@@ -1,0 +1,234 @@
+# docker-compose.yml
+# Run with: docker compose up --build
+
+services:
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: extremesales
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: seotool
+    ports:
+      - '5434:5432'
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - aiseo-net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U extremesales -d seotool" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    # Enforce a hard memory ceiling with LRU eviction — prevents Redis from growing
+    # unbounded and triggering the OOM-killer on the host.
+    command: redis-server --maxmemory 100mb --maxmemory-policy allkeys-lru
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      - aiseo-net
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  browserless:
+    image: browserless/chrome:latest
+    restart: unless-stopped
+    environment:
+      - MAX_CONCURRENT_SESSIONS=3
+      - CONNECTION_TIMEOUT=30000
+      - MAX_QUEUE_LENGTH=10
+      - PREBOOT_CHROME=true
+      - KEEP_ALIVE=true
+    networks:
+      - aiseo-net
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "require('http').get('http://localhost:3000/json/version', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+    image: aiseo-migrate
+    working_dir: /app
+    command: [ "npx", "prisma", "migrate", "deploy" ]
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://extremesales:password@db:5432/seotool
+    volumes:
+      - ./prisma:/app/prisma
+    networks:
+      - aiseo-net
+    depends_on:
+      db:
+        condition: service_healthy
+
+  inngest:
+    image: inngest/inngest:latest
+    restart: unless-stopped
+    ports:
+      - '8288:8288'
+    command:
+      - inngest
+      - dev
+      - --host=0.0.0.0
+      - --port=8288
+      - -u
+      - http://app:3000/api/inngest
+    networks:
+      - aiseo-net
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # cache_from: pull embedded BUILDKIT_INLINE_CACHE layers from the last
+      # successful image before rebuilding. Stages whose inputs haven't changed
+      # (base OS, apt-get, pnpm fetch) will be reused even on --no-cache runs.
+      cache_from:
+        - aiseo-app:latest
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+        DATABASE_URL: "postgresql://extremesales:password@db:5432/seotool"
+        UPSTASH_REDIS_REST_URL: "${UPSTASH_REDIS_REST_URL}"
+        UPSTASH_REDIS_REST_TOKEN: "${UPSTASH_REDIS_REST_TOKEN}"
+        NEXTAUTH_SECRET: "${NEXTAUTH_SECRET}"
+        NEXT_PUBLIC_SITE_URL: "${NEXT_PUBLIC_SITE_URL}"
+    image: aiseo-app
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://extremesales:password@db:5432/seotool
+      - REDIS_URL=redis://redis:6379
+      - NEXTAUTH_URL=http://localhost:3000
+      - INNGEST_BASE_URL=http://inngest:8288
+      - INNGEST_SIGNING_KEY=signkey-staging-000000000000000000000000000000000000000000000000000000
+      # Browserless external Chrome — crawls use ws://browserless:3000 instead of spawning local Chromium
+      - BROWSERLESS_URL=ws://browserless:3000
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    networks:
+      - aiseo-net
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      browserless:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "require('http').get('http://localhost:3000/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1536M
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+      # Same inline-cache strategy as app — especially valuable for the
+      # runtime-base stage (ffmpeg install = 17 min from scratch).
+      cache_from:
+        - aiseo-agent:latest
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+    image: aiseo-agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://extremesales:password@db:5432/seotool
+      - REDIS_URL=redis://redis:6379
+      # Agent runs the site crawler — route Chrome through Browserless to save 1.5GB RAM
+      - BROWSERLESS_URL=ws://browserless:3000
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    networks:
+      - aiseo-net
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      browserless:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "node", "-e", "process.exit(require('os').uptime() > 0 ? 0 : 1)" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1024M
+
+volumes:
+  db_data:
+  redis_data:
+
+
+networks:
+  aiseo-net:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

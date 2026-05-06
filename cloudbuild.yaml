@@ -1,0 +1,58 @@
+steps:
+  # Build the web container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/aiseo-web:$COMMIT_SHA', '.']
+
+  # Build the agent container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/aiseo-agent:$COMMIT_SHA', '-f', 'Dockerfile.agent', '.']
+
+  # Build the migrations container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/aiseo-migrate:$COMMIT_SHA', '-f', 'Dockerfile.migrate', '.']
+
+  # Push the images
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/aiseo-web:$COMMIT_SHA']
+  
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/aiseo-agent:$COMMIT_SHA']
+
+  # Run Prisma migrations
+  - name: 'gcr.io/$PROJECT_ID/aiseo-migrate:$COMMIT_SHA'
+    env:
+      - 'DATABASE_URL=$_DATABASE_URL'
+
+  # Deploy the Web Application to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'aiseo-web-service'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/aiseo-web:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      
+  # Deploy the LiveKit Agent to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'aiseo-voice-agent'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/aiseo-agent:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--no-allow-unauthenticated'
+
+images:
+  - 'gcr.io/$PROJECT_ID/aiseo-web:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/aiseo-agent:$COMMIT_SHA'

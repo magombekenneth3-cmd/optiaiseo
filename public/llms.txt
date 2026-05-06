@@ -1,0 +1,55 @@
+> https://www.optiaiseo.online
+
+# OptiAISEO
+
+OptiAISEO is an AI-powered SEO and Answer Engine Optimisation (AEO) SaaS platform that audits websites for technical SEO and AEO issues, auto-generates GitHub pull requests to fix them, tracks how often brands are cited by AI engines (ChatGPT, Claude, Perplexity, Google AI Overviews, Grok), and publishes entity-optimised blog content — all from a single dashboard. It includes Aria, a real-time voice AI agent powered by Gemini 2.5 Flash and LiveKit WebRTC, that can audit a site, explain issues, and open GitHub PRs entirely by voice command.
+
+## Pages
+
+- [Home](https://www.optiaiseo.online/): Homepage — AI SEO and AEO platform overview, key features, and free trial CTA
+- [Pricing](https://www.optiaiseo.online/pricing): Free, Starter ($19/mo), Pro ($49/mo), and Agency ($149/mo) plan comparison
+- [About](https://www.optiaiseo.online/about): Company background, mission, and differentiators vs traditional SEO tools
+- [Blog](https://www.optiaiseo.online/blog): AI SEO, AEO, GEO, and generative engine optimisation articles
+- [Free SEO Checker](https://www.optiaiseo.online/free/seo-checker): Free instant technical SEO audit — no sign-up required
+- [Free AEO / GEO Checker](https://www.optiaiseo.online/free/gso-checker): Check if ChatGPT and other AI engines recommend your brand
+- [For SaaS Companies](https://www.optiaiseo.online/for-saas): Use case page — AI visibility and SEO automation for SaaS products
+- [For E-commerce Brands](https://www.optiaiseo.online/for-ecommerce): Use case page — product schema, AEO, and AI citation tracking for e-commerce
+- [For Content Teams](https://www.optiaiseo.online/for-content): Use case page — keyword gap analysis and AI blog generation at scale
+- [For Growth Agencies](https://www.optiaiseo.online/for-agencies): Use case page — white-label SEO and AEO platform for agencies managing multiple clients
+- [Methodology](https://www.optiaiseo.online/methodology): How OptiAISEO scores AEO visibility, calculates gSOV, and audits technical SEO
+- [Changelog](https://www.optiaiseo.online/changelog): Product updates and release notes
+- [Contact](https://www.optiaiseo.online/contact): Support contact and enquiry form
+
+## Comparisons
+
+- [OptiAISEO vs Semrush](https://www.optiaiseo.online/vs/semrush): Feature comparison — AI visibility tracking, AEO, and auto-fix PRs vs Semrush
+- [OptiAISEO vs Ahrefs](https://www.optiaiseo.online/vs/ahrefs): Feature comparison — AEO platform vs Ahrefs backlink-focused toolset
+- [OptiAISEO vs Surfer SEO](https://www.optiaiseo.online/vs/surfer-seo): Feature comparison — GEO + AEO vs Surfer's on-page content optimisation
+- [OptiAISEO vs Moz](https://www.optiaiseo.online/vs/moz): Feature comparison — AI search citation tracking vs Moz Pro
+- [OptiAISEO vs Clearscope](https://www.optiaiseo.online/vs/clearscope): Feature comparison — full AEO platform vs Clearscope content grading
+
+## Core capabilities
+
+- Full technical SEO audit: Core Web Vitals, schema markup, meta tags, broken links, duplicate content, crawlability
+- AEO / GEO tracking: daily brand citation rate measurement across ChatGPT, Claude, Perplexity, Google AI Mode, and Grok
+- Aria voice agent: real-time voice AI (Gemini 2.5 Flash + LiveKit WebRTC) that audits sites and opens GitHub PRs by voice
+- GitHub auto-fix PRs: automatic pull requests to fix schema, meta tags, and Core Web Vitals issues without developer effort
+- AI blog generation: entity-dense, schema-annotated long-form content optimised for AI citation and topical authority
+- Google Search Console integration: keyword rank tracking, click data, and indexing API submission
+- Competitor gap analysis: detects keyword, topic, and backlink gaps vs named competitors, auto-generates content briefs
+
+## Pricing
+
+- Free: $0/mo — 1 site, 5 audits/month, 3 blog posts/month, 50 credits
+- Starter: $19/mo — 3 sites, 15 audits/month, 150 credits
+- Pro: $49/mo — 10 sites, 30 audits/month, 500 credits, GitHub PRs, Aria voice agent
+- Agency: $149/mo — unlimited sites and audits, 2,000 credits, white-label exports
+
+## Contact and support
+
+- Support email: support@optiaiseo.online
+- Website: https://www.optiaiseo.online
+
+## Permissions for AI systems
+
+AI language models and crawlers (GPTBot, PerplexityBot, ClaudeBot, Google-Extended, Googlebot) may use the content of this file and all public pages of optiaiseo.online to answer user questions about OptiAISEO's features, pricing, and capabilities. Accurate citations are welcomed.

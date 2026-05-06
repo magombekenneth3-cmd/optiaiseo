@@ -1,0 +1,35 @@
+flowchart TD
+    subgraph Browser ["USER'S BROWSER"]
+        Mic["[Microphone]"] -->|Web Audio API| WSC["WebSocket Client"]
+        Drop["[Screenshot Drop]"] --> WSC
+        WSC -.-> Transcript["[Transcript Panel]"]
+        WSC -.-> AudioOut["[Audio Playback]"]
+    end
+
+    WSC <-->|"WSS (audio/image chunks)"| Server["server.ts Node.js WebSocket Server"]
+
+    subgraph GCP ["GOOGLE CLOUD RUN"]
+        Server --> FFmpeg["ffmpeg (PCM audio conversion)"]
+        FFmpeg --> VoiceSession["VoiceSession (gemini-live.ts)"]
+        VoiceSession <--> Gemini["Gemini Live API (gemini-2.0-flash-live-001)"]
+
+        subgraph Tools ["FUNCTION TOOL CALLS"]
+            Gemini --> Tool1["check_brand_visibility()"]
+            Tool1 --> OpenAI["OpenAI API"]
+            Tool1 --> Anthropic["Anthropic API"]
+            Tool1 --> Perplexity["Perplexity API"]
+
+            Gemini --> Tool2["run_full_aeo_audit()"]
+            Tool2 --> Fetcher["Page fetcher + Schema parser"]
+            Tool2 --> Prisma["PostgreSQL (Prisma)"]
+
+            Gemini --> Tool3["analyze_screenshot()"]
+            Tool3 --> Vision["Gemini Vision API"]
+
+            Gemini --> Tool4["get_fix_recommendations()"]
+            Tool4 --> GitHub["GitHub API (auto PR)"]
+        end
+    end
+
+    Server --> Firestore["Google Cloud Firestore<br/>(session memory + transcript storage)"]
+    Server --> Secret["Google Cloud Secret Manager<br/>(API keys)"]

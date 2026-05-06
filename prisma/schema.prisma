@@ -1,0 +1,1196 @@
+// ── CANONICAL SCHEMA ──────────────────────────────────────────────────────────
+// This is the single source of truth for the database schema.
+// Do NOT create backup copies of this file (they cause confusion and conflicts).
+// To view schema changes over time: git log -- prisma/schema.prisma
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  output        = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  stripePriceId        String?
+  status               String    @default("inactive")
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model IdempotencyKey {
+  id              String    @id @default(cuid())
+  idempotencyKey  String
+  userId          String
+  requestPath     String    @default("")
+  requestChecksum String
+  status          String    @default("PROCESSING")
+  responseCode    Int?
+  responseBody    Json?
+  expiresAt       DateTime  @default(dbgenerated("(now() + '24:00:00'::interval)"))
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([idempotencyKey, userId])
+  @@index([expiresAt])
+}
+
+model WebhookEvent {
+  id              String    @id @default(cuid())
+  provider        String
+  providerEventId String
+  eventType       String
+  payload         Json
+  status          String    @default("RECEIVED")
+  processedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@unique([provider, providerEventId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model User {
+  id                     String                   @id @default(cuid())
+  name                   String?
+  email                  String?                  @unique
+  emailVerified          DateTime?
+  image                  String?
+  password               String?
+  role                   Role                     @default(USER)
+  subscriptionTier       String                   @default("FREE")
+  trialEndsAt            DateTime?
+  preferences            Json?
+  whiteLabel             Json?
+  gscConnected           Boolean                  @default(false)
+  onboardingDone         Boolean                  @default(false)
+  createdAt              DateTime                 @default(now())
+  accounts               Account[]
+  idempotencyKeys        IdempotencyKey[]
+  sessions               Session[]
+  sites                  Site[]
+  viewableSites          Site[]                   @relation("SiteViewers")
+  subscription           Subscription?
+  passwordResetTokens    PasswordResetToken[]
+  teamMemberships        TeamMember[]             @relation("TeamMemberUser")
+  ownedTeamMembers       TeamMember[]             @relation("TeamMemberOwner")
+  teamInvitations        TeamInvitation[]
+  competitorPageAnalyses CompetitorPageAnalysis[]
+  strategyMemories       StrategyMemory[]
+  referral               Referral?                @relation("ReferralOwner")
+  wonReferral            Referral?                @relation("ReferralWinner", fields: [referralId], references: [id])
+  referralId             String?
+  commissions            Commission[]
+  embedLeads             EmbedLead[]
+  credits                Int                      @default(50)
+  voiceSessions          VoiceSession[]
+  wpApiKey               String?                  @unique
+  apiKeys                ApiKey[]
+  dripSequence           DripSequence?
+  creditHistory          CreditHistory[]
+
+  @@index([wpApiKey])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Site {
+  id                     String                   @id @default(cuid())
+  userId                 String
+  viewerId               String?
+  domain                 String
+  brandName              String? // User-supplied display name override, e.g. "Search Atlas"
+  targetKeyword          String?
+  operatingMode          String                   @default("REPORT_ONLY")
+  githubRepoUrl          String?
+  mediumToken            String?
+  hashnodeToken          String?
+  hashnodePublicationId  String?
+  coreServices           String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  blogTone               String?                  @default("Authoritative & Professional")
+  techStack              String?                  @default("nextjs")
+  authorName             String?
+  authorRole             String?
+  authorBio              String?
+  realExperience         String?
+  realNumbers            String?
+  localContext           String?
+  plannerState           Json?
+  niche                  String?
+  location               String?
+  targetCustomer         String?
+  wordPressConfig        Json?
+  ghostConfig            Json?
+  hideFromLeaderboard    Boolean                  @default(false)
+  shareToken             String?                  @unique
+  slackWebhookUrl        String?
+  zapierWebhookUrl       String?
+  aeoEvents              AeoEvent[]
+  aeoReports             AeoReport[]
+  ahrefsSnapshots        AhrefsSnapshot[]
+  audits                 Audit[]
+  backlinkAlerts         BacklinkAlert[]
+  blogs                  Blog[]
+  competitors            Competitor[]
+  onPageReports          OnPageReport[]
+  rankSnapshots          RankSnapshot[]
+  selfHealingLogs        SelfHealingLog[]
+  aiShareOfVoice         AiShareOfVoice[]
+  indexingLogs           IndexingLog[]
+  user                   User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  viewer                 User?                    @relation("SiteViewers", fields: [viewerId], references: [id])
+  brandFacts             BrandFact[]
+  aeoSnapshots           AeoSnapshot[]
+  plannerItems           PlannerItem[]
+  seedKeywords           SeedKeyword[]
+  competitorPageAnalyses CompetitorPageAnalysis[]
+  strategyMemories       StrategyMemory[]
+  metricSnapshots        MetricSnapshot[]
+  backlinkDetails        BacklinkDetail[]
+  healingOutcomes        HealingOutcome[]
+  serpFeatures           SerpFeature[]
+  uptimeAlerts           UptimeAlert[]
+  voiceSessions          VoiceSession[]
+  detectedServices       DetectedService[]
+  skippedCompetitors     SkippedCompetitor[]
+  indexNowConfig         IndexNowConfig?
+  pageAudits             PageAudit[]
+  repurposedResults      RepurposedResult[]
+  aeoAutopilotEnabled    Boolean                  @default(false)
+  aeoAutopilotSchedule   String                   @default("weekly")
+  aeoPublicToken         String?                  @unique
+  aeoDigestEnabled       Boolean                  @default(true)
+  aeoProofs              AeoProof[]
+  trackedKeywords        TrackedKeyword[]
+  trackedQueries         TrackedQuery[]
+  visibilitySnapshots    VisibilitySnapshot[]
+  healingPlans           HealingPlan[]
+  mentionCorrectionLogs  MentionCorrectionLog[]
+  serpGapAnalyses        SerpGapAnalysis[]
+
+  marketCategoryId String?
+  marketCategory   MarketCategory? @relation(fields: [marketCategoryId], references: [id])
+
+  @@index([userId])
+  @@index([niche, operatingMode])
+}
+
+model BrandFact {
+  id        String   @id @default(cuid())
+  siteId    String
+  factType  String
+  value     String
+  sourceUrl String?
+  verified  Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, factType, value])
+  @@index([siteId])
+}
+
+model AhrefsSnapshot {
+  id               String   @id @default(cuid())
+  siteId           String
+  domainRating     Float?
+  organicTraffic   Int?
+  backlinks        Int?
+  referringDomains Int?
+  topKeywords      Json?
+  backlinkDomains  Json?
+  fetchedAt        DateTime @default(now())
+  site             Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+}
+
+model RankSnapshot {
+  id           String          @id @default(cuid())
+  siteId       String
+  keyword      String
+  intent       String?
+  position     Int
+  url          String?
+  device       String          @default("desktop")
+  searchVolume Int?
+  cpc          Float?
+  difficulty   Int?
+  trackedId    String?
+  recordedAt   DateTime        @default(now())
+  serpFeatures SerpFeature[]
+  site         Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  tracked      TrackedKeyword? @relation(fields: [trackedId], references: [id], onDelete: SetNull)
+
+  @@index([siteId, keyword])
+  @@index([recordedAt])
+  @@index([siteId, keyword, recordedAt(sort: Desc)])
+}
+
+model TrackedKeyword {
+  id           String         @id @default(cuid())
+  siteId       String
+  keyword      String
+  locationCode Int            @default(2840)
+  device       String         @default("desktop")
+  addedAt      DateTime       @default(now())
+  addedBy      String
+  site         Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  snapshots    RankSnapshot[]
+
+  @@unique([siteId, keyword, device])
+  @@index([siteId])
+}
+
+model AiShareOfVoice {
+  id                   String   @id @default(cuid())
+  siteId               String
+  keyword              String
+  modelName            String
+  brandMentioned       Boolean  @default(false)
+  competitorsMentioned String[] @default([])
+  recordedAt           DateTime @default(now())
+  // Gap 1 — persisted from live citation-gap analysis so cached path skips Gemini
+  gapReason            String? // GapReason enum value
+  gapExplanation       String?
+  gapFix               String?
+  embeddingGapSignals  String[] @default([])
+  // Gap 2 — mention confidence for false-negative detection (0.0–1.0; null = binary check)
+  mentionConfidence    Float?
+  site                 Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, keyword])
+  @@index([recordedAt])
+  @@index([siteId, mentionConfidence]) // low-confidence queries
+}
+
+// Gap 2 — user-flagged brand mention corrections (false positive / false negative)
+model MentionCorrectionLog {
+  id           String   @id @default(cuid())
+  siteId       String
+  keyword      String
+  modelName    String
+  correctValue Boolean // true = brand WAS mentioned, false = was NOT mentioned
+  rawSnippet   String? // first 500 chars of the model response
+  flaggedAt    DateTime @default(now())
+  site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, flaggedAt])
+}
+
+model BacklinkAlert {
+  id         String   @id @default(cuid())
+  siteId     String
+  type       String
+  domain     String
+  url        String   @default("")
+  dr         Float?
+  detectedAt DateTime @default(now())
+  site       Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, domain, type])
+  @@index([siteId, detectedAt(sort: Desc)])
+}
+
+model OnPageReport {
+  id        String   @id @default(cuid())
+  siteId    String
+  url       String
+  issues    Json
+  score     Int
+  createdAt DateTime @default(now())
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+}
+
+model Audit {
+  id             String       @id @default(cuid())
+  siteId         String
+  categoryScores Json
+  issueList      Json
+  fixStatus      String       @default("PENDING")
+  deletedAt      DateTime?
+  lcp            Float?
+  cls            Float?
+  inp            Float?
+  runTimestamp   DateTime     @default(now())
+  site           Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  pageAudits     PageAudit[]
+  shares         AuditShare[]
+
+  @@index([siteId, runTimestamp])
+  @@index([siteId, fixStatus, runTimestamp(sort: Desc)])
+}
+
+model AuditShare {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  auditId   String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  viewCount Int      @default(0)
+  audit     Audit    @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@index([auditId])
+  @@index([token])
+}
+
+model RepurposedResult {
+  id          String     @id @default(cuid())
+  blogId      String     @unique
+  siteId      String
+  pageAuditId String?
+  data        Json
+  status      String     @default("completed")
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  blog        Blog       @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  site        Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  pageAudit   PageAudit? @relation(fields: [pageAuditId], references: [id], onDelete: SetNull)
+
+  @@index([siteId, createdAt])
+  @@index([pageAuditId])
+}
+
+model PageAudit {
+  id                String             @id @default(cuid())
+  auditId           String
+  siteId            String
+  pageUrl           String
+  overallScore      Int                @default(0)
+  categoryScores    Json               @default("{}")
+  issueList         Json               @default("[]")
+  runTimestamp      DateTime           @default(now())
+  audit             Audit              @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  site              Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  repurposedResults RepurposedResult[]
+
+  @@unique([auditId, pageUrl])
+  @@index([auditId])
+  @@index([siteId, runTimestamp(sort: Desc)])
+}
+
+model Blog {
+  id                   String            @id @default(cuid())
+  siteId               String
+  pipelineType         String
+  title                String
+  slug                 String
+  content              String
+  metaDescription      String?
+  status               String            @default("DRAFT")
+  isEditorial          Boolean           @default(false)
+  deletedAt            DateTime?
+  targetKeywords       String[]
+  hashnodeUrl          String?
+  mediumUrl            String?
+  wordPressUrl         String?
+  ghostUrl             String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  publishedAt          DateTime?
+  ogImage              String?
+  needsRefresh         Boolean           @default(false)
+  interactiveWidget    String?
+  schemaMarkup         String?
+  sourceUrl            String?
+  validationScore      Int?
+  validationErrors     String[]          @default([])
+  validationWarnings   String[]          @default([])
+  factCheckIssues      String[]          @default([])
+  factCheckSuggestions String[]          @default([])
+  citationScore        Int?
+  citationCriteria     Json?
+  aeoEvents            AeoEvent[]
+  repurposedResult     RepurposedResult?
+  site                 Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, slug])
+  @@index([siteId])
+  @@index([siteId, status, createdAt])
+  @@index([siteId, pipelineType, createdAt])
+}
+
+model TrendingTopic {
+  id        String   @id @default(cuid())
+  country   String
+  industry  String
+  keywords  String[]
+  newsData  Json
+  fetchedAt DateTime @default(now())
+}
+
+model MarketCategory {
+  id          String       @id @default(cuid())
+  category    String
+  subcategory String
+  geo         String
+  audience    String[]     @default([])
+  features    String[]     @default([])
+  sites       Site[]
+  competitors Competitor[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([subcategory, geo])
+}
+
+model Competitor {
+  id                        String                      @id @default(cuid())
+  siteId                    String?
+  marketCategoryId          String?
+  serviceId                 String?
+  domain                    String
+  name                      String?
+  score                     Float?
+  metadata                  Json?
+  deletedAt                 DateTime?
+  addedAt                   DateTime                    @default(now())
+  site                      Site?                       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  marketCategory            MarketCategory?             @relation(fields: [marketCategoryId], references: [id])
+  service                   DetectedService?            @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  keywords                  CompetitorKeyword[]
+  snapshots                 CompetitorTrafficSnapshot[]
+  competitorAhrefsSnapshots CompetitorAhrefsSnapshot[]
+
+  @@unique([siteId, domain])
+  @@index([marketCategoryId])
+}
+
+model CompetitorAhrefsSnapshot {
+  id               String     @id @default(cuid())
+  competitorId     String
+  domainRating     Float?
+  organicTraffic   Int?
+  backlinks        Int?
+  referringDomains Int?
+  createdAt        DateTime   @default(now())
+  competitor       Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId])
+  @@index([createdAt])
+}
+
+model DetectedService {
+  id                 String              @id @default(cuid())
+  siteId             String
+  name               String
+  label              String
+  createdAt          DateTime            @default(now())
+  site               Site                @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  competitors        Competitor[]
+  skippedCompetitors SkippedCompetitor[]
+
+  @@unique([siteId, name])
+  @@index([siteId])
+}
+
+model CompetitorKeyword {
+  id           String     @id @default(cuid())
+  competitorId String
+  keyword      String
+  position     Int?
+  searchVolume Int?
+  difficulty   Int?
+  url          String?
+  clicks       Int?
+  impressions  Int?
+  ctr          Float?
+  dataSource   String?
+  fetchedAt    DateTime   @default(now())
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+}
+
+model CompetitorTrafficSnapshot {
+  id              String     @id @default(cuid())
+  competitorId    String
+  month           String
+  estimatedVisits Int
+  organicKeywords Int?
+  dataSource      String?
+  createdAt       DateTime   @default(now())
+  competitor      Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@unique([competitorId, month])
+  @@index([competitorId, month])
+}
+
+model AeoSnapshot {
+  id                     String   @id @default(cuid())
+  siteId                 String
+  score                  Int
+  grade                  String
+  citationScore          Int
+  generativeShareOfVoice Int
+  citationLikelihood     Int
+  perplexityScore        Int
+  chatgptScore           Int
+  claudeScore            Int
+  googleAioScore         Int
+  grokScore              Int      @default(0)
+  copilotScore           Int      @default(0)
+  platformBreakdown      Json
+  failedChecks           Json
+  createdAt              DateTime @default(now())
+  site                   Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, createdAt])
+  @@index([siteId])
+  @@index([createdAt])
+}
+
+model AeoReport {
+  id                     String     @id @default(cuid())
+  siteId                 String
+  status                 String     @default("COMPLETED")
+  score                  Int
+  grade                  String
+  citationScore          Int        @default(0)
+  schemaTypes            String[]
+  checks                 Json
+  topRecommendations     String[]
+  createdAt              DateTime   @default(now())
+  citationLikelihood     Int        @default(0)
+  generativeShareOfVoice Int        @default(0)
+  multiEngineScore       Json?
+  multiModelResults      Json?
+  layerScores            Json? // { aeo: number, geo: number, aio: number }
+  diagnosis              Json? // AeoDiagnosis | null
+  site                   Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  proofs                 AeoProof[]
+
+  @@index([siteId])
+  @@index([createdAt])
+}
+
+model SelfHealingLog {
+  id          String   @id @default(cuid())
+  siteId      String
+  issueType   String
+  description String
+  actionTaken String
+  impactScore Int?
+  status      String   @default("COMPLETED")
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId])
+  @@index([createdAt])
+  @@index([siteId, status, createdAt])
+}
+
+model CompetitorAlertLog {
+  id         String   @id @default(cuid())
+  siteId     String
+  competitor String
+  keyword    String
+  delta      Int
+  oldPos     Int
+  newPos     Int
+  sentAt     DateTime @default(now())
+
+  @@unique([siteId, competitor, keyword, newPos])
+  @@index([siteId, sentAt])
+}
+
+model AeoEvent {
+  id        String   @id @default(cuid())
+  siteId    String
+  blogId    String?
+  eventType String
+  intent    String?
+  revenue   Float?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  blog      Blog?    @relation(fields: [blogId], references: [id])
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId])
+  @@index([createdAt])
+  @@index([siteId, createdAt(sort: Desc)])
+}
+
+model AeoProof {
+  id           String     @id @default(cuid())
+  siteId       String
+  reportId     String?
+  query        String
+  responseText String     @db.Text
+  cited        Boolean    @default(false)
+  shareToken   String     @unique @default(cuid())
+  expiresAt    DateTime?
+  createdAt    DateTime   @default(now())
+  site         Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  report       AeoReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@index([siteId, createdAt(sort: Desc)])
+  @@index([shareToken])
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  keyHash    String    @unique
+  keyPrefix  String
+  scopes     String[]  @default(["aeo:read"])
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([keyHash])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum Role {
+  USER
+  AGENCY_ADMIN
+  EDITOR
+  CLIENT_VIEWER
+  SUPER_ADMIN
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  userId    String
+  ownerId   String
+  role      String   @default("VIEWER")
+  createdAt DateTime @default(now())
+  user      User     @relation("TeamMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  owner     User     @relation("TeamMemberOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ownerId])
+}
+
+model IndexingLog {
+  id        String   @id @default(cuid())
+  siteId    String
+  url       String
+  status    String   @default("PENDING")
+  trigger   String
+  engine    String   @default("GOOGLE")
+  errorMsg  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, createdAt])
+  @@index([status])
+}
+
+model IndexNowConfig {
+  id        String   @id @default(cuid())
+  siteId    String   @unique
+  host      String
+  apiKey    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+}
+
+model TeamInvitation {
+  id        String   @id @default(cuid())
+  email     String
+  ownerId   String
+  role      String   @default("VIEWER")
+  token     String   @unique @default(cuid())
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([email])
+}
+
+model CompetitorPageAnalysis {
+  id        String   @id @default(cuid())
+  siteId    String
+  userId    String
+  url       String
+  keyword   String
+  status    String   @default("pending")
+  result    Json?
+  error     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model Changelog {
+  id          String   @id @default(cuid())
+  version     String?
+  title       String
+  category    String
+  description String   @db.Text
+  publishedAt DateTime @default(now())
+  isPublic    Boolean  @default(true)
+
+  @@index([publishedAt])
+}
+
+model BenchmarkStat {
+  id         String   @id @default(cuid())
+  niche      String
+  techStack  String
+  metric     String
+  p25        Float
+  p50        Float
+  p75        Float
+  p90        Float
+  sampleSize Int
+  updatedAt  DateTime @updatedAt
+
+  @@unique([niche, techStack, metric])
+  @@index([niche, metric])
+}
+
+model StrategyMemory {
+  id         String    @id @default(cuid())
+  userId     String
+  siteId     String
+  memoryType String
+  content    String    @db.Text
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site       Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([userId, siteId, createdAt])
+}
+
+model EmbedLead {
+  id        String   @id @default(cuid())
+  ownerId   String
+  email     String
+  domain    String
+  scores    Json
+  embedKey  String
+  createdAt DateTime @default(now())
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, createdAt])
+  @@index([embedKey])
+}
+
+model Referral {
+  id            String       @id @default(cuid())
+  ownerId       String       @unique
+  code          String       @unique
+  signups       Int          @default(0)
+  conversions   Int          @default(0)
+  createdAt     DateTime     @default(now())
+  owner         User         @relation("ReferralOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  referredUsers User[]       @relation("ReferralWinner")
+  commissions   Commission[]
+
+  @@index([code])
+}
+
+model Commission {
+  id              String   @id @default(cuid())
+  referralId      String
+  referrerId      String
+  amountCents     Int
+  month           String
+  stripeInvoiceId String   @unique
+  status          String   @default("pending")
+  createdAt       DateTime @default(now())
+  referral        Referral @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  referrer        User     @relation(fields: [referrerId], references: [id], onDelete: Cascade)
+
+  @@index([referrerId, status])
+  @@index([month])
+}
+
+model MetricSnapshot {
+  id             String   @id @default(cuid())
+  siteId         String
+  capturedAt     DateTime @default(now())
+  overallScore   Float?
+  aeoScore       Float?
+  coreWebVitals  Float?
+  schemaScore    Float?
+  keywordCount   Int?
+  backlinksCount Int?
+  organicTraffic Int?
+  site           Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, capturedAt])
+}
+
+model BacklinkDetail {
+  id           String   @id @default(cuid())
+  siteId       String
+  srcDomain    String
+  anchorText   String
+  targetUrl    String   @default("")
+  domainRating Float?
+  isDoFollow   Boolean  @default(true)
+  firstSeen    DateTime @default(now())
+  lastSeen     DateTime @default(now())
+  isToxic      Boolean  @default(false)
+  toxicReason  String?
+  site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, srcDomain, anchorText])
+  @@index([siteId])
+  @@index([siteId, isToxic])
+  @@index([siteId, firstSeen])
+}
+
+model HealingOutcome {
+  id            String    @id @default(cuid())
+  siteId        String
+  healingLogId  String    @unique
+  issueType     String
+  fixAppliedAt  DateTime
+  measuredAt    DateTime?
+  trafficBefore Int?
+  trafficAfter  Int?
+  rankBefore    Float?
+  rankAfter     Float?
+  outcome       String?
+  impactScore   Float?
+  site          Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, issueType])
+  @@index([fixAppliedAt])
+  @@index([measuredAt])
+}
+
+model SerpFeature {
+  id             String        @id @default(cuid())
+  siteId         String
+  rankSnapshotId String?
+  keyword        String
+  hasAiOverview  Boolean       @default(false)
+  hasSnippet     Boolean       @default(false)
+  snippetText    String?
+  hasPaa         Boolean       @default(false)
+  hasLocalPack   Boolean       @default(false)
+  hasVideo       Boolean       @default(false)
+  brandInAio     Boolean       @default(false)
+  capturedAt     DateTime      @default(now())
+  site           Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  rankSnapshot   RankSnapshot? @relation(fields: [rankSnapshotId], references: [id], onDelete: SetNull)
+
+  @@unique([siteId, keyword])
+  @@index([siteId, keyword])
+  @@index([siteId, capturedAt(sort: Desc)])
+}
+
+model VisibilitySnapshot {
+  id           String   @id @default(cuid())
+  siteId       String
+  date         String
+  score        Float
+  top3Pct      Float
+  top10Pct     Float
+  keywordsUsed Int
+  createdAt    DateTime @default(now())
+  site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, date])
+  @@index([siteId, date(sort: Desc)])
+}
+
+model UptimeAlert {
+  id         String    @id @default(cuid())
+  siteId     String
+  status     Int?
+  durationMs Int?
+  alertSent  Boolean   @default(false)
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  site       Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, createdAt(sort: Desc)])
+}
+
+model FreeAudit {
+  id             String          @id @default(cuid())
+  domain         String
+  rateLimitKey   String?
+  url            String
+  status         String          @default("PENDING")
+  progress       Int             @default(0)
+  currentStep    String?
+  overallScore   Int?
+  categoryScores Json?
+  topRecs        Json?
+  allRecs        Json?
+  errorMsg       String?
+  expiresAt      DateTime
+  createdAt      DateTime        @default(now())
+  leads          FreeAuditLead[]
+
+  @@index([domain])
+  @@index([rateLimitKey])
+  @@index([expiresAt])
+}
+
+model FreeAuditLead {
+  id        String    @id @default(cuid())
+  email     String
+  auditId   String
+  domain    String
+  createdAt DateTime  @default(now())
+  audit     FreeAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([auditId])
+}
+
+model VoiceSession {
+  id          String    @id @default(cuid())
+  siteId      String
+  userId      String
+  startedAt   DateTime
+  endedAt     DateTime?
+  durationSec Int?
+  transcript  Json?
+  summary     String?   @db.Text
+  actionsLog  Json?
+  site        Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, startedAt])
+  @@index([userId])
+}
+
+model PlannerItem {
+  id            String   @id @default(cuid())
+  siteId        String
+  keyword       String
+  title         String?
+  parentTopic   String?
+  intent        String?
+  difficulty    String?
+  weekBucket    String?
+  status        String   @default("Todo")
+  briefId       String?
+  reason        String?
+  pillar        Boolean  @default(false)
+  priorityScore Int?
+  reddit        Json?
+  backlinks     Json?
+  pageScore     Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  site          Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, keyword])
+  @@index([siteId, status])
+  @@index([siteId, weekBucket])
+}
+
+model SeedKeyword {
+  id           String    @id @default(cuid())
+  siteId       String
+  keyword      String
+  intent       String?
+  notes        String?
+  source       String    @default("manual")
+  discoveredAt DateTime?
+  addedAt      DateTime  @default(now())
+  site         Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, keyword])
+  @@index([siteId])
+  @@index([siteId, source, discoveredAt])
+}
+
+model TrackedQuery {
+  id        String        @id @default(cuid())
+  siteId    String
+  queryText String
+  intent    String        @default("informational")
+  reason    String?
+  source    String        @default("auto")
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  site      Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  results   QueryResult[]
+
+  @@unique([siteId, queryText])
+  @@index([siteId, isActive])
+}
+
+model QueryResult {
+  id               String       @id @default(cuid())
+  trackedQueryId   String
+  model            String
+  mentioned        Boolean      @default(false)
+  mentionPosition  Int          @default(0)
+  isAuthoritative  Boolean      @default(false)
+  citationUrl      String?
+  competitorsCited String[]     @default([])
+  responseSnippet  String       @default("")
+  checkedAt        DateTime     @default(now())
+  trackedQuery     TrackedQuery @relation(fields: [trackedQueryId], references: [id], onDelete: Cascade)
+
+  @@index([trackedQueryId, checkedAt(sort: Desc)])
+  @@index([checkedAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  action    String
+  target    String
+  payload   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([target, createdAt])
+  @@index([action, createdAt])
+}
+
+model SkippedCompetitor {
+  id        String          @id @default(cuid())
+  siteId    String
+  serviceId String
+  domain    String
+  createdAt DateTime        @default(now())
+  site      Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  service   DetectedService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, serviceId, domain])
+  @@index([siteId])
+}
+
+model DripSequence {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  startedAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model HealingPlan {
+  id         String   @id @default(cuid())
+  siteId     String
+  trigger    String
+  scoreDelta Float
+  actions    Json
+  status     String   @default("PENDING")
+  createdAt  DateTime @default(now())
+  site       Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId])
+  @@index([status])
+}
+
+// Credit audit ledger — written after every consumeCredits call.
+// Never blocks the primary action (fire-and-forget insert).
+model CreditHistory {
+  id           String   @id @default(cuid())
+  userId       String
+  action       String // CreditAction key e.g. "blog_generation"
+  label        String // Human-readable label e.g. "Blog Generation"
+  cost         Int // Credits deducted (0 for free actions)
+  balanceAfter Int // credits remaining after deduction
+  metadata     Json? // e.g. { siteId, blogId } for traceability
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, action])
+}
+
+model SerpGapAnalysis {
+  id                    String    @id @default(cuid())
+  siteId                String
+  userId                String
+  keyword               String
+  clientUrl             String
+  clientPosition        Int
+  status                String    @default("PENDING")
+  // PENDING | SCRAPING | PLANNING | COMPLETED | FAILED
+  gapReport             Json?
+  implementationPlan    Json?
+  serpFormat            String?
+  serpHasAiOverview     Boolean   @default(false)
+  serpHasFeaturedSnippet Boolean  @default(false)
+  gapCount              Int?
+  criticalGapCount      Int?
+  competitorAvgWordCount Int?
+  estimatedPositionGain String?
+  executiveSummary      String?
+  topPriority           String?
+  taskCount             Int?
+  automatedTaskCount    Int?
+  errorMessage          String?
+  createdAt             DateTime  @default(now())
+  completedAt           DateTime?
+  site                  Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, createdAt(sort: Desc)])
+  @@index([userId])
+}
+

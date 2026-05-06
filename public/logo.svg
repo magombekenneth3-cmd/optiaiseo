@@ -1,0 +1,41 @@
+<svg width="900" height="300" viewBox="0 0 900 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- Gradient -->
+  <defs>
+    <linearGradient id="blueGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0A3D91"/>
+      <stop offset="100%" stop-color="#00A3FF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Circular growth arrow -->
+  <path d="M150 60
+           C90 110, 90 190, 150 240
+           C220 280, 310 250, 340 200"
+        stroke="url(#blueGrad)"
+        stroke-width="14"
+        fill="none"
+        stroke-linecap="round"/>
+
+  <!-- Arrow head -->
+  <path d="M340 200 L330 170 L365 185 Z" fill="url(#blueGrad)"/>
+
+  <!-- Bar chart inside circle -->
+  <rect x="170" y="150" width="20" height="50" fill="#0A3D91"/>
+  <rect x="200" y="130" width="20" height="70" fill="#1B6FD1"/>
+  <rect x="230" y="100" width="20" height="100" fill="#00A3FF"/>
+
+  <!-- Brand text -->
+  <text x="400" y="160" font-size="48" font-family="Arial, Helvetica, sans-serif" font-weight="700" fill="#0A3D91">
+    OPTI
+  </text>
+  <text x="525" y="160" font-size="48" font-family="Arial, Helvetica, sans-serif" font-weight="700" fill="#00A3FF">
+    AISEO
+  </text>
+
+  <!-- URL -->
+  <text x="400" y="210" font-size="18" font-family="Arial, Helvetica, sans-serif" fill="#555">
+    www.optiaiseo.online
+  </text>
+
+</svg>

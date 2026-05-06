@@ -1,0 +1,20 @@
+
+ARG PRISMA_VERSION=5.22.0
+
+FROM node:20-slim
+
+# System deps ONCE — cached in image layer after first build
+RUN apt-get update -qq && \
+    apt-get install -y --no-install-recommends openssl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install the EXACT matching Prisma CLI version globally — cached after first build
+ARG PRISMA_VERSION
+RUN npm install -g prisma@${PRISMA_VERSION}
+
+WORKDIR /app
+
+# Prisma schema + migrations are mounted at runtime via docker-compose volume
+# so we never COPY them here — no image rebuild needed when migrations change.
+
+CMD ["prisma", "migrate", "deploy"]

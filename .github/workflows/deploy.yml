@@ -1,0 +1,125 @@
+name: Deploy AISEO to Google Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  REPO: aiseo-repo
+  FRONTEND_SERVICE: aiseo-frontend
+  AGENT_SERVICE: aiseo-agent
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # needed for Workload Identity Federation
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Enable required GCP APIs
+        run: |
+          gcloud services enable \
+            run.googleapis.com \
+            artifactregistry.googleapis.com \
+            secretmanager.googleapis.com \
+            --project=${{ env.PROJECT_ID }} --quiet
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build & Push Frontend image
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/aiseo-frontend:${{ github.sha }}"
+          docker build -t "$IMAGE" -f Dockerfile .
+          docker push "$IMAGE"
+          echo "FRONTEND_IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Build & Push Agent image
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/aiseo-agent:${{ github.sha }}"
+          docker build -t "$IMAGE" -f Dockerfile.agent .
+          docker push "$IMAGE"
+          echo "AGENT_IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Deploy Frontend to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.FRONTEND_SERVICE }} \
+            --image="${{ env.FRONTEND_IMAGE }}" \
+            --region="${{ env.REGION }}" \
+            --platform=managed \
+            --allow-unauthenticated \
+            --port=3000 \
+            --memory=2Gi \
+            --cpu=2 \
+            --min-instances=1 \
+            --max-instances=10 \
+            --timeout=3600 \
+            --session-affinity \
+            --set-env-vars="NODE_ENV=production" \
+            --set-secrets="\
+DATABASE_URL=DATABASE_URL:latest,\
+NEXTAUTH_SECRET=NEXTAUTH_SECRET:latest,\
+NEXTAUTH_URL=NEXTAUTH_URL:latest,\
+NEXT_PUBLIC_APP_URL=NEXT_PUBLIC_APP_URL:latest,\
+GEMINI_API_KEY=GEMINI_API_KEY:latest,\
+LIVEKIT_URL=LIVEKIT_URL:latest,\
+LIVEKIT_API_KEY=LIVEKIT_API_KEY:latest,\
+LIVEKIT_API_SECRET=LIVEKIT_API_SECRET:latest,\
+GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,\
+GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,\
+GITHUB_ID=GITHUB_ID:latest,\
+GITHUB_SECRET=GITHUB_SECRET:latest,\
+OPENAI_API_KEY=OPENAI_API_KEY:latest,\
+ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,\
+PERPLEXITY_API_KEY=PERPLEXITY_API_KEY:latest,\
+SERPER_API_KEY=SERPER_API_KEY:latest,\
+STRIPE_SECRET_KEY=STRIPE_SECRET_KEY:latest,\
+STRIPE_WEBHOOK_SECRET=STRIPE_WEBHOOK_SECRET:latest,\
+RESEND_API_KEY=RESEND_API_KEY:latest,\
+CRON_SECRET=CRON_SECRET:latest"
+
+      - name: Deploy Agent Worker to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.AGENT_SERVICE }} \
+            --image="${{ env.AGENT_IMAGE }}" \
+            --region="${{ env.REGION }}" \
+            --platform=managed \
+            --no-allow-unauthenticated \
+            --port=8081 \
+            --memory=2Gi \
+            --cpu=2 \
+            --min-instances=1 \
+            --max-instances=5 \
+            --timeout=3600 \
+            --set-env-vars="NODE_ENV=production" \
+            --set-secrets="\
+DATABASE_URL=DATABASE_URL:latest,\
+GEMINI_API_KEY=GEMINI_API_KEY:latest,\
+LIVEKIT_URL=LIVEKIT_URL:latest,\
+LIVEKIT_API_KEY=LIVEKIT_API_KEY:latest,\
+LIVEKIT_API_SECRET=LIVEKIT_API_SECRET:latest"
+
+      - name: Output deployment URL
+        run: |
+          URL=$(gcloud run services describe ${{ env.FRONTEND_SERVICE }} \
+            --region=${{ env.REGION }} --format="value(status.url)")
+          echo "✅ Deployed to: $URL"

@@ -1,0 +1,89 @@
+
+node_modules
+.pnpm-store
+.yarn
+.npm
+
+# ── Next.js build output ──────────────────────────────────────────────────────
+.next
+out
+
+.env
+.env.*
+!.env.example
+
+# ── Git ───────────────────────────────────────────────────────────────────────
+.git
+.gitignore
+.gitattributes
+.github
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+build_output.log
+build_agent_output.log
+
+
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# Next.js caches a compiled version of next.config.ts — exclude it so the
+# builder stage always compiles a fresh copy inside the container.
+next.config.compiled.js
+next.config.ts.timestamp
+
+
+coverage/
+playwright-report/
+test-results/
+__tests__/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+test-*.js
+e2e/
+
+# ── Dev-only local scripts ────────────────────────────────────────────────────
+fix-ticks.js
+puppeteer-config.json
+
+# ── Documentation ─────────────────────────────────────────────────────────────
+docs/
+README.md
+DEVPOST_SUBMISSION.md
+blog_post_bonus.md
+*.md
+!prisma/migrations/**/*.sql
+
+# ── Compiled agent output (rebuilt inside Docker) ─────────────────────────────
+# Gap 7.3: Both .ts source and .js build are excluded from the main app image.
+# The LiveKit agent runs as a SEPARATE container via Dockerfile.agent.
+# Including these in the main image inflates it by 600KB+ with no benefit.
+
+# ── Audit / planning documents ────────────────────────────────────────────────
+plan3.txt
+CHANGES.md
+
+# ── Editor / OS artifacts ─────────────────────────────────────────────────────
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+*.orig
+
+# ── CI / deploy scripts ───────────────────────────────────────────────────────
+deploy.sh
+cloudbuild.yaml
+docker-compose*.yml
+Makefile
+
+# ── Antigravity / AI assistant artifacts ─────────────────────────────────────
+.gemini/
+.antigravity/

@@ -1,0 +1,96 @@
+# =============================================================
+# OptiAISEO robots.txt
+# optiaiseo.online — AI SEO & AEO platform
+# =============================================================
+
+# ─── Default: allow all standard crawlers ────────────────────
+User-agent: *
+Allow: /
+Disallow: /dashboard/
+Disallow: /reset-password
+Disallow: /invite/
+Disallow: /admin/
+Disallow: /api/stripe/
+Disallow: /api/auth/
+# Public API endpoints (kg-feed, llms.txt, sitemap, structured data) remain crawlable.
+
+# ─── Search engine bots ───────────────────────────────────────
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+# ─── Google AI crawlers — CRITICAL for AI Overview inclusion ──
+# Google-Extended controls whether content appears in Gemini and
+# Google AI Overviews (SGE). Blocking it = zero AI Overview mentions.
+User-agent: Google-Extended
+Allow: /
+Disallow: /dashboard/
+Disallow: /admin/
+Disallow: /api/stripe/
+Disallow: /api/auth/
+
+# ─── AI crawlers — open to all public brand & service pages ───
+# GEO research shows entities that allow AI crawlers on service/about
+# pages are cited 3× more in LLM answers. Brand definition pages MUST
+# be indexable for entity recognition and citation.
+
+User-agent: GPTBot
+Allow: /
+Disallow: /dashboard/
+Disallow: /reset-password
+Disallow: /invite/
+Disallow: /admin/
+Disallow: /api/stripe/
+Disallow: /api/auth/
+
+User-agent: Claude-Web
+Allow: /
+Disallow: /dashboard/
+Disallow: /reset-password
+Disallow: /invite/
+Disallow: /admin/
+Disallow: /api/stripe/
+Disallow: /api/auth/
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /dashboard/
+Disallow: /reset-password
+Disallow: /invite/
+Disallow: /admin/
+Disallow: /api/stripe/
+Disallow: /api/auth/
+
+User-agent: anthropic-ai
+Allow: /
+Disallow: /dashboard/
+Disallow: /reset-password
+Disallow: /invite/
+Disallow: /admin/
+Disallow: /api/stripe/
+Disallow: /api/auth/
+
+User-agent: cohere-ai
+Allow: /
+Disallow: /dashboard/
+Disallow: /admin/
+
+# ─── High-volume scrapers — block (not AI citation crawlers) ──
+User-agent: CCBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: FacebookBot
+Disallow: /
+
+Sitemap: https://www.optiaiseo.online/sitemap.xml

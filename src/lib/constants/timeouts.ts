@@ -1,0 +1,11 @@
+export const TIMEOUTS = {
+  AI_DEFAULT_MS:    12_000,
+  AI_CLAUDE_MS:     15_000,
+  AI_COPILOT_MS:    15_000,
+  AI_PERPLEXITY_MS: 25_000,
+  AI_BLOG_MS:       90_000,
+  VECTOR_UPSERT_MS:  5_000,
+  VECTOR_QUERY_MS:   5_000,
+  VECTOR_INFO_MS:    3_000,
+  INDEXNOW_MS:      10_000,
+} as const;

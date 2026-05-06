@@ -1,0 +1,71 @@
+# Environment files — NEVER commit these
+.env
+.env.local
+.env*.local
+.env.production
+.env.staging
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+
+# TypeScript cache
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# Compiled agent (generated artifact)
+livekit-agent.js
+
+# One-off migration/fix scripts (served their purpose)
+fix_loggers.js
+fix_all_loggers.js
+replace-logger.js
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test helpers
+test-*.js
+fix-ticks.js
+apply_colors.js
+puppeteer-config.json
+
+scripts/one-off/
+
+# Prisma — ignore auto-generated backup copies of the schema file
+# The canonical schema is prisma/schema.prisma — do not create backup copies.
+# To view schema history: git log -- prisma/schema.prisma
+prisma/schema\ (*).prisma
+prisma/schema?.prisma
+
+# macOS metadata — catch nested .DS_Store files too
+**/.DS_Store
+zi83mfL3
+
+# Sentry Config File
+.env.sentry-build-plugin
+
+# Local archives and temp dirs
+*.zip
+ziRlqeMx/
+node_modules/
+.next/
+zi09dPfY
+.env
+.env.*

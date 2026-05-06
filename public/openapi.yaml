@@ -1,0 +1,153 @@
+openapi: 3.0.3
+info:
+  title: OptiAISEO API
+  version: 1.0.0
+  description: |
+    REST API for AEO scoring, SEO analysis, and backlink monitoring.
+
+    ## Authentication
+    All endpoints require an API key passed in the `X-API-Key` header.
+    Obtain your key from **Dashboard → Settings → Developer API**.
+
+    ## Rate Limits
+    - **Pro plan**: 60 requests / minute per endpoint
+    - **Agency plan**: 300 requests / minute per endpoint
+
+    ## Error Codes
+    | Status | Meaning |
+    |--------|---------|
+    | 401    | Missing or invalid API key |
+    | 403    | Feature not available on your plan |
+    | 429    | Rate limit exceeded — retry after the `Retry-After` header value |
+    | 503    | Endpoint temporarily unavailable |
+
+servers:
+  - url: https://www.optiaiseo.online/api/v1
+    description: Production
+
+security:
+  - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    AeoScore:
+      type: object
+      properties:
+        score:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: AEO citation readiness score (0–100)
+          example: 72
+        grade:
+          type: string
+          enum: [A, B, C, D, F]
+          description: Letter grade derived from score
+          example: B
+        citations:
+          type: array
+          description: AI sources that currently cite this URL
+          items:
+            type: object
+            properties:
+              source:
+                type: string
+                example: perplexity
+              cited:
+                type: boolean
+              checkedAt:
+                type: string
+                format: date-time
+        issues:
+          type: array
+          description: Actionable recommendations to improve the score
+          items:
+            type: object
+            properties:
+              criterion:
+                type: string
+                example: missing_faq_schema
+              impact:
+                type: string
+                enum: [high, medium, low]
+              fix:
+                type: string
+                example: Add FAQPage JSON-LD to the page <head>
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Missing or invalid API key
+
+paths:
+  /aeo/score:
+    post:
+      operationId: getAeoScore
+      summary: AEO score for a URL
+      description: |
+        Returns the AI Engine Optimisation (AEO) citation readiness score for a given URL.
+        Checks whether the page is currently cited by Perplexity, ChatGPT, and Claude,
+        and provides a prioritised list of fixes to improve discoverability.
+
+        **Plan requirement**: Pro or Agency
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  example: https://example.com/blog/seo-guide
+                  description: Fully qualified URL to analyse
+                forceRefresh:
+                  type: boolean
+                  default: false
+                  description: Bypass cache and force a live check
+      responses:
+        '200':
+          description: AEO score result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AeoScore'
+        '400':
+          description: Invalid or missing URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Feature not available on your current plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds until the rate limit resets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
