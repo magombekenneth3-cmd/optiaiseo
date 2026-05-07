@@ -21,6 +21,7 @@
 import { inngest } from "../client";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import { cleanupOrphanedRateLimitKeys } from "@/lib/rate-limit";
 
 // ── Shared helper — fetch all paid (PRO + AGENCY) site IDs ──────────────────
 
@@ -205,5 +206,32 @@ export const cronWeeklyCompetitorAlerts = inngest.createFunction(
 
         logger.info(`[CronCompetitorAlerts] Queued ${sites.length} sites`);
         return { queued: sites.length };
+    },
+);
+
+// ── Monthly rate-limit key cleanup (1st of month, 00:30 UTC) ────────────────
+// Runs 30 min after the credits reset job (00:00 UTC) to avoid Redis contention.
+// Scans all rl:* keys and deletes any whose prefix is no longer in ACTIVE_PREFIXES.
+// @upstash/ratelimit sets TTLs automatically so this is a belt-and-suspenders safety net.
+
+export const cronMonthlyRateLimitCleanup = inngest.createFunction(
+    {
+        id: "cron-monthly-ratelimit-cleanup",
+        name: "Cron: Monthly Rate-Limit Key Cleanup",
+        retries: 2,
+        triggers: [{ cron: "30 0 1 * *" }], // 00:30 UTC on 1st of every month
+    },
+    async ({ step }) => {
+        const result = await step.run("cleanup-orphaned-rl-keys", () =>
+            cleanupOrphanedRateLimitKeys()
+        );
+
+        logger.info("[CronMonthlyRateLimitCleanup] Done", {
+            scanned: result.scanned,
+            deleted: result.deleted,
+            orphanCount: result.orphans.length,
+        });
+
+        return result;
     },
 );

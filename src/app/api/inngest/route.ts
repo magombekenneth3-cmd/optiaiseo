@@ -38,6 +38,7 @@ import {
     checkOneQueryJob,   // Gap 3: fan-out child — must be registered or events are silently dropped
 } from "@/lib/inngest/functions/query-library";
 import { runSerpGapAnalysisJob } from "@/lib/inngest/functions/serp-gap-analysis";
+import { cronMonthlyRateLimitCleanup } from "@/lib/inngest/functions/cron-schedule";
 
 // IMPORTANT: every function that handles a fan-out child event MUST be
 // registered here or Inngest will silently drop those events.
@@ -87,6 +88,10 @@ export const { GET, POST, PUT } = serve({
         // IMPORTANT: Scheduled via Inngest cron only. Do NOT add a matching
         // entry in vercel.json — double-scheduling would reset credits twice per month.
         creditsResetJob,
+        // Monthly rate-limit key cleanup (1st of month 00:30 UTC)
+        // Runs 30 min after credits reset to avoid Redis contention.
+        // Scans all rl:* keys and deletes any whose prefix is no longer active.
+        cronMonthlyRateLimitCleanup,
         // Free SEO Check — background audit runner
         runFreeAuditJob,
         // Free SEO Check — report email delivery (capped at 5, 3 retries)
