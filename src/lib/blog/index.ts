@@ -421,7 +421,7 @@ export async function buildPost(
     });
 
     if (siteId) {
-        assembled = await injectInternalLinks(assembled, siteId, slug);
+        assembled = await injectInternalLinks(assembled, siteId, slug, ctx.siteDomain);
     }
 
     logger.debug("[Blog Engine] Running humanization pass...", { keyword: ctx.keyword });

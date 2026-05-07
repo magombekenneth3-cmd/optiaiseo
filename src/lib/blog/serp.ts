@@ -34,10 +34,10 @@ export interface SerpContext {
 
 /** Hard character limits per section to prevent silent context overflows. */
 const BUDGET = {
-  scrapedContentPerResult: 2000,
+  scrapedContentPerResult: 6000, // ~900 words — enough to see full H2 structure and benchmark depth
   snippetPerResult: 400,
   featuredSnippet: 600,
-  paaTotal: 800,
+  paaTotal: 1200,  // increased to match richer content
   relatedSearches: 300,
 } as const;
 

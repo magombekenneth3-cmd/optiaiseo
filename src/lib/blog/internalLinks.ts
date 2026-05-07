@@ -7,7 +7,8 @@ import { parse } from "node-html-parser";
 export async function injectInternalLinks(
     htmlContent: string,
     siteId: string,
-    currentSlug: string
+    currentSlug: string,
+    siteDomain?: string | null
 ): Promise<string> {
     try {
         // Fetch up to 5 other published blogs to potentially link to
@@ -58,10 +59,18 @@ export async function injectInternalLinks(
                     const regex = new RegExp(`\\b(${escapedKw})\\b`, 'i');
 
                     if (regex.test(text)) {
-                        // Replace only the FIRST occurrence in the text node to avoid over-linking
+                        // Use absolute URL when domain is known — links must be canonical
+                        // and work correctly when content is syndicated or embedded.
+                        const cleanDomain = siteDomain
+                            ? siteDomain.replace(/^https?:\/\//, "").replace(/\/$/, "")
+                            : null;
+                        const href = cleanDomain
+                            ? `https://${cleanDomain}/blog/${blog.slug}`
+                            : `/blog/${blog.slug}`;
+
                         const newHtml = passage.innerHTML.replace(
                             regex,
-                            `<a href="/blog/${blog.slug}" class="text-primary hover:underline font-medium" title="$1">$1</a>`
+                            `<a href="${href}" class="text-primary hover:underline font-medium" title="$1">$1</a>`
                         );
                         passage.set_content(newHtml);
                         linksAdded++;
