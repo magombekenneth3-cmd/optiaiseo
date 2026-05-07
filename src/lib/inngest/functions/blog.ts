@@ -375,6 +375,20 @@ Be specific and concise. This will be used to write a better article.`,
             let keywords = siteContext?.keywords ?? [];
             finalPipelineType = siteContext ? "SITE_CONTEXT" : "INDUSTRY";
 
+            // ── USER_KEYWORD / SEED_KEYWORD: honour the user's explicit choice ──
+            // The user typed (or we selected) a specific keyword in Step 0.
+            // It arrives as event.data.keyword. We MUST place it at position [0]
+            // so generateEvergreenPost uses it as primaryKeyword for the prompt.
+            // GSC opportunities are still fetched below for semantic enrichment,
+            // but they cannot displace the user's chosen keyword.
+            if (keyword && (pipelineType === "USER_KEYWORD" || pipelineType === "SEED_KEYWORD")) {
+                category = keyword;
+                // Put the chosen keyword first; retain site keywords as semantic support
+                keywords = [keyword, ...(siteContext?.keywords ?? []).filter(k => k.toLowerCase() !== keyword.toLowerCase())].slice(0, 15);
+                finalPipelineType = pipelineType;
+                logger.info(`[Blog/Pipeline] USER_KEYWORD override — primary keyword: "${keyword}"`, { siteId, pipelineType });
+            }
+
             const gscOpp = await step.run("fetch-gsc-opportunities", async () => {
                 try {
                     const { getUserGscToken } = await import("@/lib/gsc/token");
@@ -402,15 +416,21 @@ Be specific and concise. This will be used to write a better article.`,
                 return [];
             });
 
-            if (gscOpp.length > 0) {
+            // Only let GSC override category/keywords when no explicit keyword was supplied.
+            // When the user chose a keyword, GSC data is secondary enrichment only.
+            if (!keyword && gscOpp.length > 0) {
                 keywords = [...gscOpp.map(o => o.keyword), ...(siteContext?.keywords ?? [])].slice(0, 15);
                 category = `${displayName} — GSC Opportunity`;
                 finalPipelineType = "GSC_GAP";
-            } else if (keywords.length === 0) {
+            } else if (!keyword && keywords.length === 0) {
                 const brand = site.domain.replace(/^www\./, "").split(".")[0];
                 category = brand;
                 keywords = [brand, "guide", "tips", "how to", "best practices"];
                 finalPipelineType = "INDUSTRY";
+            } else if (keyword && gscOpp.length > 0) {
+                // Enrich the user's keyword list with GSC semantic terms (don't replace position 0)
+                const gscTerms = gscOpp.map(o => o.keyword).filter(k => k.toLowerCase() !== keyword.toLowerCase());
+                keywords = [keyword, ...gscTerms, ...(siteContext?.keywords ?? []).filter(k => k.toLowerCase() !== keyword.toLowerCase())].slice(0, 15);
             }
 
             liveBlogPost = await step.run("generate-evergreen-post", async () => {
