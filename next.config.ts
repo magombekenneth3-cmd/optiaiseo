@@ -137,7 +137,7 @@ const nextConfig: NextConfig = {
             value: 'optiaiseo-production.up.railway.app',
           },
         ],
-        destination: 'https://www.optiaiseo.online/:path*',
+        destination: 'https://optiaiseo.online/:path*',
         permanent: true,
       },
       {
@@ -145,10 +145,10 @@ const nextConfig: NextConfig = {
         has: [
           {
             type: 'host',
-            value: 'optiaiseo.online',
+            value: 'optiaiseo-production.up.railway.app',
           },
         ],
-        destination: 'https://www.optiaiseo.online/:path*',
+        destination: 'https://optiaiseo.online/:path*',
         permanent: true,
       },
     ];
