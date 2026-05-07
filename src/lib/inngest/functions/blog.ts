@@ -275,9 +275,13 @@ export const generateBlogJob = inngest.createFunction(
 
         // ── Step: Perplexity research — understand what top results cover ────────────
         // Runs before generation so the writer knows the competitive landscape.
+        // Fires for ALL pipeline types: uses the explicit keyword when provided,
+        // falls back to the primary site topic/brand for INDUSTRY & SITE_CONTEXT blogs.
         // Degrades gracefully if Perplexity key is missing.
         const researchBrief = await step.run("perplexity-research", async () => {
-            if (!process.env.PERPLEXITY_API_KEY || !keyword) return null;
+            if (!process.env.PERPLEXITY_API_KEY) return null;
+            // Use explicit keyword for USER_KEYWORD/SEED_KEYWORD; fall back to site topic
+            const researchTopic = keyword || site.domain.replace(/^www\./, "").split(".")[0];
             try {
                 const res = await fetch("https://api.perplexity.ai/chat/completions", {
                     method: "POST",
@@ -289,7 +293,7 @@ export const generateBlogJob = inngest.createFunction(
                         model: "sonar-pro",
                         messages: [{
                             role: "user",
-                            content: `Search for the top ranking pages for "${keyword}". 
+                            content: `Search for the top ranking pages for "${researchTopic}".
 
 Extract and summarise:
 1. The H2 structure / main topics the top 3 results cover
@@ -316,8 +320,8 @@ Be specific and concise. This will be used to write a better article.`,
                     typeof c === "string" ? c : (c as Record<string, string>).url ?? ""
                 ).filter(Boolean);
                 const domainCited = citations.some(url => url.includes(site.domain.replace(/^www\./, "")));
-                logger.info(`[Blog/Research] Research complete for "${keyword}" — domain cited in results: ${domainCited}`, { citationCount: citations.length });
-                return brief ? `COMPETITIVE RESEARCH for "${keyword}":\n${brief}` : null;
+                logger.info(`[Blog/Research] Research complete for "${researchTopic}" — domain cited in results: ${domainCited}`, { citationCount: citations.length });
+                return brief ? `COMPETITIVE RESEARCH for "${researchTopic}":\n${brief}` : null;
             } catch (err: unknown) {
                 logger.warn("[Blog/Research] Perplexity research failed — continuing without brief", {
                     error: (err as Error)?.message,

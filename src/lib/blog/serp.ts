@@ -431,11 +431,12 @@ export async function getSerpContextForKeyword(
 
   if (organic.length === 0) return null;
 
-  // Scrape sequentially with a small concurrency limit to avoid rate-limiting.
-  // Two concurrent requests is safe for most hosts; bump to 3 if speed matters.
+  // Scrape with limited concurrency to respect host rate limits.
+  // 3 concurrent requests across different domains is safe and cuts scrape time
+  // from ~24s (3 batches of 2) to ~16s (2 batches of 3) for 5 results.
   if (scrapeTopPages) {
     const queue = organic.filter((r) => !isUnscrappable(r.link));
-    const CONCURRENCY = 2;
+    const CONCURRENCY = 3;
 
     for (let i = 0; i < queue.length; i += CONCURRENCY) {
       const batch = queue.slice(i, i + CONCURRENCY);

@@ -108,7 +108,8 @@ export async function injectInternalLinks(
 export async function suggestEntityLinks(
     currentBlogContent: string,
     currentBlogKeywords: string[],
-    siteId: string
+    siteId: string,
+    siteDomain?: string | null
 ): Promise<{ anchorText: string; targetSlug: string; reason: string }[]> {
     try {
         const entityPages = await prisma.blog.findMany({
@@ -121,6 +122,10 @@ export async function suggestEntityLinks(
         const contentLower = currentBlogContent.toLowerCase();
         const suggestions: { anchorText: string; targetSlug: string; reason: string; score: number }[] = [];
 
+        const cleanDomain = siteDomain
+            ? siteDomain.replace(/^https?:\/\//, "").replace(/\/$/, "")
+            : null;
+
         for (const entityPage of entityPages) {
             const overlap = entityPage.targetKeywords.filter(kw =>
                 contentLower.includes(kw.toLowerCase()) ||
@@ -128,10 +133,14 @@ export async function suggestEntityLinks(
             );
 
             if (overlap.length > 0) {
+                // Use absolute URL when domain is known — same as injectInternalLinks fix
+                const targetSlug = cleanDomain
+                    ? `https://${cleanDomain}/services/${entityPage.slug}`
+                    : `/services/${entityPage.slug}`;
+
                 suggestions.push({
-                    // Strip brand suffix from title for cleaner anchor text
                     anchorText: entityPage.title.replace(/\|.*$/, "").trim(),
-                    targetSlug: `/services/${entityPage.slug}`,
+                    targetSlug,
                     reason: `Matches keywords: ${overlap.slice(0, 2).join(", ")}`,
                     score: overlap.length,
                 });
