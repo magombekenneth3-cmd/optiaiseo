@@ -427,7 +427,7 @@ export async function getSerpContextForKeyword(
   logger.debug(`[SERP] Fetching context for: "${keyword}"…`);
 
   const { organic, peopleAlsoAsk, featuredSnippet, relatedSearches } =
-    await fetchGoogleSerp(keyword, 3);
+    await fetchGoogleSerp(keyword, 5); // 5 results → better heading frequency signal
 
   if (organic.length === 0) return null;
 
@@ -755,10 +755,18 @@ export function buildCompetitorBeatStrategy(
   }
 
   const totalProfiles = profiles.length;
-  const tableStakeHeadings = [...headingFreq.entries()]
-    .filter(([, count]) => count >= Math.ceil(totalProfiles * 0.6))
+  // 50% threshold: with 5 results, 3+ must agree; with 2 scraped, 1+ agree.
+  // Lower than the old 60% so niche keywords with varied structures still get signal.
+  let tableStakeHeadings = [...headingFreq.entries()]
+    .filter(([, count]) => count >= Math.ceil(totalProfiles * 0.5))
     .map(([h]) => h)
     .slice(0, 5);
+
+  // Fallback for very niche keywords where all competitors have unique structures:
+  // treat rank-1's top headings as the mandatory baseline — they define the floor.
+  if (tableStakeHeadings.length === 0 && profiles[0]?.headings.length > 0) {
+    tableStakeHeadings = profiles[0].headings.slice(0, 3);
+  }
 
   const rareHeadings = [...headingFreq.entries()]
     .filter(([, count]) => count === 1)

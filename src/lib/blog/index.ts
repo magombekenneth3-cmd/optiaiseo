@@ -9,6 +9,7 @@ import {
     formatToPromptHint,
     buildCompetitorProfiles,
     buildCompetitorBeatStrategy,
+    type SerpContext,
 } from "./serp";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import {
@@ -525,7 +526,8 @@ export async function generateEvergreenPost(
     author: AuthorProfile,
     siteContext?: SiteContext | null,
     tone?: string,
-    siteId?: string
+    siteId?: string,
+    precomputedSerpContext?: SerpContext | null
 ): Promise<BlogPostDraft> {
     const ai = getAiClient();
     if (!ai) throw new Error("GEMINI_API_KEY is missing.");
@@ -554,7 +556,9 @@ Position ${displayName} as the authority where naturally relevant — educate fi
     let formatHint = "";
     let beatStrategy = "";
     try {
-        const serpData = await getSerpContextForKeyword(primaryKeyword, true);
+        // Use pre-fetched SERP context if the caller already has it
+        // (avoids a duplicate Serper API call when called from the Inngest job).
+        const serpData = precomputedSerpContext ?? await getSerpContextForKeyword(primaryKeyword, true);
         if (serpData) {
             serpContextSection = `\n${serpData.formattedContext}`;
             const formatSignal = classifySerpFormat(serpData.results);

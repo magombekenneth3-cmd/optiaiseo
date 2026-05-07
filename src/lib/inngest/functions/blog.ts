@@ -15,6 +15,7 @@ import { getFunnelForIntent, SearchIntent as FunnelIntent } from "@/lib/aeo/funn
 import { detectRiskTier, detectIntent, cleanDomainToDisplayName } from "@/lib/blog/prompt-context";
 import { gateCitationScore } from "@/lib/blog/ai-citation-template";
 import { AI_MODELS } from "@/lib/constants/ai-models";
+import { getSerpContextForKeyword, type SerpContext } from "@/lib/blog/serp";
 
 function buildAuthorFromSite(site: {
     id: string;
@@ -433,9 +434,32 @@ Be specific and concise. This will be used to write a better article.`,
                 keywords = [keyword, ...gscTerms, ...(siteContext?.keywords ?? []).filter(k => k.toLowerCase() !== keyword.toLowerCase())].slice(0, 15);
             }
 
+            // ── Step: Pre-fetch SERP context once ──────────────────────────────────
+            // generateEvergreenPost internally calls getSerpContextForKeyword.
+            // By fetching it here as a dedicated step, we:
+            //   1. Avoid a duplicate Serper API call inside the generator
+            //   2. Get Inngest step-level retry/observability for the SERP fetch
+            //   3. Share the same data across both the generator and any future steps
+            const primaryKeywordForSerp = keywords[0]; // position [0] is always the target keyword
+            const precomputedSerpContext: SerpContext | null = await step.run("fetch-serp-context", async () => {
+                if (!primaryKeywordForSerp) return null;
+                try {
+                    const ctx = await getSerpContextForKeyword(primaryKeywordForSerp, true);
+                    logger.info(`[Blog/SERP] Pre-fetched SERP for "${primaryKeywordForSerp}" — ${ctx?.results.length ?? 0} results`, { siteId });
+                    return ctx;
+                } catch (err: unknown) {
+                    logger.warn("[Blog/SERP] SERP pre-fetch failed — generator will skip SERP enrichment", {
+                        keyword: primaryKeywordForSerp,
+                        error: (err as Error)?.message,
+                    });
+                    return null;
+                }
+            });
+
             liveBlogPost = await step.run("generate-evergreen-post", async () => {
                 const res = await generateEvergreenPost(
-                    category, keywords, author, enrichedSiteContext, site.blogTone || undefined, siteId
+                    category, keywords, author, enrichedSiteContext,
+                    site.blogTone || undefined, siteId, precomputedSerpContext
                 );
                 return { ...res, ogImage: res.heroImage?.url };
             });
