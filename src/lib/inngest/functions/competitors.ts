@@ -8,7 +8,7 @@
  * Data:  { analysisId: string, url: string, keyword: string, domain: string }
  */
 import { inngest } from "../client";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { analyseCompetitorPage } from "@/lib/competitors";
 import { CONCURRENCY } from "../concurrency";
 

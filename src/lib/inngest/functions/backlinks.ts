@@ -32,7 +32,7 @@ export const backlinkCheckSite = inngest.createFunction(
         // When fired by event, event.data has { siteId, domain } — process that single site.
         const eventData = event.data as Record<string, unknown>;
         if (!eventData?.siteId) {
-            const { default: prisma } = await import("@/lib/prisma");
+            const { prisma } = await import("@/lib/prisma");
             const sites = await step.run("fetch-sites", () =>
                 prisma.site.findMany({
                     where:  { user: { subscriptionTier: { in: ["PRO", "AGENCY", "ENTERPRISE"] } } },

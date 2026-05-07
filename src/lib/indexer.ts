@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { pingGoogleIndexingApi } from "@/lib/gsc/indexing";
 import { logger, formatError } from "@/lib/logger";
 import { submitToAllIndexNow } from "@/lib/indexnow";

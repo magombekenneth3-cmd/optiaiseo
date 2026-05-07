@@ -1,6 +1,6 @@
 import crypto from "crypto"
 import { logger } from "@/lib/logger"
-import prisma from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library"
 
 function hashRequest(data: object): string {

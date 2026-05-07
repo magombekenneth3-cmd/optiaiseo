@@ -2,7 +2,7 @@
  * Win 9: Strategy Memory — helpers for reading/writing Aria session memories.
  * Import this in livekit-agent.ts and any route that fires key user events.
  */
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { logger } from "@/lib/logger";
 

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 interface Props {
     params: Promise<{ token: string }>;

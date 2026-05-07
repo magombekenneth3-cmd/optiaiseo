@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { AeoResult } from "./index";
 import { checkGrokVisibility } from "./check-grok";
 import { checkCopilotVisibility } from "./check-copilot";

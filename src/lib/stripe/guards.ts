@@ -8,7 +8,7 @@
  * Enforced by ESLint rule: eslint-rules/no-direct-resolve-effective-tier.js
  */
 
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { hasFeature, withinLimit, getPlan } from "./plans";
 import type { Tier } from "./plans";
 import { resolveEffectiveTier } from "./resolveEffectiveTier";

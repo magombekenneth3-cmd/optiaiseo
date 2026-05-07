@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ReactNode } from "react";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { CollapsibleSidebar } from "@/components/dashboard/CollapsibleSidebar";
 import { TopHeader } from "@/components/dashboard/TopHeader";
 import { MobileSidebar } from "@/components/dashboard/MobileSidebar";

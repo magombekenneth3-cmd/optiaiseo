@@ -5,7 +5,7 @@ export const config = { api: { bodyParser: { sizeLimit: "64kb" } } };
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import {
     runCitationGapAnalysis,
     getCachedCitationGaps,

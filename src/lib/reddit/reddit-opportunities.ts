@@ -4,7 +4,7 @@
  * Filters for threads ranking in positions 1-10 on Google.
  * Surfaces as "Reddit opportunities" in the Keywords dashboard.
  */
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 
 export interface RedditOpportunity {

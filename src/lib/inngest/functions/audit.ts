@@ -1,7 +1,7 @@
 import { logger } from "@/lib/logger";
 import { inngest } from "../client";
 import { NonRetriableError } from "inngest";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { CONCURRENCY } from "../concurrency";
 import { getFullAuditEngine } from "@/lib/seo-audit";
 import { diffAuditSnapshots } from "@/lib/seo-audit/audit-diff";
@@ -27,7 +27,7 @@ export const processManualAuditJob = inngest.createFunction(
             limit: CONCURRENCY.auditFull,
             key: `event.data.siteId`,
         },
-    
+
         triggers: [{ event: "audit.run.manual" }],
     },
     async ({ event, step }) => {
@@ -133,7 +133,7 @@ export const runWeeklyAuditJob = inngest.createFunction(
                 error: error.message,
             });
         },
-    
+
         triggers: [{ event: "audit.run" }],
     },
     async ({ event, step }) => {
@@ -303,7 +303,8 @@ export const runWeeklyAuditJob = inngest.createFunction(
 // ── Post-Fix Impact Audit ─────────────────────────────────────────────────────
 
 export const auditPostFixJob = inngest.createFunction(
-    { id: "audit-post-fix", name: "Post-Fix Impact Audit",
+    {
+        id: "audit-post-fix", name: "Post-Fix Impact Audit",
         triggers: [{ event: "audit/run-post-fix" }],
     },
     async ({ event, step }) => {
@@ -345,7 +346,8 @@ export const auditPostFixJob = inngest.createFunction(
 // ── Weekly Email Digest ───────────────────────────────────────────────────────
 
 export const sendWeeklyDigestJob = inngest.createFunction(
-    { id: "send-weekly-digest", name: "Send Weekly SEO Digest",
+    {
+        id: "send-weekly-digest", name: "Send Weekly SEO Digest",
         triggers: [{ event: "email.digest" }],
     },
     async ({ event, step }) => {
@@ -425,7 +427,8 @@ export const sendWeeklyDigestJob = inngest.createFunction(
 // ── GSoV Monitor & Self-Healing ───────────────────────────────────────────────
 
 export const monitorGsovJob = inngest.createFunction(
-    { id: "monitor-gsov", name: "Hourly GSoV & Self-Healing Monitor",
+    {
+        id: "monitor-gsov", name: "Hourly GSoV & Self-Healing Monitor",
         triggers: [{ cron: "0 * * * *" }],
     },
     async ({ step }) => {
@@ -460,7 +463,7 @@ export const processGsovSiteJob = inngest.createFunction(
                 error: error.message,
             });
         },
-    
+
         triggers: [{ event: "gsov.check.site" }],
     },
     async ({ event, step }) => {
@@ -493,7 +496,8 @@ export const processGsovSiteJob = inngest.createFunction(
 // ── Daily GSC Anomaly Monitor ─────────────────────────────────────────────────
 
 export const monitorGscAnomaliesJob = inngest.createFunction(
-    { id: "monitor-gsc-anomalies", name: "Daily GSC Anomaly & Intent Shift Monitor",
+    {
+        id: "monitor-gsc-anomalies", name: "Daily GSC Anomaly & Intent Shift Monitor",
         triggers: [{ cron: "0 8 * * *" }],
     },
     async ({ step }) => {
@@ -528,7 +532,7 @@ export const processGscSiteJob = inngest.createFunction(
                 error: error.message,
             });
         },
-    
+
         triggers: [{ event: "gsc.anomaly.check.site" }],
     },
     async ({ event, step }) => {

@@ -3,7 +3,7 @@ import IORedis from "ioredis";
 import { Queue, Worker } from "bullmq";
 import { callGeminiJson } from "@/lib/gemini";
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import type { Blog, Site } from "@prisma/client";
 
 // ─────────────────────────────────────────────────────────────

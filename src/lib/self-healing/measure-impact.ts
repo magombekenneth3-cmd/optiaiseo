@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { subDays } from "date-fns";
 
 function avg(values: number[]): number {

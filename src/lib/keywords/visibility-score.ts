@@ -10,7 +10,7 @@
  * would if every keyword was ranked #1.
  */
 
-import prisma    from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 
 const CTR_WEIGHT: Readonly<Record<number, number>> = {

@@ -4,7 +4,7 @@ export const config = { api: { bodyParser: { sizeLimit: "512kb" } } };
 import { logger } from "@/lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { GoogleGenAI } from "@google/genai";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { z } from "zod";

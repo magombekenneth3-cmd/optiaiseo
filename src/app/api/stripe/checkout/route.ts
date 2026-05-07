@@ -5,7 +5,7 @@ import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { createCheckoutSession } from "@/lib/stripe/client";
 import { executeIdempotently } from "@/lib/stripe/idempotency";
 import { getPlan } from "@/lib/stripe/plans";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit/check";
 
 // All purchasable tiers — FREE is never purchased via checkout

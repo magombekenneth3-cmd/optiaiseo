@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { isCronAuthorized } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 
 /**

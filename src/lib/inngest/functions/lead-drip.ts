@@ -22,7 +22,7 @@
 
 import { inngest } from "../client";
 import { NonRetriableError } from "inngest";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { Resend } from "resend";
 import { signUnsubToken } from "@/lib/unsub-token";

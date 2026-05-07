@@ -2,7 +2,7 @@
 
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { callGeminiJson } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { logger } from "@/lib/logger";

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server"
 import { stripe } from "@/lib/stripe/client"
-import prisma from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library"
 import {
     handleCheckoutCompleted,

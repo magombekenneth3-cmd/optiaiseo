@@ -1,6 +1,6 @@
 import { inngest }           from "../client";
 import { NonRetriableError }  from "inngest";
-import prisma                 from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger }             from "@/lib/logger";
 import { CONCURRENCY }        from "../concurrency";
 import { getSerpData, getKeywordMetricsBatch } from "@/lib/keywords/dataforseo";

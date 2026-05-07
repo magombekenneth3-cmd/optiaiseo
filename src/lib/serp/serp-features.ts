@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
 
 const KEYWORD_CAP = 20

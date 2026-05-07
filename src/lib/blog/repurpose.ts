@@ -1,7 +1,7 @@
 import IORedis from "ioredis";
 import { callGeminiJson } from "@/lib/gemini";
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import type { Blog, Site } from "@prisma/client";
 
 // ─────────────────────────────────────────────────────────────

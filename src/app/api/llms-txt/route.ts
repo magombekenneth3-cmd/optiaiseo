@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 /**
  * Public llms.txt endpoint for AI crawlers (GPTBot, PerplexityBot, Google AIO, etc.)

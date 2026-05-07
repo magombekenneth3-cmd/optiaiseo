@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { isCronAuthorized } from "@/lib/cron-auth";
 import { fetchTrendingTopics } from "@/lib/trending/fetch-trending";
 import { runDecayCheck } from "@/lib/content/decay-check";

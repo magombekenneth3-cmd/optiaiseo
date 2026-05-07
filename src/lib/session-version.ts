@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { jwtCacheKey } from "@/lib/auth";
 import { logger } from "@/lib/logger";

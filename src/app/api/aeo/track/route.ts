@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 import { logger } from "@/lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { checkRateLimit } from "@/lib/rate-limit";

@@ -3,7 +3,7 @@
  * Captures a point-in-time baseline that feeds 6-month sparkline charts
  * and week-over-week drop alerts.
  */
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { sendSEODigest } from "@/lib/email";
 

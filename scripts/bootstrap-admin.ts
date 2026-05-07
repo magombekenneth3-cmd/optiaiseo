@@ -3,7 +3,7 @@
  * Run once after initial deployment:
  *   pnpm tsx scripts/bootstrap-admin.ts admin@yourcompany.com
  */
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 const email = process.argv[2];
 

@@ -10,7 +10,7 @@ import { logger } from "@/lib/logger";
 
 import { NextRequest, NextResponse } from "next/server";
 import { SignJWT } from "jose";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { isCronAuthorized } from "@/lib/cron-auth";
 import { sendPriorityDigest } from "@/lib/email";
 import { extractEnrichedRecommendations } from "@/lib/seo/recommendations";

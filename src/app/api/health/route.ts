@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { logger } from "@/lib/logger";
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 
 /**

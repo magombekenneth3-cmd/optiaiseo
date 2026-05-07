@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { logger } from "@/lib/logger";

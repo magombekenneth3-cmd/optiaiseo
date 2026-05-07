@@ -2,7 +2,7 @@
 
 
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { resolveEffectiveTier } from "@/lib/stripe/resolveEffectiveTier";

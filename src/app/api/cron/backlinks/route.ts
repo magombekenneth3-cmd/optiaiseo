@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { logger } from "@/lib/logger";
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { isCronAuthorized } from "@/lib/cron-auth";
 import { inngest } from "@/lib/inngest/client";
 

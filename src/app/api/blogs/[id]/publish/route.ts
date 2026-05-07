@@ -31,7 +31,7 @@ async function checkOriginality(text: string): Promise<{ isOriginal: boolean, co
     }
 }
 
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { pingGoogleIndexingApi } from "@/lib/gsc/indexing";
 
 // ── HASHNODE GRAPHQL HELPER ───────────────────────────────────────────────────

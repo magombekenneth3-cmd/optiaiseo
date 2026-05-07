@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { logger }                    from "@/lib/logger";
-import prisma                        from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { getQueryLibrarySummary }    from "@/lib/aeo/query-library";
 
 const VALID_INTENTS = new Set([

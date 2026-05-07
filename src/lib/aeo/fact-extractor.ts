@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { pingGoogleIndexingApi } from "@/lib/gsc/indexing";
 import {
     GEMINI_3_FLASH,

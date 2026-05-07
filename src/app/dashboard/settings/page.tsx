@@ -3,7 +3,7 @@ import { Metadata } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { getPlan } from "@/lib/stripe/plans";
 import { SettingsTabs } from "./SettingsTabs";
 

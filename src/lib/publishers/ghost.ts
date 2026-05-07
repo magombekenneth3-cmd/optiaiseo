@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 import { isSafeUrl } from "@/lib/security/safe-url";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 
 

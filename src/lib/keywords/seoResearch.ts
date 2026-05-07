@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { callGeminiJson } from "@/lib/gemini/client";
 import { logger, formatError } from "@/lib/logger";

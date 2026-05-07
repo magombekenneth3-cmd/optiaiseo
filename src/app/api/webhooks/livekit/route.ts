@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { WebhookReceiver } from "livekit-server-sdk";
 import { rateLimit, getClientIp } from "@/lib/rate-limit/check";
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
     // IP-based rate limit — legitimate LiveKit deliveries come from known IP

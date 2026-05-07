@@ -16,7 +16,7 @@ import { BenchmarkPanel, BenchmarkPlaceholder } from "@/components/dashboard/Ben
 import { CacheStatsWidget } from "@/components/dashboard/CacheStatsWidget";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 
 export const metadata: Metadata = {

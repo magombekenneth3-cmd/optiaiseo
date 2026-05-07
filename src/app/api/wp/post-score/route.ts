@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { logger }                    from "@/lib/logger";
-import prisma                        from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { runAeoAudit }               from "@/lib/aeo";
 import { rateLimit }                 from "@/lib/rate-limit";
 

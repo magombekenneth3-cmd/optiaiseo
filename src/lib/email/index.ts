@@ -341,7 +341,7 @@ export async function sendRankMovementEmail(params: {
 }): Promise<{ success: boolean; error?: string }> {
   const { userId, domain, wins, drops } = params;
 
-  const { default: prisma } = await import("@/lib/prisma");
+  const { prisma } = await import("@/lib/prisma");
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { email: true, name: true },

@@ -1,5 +1,5 @@
 import { inngest } from "../client";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { checkPerplexityCitation } from "@/lib/aeo/perplexity-citation-check";
 import { Resend } from "resend";

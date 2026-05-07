@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { requireAdminApi } from "@/lib/admin-guard";
 import { logAdminAction } from "@/lib/admin-audit";
 import { logger } from "@/lib/logger";

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { getCacheStats, bustDomainCache } from "@/lib/aeo/response-cache";
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { requireAdminApi } from "@/lib/admin-guard";
 
 

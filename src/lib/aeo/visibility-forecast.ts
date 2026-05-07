@@ -10,7 +10,7 @@
  * appear in X% of Perplexity answers for your core keywords."
  */
 
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { callGemini } from "@/lib/gemini/client";
 import { logger } from "@/lib/logger";
 

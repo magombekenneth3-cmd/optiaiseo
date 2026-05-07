@@ -1,7 +1,7 @@
 "use server";
 
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { fetchGSCKeywords, normaliseSiteUrl } from "@/lib/gsc";

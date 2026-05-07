@@ -1,7 +1,7 @@
 "use server";
 
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath, unstable_cache, revalidateTag } from "next/cache";
 import { requireUser, assertSiteOwnership } from "@/lib/auth/require-user";
 

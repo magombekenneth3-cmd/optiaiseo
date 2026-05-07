@@ -17,7 +17,7 @@ export async function GET(request: Request) {
         logger.debug('[Cron/Audit] Initiating weekly audit fan-out...');
 
         // Dynamic import of Prisma to avoid edge runtime issues if applicable
-        const { default: prisma } = await import('@/lib/prisma');
+        const { prisma } = await import('@/lib/prisma');
 
         const sites = await prisma.site.findMany({
             select: { id: true, domain: true },

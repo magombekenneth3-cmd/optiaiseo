@@ -2,7 +2,7 @@
 
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit/monthly";
 import { scrapePageQuality, type PageQualityResult } from "@/lib/audit/scrapePageQuality";
 import { getDomainOverview } from "@/lib/keywords/dataforseo";

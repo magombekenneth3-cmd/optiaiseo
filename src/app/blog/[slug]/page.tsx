@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
 import Image from "next/image";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import sanitizeHtml from "sanitize-html";
 
 const ALLOWED_TAGS = [

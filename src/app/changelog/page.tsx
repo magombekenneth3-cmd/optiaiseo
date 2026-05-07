@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 const CHANGELOG_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 

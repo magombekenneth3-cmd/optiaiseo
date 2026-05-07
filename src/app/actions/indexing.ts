@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { pingGoogleIndexingApi } from "@/lib/gsc/indexing";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { submitUrlForIndexing } from "@/lib/indexer";
 import { limiters } from "@/lib/rate-limit";
 import { requireTiers, guardErrorToResult } from "@/lib/stripe/guards";

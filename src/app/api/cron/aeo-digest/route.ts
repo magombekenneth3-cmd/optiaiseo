@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { isCronAuthorized } from "@/lib/cron-auth";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { sendAeoWeeklyDigest } from "@/lib/email/aeo-alert";
 import { logger } from "@/lib/logger";
 

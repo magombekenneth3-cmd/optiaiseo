@@ -1,7 +1,7 @@
 import { logger } from "@/lib/logger";
 import { inngest } from "../client";
 import { NonRetriableError } from "inngest";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { callGemini } from "@/lib/gemini/client";
 
 // ── Planner Brief Generator ───────────────────────────────────────────────────

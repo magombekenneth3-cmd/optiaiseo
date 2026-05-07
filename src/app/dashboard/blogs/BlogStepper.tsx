@@ -9,9 +9,16 @@ import {
 import { getSiteAuthorDetails } from "@/app/actions/blog";
 import { getSiteKeywordSuggestions, type KeywordSuggestion } from "@/app/actions/keyword-suggest";
 
-// ─── Re-export AuthorInput so GenerateBlogButton.tsx import still works ────
-export type { AuthorInput } from "./genBlogmodal";
-import type { AuthorInput } from "./genBlogmodal";
+// ─── AuthorInput type (was in genBlogmodal — now defined here) ──────────────
+export interface AuthorInput {
+    authorName:     string;
+    authorRole:     string;
+    authorBio:      string;
+    realExperience: string;
+    realNumbers:    string;
+    localContext:   string;
+    keyword:        string;
+}
 
 // ─── Props — identical to genBlogmodal ────────────────────────────────────
 interface GenerateBlogModalProps {

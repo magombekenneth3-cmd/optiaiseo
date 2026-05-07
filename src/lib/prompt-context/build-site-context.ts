@@ -11,7 +11,7 @@
  * This module provides that data every time.
  */
 
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 
 export interface GroundedSiteContext {

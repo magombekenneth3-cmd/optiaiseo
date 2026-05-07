@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 import { logger } from "@/lib/logger";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 
 export async function PATCH(

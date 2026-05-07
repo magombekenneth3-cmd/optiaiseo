@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { fetchSerp } from "@/lib/serp/serp-features";
 import { GoogleGenAI } from "@google/genai";
 import { GEMINI_3_FLASH } from "@/lib/constants/ai-models";

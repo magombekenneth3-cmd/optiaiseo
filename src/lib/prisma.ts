@@ -42,4 +42,4 @@ if (!globalForPrisma.prisma && process.env.NODE_ENV !== "test") {
 
 globalForPrisma.prisma = prisma;
 
-export default prisma;
+// Default export removed — use named import: import { prisma } from "@/lib/prisma"

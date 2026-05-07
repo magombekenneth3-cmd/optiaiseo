@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { profileCompetitorEntity, buildEntityGaps } from "@/lib/aio/competitor-entity-profile";
 import { redis } from "@/lib/redis";
 

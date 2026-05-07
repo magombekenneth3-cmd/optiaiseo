@@ -2,7 +2,7 @@
 
 import { requireTiers, guardErrorToResult } from "@/lib/stripe/guards";
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth/require-user";
 import { extractSiteContext } from "@/lib/blog/context";
 import { getAiClient, buildBlogResponseSchema, GeminiBlogResponse, buildPost } from "@/lib/blog";

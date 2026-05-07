@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import { sanitizeHtml } from "@/lib/sanitize-html";

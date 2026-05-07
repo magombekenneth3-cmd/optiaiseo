@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { compareWithCompetitors } from "@/lib/aeo/competitor-compare";
 export interface PredictiveAlert {
     id: string;

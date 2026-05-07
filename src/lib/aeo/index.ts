@@ -7,7 +7,7 @@ import { saveAeoSnapshot } from "./snapshots";
 import { checkGoogleAIOverview } from "./google-aio-check";
 import { detectSchemaGaps } from "./schema-gaps";
 import { diagnoseAeoData, MentionRecord, AeoDiagnosis } from "./diagnosis";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { cachedQuestions } from "./response-cache";
 import { isSafeUrl } from "@/lib/security/safe-url";
 import {

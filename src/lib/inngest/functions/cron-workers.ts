@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 import { inngest } from "../client";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { detectCompetitorMoves, filterUnsentAlerts, renderCompetitorAlertEmail } from "@/lib/competitors/detect-moves";
 import { getReferringDomains } from "@/lib/backlinks/referring-domains";
 import { Resend } from "resend";

@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { getSelfHealingStats } from "@/lib/self-healing/measure-impact";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 export async function GET(

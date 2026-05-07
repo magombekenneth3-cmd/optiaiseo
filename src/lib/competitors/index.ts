@@ -1,7 +1,7 @@
 import { logger } from "@/lib/logger";
 import { GEMINI_3_FLASH } from "@/lib/constants/ai-models";
 import { throttledGeminiCall } from "@/lib/gemini/throttle";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { fetchCompetitorPageHtml } from "./page-fetcher";
 import { isSafeUrl } from "@/lib/security/safe-url";
 import { getDomainMetrics, getKeywordMetricsBatch, resolveLocationCode } from "@/lib/keywords/dataforseo";

@@ -1,7 +1,7 @@
 "use server";
 
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { getServerSession } from "next-auth";

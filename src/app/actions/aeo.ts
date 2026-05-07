@@ -2,7 +2,7 @@
 
 import { logger } from "@/lib/logger";
 import { rateLimit } from "@/lib/rate-limit/check";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { requireTiers, getEffectiveTier, guardErrorToResult } from "@/lib/stripe/guards";

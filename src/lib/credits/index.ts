@@ -4,7 +4,7 @@
  * Protects: full audit (10), AEO check (5), blog generation (15),
  * competitor analysis (8), GitHub PR fix (3), voice session (2).
  */
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 
 import {

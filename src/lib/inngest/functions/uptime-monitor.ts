@@ -5,7 +5,7 @@
  * On failure, sends a Resend email alert (max 1 alert/hour per site).
  */
 import { inngest } from "../client";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { Resend } from "resend";
 import { CONCURRENCY } from "../concurrency";

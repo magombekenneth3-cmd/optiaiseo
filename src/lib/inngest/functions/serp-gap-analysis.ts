@@ -16,7 +16,7 @@
 
 import { inngest } from "../client";
 import { NonRetriableError } from "inngest";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { analyseSerpGap } from "@/lib/serp-gap/analyser";
 import { generateImplementationPlan } from "@/lib/serp-gap/plan-generator";

@@ -7,7 +7,7 @@
  * Security: siteId ownership is verified upstream in the server action.
  */
 
-import prisma    from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 
 const CTR: Readonly<Record<number, number>> = {

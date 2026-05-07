@@ -7,7 +7,7 @@ import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { GoogleGenAI } from "@google/genai";
 import { GEMINI_3_FLASH } from "@/lib/constants/ai-models";
 import { rateLimit, checkRateLimit } from "@/lib/rate-limit";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 // ─── Limiter ──────────────────────────────────────────────────────────────────
 // Uses the monthly checkRateLimit helper with a rolling hourly key so we

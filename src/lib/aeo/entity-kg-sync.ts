@@ -3,7 +3,7 @@
  * Called after every AEO audit to store extracted entities as BrandFacts.
  * Connects the kg-builder to the main AEO audit flow.
  */
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { buildKnowledgeGraph } from "@/lib/aeo/kg-builder";
 import { logger } from "@/lib/logger";
 

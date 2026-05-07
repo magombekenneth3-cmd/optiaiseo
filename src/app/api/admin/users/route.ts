@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-guard";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";

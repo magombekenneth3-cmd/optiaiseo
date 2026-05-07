@@ -1,18 +1,6 @@
 import { logger } from "@/lib/logger";
 import { parse } from 'node-html-parser';
-import { Redis } from '@upstash/redis';
-
-// Lazy Redis getter — avoids crashing builds when UPSTASH env vars are absent
-let _redis: Redis | null = null;
-function getRedis(): Redis {
-    if (!_redis) {
-        _redis = new Redis({
-            url: process.env.UPSTASH_REDIS_REST_URL!,
-            token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-        });
-    }
-    return _redis;
-}
+import { redis } from "@/lib/redis";
 
 import { GEMINI_3_FLASH } from "@/lib/constants/ai-models";
 
@@ -127,7 +115,7 @@ async function getSerpBenchmark(keyword: string) {
     const cacheKey = `content-score:benchmark:${keyword.toLowerCase().trim()}`;
     try {
          
-        const cached = await getRedis().get(cacheKey);
+        const cached = await redis.get(cacheKey);
         if (cached) return typeof cached === 'string' ? JSON.parse(cached) : cached;
      
     } catch (e: unknown) {
@@ -228,7 +216,7 @@ async function getSerpBenchmark(keyword: string) {
     };
 
     try {
-        await getRedis().set(cacheKey, JSON.stringify(benchmark), { ex: 86400 }); // 24 hours TTL
+        await redis.set(cacheKey, JSON.stringify(benchmark), { ex: 86400 }); // 24 hours TTL
      
     } catch (e: unknown) {
         logger.error("Redis set failed", { error: (e as Error)?.message || String(e) });
@@ -642,7 +630,7 @@ export async function getSitewideContentHealth(
     days = 90
 ): Promise<SitewideContentHealth> {
     try {
-        const prisma = (await import("@/lib/prisma")).default;
+        const { prisma } = await import("@/lib/prisma");
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - days);
 

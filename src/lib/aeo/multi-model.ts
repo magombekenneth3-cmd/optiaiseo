@@ -17,7 +17,7 @@ import {
     classifyMentionConfidence,
     type BrandIdentity,
 } from "@/lib/aeo/brand-utils";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 export interface MentionResult {
     model: string;

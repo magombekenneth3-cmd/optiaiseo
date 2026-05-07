@@ -1,5 +1,5 @@
 
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
 const [email, password] = process.argv.slice(2);

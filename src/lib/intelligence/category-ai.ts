@@ -2,7 +2,7 @@ import { generateObject } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import * as crypto from "crypto";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { extractRoot } from "@/lib/competitors/filters";
 
 export const CategoryProfileSchema = z.object({

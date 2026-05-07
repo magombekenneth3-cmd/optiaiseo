@@ -25,7 +25,7 @@ export default async function EmbedAuditPage({
     // Server-side white-label check
     let whiteLabel = false;
     if (apiKey) {
-        const { default: prisma } = await import("@/lib/prisma");
+        const { prisma } = await import("@/lib/prisma");
         const owner = await prisma.user.findFirst({
             where: { whiteLabel: { path: ["embedKey"], equals: apiKey } },
             select: { subscriptionTier: true },

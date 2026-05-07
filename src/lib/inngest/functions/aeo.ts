@@ -1,7 +1,7 @@
 import { logger } from "@/lib/logger";
 import { inngest } from "../client";
 import { NonRetriableError } from "inngest";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { checkAeoLimit } from "@/lib/rate-limit";
 import { runAeoAudit, runAeoAuditLite } from "@/lib/aeo";
 import { CREDIT_COSTS } from "@/lib/credits";

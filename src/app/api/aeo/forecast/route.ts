@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { generateVisibilityForecast } from "@/lib/aeo/visibility-forecast";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
     const user = await getAuthUser(req);

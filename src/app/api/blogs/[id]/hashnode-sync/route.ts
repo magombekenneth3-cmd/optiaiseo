@@ -3,7 +3,7 @@ import { logger } from "@/lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { syndicateToHashnode } from "@/lib/blog/hashnode";
 
 const HASHNODE_GQL = "https://gql.hashnode.com/";

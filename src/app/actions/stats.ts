@@ -1,6 +1,6 @@
 "use server";
 
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { logger } from "@/lib/logger";
 

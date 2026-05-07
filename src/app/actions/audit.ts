@@ -1,7 +1,7 @@
 "use server";
 
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { runSiteAudit } from "@/lib/audit";
 import { clearSessionCaches } from "@/lib/seo/ai";

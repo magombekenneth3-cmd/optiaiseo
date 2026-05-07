@@ -5,7 +5,7 @@
  * Called from the backlinkCheckSite Inngest function (see functions/backlinks.ts).
  */
 
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { getReferringDomains } from "./referring-domains";
 import { logger } from "@/lib/logger";
 

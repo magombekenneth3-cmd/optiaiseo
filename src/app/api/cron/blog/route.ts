@@ -9,7 +9,7 @@ export async function GET(request: Request) {
         return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { default: prisma } = await import("@/lib/prisma");
+    const { prisma } = await import("@/lib/prisma");
 
     const sites = await prisma.site.findMany({
         where: { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },

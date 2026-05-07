@@ -8,7 +8,7 @@ export async function GET(request: Request) {
         return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { default: prisma } = await import("@/lib/prisma");
+    const { prisma } = await import("@/lib/prisma");
 
     const sites = await prisma.site.findMany({
         select: { id: true, domain: true, userId: true },

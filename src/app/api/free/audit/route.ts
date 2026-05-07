@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { inngest } from '@/lib/inngest/client';
 import { isSafeUrl } from '@/lib/security/safe-url';
 

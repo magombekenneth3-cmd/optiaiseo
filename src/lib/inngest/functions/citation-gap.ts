@@ -1,7 +1,7 @@
 import { inngest } from "@/lib/inngest/client";
 import { runCitationGapAnalysis } from "@/lib/aeo/citation-gap";
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 // ─── On-demand trigger (user clicks "Run Analysis") ───────────────────────────
 

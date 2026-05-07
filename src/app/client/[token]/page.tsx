@@ -1,6 +1,6 @@
 import { notFound }   from "next/navigation";
 import type { Metadata } from "next";
-import prisma           from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import {
   Shield, TrendingUp, BarChart2, CheckCircle, XCircle,
   Globe, Zap, FileText, Info,

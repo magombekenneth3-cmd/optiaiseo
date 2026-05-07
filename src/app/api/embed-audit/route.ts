@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { getFullAuditEngine } from "@/lib/seo-audit";
 import { Resend } from "resend";
 import { isSafeUrl } from "@/lib/security/safe-url";

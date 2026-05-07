@@ -6,7 +6,7 @@
  */
 import { inngest } from "../client";
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { NonRetriableError } from "inngest";
 
 export const runFullStrategyJob = inngest.createFunction(

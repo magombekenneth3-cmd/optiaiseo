@@ -2,7 +2,7 @@
 "use server";
 
 import { after } from "next/server"; // Next.js 15+ — fire-and-forget background work
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getUserGscToken } from "@/lib/gsc/token";

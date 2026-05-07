@@ -14,7 +14,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { rateLimit, getClientIp } from '@/lib/rate-limit/check';
 
 export const runtime = 'nodejs';

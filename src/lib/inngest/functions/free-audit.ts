@@ -9,7 +9,7 @@
 import { inngest } from '../client';
 import { NonRetriableError } from 'inngest';
 import { CONCURRENCY } from '../concurrency';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { getAuditEngine } from '@/lib/seo-audit';
 import type { NormalizedRecommendation } from '@/lib/seo-audit/types';
 

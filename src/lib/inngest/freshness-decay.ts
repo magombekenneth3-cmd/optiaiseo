@@ -1,5 +1,5 @@
 import { inngest } from "./client";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { CONCURRENCY } from "@/lib/inngest/concurrency";
 

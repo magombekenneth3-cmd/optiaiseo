@@ -1,5 +1,5 @@
 import { inngest } from "../client";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { detectCategory, upsertMarketCategory } from "@/lib/intelligence/category-ai";
 import { fetchSiteText } from "@/lib/competitors/scraper";
 import { generateMarketQueries, fetchMarketSources, isListArticleOrDirectory } from "@/lib/intelligence/discovery-engine";

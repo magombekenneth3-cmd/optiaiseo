@@ -8,7 +8,7 @@ import {
     type PredictiveAlert,
 } from "@/lib/alerts/engine";
 import { sendAeoDropAlert } from "@/lib/email/aeo-alert";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------

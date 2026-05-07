@@ -1,5 +1,5 @@
 import { logger, formatError } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 const TOKEN_CACHE_PREFIX = "gsc:token:";
 const TOKEN_CACHE_TTL_SECONDS = 3500;

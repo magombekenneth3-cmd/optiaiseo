@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { createHash } from "crypto";
 import { checkRateLimit } from "@/lib/rate-limit";

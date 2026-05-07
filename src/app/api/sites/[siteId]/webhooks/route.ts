@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { isSafeUrl } from "@/lib/security/safe-url";
 

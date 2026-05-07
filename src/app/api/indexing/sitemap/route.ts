@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireTiers, guardErrorToResult } from '@/lib/stripe/guards';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { safeFetch } from '@/lib/api/safe-fetch';
 
 export async function POST(req: NextRequest) {

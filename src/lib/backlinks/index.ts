@@ -16,7 +16,7 @@ import type {
     BacklinkMetricGap,
     BacklinkGapReport,
 } from "@/types/backlinks";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 // Re-export shared types so existing import paths keep working
 export type { BacklinkSummary, BacklinkDetail, BacklinkMetricGap, BacklinkGapReport };

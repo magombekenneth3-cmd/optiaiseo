@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { fetchGSCKeywords, normaliseSiteUrl } from "@/lib/gsc";
 import { getUserGscToken } from "@/lib/gsc/token";

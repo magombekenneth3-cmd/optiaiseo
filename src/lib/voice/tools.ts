@@ -5,7 +5,7 @@ import { auditMultiModelMentions } from "@/lib/aeo/multi-model";
 import { type AeoCheck } from "@/lib/aeo";
 import { generateAeoFixInternal } from "@/lib/aeo/fix-engine";
 import { pushFixToGitHub } from "@/app/actions/aeoFix";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 
 // Module-level singleton — avoids re-instantiating the SDK on every tool call

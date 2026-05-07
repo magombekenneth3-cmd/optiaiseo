@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 import { logger } from "@/lib/logger";
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { parseAuditResult } from "@/lib/seo-audit/parse-audit-result";
 import ExcelJS from "exceljs";
 

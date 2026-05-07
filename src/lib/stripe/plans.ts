@@ -164,4 +164,4 @@ export function isPaidTier(tier: string): boolean {
 
 export const getFeaturesForTier = (tier?: string | null) => getPlan(tier ?? "FREE")
 
-export const canAccessFeature = hasFeature
+// canAccessFeature alias removed — use hasFeature() directly

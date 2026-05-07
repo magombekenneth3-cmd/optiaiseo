@@ -18,7 +18,7 @@
 
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import type { User } from "@prisma/client";
 
 // ── Shared action error shape ─────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 import { logger } from "@/lib/logger";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { limiters } from "@/lib/rate-limit";
 
 export interface InternalLinkSuggestion {

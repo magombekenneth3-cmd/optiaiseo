@@ -83,7 +83,7 @@ function PositionBadge({ position }: { position: number }) {
 
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { getCompetitors } from "@/app/actions/competitors";
 import { CompetitorManager } from "./CompetitorManager";
 import { GenerateBlogButton } from "./GenerateBlogButton";

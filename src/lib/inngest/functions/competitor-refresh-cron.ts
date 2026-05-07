@@ -9,7 +9,7 @@
  *   - Alert fan-out:   every Tuesday 06:00 UTC (after refresh)
  */
 import { inngest } from "../client";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { CONCURRENCY } from "../concurrency";
 

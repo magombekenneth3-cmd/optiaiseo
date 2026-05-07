@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger"
-import prisma from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import type Stripe from "stripe"
 import { redis } from "@/lib/redis"
 import { ALERT_EMAIL } from "@/lib/constants/auth"

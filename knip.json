@@ -1,0 +1,26 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": [
+    "src/app/**/{page,layout,route,error,loading,not-found,template,default}.{ts,tsx}",
+    "src/app/api/**/*.{ts,tsx}",
+    "src/instrumentation.ts",
+    "src/middleware.ts",
+    "scripts/**/*.{ts,js,mjs,cjs}",
+    "livekit-agent.ts"
+  ],
+  "project": ["src/**/*.{ts,tsx}"],
+  "ignore": [
+    "src/lib/inngest/functions/**",
+    "src/lib/rate-limit/index.ts",
+    "src/lib/telemetry.ts",
+    "public/embed.js",
+    "optiaiseo/**"
+  ],
+  "ignoreDependencies": [
+    "server-only",
+    "@opentelemetry/api",
+    "@opentelemetry/sdk-node",
+    "@opentelemetry/exporter-trace-otlp-http",
+    "@opentelemetry/auto-instrumentations-node"
+  ]
+}

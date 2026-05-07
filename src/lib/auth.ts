@@ -4,7 +4,7 @@ import GithubProvider from "next-auth/providers/github";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import type { Account } from "next-auth";
 import type { JWT } from "next-auth/jwt";
 import { AUTH_ERRORS } from "@/lib/constants/auth";

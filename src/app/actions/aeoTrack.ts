@@ -3,7 +3,7 @@
 import { logger } from "@/lib/logger";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { callGemini as _callGemini } from "@/lib/gemini";
 import { extractBrandIdentity, isBrandCited } from "@/lib/aeo/brand-utils";
 import pLimit from "p-limit";

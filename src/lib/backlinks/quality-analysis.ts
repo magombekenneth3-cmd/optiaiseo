@@ -8,7 +8,7 @@
  *
  * Upsert key: siteId + srcDomain + anchorText  (covers multi-anchor scenarios)
  */
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 
 const TOXIC_KEYWORDS = [

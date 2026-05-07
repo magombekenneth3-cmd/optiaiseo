@@ -1,7 +1,7 @@
 import { logger } from "@/lib/logger";
 import { fetchGSCKeywordsByDateRange, normaliseSiteUrl } from "@/lib/gsc";
 import { getUserGscToken } from "@/lib/gsc/token";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { HealingAction } from "./engine";
 import { callGemini } from "@/lib/gemini/client";
 

@@ -1,7 +1,7 @@
 import { logger } from "@/lib/logger";
 
 
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { parse } from "node-html-parser";
 
 export async function injectInternalLinks(

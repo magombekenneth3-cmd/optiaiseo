@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { requireTiers, guardErrorToResult } from "@/lib/stripe/guards";
 import { logger } from "@/lib/logger";
 import { generateAeoReportPdf } from "@/lib/pdf/aeo-report";

@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { isSafeUrl } from "@/lib/security/safe-url";
 import { logger } from "@/lib/logger";
 import { z } from "zod";

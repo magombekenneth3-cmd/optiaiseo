@@ -14,7 +14,7 @@
  * Cron: every Monday at 04:30 UTC (staggered from benchmark cron at 03:00 Tue)
  */
 import { inngest } from "../client";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 import { CONCURRENCY } from "../concurrency";

@@ -11,7 +11,7 @@ import { analyseAndStoreBacklinks } from "@/lib/backlinks/quality-analysis";
 import { bustBacklinkCache } from "@/lib/backlinks/cache";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { hasFeature } from "@/lib/stripe/plans";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 // ─── Per-mode rate limits (live DataForSEO calls only) ────────────────────────
 // DB-read modes (quality / alerts / stored) are free — no rate limit applied.

@@ -1,5 +1,5 @@
 import { inngest }                      from "../client";
-import prisma                            from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger }                        from "@/lib/logger";
 import { redis }                         from "@/lib/redis";
 import { TTL }                           from "@/lib/constants/ttl";

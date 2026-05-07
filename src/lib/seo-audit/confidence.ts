@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 export type ConfidenceLabel = "High confidence" | "Medium confidence" | "Low confidence" | "Estimated";
 

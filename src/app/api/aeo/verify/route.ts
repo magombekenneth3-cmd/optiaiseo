@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 import { logger } from "@/lib/logger";
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { getEmbedding, cosineSimilarity } from "@/lib/aeo/embeddings";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { checkRateLimit } from "@/lib/rate-limit";

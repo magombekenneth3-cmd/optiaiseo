@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { RecommendationsDashboard } from "@/components/dashboard/RecommendationsDashboard";
 import { buildRecommendations, type SiteContext } from "@/lib/recommendations/engine";
 

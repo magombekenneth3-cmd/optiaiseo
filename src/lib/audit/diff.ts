@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { parseAuditResult } from "@/lib/seo-audit/parse-audit-result";
 
 export interface DiffItem {

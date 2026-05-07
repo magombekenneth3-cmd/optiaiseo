@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { NICHES } from "@/lib/leaderboard";
 import { GUIDES } from "./guide/[slug]/page";
 import KEYWORDS from "@/data/keywords.json";

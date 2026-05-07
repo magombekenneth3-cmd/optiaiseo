@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 
 export const getDashboardMetrics = async (siteIds: string[]) => {

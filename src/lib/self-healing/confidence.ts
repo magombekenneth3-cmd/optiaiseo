@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import type { HealingAction } from "./engine";
 import { dispatchWebhooks } from "@/lib/alerts/webhook-dispatcher";
 

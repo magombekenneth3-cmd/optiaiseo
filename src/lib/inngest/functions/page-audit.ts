@@ -29,7 +29,7 @@
 
 import { inngest } from "../client";
 import { NonRetriableError } from "inngest";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { CONCURRENCY } from "../concurrency";
 import { getFullAuditEngine } from "@/lib/seo-audit";
 import { discoverPages } from "@/lib/seo-audit/crawler";

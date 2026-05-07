@@ -10,7 +10,7 @@
  */
 
 import { parse } from 'node-html-parser';
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { clusterKeywords, EnrichedKeyword } from "@/lib/keywords";
 import { isSafeUrl } from '@/lib/security/safe-url';
 

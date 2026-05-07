@@ -2,7 +2,7 @@
 
 import { logger } from "@/lib/logger";
 import { rateLimit } from "@/lib/rate-limit/check";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { AuthorProfile } from "@/lib/blog";
 import { fetchGSCKeywords, findOpportunities, normaliseSiteUrl } from "@/lib/gsc";

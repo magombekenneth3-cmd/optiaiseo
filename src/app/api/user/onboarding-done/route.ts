@@ -1,6 +1,6 @@
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { bumpSessionVersion } from "@/lib/session-version";
 
 export async function POST(req: import('next/server').NextRequest) {

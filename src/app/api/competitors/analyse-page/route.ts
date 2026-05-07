@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { inngest } from "@/lib/inngest/client";
 import { rateLimit } from "@/lib/rate-limit/check";
 
@@ -13,8 +13,8 @@ export async function POST(req: NextRequest) {
     // Gap 6.2: Check feature gate BEFORE rate limit to prevent bypass via stale tier data.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tier = (user as any)?.subscriptionTier ?? "FREE";
-    const { canAccessFeature } = await import("@/lib/stripe/plans");
-    if (!canAccessFeature(tier, "competitor")) {
+    const { hasFeature } = await import("@/lib/stripe/plans");
+    if (!hasFeature(tier, "competitor")) {
         return NextResponse.json(
             { error: "Competitor tracking requires a Pro or Agency plan.", upgradeUrl: "/billing" },
             { status: 403 }

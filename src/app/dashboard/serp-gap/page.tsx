@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { SerpGapDashboard } from "./SerpGapDashboard";
 
 export const metadata: Metadata = {

@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { callGeminiJson } from "@/lib/gemini";
 import { checkPerplexityCitation } from "./perplexity-citation-check";

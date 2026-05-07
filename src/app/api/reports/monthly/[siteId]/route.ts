@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { limiters } from "@/lib/rate-limit";
 import { generateMonthlyReportPdf } from "@/lib/pdf/monthly-report";
 import { logger } from "@/lib/logger";
