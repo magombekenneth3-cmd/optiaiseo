@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
                         <li><strong>Email:</strong> ${leadEmail}</li>
                         <li><strong>Scores:</strong> ${JSON.stringify(scores)}</li>
                     </ul>
-                    <p>View your leads in <a href="https://www.optiaiseo.online/dashboard/settings?tab=embed">your Agency settings</a>.</p>
+                    <p>View your leads in <a href="https://optiaiseo.online/dashboard/settings?tab=embed">your Agency settings</a>.</p>
                     `.trim(),
                 });
             } catch {

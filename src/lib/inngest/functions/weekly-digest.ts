@@ -47,7 +47,7 @@ function getFrom(): string {
   return `Kenneth from OptiAISEO <kenneth@${domain}>`;
 }
 function appUrl(): string {
-  return (process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+  return (process.env.NEXTAUTH_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 }
 function unsubLink(userId: string): string {
   return `${appUrl()}/api/unsubscribe?token=${signUnsubToken(userId)}`;

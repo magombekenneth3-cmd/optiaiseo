@@ -129,7 +129,7 @@ export const uptimeSiteCheckerJob = inngest.createFunction(
                             <p>Hi ${siteRecord?.user?.name ?? "there"},</p>
                             <p>OptiAISEO detected that <strong>${domain}</strong> returned an error or timed out.</p>
                             <p>Status: <strong>${statusCode ?? "Timeout"}</strong></p>
-                            <p><a href="https://www.optiaiseo.online/dashboard">View your dashboard &rarr;</a></p>
+                            <p><a href="https://optiaiseo.online/dashboard">View your dashboard &rarr;</a></p>
                             <p style="color:#6b7280;font-size:12px">You'll receive at most one alert per hour per site to avoid inbox flooding.</p>
                             <p style="color:#9ca3af;font-size:11px;margin-top:16px;">OptiAISEO Ltd &middot; 20-22 Wenlock Road &middot; London &middot; N1 7GU &middot; UK</p>
                             `.trim(),

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import SiteFooter from "@/components/marketing/SiteFooter";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 const PAGE_URL = `${SITE_URL}/aio`;
 const TITLE = "AI Optimization (AIO) — Make AI Understand Your Brand 2026";
 const DESC  = "AIO ensures AI models correctly represent your brand across ChatGPT, Claude, Perplexity, and Google AI. Learn how to fix your AI brand signals.";

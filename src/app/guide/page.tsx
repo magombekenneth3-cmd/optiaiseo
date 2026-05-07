@@ -4,7 +4,7 @@ import SiteFooter from "@/components/marketing/SiteFooter";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { GUIDES } from "./[slug]/page";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 export const metadata: Metadata = {
   title: "SEO & AEO Guides — How to Rank in Google and AI (2026) | OptiAISEO",

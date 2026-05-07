@@ -10,15 +10,15 @@ const PRIVACY_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "WebPage",
   "name": "Privacy Policy | OptiAISEO",
-  "url": "https://www.optiaiseo.online/privacy",
+  "url": "https://optiaiseo.online/privacy",
   "description": "Privacy Policy for OptiAISEO - how we collect, use, and protect your data.",
   "publisher": {
     "@type": "Organization",
     "name": "OptiAISEO",
-    "url": "https://www.optiaiseo.online",
+    "url": "https://optiaiseo.online",
     "logo": {
       "@type": "ImageObject",
-      "url": "https://www.optiaiseo.online/logo.png"
+      "url": "https://optiaiseo.online/logo.png"
     }
   }
 };

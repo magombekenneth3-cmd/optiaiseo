@@ -27,7 +27,7 @@ const montserrat = Montserrat({
   preload: false,
 });
 
-const FALLBACK_ORIGIN = "https://www.optiaiseo.online";
+const FALLBACK_ORIGIN = "https://optiaiseo.online";
 function getSiteOrigin(): URL {
   const raw = process.env.NEXT_PUBLIC_SITE_URL || "";
   try {
@@ -121,10 +121,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     "@context": "https://schema.org",
     "@type": "Organization",
     name: "OptiAISEO",
-    url: "https://www.optiaiseo.online",
+    url: "https://optiaiseo.online",
     logo: {
       "@type": "ImageObject",
-      url: "https://www.optiaiseo.online/logo.svg",
+      url: "https://optiaiseo.online/logo.svg",
       width: 200,
       height: 60,
     },
@@ -136,7 +136,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     contactPoint: {
       "@type": "ContactPoint",
       contactType: "customer support",
-      url: "https://www.optiaiseo.online/contact",
+      url: "https://optiaiseo.online/contact",
     },
   };
 
@@ -144,13 +144,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     "@context": "https://schema.org",
     "@type": "WebSite",
     name: "OptiAISEO",
-    url: "https://www.optiaiseo.online",
+    url: "https://optiaiseo.online",
     description: "Free AI SEO audit tool — scan your website for technical issues, get instant fixes, and rank higher on Google.",
     potentialAction: {
       "@type": "SearchAction",
       target: {
         "@type": "EntryPoint",
-        urlTemplate: "https://www.optiaiseo.online/free/seo-checker?url={search_term_string}",
+        urlTemplate: "https://optiaiseo.online/free/seo-checker?url={search_term_string}",
       },
       "query-input": "required name=search_term_string",
     },

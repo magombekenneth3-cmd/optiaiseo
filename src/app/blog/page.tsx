@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ArrowRight, BookOpen } from "lucide-react";
 import SiteFooter from "@/components/marketing/SiteFooter";
 
-const BLOG_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const BLOG_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 export const metadata: Metadata = {
     title: "SEO & AI Search Blog — Guides, Tips & Case Studies | OptiAISEO",
@@ -32,13 +32,13 @@ const BLOG_SCHEMA = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
     "name": "SEO & AI Search Blog — OptiAISEO",
-    "url": "https://www.optiaiseo.online/blog",
+    "url": "https://optiaiseo.online/blog",
     "description": "Practical guides on technical SEO, AEO, GEO, and AI visibility. Learn how to rank on Google and get cited in ChatGPT, Perplexity, and Claude.",
     "publisher": {
         "@type": "Organization",
         "name": "OptiAISEO",
-        "url": "https://www.optiaiseo.online",
-        "logo": { "@type": "ImageObject", "url": "https://www.optiaiseo.online/logo.png" }
+        "url": "https://optiaiseo.online",
+        "logo": { "@type": "ImageObject", "url": "https://optiaiseo.online/logo.png" }
     }
 };
 

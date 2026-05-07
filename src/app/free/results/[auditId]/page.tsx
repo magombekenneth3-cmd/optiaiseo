@@ -26,7 +26,7 @@ function scoreGrade(score: number): string {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const { auditId } = await params;
-    const appUrl = process.env.NEXTAUTH_URL ?? 'https://www.optiaiseo.online';
+    const appUrl = process.env.NEXTAUTH_URL ?? 'https://optiaiseo.online';
 
     const audit = await prisma.freeAudit
         .findUnique({

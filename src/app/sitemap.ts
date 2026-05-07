@@ -16,7 +16,7 @@ export const revalidate = 3600;
 const SITE_URL = (
     process.env.NEXT_PUBLIC_SITE_URL ??
     process.env.NEXT_PUBLIC_APP_URL ??
-    "https://www.optiaiseo.online"
+    "https://optiaiseo.online"
 ).replace(/\/$/, "");
 
 if (!SITE_URL) {

@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import { Brain, RefreshCw, Target, BarChart2, AlertCircle, Calendar } from "lucide-react";
 
-const METHODOLOGY_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const METHODOLOGY_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 export const metadata: Metadata = {
     title: "AEO Methodology — How We Measure AI Search Visibility | OptiAISEO",
@@ -27,15 +27,15 @@ const METHODOLOGY_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "TechArticle",
   "name": "AEO Methodology - How We Measure AI Search Visibility | OptiAISEO",
-  "url": "https://www.optiaiseo.online/methodology",
+  "url": "https://optiaiseo.online/methodology",
   "description": "Our methodology for measuring AEO scores: AI engines queried, citation detection, and accuracy validation.",
   "publisher": {
     "@type": "Organization",
     "name": "OptiAISEO",
-    "url": "https://www.optiaiseo.online",
+    "url": "https://optiaiseo.online",
     "logo": {
       "@type": "ImageObject",
-      "url": "https://www.optiaiseo.online/logo.png"
+      "url": "https://optiaiseo.online/logo.png"
     }
   }
 };

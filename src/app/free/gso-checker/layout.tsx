@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 export const metadata: Metadata = {
     title: "Free AI Visibility Checker — Is Your Brand in ChatGPT?",

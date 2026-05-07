@@ -62,7 +62,7 @@ export interface PriorityDigestData {
 }
 
 const buildPriorityDigestHtml = (data: PriorityDigestData): string => {
-  const appUrl = data.appUrl ?? process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online";
+  const appUrl = data.appUrl ?? process.env.NEXTAUTH_URL ?? "https://optiaiseo.online";
   const unsubUrl = `${appUrl}/api/unsubscribe?token=${encodeURIComponent(data.unsubToken)}`;
   const auditUrl = `${appUrl}/dashboard/audits`;
   const rankUrl  = `${appUrl}/dashboard/keywords`;
@@ -152,7 +152,7 @@ const buildPriorityDigestHtml = (data: PriorityDigestData): string => {
 };
 
 const buildPriorityDigestText = (data: PriorityDigestData): string => {
-  const appUrl = data.appUrl ?? process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online";
+  const appUrl = data.appUrl ?? process.env.NEXTAUTH_URL ?? "https://optiaiseo.online";
   const lines = [
     `OptiAISEO Weekly Report — ${data.domain}`,
     `Hi ${data.userName}`,
@@ -205,7 +205,7 @@ export const sendPriorityDigest = async (
       html: buildPriorityDigestHtml(data),
       text: buildPriorityDigestText(data),
       headers: {
-        "List-Unsubscribe": `<${process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online"}/dashboard/settings?tab=notifications>`,
+        "List-Unsubscribe": `<${process.env.NEXTAUTH_URL ?? "https://optiaiseo.online"}/dashboard/settings?tab=notifications>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         "Precedence": "bulk",
       },
@@ -315,7 +315,7 @@ export const sendSEODigest = async (
       html: buildDigestHtml(data),
       text: buildDigestText(data),
       headers: {
-        "List-Unsubscribe": `<${process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online"}/dashboard/settings?tab=notifications>`,
+        "List-Unsubscribe": `<${process.env.NEXTAUTH_URL ?? "https://optiaiseo.online"}/dashboard/settings?tab=notifications>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         "Precedence": "bulk",
       },
@@ -352,7 +352,7 @@ export async function sendRankMovementEmail(params: {
     return { success: false, error: "No user email found" };
   }
 
-  const appUrl = process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online";
+  const appUrl = process.env.NEXTAUTH_URL ?? "https://optiaiseo.online";
 
   return sendPriorityDigest(user.email, {
     userName:   user.name ?? user.email.split("@")[0],

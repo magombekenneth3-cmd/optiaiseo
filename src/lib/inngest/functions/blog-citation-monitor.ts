@@ -116,7 +116,7 @@ export const blogCitationMonitorJob = inngest.createFunction(
                     one of the sources it cites. This directly increases your AI Visibility score.
                   </p>
                 </div>
-                <a href="https://www.optiaiseo.online/dashboard/aeo?siteId=${siteId}"
+                <a href="https://optiaiseo.online/dashboard/aeo?siteId=${siteId}"
                    style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;
                           padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px">
                   View your full AEO report →

@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     "Browse 60+ AEO guides covering how to rank in ChatGPT, Perplexity, and Google AI Overviews. Updated for 2026.",
   alternates: {
     canonical:
-      (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online") + "/aeo-guide",
+      (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online") + "/aeo-guide",
   },
 };
 

@@ -5,7 +5,7 @@ import { getPublicStats } from "@/app/actions/stats";
 
 // Stats are cached via unstable_cache (1h TTL) in src/app/actions/stats.ts
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 
 const PAGE_TITLE = "OptiAISEO — AI SEO Platform That Fixes Itself | Free Trial";

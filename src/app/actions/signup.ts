@@ -49,7 +49,7 @@ export async function signupUser(data: {
             const { Resend } = await import("resend");
             const resend = new Resend(process.env.RESEND_API_KEY);
             const firstName = name.trim().split(" ")[0];
-            const baseUrl = process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online";
+            const baseUrl = process.env.NEXTAUTH_URL ?? "https://optiaiseo.online";
             await resend.emails.send({
                 from: `OptiAISEO <welcome@${process.env.RESEND_FROM_DOMAIN}>`,
                 to: email,

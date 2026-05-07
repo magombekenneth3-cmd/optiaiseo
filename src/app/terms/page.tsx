@@ -10,15 +10,15 @@ const TERMS_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "WebPage",
   "name": "Terms of Service | OptiAISEO",
-  "url": "https://www.optiaiseo.online/terms",
+  "url": "https://optiaiseo.online/terms",
   "description": "Terms of Service for OptiAISEO - the rules governing use of our platform.",
   "publisher": {
     "@type": "Organization",
     "name": "OptiAISEO",
-    "url": "https://www.optiaiseo.online",
+    "url": "https://optiaiseo.online",
     "logo": {
       "@type": "ImageObject",
-      "url": "https://www.optiaiseo.online/logo.png"
+      "url": "https://optiaiseo.online/logo.png"
     }
   }
 };

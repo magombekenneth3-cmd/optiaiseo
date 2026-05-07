@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import SiteFooter from "@/components/marketing/SiteFooter";
 
-const CONTACT_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const CONTACT_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 export const metadata: Metadata = {
   title: "Contact OptiAISEO — Get in Touch",
@@ -29,12 +29,12 @@ export default function ContactPage() {
     "@context": "https://schema.org",
     "@type": "ContactPage",
     "name": "Contact OptiAISEO",
-    "url": "https://www.optiaiseo.online/contact",
+    "url": "https://optiaiseo.online/contact",
     "description": "Contact the OptiAISEO team for support, billing questions, or partnership enquiries.",
     "mainEntity": {
       "@type": "Organization",
       "name": "OptiAISEO",
-      "url": "https://www.optiaiseo.online",
+      "url": "https://optiaiseo.online",
       "email": "support@optiaiseo.online",
       "contactPoint": {
         "@type": "ContactPoint",

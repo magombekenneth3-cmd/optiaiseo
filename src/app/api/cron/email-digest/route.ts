@@ -16,7 +16,7 @@ import { sendPriorityDigest } from "@/lib/email";
 import { extractEnrichedRecommendations } from "@/lib/seo/recommendations";
 
 // ── Env ───────────────────────────────────────────────────────────────────────
-const APP_URL    = process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online";
+const APP_URL    = process.env.NEXTAUTH_URL ?? "https://optiaiseo.online";
 const JWT_SECRET = process.env.NEXTAUTH_SECRET ?? "change-me";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

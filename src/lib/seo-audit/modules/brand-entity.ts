@@ -315,7 +315,7 @@ function checkLogoHomepageAnchor(html: string): ChecklistItem {
     const root = parse(html.slice(0, MAX_HTML_BYTES));
 
     // Check if logo is wrapped in a link pointing to "/"
-    const homeLinks = root.querySelectorAll('a[href="/"], a[href="https://www.optiaiseo.online"], a[href="https://optiaiseo.online"]');
+    const homeLinks = root.querySelectorAll('a[href="/"], a[href="https://optiaiseo.online"], a[href="https://optiaiseo.online"]');
     if (homeLinks.length === 0) {
         return {
             id: 'brand-logo-home-anchor',

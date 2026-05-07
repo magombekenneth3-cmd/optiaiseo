@@ -11,15 +11,15 @@ const SECURITY_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "WebPage",
   "name": "Security and Data Privacy | OptiAISEO",
-  "url": "https://www.optiaiseo.online/security",
+  "url": "https://optiaiseo.online/security",
   "description": "How OptiAISEO protects your data: encryption, GDPR compliance, and our SOC 2 roadmap.",
   "publisher": {
     "@type": "Organization",
     "name": "OptiAISEO",
-    "url": "https://www.optiaiseo.online",
+    "url": "https://optiaiseo.online",
     "logo": {
       "@type": "ImageObject",
-      "url": "https://www.optiaiseo.online/logo.png"
+      "url": "https://optiaiseo.online/logo.png"
     }
   }
 };

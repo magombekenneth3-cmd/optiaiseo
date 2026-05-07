@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowRight, BarChart2, TrendingUp, Users } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 export const metadata: Metadata = {
     title: "SEO Case Studies | Proven Results | OptiAISEO",
@@ -50,15 +50,15 @@ const CASE_STUDIES_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "CollectionPage",
   "name": "Customer Results - OptiAISEO",
-  "url": "https://www.optiaiseo.online/case-studies",
+  "url": "https://optiaiseo.online/case-studies",
   "description": "Real-world results from OptiAISEO users on AI citation improvement and SEO ranking gains.",
   "publisher": {
     "@type": "Organization",
     "name": "OptiAISEO",
-    "url": "https://www.optiaiseo.online",
+    "url": "https://optiaiseo.online",
     "logo": {
       "@type": "ImageObject",
-      "url": "https://www.optiaiseo.online/logo.png"
+      "url": "https://optiaiseo.online/logo.png"
     }
   }
 };

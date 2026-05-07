@@ -1680,7 +1680,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const c = COMPETITORS[competitor];
   if (!c) return {};
   const siteUrl = (
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online"
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online"
   ).replace(/\/$/, "");
   const m = META[competitor] ?? {
     title: `${c.name} vs OptiAISEO (2026): Tested & Compared`,
@@ -1715,7 +1715,7 @@ export default async function VsPage({ params }: Props) {
   const meta = META[competitor];
   const useCases = USE_CASES[competitor];
   const siteUrl = (
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online"
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online"
   ).replace(/\/$/, "");
 
   const competitorScore = OVERALL_SCORES[competitor] ?? 0;

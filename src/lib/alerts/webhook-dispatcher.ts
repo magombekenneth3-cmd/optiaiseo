@@ -94,7 +94,7 @@ export async function dispatchWebhooks(
     domain: site.domain,
     timestamp: new Date().toISOString(),
     dashboardUrl: payload.dashboardUrl
-      ?? `${process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online"}/dashboard?siteId=${site.id}`,
+      ?? `${process.env.NEXTAUTH_URL ?? "https://optiaiseo.online"}/dashboard?siteId=${site.id}`,
   };
 
   const sends: Promise<void>[] = [];

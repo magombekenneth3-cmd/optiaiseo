@@ -53,7 +53,7 @@ function getFrom(): string {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function appUrl(): string {
-  return (process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+  return (process.env.NEXTAUTH_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 }
 
 function unsubLink(userId: string): string {
@@ -85,7 +85,7 @@ function emailShell(body: string, userId: string): string {
     ${body}
     <div style="margin-top:40px;padding-top:20px;border-top:1px solid #21262d;">
       <p style="color:#4b5563;font-size:12px;margin:0;">
-        You're receiving this because you signed up at www.optiaiseo.online.<br>
+        You're receiving this because you signed up at optiaiseo.online.<br>
         <a href="${unsubLink(userId)}" style="color:#4b5563;text-decoration:underline;">Unsubscribe</a>
       </p>
       <p style="color:#374151;font-size:11px;margin:8px 0 0;">${POSTAL_ADDRESS}</p>
@@ -103,7 +103,7 @@ function textShell(body: string, userId: string): string {
     body,
     "",
     "---",
-    "You're receiving this because you signed up at www.optiaiseo.online.",
+    "You're receiving this because you signed up at optiaiseo.online.",
     `Unsubscribe: ${unsubLink(userId)}`,
     POSTAL_ADDRESS,
   ].join("\n");

@@ -10,7 +10,7 @@ import prisma from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { dispatchWebhooks, type WebhookEventType } from "@/lib/alerts/webhook-dispatcher";
 
-const APP_URL = (process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const APP_URL = (process.env.NEXTAUTH_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 const DEFAULT_ALERT_THRESHOLD = 3; // positions
 
 export const rankAlertCheckerJob = inngest.createFunction(

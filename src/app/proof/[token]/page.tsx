@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return { title: "Proof not found — OptiAISEO" };
   }
 
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
   const status = proof.cited ? "cited" : "not cited";
   const title = `${proof.site.domain} was ${status} by an AI engine — Proof by OptiAISEO`;
 

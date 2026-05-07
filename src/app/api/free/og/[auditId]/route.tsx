@@ -132,8 +132,8 @@ export async function GET(
 
                 {/* Footer */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '32px', color: '#475569', fontSize: '14px' }}>
-                    <span>www.optiaiseo.online</span>
-                    <span>Get your free audit → www.optiaiseo.online/free</span>
+                    <span>optiaiseo.online</span>
+                    <span>Get your free audit → optiaiseo.online/free</span>
                 </div>
             </div>
         ),

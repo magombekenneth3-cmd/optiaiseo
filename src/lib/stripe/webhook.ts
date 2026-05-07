@@ -346,7 +346,7 @@ export async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> 
             <p>Hi ${referral.owner.name ?? "there"},</p>
             <p>Great news! One of your referred users just paid their OptiAISEO subscription.</p>
             <p><strong>Your 30% commission: $${dollars}</strong> (for ${month})</p>
-            <p>We batch commission payouts monthly. View your earnings in your <a href="https://www.optiaiseo.online/dashboard/settings?tab=affiliate">Affiliate Dashboard</a>.</p>
+            <p>We batch commission payouts monthly. View your earnings in your <a href="https://optiaiseo.online/dashboard/settings?tab=affiliate">Affiliate Dashboard</a>.</p>
           `.trim(),
                 })
                 .catch(() => { })

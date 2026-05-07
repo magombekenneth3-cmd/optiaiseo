@@ -256,7 +256,7 @@ export async function GET(req: NextRequest) {
   try {
     const resp = await fetch(targetUrl.href, {
       headers: {
-        "User-Agent": "OptiAISEO-FreeSEOChecker/1.0 (+https://www.optiaiseo.online)",
+        "User-Agent": "OptiAISEO-FreeSEOChecker/1.0 (+https://optiaiseo.online)",
         Accept: "text/html,application/xhtml+xml",
         "Accept-Language": "en",
       },

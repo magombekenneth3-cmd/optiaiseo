@@ -8,7 +8,7 @@ interface Props {
 }
 
 const TOKEN_RE = /^[0-9a-f]{64}$/;
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 async function getShareData(token: string) {
     if (!TOKEN_RE.test(token)) return null;

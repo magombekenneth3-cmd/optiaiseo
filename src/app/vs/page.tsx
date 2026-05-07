@@ -16,7 +16,7 @@ import Link from "next/link";
 import { ArrowRight, Check } from "lucide-react";
 import SiteFooter from "@/components/marketing/SiteFooter";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 export const metadata: Metadata = {
   title: "Best Ahrefs Alternative 2026 — OptiAISEO vs Ahrefs, Semrush & More",

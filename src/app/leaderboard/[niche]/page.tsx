@@ -11,7 +11,7 @@ import {
     type LeaderboardEntry,
 } from "@/lib/leaderboard";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 export function generateStaticParams() {
     return NICHES.map((niche) => ({ niche }));

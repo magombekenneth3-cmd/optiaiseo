@@ -27,7 +27,7 @@ import {
 } from "@/lib/competitors/content-velocity";
 import { dispatchWebhooks } from "@/lib/alerts/webhook-dispatcher";
 
-const APP_URL = (process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const APP_URL = (process.env.NEXTAUTH_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 const SNAP_TTL_S  = 60 * 60 * 24 * 14; // 14 days — keep two snapshots warm
 const DIFF_TTL_S  = 60 * 60 * 24 * 7;  // 7 days — dashboard reads the diff
 

@@ -48,7 +48,7 @@ export async function generateMetadata({
   if (!page) return { title: "Not Found" };
 
   const description = buildDescription(page);
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online";
 
   return {
     title: page.title,
@@ -227,7 +227,7 @@ export default async function AeoGuidePage({
   const page = (AEO_PAGES as AeoPage[]).find((p) => p.slug === slug);
   if (!page) notFound();
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online";
   const sections = buildSections(page);
   const faqs = buildFaqs(page);
   const related = getRelated(page);

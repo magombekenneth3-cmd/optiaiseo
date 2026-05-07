@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import UseCasePage from "@/components/marketing/UseCasePage";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 export const metadata: Metadata = {
   title: "SEO & AI Visibility Platform for SaaS Companies | OptiAISEO",
@@ -19,30 +19,30 @@ const FOR_SAAS_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "WebPage",
   "name": "SEO & AI Visibility Platform for SaaS Companies | OptiAISEO",
-  "url": "https://www.optiaiseo.online/for-saas",
+  "url": "https://optiaiseo.online/for-saas",
   "description": "Track how ChatGPT recommends your SaaS. Auto-generate comparison content. Fix technical issues without engineering tickets.",
   "publisher": {
     "@type": "Organization",
     "name": "OptiAISEO",
-    "url": "https://www.optiaiseo.online",
+    "url": "https://optiaiseo.online",
     "logo": {
       "@type": "ImageObject",
-      "url": "https://www.optiaiseo.online/logo.png"
+      "url": "https://optiaiseo.online/logo.png"
     }
   },
   "about": {
     "@type": "Service",
     "name": "AI Visibility & SEO Automation for SaaS",
-    "url": "https://www.optiaiseo.online/for-saas",
+    "url": "https://optiaiseo.online/for-saas",
     "provider": {
       "@type": "Organization",
       "name": "OptiAISEO",
-      "url": "https://www.optiaiseo.online"
+      "url": "https://optiaiseo.online"
     },
     "offers": [
-      { "@type": "Offer", "name": "Free Plan", "price": "0", "priceCurrency": "USD", "url": "https://www.optiaiseo.online/signup" },
-      { "@type": "Offer", "name": "Pro Plan", "price": "49", "priceCurrency": "USD", "url": "https://www.optiaiseo.online/pricing" },
-      { "@type": "Offer", "name": "Agency Plan", "price": "99", "priceCurrency": "USD", "url": "https://www.optiaiseo.online/pricing" }
+      { "@type": "Offer", "name": "Free Plan", "price": "0", "priceCurrency": "USD", "url": "https://optiaiseo.online/signup" },
+      { "@type": "Offer", "name": "Pro Plan", "price": "49", "priceCurrency": "USD", "url": "https://optiaiseo.online/pricing" },
+      { "@type": "Offer", "name": "Agency Plan", "price": "99", "priceCurrency": "USD", "url": "https://optiaiseo.online/pricing" }
     ]
   }
 };

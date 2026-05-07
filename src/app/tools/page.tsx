@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "Browse 100+ curated SEO tool guides by region, pricing, and intent. Find the best free, cheap, and AI-powered SEO tools for your market.",
   alternates: {
     canonical:
-      (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online") +
+      (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online") +
       "/tools",
   },
 };
@@ -39,15 +39,15 @@ const TOOLS_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "CollectionPage",
   "name": "SEO Tool Guides by Region & Intent | OptiAISEO",
-  "url": "https://www.optiaiseo.online/tools",
+  "url": "https://optiaiseo.online/tools",
   "description": "Browse 100+ curated SEO tool guides by region, pricing, and intent.",
   "publisher": {
     "@type": "Organization",
     "name": "OptiAISEO",
-    "url": "https://www.optiaiseo.online",
+    "url": "https://optiaiseo.online",
     "logo": {
       "@type": "ImageObject",
-      "url": "https://www.optiaiseo.online/logo.png"
+      "url": "https://optiaiseo.online/logo.png"
     }
   }
 };

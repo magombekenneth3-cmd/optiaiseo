@@ -11,11 +11,11 @@ export const metadata: Metadata = {
     title: 'Log In to OptiAISEO | Access Your SEO Dashboard',
     description: 'Sign in to your OptiAISEO account. AI SEO platform trusted by agencies worldwide.',
     robots: { index: false, follow: false },
-    alternates: { canonical: 'https://www.optiaiseo.online/login' },
+    alternates: { canonical: 'https://optiaiseo.online/login' },
     openGraph: {
         title: 'Log In to OptiAISEO | Access Your SEO Dashboard',
         description: 'Sign in to your OptiAISEO account. AI SEO platform trusted by agencies worldwide.',
-        url: 'https://www.optiaiseo.online/login',
+        url: 'https://optiaiseo.online/login',
         siteName: 'OptiAISEO',
         type: 'website',
         images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'OptiAISEO — AI SEO Dashboard' }],
@@ -72,17 +72,17 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
                         "@context": "https://schema.org",
                         "@type": "WebPage",
                         "name": "Log In — OptiAISEO",
-                        "url": "https://www.optiaiseo.online/login",
+                        "url": "https://optiaiseo.online/login",
                         "isPartOf": {
                             "@type": "WebSite",
                             "name": "OptiAISEO",
-                            "url": "https://www.optiaiseo.online"
+                            "url": "https://optiaiseo.online"
                         },
                         "publisher": {
                             "@type": "Organization",
                             "name": "OptiAISEO",
-                            "url": "https://www.optiaiseo.online",
-                            "logo": "https://www.optiaiseo.online/og-image.png"
+                            "url": "https://optiaiseo.online",
+                            "logo": "https://optiaiseo.online/og-image.png"
                         }
                     })
                 }}

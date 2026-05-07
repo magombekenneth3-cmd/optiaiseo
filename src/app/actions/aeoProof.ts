@@ -57,7 +57,7 @@ export async function saveAeoProof(
       data: { siteId, query, responseText, cited, expiresAt },
     });
 
-    const siteUrl = (process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+    const siteUrl = (process.env.NEXTAUTH_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
     return {
       success: true,

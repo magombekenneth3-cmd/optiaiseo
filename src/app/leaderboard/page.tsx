@@ -5,7 +5,7 @@ import { getLeaderboardIndex } from "@/lib/leaderboard";
 import type { Niche } from "@/lib/leaderboard";
 import SiteFooter from "@/components/marketing/SiteFooter";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 export const metadata: Metadata = {
     title: `AI Visibility Leaderboard ${new Date().getFullYear()} — Most AI-Cited Websites by Industry`,

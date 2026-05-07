@@ -11,7 +11,7 @@ interface Props {
 export function SettingsClientExtras({ userId }: Props) {
   const [copied, setCopied] = useState(false);
 
-  const embedSnippet = `<script src="https://www.optiaiseo.online/embed.js" data-user="${userId}" defer></script>`;
+  const embedSnippet = `<script src="https://optiaiseo.online/embed.js" data-user="${userId}" defer></script>`;
 
   async function handleCopyEmbed() {
     try {

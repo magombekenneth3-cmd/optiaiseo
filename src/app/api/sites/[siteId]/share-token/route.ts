@@ -32,7 +32,7 @@ export async function GET(
     });
   }
 
-  const baseUrl = process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online";
+  const baseUrl = process.env.NEXTAUTH_URL ?? "https://optiaiseo.online";
   return NextResponse.json({ token, url: `${baseUrl}/client/${token}` });
 }
 

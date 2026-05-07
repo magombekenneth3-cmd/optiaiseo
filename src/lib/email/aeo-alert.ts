@@ -7,7 +7,7 @@ function resend(): Resend {
   return _resend;
 }
 
-const SITE_URL = (process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXTAUTH_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 const FROM = `OptiAISEO <noreply@${process.env.RESEND_FROM_DOMAIN}>`;
 
 export interface AeoDropData {

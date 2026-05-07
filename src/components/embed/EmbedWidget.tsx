@@ -144,7 +144,7 @@ export function EmbedWidget({ apiKey, brandName, accentColor, logoUrl, whiteLabe
             {/* Footer */}
             {!whiteLabel && (
                 <div style={{ marginTop: 20, textAlign: "center", fontSize: 11, color: "#9ca3af" }}>
-                    Powered by <a href="https://www.optiaiseo.online" target="_blank" rel="noopener noreferrer" style={{ color: accent }}>OptiAISEO</a>
+                    Powered by <a href="https://optiaiseo.online" target="_blank" rel="noopener noreferrer" style={{ color: accent }}>OptiAISEO</a>
                 </div>
             )}
         </div>

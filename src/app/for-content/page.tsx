@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import UseCasePage from "@/components/marketing/UseCasePage";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 export const metadata: Metadata = {
   title: "AI Content SEO Platform for Content Teams | OptiAISEO",
@@ -19,30 +19,30 @@ const FOR_CONTENT_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "WebPage",
   "name": "AI Content SEO Platform for Content Teams | OptiAISEO",
-  "url": "https://www.optiaiseo.online/for-content",
+  "url": "https://optiaiseo.online/for-content",
   "description": "Find keyword gaps, auto-generate SEO articles, and publish them directly to your CMS with OptiAISEO.",
   "publisher": {
     "@type": "Organization",
     "name": "OptiAISEO",
-    "url": "https://www.optiaiseo.online",
+    "url": "https://optiaiseo.online",
     "logo": {
       "@type": "ImageObject",
-      "url": "https://www.optiaiseo.online/logo.png"
+      "url": "https://optiaiseo.online/logo.png"
     }
   },
   "about": {
     "@type": "Service",
     "name": "AI-Powered Content SEO Platform",
-    "url": "https://www.optiaiseo.online/for-content",
+    "url": "https://optiaiseo.online/for-content",
     "provider": {
       "@type": "Organization",
       "name": "OptiAISEO",
-      "url": "https://www.optiaiseo.online"
+      "url": "https://optiaiseo.online"
     },
     "offers": [
-      { "@type": "Offer", "name": "Free Plan", "price": "0", "priceCurrency": "USD", "url": "https://www.optiaiseo.online/signup" },
-      { "@type": "Offer", "name": "Pro Plan", "price": "49", "priceCurrency": "USD", "url": "https://www.optiaiseo.online/pricing" },
-      { "@type": "Offer", "name": "Agency Plan", "price": "99", "priceCurrency": "USD", "url": "https://www.optiaiseo.online/pricing" }
+      { "@type": "Offer", "name": "Free Plan", "price": "0", "priceCurrency": "USD", "url": "https://optiaiseo.online/signup" },
+      { "@type": "Offer", "name": "Pro Plan", "price": "49", "priceCurrency": "USD", "url": "https://optiaiseo.online/pricing" },
+      { "@type": "Offer", "name": "Agency Plan", "price": "99", "priceCurrency": "USD", "url": "https://optiaiseo.online/pricing" }
     ]
   }
 };

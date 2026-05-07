@@ -33,7 +33,7 @@ function sanitize(html: string): string {
     return sanitizeHtml(html, SANITIZE_OPTS);
 }
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 interface Props {
     params: Promise<{ slug: string }>;

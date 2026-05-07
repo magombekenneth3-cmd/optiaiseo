@@ -506,7 +506,7 @@ export async function testAeoQuery(
         const brandIdentity = extractBrandIdentity(site.domain);
         const cited = isBrandCited(responseText, brandIdentity);
 
-        const siteUrl = (process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+        const siteUrl = (process.env.NEXTAUTH_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
         const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
         const proof = await prisma.aeoProof.create({
             data: { siteId: site.id, query, responseText, cited, expiresAt },

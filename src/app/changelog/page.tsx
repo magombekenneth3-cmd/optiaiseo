@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import prisma from "@/lib/prisma";
 
-const CHANGELOG_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+const CHANGELOG_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
 export const metadata: Metadata = {
     title: "Changelog | OptiAISEO",
@@ -40,15 +40,15 @@ const CHANGELOG_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "WebPage",
   "name": "Changelog | OptiAISEO",
-  "url": "https://www.optiaiseo.online/changelog",
+  "url": "https://optiaiseo.online/changelog",
   "description": "All product updates, new features, bug fixes, and improvements to the OptiAISEO platform.",
   "publisher": {
     "@type": "Organization",
     "name": "OptiAISEO",
-    "url": "https://www.optiaiseo.online",
+    "url": "https://optiaiseo.online",
     "logo": {
       "@type": "ImageObject",
-      "url": "https://www.optiaiseo.online/logo.png"
+      "url": "https://optiaiseo.online/logo.png"
     }
   }
 };

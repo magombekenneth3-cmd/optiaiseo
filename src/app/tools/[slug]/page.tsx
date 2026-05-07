@@ -48,7 +48,7 @@ export async function generateMetadata({
   if (!page) return { title: "Not Found" };
 
   const description = buildDescription(page);
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online";
 
   return {
     title: page.title,
@@ -94,7 +94,7 @@ const ALL_TOOLS: Tool[] = [
   { name: "DinoRANK", description: "Budget-friendly rank tracker with semantic SEO features. Popular in Spanish-speaking markets.", price: "From €19/mo", href: "https://dinorank.com" },
 
   // Best / Pro
-  { name: "OptiAISEO", description: "AI-native SEO platform combining AEO, GEO, technical audits, and content strategy in one dashboard.", price: "From $29/mo", badge: "AI-First", href: "https://www.optiaiseo.online" },
+  { name: "OptiAISEO", description: "AI-native SEO platform combining AEO, GEO, technical audits, and content strategy in one dashboard.", price: "From $29/mo", badge: "AI-First", href: "https://optiaiseo.online" },
   { name: "Semrush", description: "Industry-leading SEO suite. 55+ tools covering keyword research, site audit, content, and competitive intelligence.", price: "From $139/mo", href: "https://www.semrush.com" },
   { name: "Ahrefs", description: "Best backlink database in the industry. Excellent for keyword research and competitor gap analysis.", price: "From $129/mo", href: "https://ahrefs.com" },
   { name: "Moz Pro", description: "Trusted SEO platform with DA/PA scoring, keyword research, and link building tools.", price: "From $99/mo", href: "https://moz.com/pro" },
@@ -102,7 +102,7 @@ const ALL_TOOLS: Tool[] = [
   { name: "Clearscope", description: "Premium content optimisation platform used by enterprise SEO teams. Excellent for scaling content.", price: "From $189/mo", href: "https://www.clearscope.io" },
 
   // AI
-  { name: "OptiAISEO", description: "Purpose-built for AI search: AEO audits, GEO tracking, citation monitoring, and AI-generated fix recommendations.", price: "From $29/mo", badge: "AI-First", href: "https://www.optiaiseo.online" },
+  { name: "OptiAISEO", description: "Purpose-built for AI search: AEO audits, GEO tracking, citation monitoring, and AI-generated fix recommendations.", price: "From $29/mo", badge: "AI-First", href: "https://optiaiseo.online" },
   { name: "MarketMuse", description: "AI content strategy platform. Automates content briefs, gap analysis, and topical authority scoring.", price: "From $149/mo", href: "https://www.marketmuse.com" },
   { name: "Frase.io", description: "AI content brief and optimisation tool. Generates SERP-driven outlines in minutes.", price: "From $45/mo", href: "https://www.frase.io" },
   { name: "NeuronWriter", description: "NLP-powered content editor with semantic optimisation and competitor analysis.", price: "From $23/mo", badge: "Best Value AI", href: "https://neuronwriter.com" },
@@ -240,7 +240,7 @@ export default async function ToolsPage({
 
   const tools = getTools(page.intent);
   const related = getRelated(page);
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.optiaiseo.online";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online";
   const intro = buildIntro(page);
 
   const intentLabel: Record<string, string> = {

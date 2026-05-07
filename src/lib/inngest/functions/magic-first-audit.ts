@@ -192,7 +192,7 @@ function buildActivationEmail(params: {
   lowestKey: string;
 }): string {
   const { name, domain, siteId, userId, issues, aeoScore } = params;
-  const baseUrl = process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online";
+  const baseUrl = process.env.NEXTAUTH_URL ?? "https://optiaiseo.online";
   const auditUrl = `${baseUrl}/dashboard/audits?siteId=${siteId}`;
   const ariaUrl = `${baseUrl}/aria?siteId=${siteId}`;
 
@@ -265,7 +265,7 @@ function buildActivationEmail(params: {
 
 function buildFallbackEmail(params: { name: string; domain: string; siteId: string; userId: string }): string {
   const { name, domain, siteId, userId } = params;
-  const baseUrl = process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online";
+  const baseUrl = process.env.NEXTAUTH_URL ?? "https://optiaiseo.online";
   const auditUrl = `${baseUrl}/dashboard/audits?siteId=${siteId}`;
 
   return `<!DOCTYPE html>
@@ -291,7 +291,7 @@ function buildFallbackEmail(params: { name: string; domain: string; siteId: stri
 }
 
 function buildNudgeEmail(name: string, userId: string): string {
-  const baseUrl = process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online";
+  const baseUrl = process.env.NEXTAUTH_URL ?? "https://optiaiseo.online";
   return `<!DOCTYPE html>
 <html>
 <body style="background:#0d1117;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:0;">

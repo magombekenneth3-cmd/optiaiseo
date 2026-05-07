@@ -210,7 +210,7 @@ export const sendFreeReportEmailJob = inngest.createFunction(
             throw new NonRetriableError("RESEND_FROM_DOMAIN is not set");
         }
 
-        const appUrl = (process.env.NEXTAUTH_URL ?? "https://www.optiaiseo.online").replace(/\/$/, "");
+        const appUrl = (process.env.NEXTAUTH_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
         const from = `OptiAISEO <noreply@${process.env.RESEND_FROM_DOMAIN}>`;
         const clampedScore = safeScore(score);
 

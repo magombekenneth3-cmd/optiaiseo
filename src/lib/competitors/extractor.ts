@@ -12,7 +12,7 @@ const MAX_SITE_TEXT_CHARS = 6_000;
  * Extracts the root words from a domain that should NEVER appear in
  * service labels (they are brand names, not generic services).
  *
- * "www.optiaiseo.online" → ["optiaiseo", "aiseo", "optiai", "opti"]
+ * "optiaiseo.online" → ["optiaiseo", "aiseo", "optiai", "opti"]
  */
 function brandWordsFromDomain(domain: string): string[] {
     const root = domain
