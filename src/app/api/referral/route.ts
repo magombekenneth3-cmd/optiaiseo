@@ -36,7 +36,7 @@ export async function GET() {
     }
 
     const appUrl = (process.env.NEXTAUTH_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
-    const shareLink = `${appUrl}/register?ref=${referral.code}`;
+    const shareLink = `${appUrl}/signup?ref=${referral.code}`;
 
     const totalEarnedCents = referral.commissions
         .filter((c) => c.status === "paid")
@@ -79,7 +79,7 @@ export async function POST() {
         const appUrl = (process.env.NEXTAUTH_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
         return NextResponse.json({
             code: existing.code,
-            shareLink: `${appUrl}/register?ref=${existing.code}`,
+            shareLink: `${appUrl}/signup?ref=${existing.code}`,
         });
     }
 
@@ -93,6 +93,6 @@ export async function POST() {
     const appUrl = (process.env.NEXTAUTH_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
     return NextResponse.json({
         code: referral.code,
-        shareLink: `${appUrl}/register?ref=${referral.code}`,
+        shareLink: `${appUrl}/signup?ref=${referral.code}`,
     });
 }

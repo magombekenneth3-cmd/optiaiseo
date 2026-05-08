@@ -129,15 +129,11 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      // /register was never a real page — all referral share links pointed here.
+      // Redirect permanently to /signup; Next.js preserves the ?ref= query string.
       {
-        source: '/:path*',
-        has: [
-          {
-            type: 'host',
-            value: 'optiaiseo-production.up.railway.app',
-          },
-        ],
-        destination: 'https://optiaiseo.online/:path*',
+        source: '/register',
+        destination: '/signup',
         permanent: true,
       },
       {
