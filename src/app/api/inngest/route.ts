@@ -35,83 +35,186 @@ import {
     initQueryLibraryJob,
     runQueryLibraryWeekly,
     runQueryLibrarySite,
-    checkOneQueryJob,   // Gap 3: fan-out child — must be registered or events are silently dropped
+    checkOneQueryJob,
 } from "@/lib/inngest/functions/query-library";
 import { runSerpGapAnalysisJob } from "@/lib/inngest/functions/serp-gap-analysis";
-import { cronMonthlyRateLimitCleanup } from "@/lib/inngest/functions/cron-schedule";
+
+// ── Cron schedule functions (NEW fan-out architecture) ──────────────────────
+// These were exported but never registered → their schedules never fired.
+import {
+    cronMonthlyRateLimitCleanup,
+    cronWeeklyAudit,
+    cronWeeklyBacklinks,
+    cronDailyRankTracker,
+    cronWeeklyAeo,
+    cronDailyBlog,
+    cronWeeklyCompetitorAlerts,
+} from "@/lib/inngest/functions/cron-schedule";
+
+// ── Cron-workers: event-listeners + weekly cron ─────────────────────────────
+import {
+    backlinksSiteJob,
+    competitorAlertsSiteJob,
+    indexingSiteJob,
+    weeklyAutoReauditJob,
+} from "@/lib/inngest/functions/cron-workers";
+
+// ── Rank tracking (cron + event fan-out child) ──────────────────────────────
+import { rankTrackerSiteJob } from "@/lib/inngest/functions/rank-tracker";
+import {
+    trackedRankCheckerSiteJob,
+    trackedRankCheckerCronJob,
+} from "@/lib/inngest/functions/tracked-rank-checker";
+
+// ── Citation gap (on-demand event + weekly cron) ────────────────────────────
+import {
+    runCitationGapOnDemand,
+    runCitationGapWeekly,
+} from "@/lib/inngest/functions/citation-gap";
+
+// ── Blog post-publish hooks ──────────────────────────────────────────────────
+import { internalLinksOnPublishJob } from "@/lib/inngest/functions/internal-links-on-publish";
+import { blogCitationMonitorJob } from "@/lib/inngest/functions/blog-citation-monitor";
+
+// ── Backlink checking (event-triggered) ─────────────────────────────────────
+import { backlinkCheckSite } from "@/lib/inngest/functions/backlinks";
+
+// ── Competitor refresh + velocity (cron + event fan-out child) ───────────────
+import {
+    weeklyCompetitorRefreshJob,
+    singleCompetitorRefreshJob,
+    weeklyCompetitorAlertsJob,
+} from "@/lib/inngest/functions/competitor-refresh-cron";
+import { competitorVelocityJob } from "@/lib/inngest/functions/competitor-velocity";
+
+// ── Query discovery (cron orchestrator + per-site child) ────────────────────
+import {
+    queryDiscoveryOrchestrator,
+    queryDiscoverySiteJob,
+} from "@/lib/inngest/functions/query-discovery";
 
 // IMPORTANT: every function that handles a fan-out child event MUST be
 // registered here or Inngest will silently drop those events.
 export const { GET, POST, PUT } = serve({
     client: inngest,
     functions: [
-        // Blog pipeline
+        // ── Blog pipeline ─────────────────────────────────────────────────
         generateBlogJob,
         publishBlogToCmsJob,
-        // AEO
+        // Daily blog auto-generation cron (06:00 UTC)
+        cronDailyBlog,
+        // Post-publish hooks (blog.published event)
+        internalLinksOnPublishJob,
+        blogCitationMonitorJob,
+
+        // ── AEO ──────────────────────────────────────────────────────────
         runAeoAuditJob,
         runAeoRankJob,
         weeklyAeoTracker,
         processAeoSiteJob,
         aeoScoreDropAlert,
-        // Site audit
+        cronWeeklyAeo,              // weekly AEO fan-out cron (Mon 05:00 UTC)
+
+        // ── Site audit ───────────────────────────────────────────────────
         runWeeklyAuditJob,
         auditPostFixJob,
-        // Manual audit (dashboard "Run Audit" button — non-blocking)
+        weeklyAutoReauditJob,       // weekly re-audit cron (Mon 06:00 UTC)
+        cronWeeklyAudit,            // weekly audit fan-out cron (Mon 02:00 UTC)
+
+        // ── Manual audit (dashboard "Run Audit" button — non-blocking) ───
         processManualAuditJob,
-        // Multi-page audit fan-out (IMPORTANT: must be registered or events are silently dropped)
+
+        // ── Multi-page audit fan-out ─────────────────────────────────────
+        // IMPORTANT: must be registered or events are silently dropped
         runPageAuditJob,
         processPageAuditJob,
-        // GSoV self-healing
+
+        // ── Rank tracking ────────────────────────────────────────────────
+        rankTrackerSiteJob,         // event: rank.tracker.site + cron 04:00 UTC
+        trackedRankCheckerSiteJob,  // fan-out child: tracked.rank.check.site
+        trackedRankCheckerCronJob,  // daily cron trigger (06:00 UTC)
+        cronDailyRankTracker,       // fan-out cron (04:00 UTC)
+
+        // ── Backlinks ────────────────────────────────────────────────────
+        backlinkCheckSite,          // event: backlinks.check.site
+        backlinksSiteJob,           // event: backlinks.check.site (fan-out handler)
+        cronWeeklyBacklinks,        // weekly backlinks fan-out cron (Mon 03:00 UTC)
+
+        // ── Competitor analysis ──────────────────────────────────────────
+        analyseCompetitorPageJob,
+        competitorAlertsSiteJob,    // event: competitor.alerts.site
+        singleCompetitorRefreshJob, // event: competitor.refresh.single
+        weeklyCompetitorRefreshJob, // weekly cron (Tue 05:00 UTC)
+        weeklyCompetitorAlertsJob,  // weekly cron (Tue 06:00 UTC)
+        competitorVelocityJob,      // weekly cron (Mon 04:30 UTC)
+        cronWeeklyCompetitorAlerts, // fan-out cron (Mon 07:00 UTC)
+
+        // ── Citation gap ─────────────────────────────────────────────────
+        runCitationGapOnDemand,     // event: aeo/citation-gap.requested
+        runCitationGapWeekly,       // weekly cron (Wed 06:00 UTC)
+
+        // ── Indexing ─────────────────────────────────────────────────────
+        indexingSiteJob,            // event: indexing.submit.site
+
+        // ── GSoV self-healing ────────────────────────────────────────────
         monitorGsovJob,
         processGsovSiteJob,
-        // GSC anomaly detection
+
+        // ── GSC anomaly detection ────────────────────────────────────────
         monitorGscAnomaliesJob,
         processGscSiteJob,
-        // Email & planner
+
+        // ── Email & planner ──────────────────────────────────────────────
         sendWeeklyDigestJob,
         generatePlannerBriefJob,
-        // Competitor analysis
-        analyseCompetitorPageJob,
-        // Content freshness
+
+        // ── Query discovery (cron + fan-out child) ───────────────────────
+        queryDiscoveryOrchestrator, // daily cron (02:00 UTC)
+        queryDiscoverySiteJob,      // fan-out child: query.discovery.site
+
+        // ── Content freshness ────────────────────────────────────────────
         freshnessDecayCron,
-        // Benchmarks (Monday 03:00 UTC)
+
+        // ── Benchmarks (Monday 03:00 UTC) ────────────────────────────────
         computeBenchmarksJob,
-        // Healing outcome measurement (daily 4am UTC)
+
+        // ── Healing outcome measurement (daily 4am UTC) ──────────────────
         measureHealingOutcomesJob,
-        // Multi-agent parallel strategy orchestration
+
+        // ── Multi-agent strategy orchestration ───────────────────────────
         runFullStrategyJob,
-        // Uptime monitoring — orchestrator fans out to child per site
+
+        // ── Uptime monitoring ────────────────────────────────────────────
         uptimeMonitorJob,
-        uptimeSiteCheckerJob,   // fan-out child: must be registered or events are dropped
-        // Monthly credits reset (1st of month 00:00 UTC)
-        // IMPORTANT: Scheduled via Inngest cron only. Do NOT add a matching
-        // entry in vercel.json — double-scheduling would reset credits twice per month.
+        uptimeSiteCheckerJob,       // fan-out child: must be registered
+
+        // ── Monthly credits reset (1st of month 00:00 UTC) ───────────────
+        // IMPORTANT: Scheduled via Inngest cron ONLY. Do NOT add a matching
+        // entry in vercel.json — double-scheduling resets credits twice per month.
         creditsResetJob,
-        // Monthly rate-limit key cleanup (1st of month 00:30 UTC)
-        // Runs 30 min after credits reset to avoid Redis contention.
-        // Scans all rl:* keys and deletes any whose prefix is no longer active.
+
+        // ── Monthly rate-limit key cleanup (1st of month 00:30 UTC) ──────
         cronMonthlyRateLimitCleanup,
-        // Free SEO Check — background audit runner
+
+        // ── Free SEO Check ───────────────────────────────────────────────
         runFreeAuditJob,
-        // Free SEO Check — report email delivery (capped at 5, 3 retries)
-        // IMPORTANT: must be registered — triggered by email/free-report.send event
-        sendFreeReportEmailJob,
-        // Embed lead webhook delivery (3 retries)
+        sendFreeReportEmailJob,     // triggered by email/free-report.send event
+
+        // ── Lead & onboarding ────────────────────────────────────────────
         fireLeadWebhookJob,
-        // Lead nurture drip sequence (Days 2, 5, 10 post-signup)
         leadDripSequenceJob,
-        // Magic first audit — new user activation email + first audit run
-        // IMPORTANT: must be registered — triggered by user.registered event
-        magicFirstAuditJob,
-        // Query library — Gap 3: fan-out architecture for fast per-query checks
+        magicFirstAuditJob,         // triggered by user.registered event
+
+        // ── Query library (fan-out architecture) ─────────────────────────
         // IMPORTANT: checkOneQueryJob is a fan-out child — must be registered
-        // or aeo/query-library.check-one events are silently dropped by Inngest.
+        // or aeo/query-library.check-one events are silently dropped.
         initQueryLibraryJob,
         runQueryLibraryWeekly,
         runQueryLibrarySite,
         checkOneQueryJob,
-        // SERP Gap Analysis — must be registered or serp-gap/requested events are silently dropped
+
+        // ── SERP Gap Analysis ────────────────────────────────────────────
+        // IMPORTANT: must be registered or serp-gap/requested events are dropped
         runSerpGapAnalysisJob,
     ],
 });
