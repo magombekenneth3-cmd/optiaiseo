@@ -129,6 +129,15 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      // www → apex: Railway only provisions SSL for the apex domain.
+      // Any www.optiaiseo.online request must be redirected server-side
+      // to avoid ERR_CERT_COMMON_NAME_INVALID in browsers.
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.optiaiseo.online" }],
+        destination: "https://optiaiseo.online/:path*",
+        permanent: true,
+      },
       // /register was never a real page — all referral share links pointed here.
       // Redirect permanently to /signup; Next.js preserves the ?ref= query string.
       {
