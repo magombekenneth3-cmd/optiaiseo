@@ -53,7 +53,6 @@ import {
 
 // ── Cron-workers: event-listeners + weekly cron ─────────────────────────────
 import {
-    backlinksSiteJob,
     competitorAlertsSiteJob,
     indexingSiteJob,
     weeklyAutoReauditJob,
@@ -136,8 +135,7 @@ export const { GET, POST, PUT } = serve({
         cronDailyRankTracker,       // fan-out cron (04:00 UTC)
 
         // ── Backlinks ────────────────────────────────────────────────────
-        backlinkCheckSite,          // event: backlinks.check.site
-        backlinksSiteJob,           // event: backlinks.check.site (fan-out handler)
+        backlinkCheckSite,          // event: backlinks.check.site + Mon 03:00 UTC cron
         cronWeeklyBacklinks,        // weekly backlinks fan-out cron (Mon 03:00 UTC)
 
         // ── Competitor analysis ──────────────────────────────────────────
