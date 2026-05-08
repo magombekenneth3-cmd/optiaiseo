@@ -713,7 +713,8 @@ export async function generateBlogFromCompetitorGap(
     siteDomain?: string,
     intentOverride?: string,
     tone?: string,
-    siteId?: string
+    siteId?: string,
+    precomputedSerpContext?: SerpContext | null
 ): Promise<BlogPostDraft> {
     const ai = getAiClient();
     if (!ai) throw new Error("GEMINI_API_KEY is missing.");
@@ -732,7 +733,8 @@ export async function generateBlogFromCompetitorGap(
     let formatHint = "";
     let beatStrategy = "";
     try {
-        const serpData = await getSerpContextForKeyword(keyword, true);
+        // Use pre-fetched SERP context if provided (avoids duplicate Serper API call).
+        const serpData = precomputedSerpContext ?? await getSerpContextForKeyword(keyword, true);
         if (serpData) {
             serpContextSection = `\n${serpData.formattedContext}`;
             const formatSignal = classifySerpFormat(serpData.results);

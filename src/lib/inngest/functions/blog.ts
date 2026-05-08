@@ -352,12 +352,30 @@ Be specific and concise. This will be used to write a better article.`,
         let finalPipelineType = pipelineType;
 
         if (pipelineType === "COMPETITOR_ATTACK" || pipelineType === "COMPETITOR_GAP") {
+            // Pre-fetch SERP once as a dedicated step — same pattern as the evergreen pipeline.
+            // This avoids a duplicate Serper call inside generateBlogFromCompetitorGap.
+            const competitorSerpContext: SerpContext | null = await step.run("fetch-serp-context-competitor", async () => {
+                if (!keyword) return null;
+                try {
+                    const ctx = await getSerpContextForKeyword(keyword, true);
+                    logger.info(`[Blog/SERP] Competitor SERP pre-fetched for "${keyword}" — ${ctx?.results.length ?? 0} results`, { siteId });
+                    return ctx;
+                } catch (err: unknown) {
+                    logger.warn("[Blog/SERP] Competitor SERP pre-fetch failed — generator will fetch internally", {
+                        keyword,
+                        error: (err as Error)?.message,
+                    });
+                    return null;
+                }
+            });
+
             liveBlogPost = await step.run("generate-competitor-content", async () => {
                 const res = await generateBlogFromCompetitorGap(
                     keyword, competitorDomain, searchVolume, difficulty,
-                    author, site.domain, undefined, site.blogTone || undefined, siteId
+                    author, site.domain, undefined, site.blogTone || undefined, siteId, competitorSerpContext
                 );
                 return { ...res, ogImage: res.heroImage?.url };
+
             });
         } else {
             const siteContext = await step.run("extract-site-context", async () => {
