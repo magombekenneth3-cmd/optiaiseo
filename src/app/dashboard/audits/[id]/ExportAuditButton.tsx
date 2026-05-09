@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 
 export function ExportAuditButton({ auditId }: { auditId: string }) {
     const [isExporting, setIsExporting] = useState<"excel" | "pdf" | null>(null);
@@ -25,6 +26,7 @@ export function ExportAuditButton({ auditId }: { auditId: string }) {
             setTimeout(() => setIsExporting(null), 3000);
         } catch {
             setIsExporting(null);
+            toast.error(`${format.toUpperCase()} export failed — please try again.`);
         }
     };
 
