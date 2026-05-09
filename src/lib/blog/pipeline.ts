@@ -322,20 +322,16 @@ export async function runSectionWriter(
             : sectionText;
         sections.push(finalText);
 
-        // Update editorial memory
         memory.previousSectionSummary = sectionText.slice(0, 300) + "…";
 
-        // Extract concepts from this section (naive but effective)
         const words = sectionText.toLowerCase().match(/\b[a-z]{5,}\b/g) ?? [];
         const topConcepts = [...new Set(words)].slice(0, 5);
         memory.recentConcepts = [...memory.recentConcepts, ...topConcepts].slice(-15);
 
-        // Track opener words
         const openerMatch = sectionText.match(/^([A-Z][a-z]+)/m);
         if (openerMatch) memory.usedSentenceOpeners.add(openerMatch[1].toLowerCase());
     }
 
-    // Assemble final Markdown
     return `# ${outline.title}\n\n${sections.join("\n\n")}`;
 }
 
@@ -440,7 +436,6 @@ Output: ONLY the section content in Markdown. Include the ## heading. No preambl
         const text = response.text?.trim() ?? "";
         if (text.length < 80) return fallbackText;
 
-        // Update entity memory from generated text
         for (const entity of section.keyEntities) {
             if (text.toLowerCase().includes(entity.toLowerCase())) {
                 memory.usedEntities.add(entity);
