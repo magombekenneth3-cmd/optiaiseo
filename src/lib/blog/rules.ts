@@ -764,61 +764,26 @@ export function getToneRules(ctx: PromptContext): string {
     };
     return `TONE: ${intentMap[ctx.intent] ?? "Authoritative and direct."}
 
-WRITE LIKE A HUMAN EXPERT — NOT AN AI:
+EDITORIAL VOICE:
+- Write from a position of earned authority — the voice of someone who has done this, not studied it.
 - Use contractions naturally: "you'll", "it's", "don't", "here's".
-- Use short, punchy sentences. Mix them with longer ones. Never write three sentences of the same length back-to-back.
-- Vary your sentence openers. Never start three consecutive sentences with the same word (including "The", "This", "It", "You").
-- Use first-person sparingly and only when grounded in real experience from the author context.
-- Write the way you'd explain it to a peer over coffee — precise, direct, occasionally opinionated.
+- First-person only when grounded in real author experience.
+- Take clear stances. Opinions backed by reasoning are more valuable than hedged generalisations.
 
 WORD CHOICE — always prefer the spoken word:
   big / not substantial        fix / not remediate          use / not leverage
   find out / not ascertain     strong / not robust          try / not endeavour
   check / not scrutinize       choose / not opt for         help / not facilitate
   show / not demonstrate       need / not require           start / not initiate
-  end / not terminate          make / not construct         think / not cognize
-  work / not function          tell / not communicate       keep / not maintain
 
-REPETITION RULE — failure condition:
+REPETITION RULE:
 - No content word (noun, verb, adjective) should appear more than 4 times in any 150-word window.
   Exception: the primary keyword "${ctx.keyword}" and its direct synonyms.
-- Vary references: use pronouns, synonyms, and sentence restructuring rather than repeating the same noun.
   BAD:  "The tool helps you track keywords. The tool also helps with backlinks. The tool provides reports."
   GOOD: "It tracks keywords, flags backlink changes, and pulls weekly reports — in one place."
 
-BANNED PHRASES — if any of these appear, the content FAILS:
-// Transitions / connectors
-furthermore / moreover / additionally / in addition / in conclusion / to summarise /
-notably / importantly / significantly / it is worth noting / it should be noted /
-it goes without saying / needless to say / as mentioned earlier / as noted above /
-
-// AI topic openers
-in today's rapidly evolving / in today's digital landscape / in the ever-changing /
-as we navigate / now more than ever / in an increasingly / in a world where /
-when it comes to / in the realm of / in the context of / at the end of the day /
-in this day and age / the fact of the matter is /
-
-// Buzzword verbs
-leverage the power of / unlock the potential / unlock new possibilities /
-seamlessly integrate / drive engagement / foster growth / facilitate change /
-enable businesses / empower users / revolutionise / transform your / elevate your /
-take your [X] to the next level / game-changing / cutting-edge / groundbreaking /
-disruptive / innovative solution / holistic approach / synergistic /
-
-// Hollow adjectives
-robust / comprehensive guide / ultimate guide / definitive guide / deep dive /
-delve into / dive into / explore / unpack / demystify / shed light on /
-pioneering / state-of-the-art / best-in-class / world-class / industry-leading /
-
-// Hedge phrases
-it is important to / it is essential to / it is crucial to / it is vital to /
-one of the most important / perhaps the most / arguably the most /
-it cannot be overstated / cannot be emphasised enough /
-
-// Generic closers
-in summary / to sum up / overall / all in all / in closing / to conclude /
-final thoughts / final word / wrapping up / as we have seen /
-key takeaways (unless followed immediately by a bulleted list).`;
+BANNED PHRASES (worst offenders — avoid these):
+furthermore / moreover / in conclusion / delve into / leverage / robust / comprehensive guide`;
 }
 
 export function getScopeRules(ctx: PromptContext): string {
@@ -828,69 +793,27 @@ export function getScopeRules(ctx: PromptContext): string {
         : ctx.intent === "local"       ? 1800
         :                                2200; // informational default
     return `SCOPE:
-- Primary keyword "${ctx.keyword}" MUST appear:
-  · In the title within the first 60 characters (not at the end)
-  · In the first 100 words of the body
-  · 8–15 times total across the article
-  · In at least 2 H2 headings (exact match or natural variant)
-  · At a density of 0.5%–2.5% of total words — not lower, not higher.
-- Include 10+ semantic / LSI variations of the primary keyword (do NOT repeat exact phrase every time).
-- Meta description: primary keyword must appear within the first 120 characters. 140–160 characters total.
-- URL slug: lowercase, hyphens only, primary keyword only — remove all stop words (a/an/the/of/in/for).
+PRIMARY KEYWORD STRATEGY — "${ctx.keyword}":
+- Use naturally in: the title (within first 60 chars), the opening paragraph, and 1-2 H2 headings.
+- Prefer semantic relevance over repetition — use synonyms, related terms, and entity variations throughout.
+- Do NOT force exact-match repetition. Keyword stuffing reduces quality and is detectable.
+- Include semantic variations: related terms, entity names, and LSI phrases that cover the topic comprehensively.
+- Meta description: keyword within first 120 characters, 140–160 characters total, written as compelling ad copy.
+- URL slug: lowercase, hyphens only, keyword-only — no stop words.
 - Minimum word count: ${wordTarget} words.
-- Year reference: ${ctx.year} (keep content current).
-${ctx.isLocalTopic ? `- LOCAL TOPIC: weave in specific local context — city/region name, local regulations, local platforms, regional pricing or buyer behaviour. Use it in at least one H2.` : ""}`;
+- Year reference: ${ctx.year}.
+${ctx.isLocalTopic ? `- LOCAL TOPIC: include city/region name, local regulations, regional pricing, and local platform context in at least one H2.` : ""}`;
 }
 
 export function getStructureRules(ctx: PromptContext): string {
-    // Intent-aware H2 blueprints — different reader goals need different content shapes
-    const blueprints: Record<string, string> = {
-        informational: `
-- H2: What Is [keyword]? (answer directly in first sentence — no preamble)
-- H2: Why [keyword] Matters in ${ctx.year} (name a specific trend, regulation, or data point)
-- H2: How to [Do / Choose / Implement] [keyword] — Step by Step (numbered H3 steps with concrete actions)
-- H2: Common [keyword] Mistakes to Avoid (H3 per mistake — name it, explain it, give the fix)
-- H2: [keyword] Real-World Example (use first-hand example or [ADD YOUR DATA] — never invent)
-- H2: Frequently Asked Questions About [keyword] (5–7 Q&A from People Also Ask — each answer starts Yes/No/number/named thing)`,
-
-        commercial: `
-- H2: What to Look For in [keyword] (criteria table with named attributes — not vague features)
-- H2: [keyword] Options Compared (named tools/services with real differentiators — not "Option A vs B")
-- H2: Who [keyword] Is Best For (audience segments with specific use cases)
-- H2: [keyword] Pricing & Value (real price ranges from named providers — use [CHECK CURRENT PRICING] if unsure)
-- H2: What to Avoid When Choosing [keyword] (specific red flags with reasons)
-- H2: Frequently Asked Questions (5 questions from People Also Ask for buyer intent queries)`,
-
-        transactional: `
-- H2: What You Get (specific deliverables — features, inclusions, timelines)
-- H2: How It Works (numbered steps from sign-up to result — 4–6 steps max)
-- H2: Who This Is For (2–3 specific audience descriptions with pain points)
-- H2: Results You Can Expect (use real case study or [ADD YOUR DATA] — never invent percentages)
-- H2: Common Questions Before Buying (4–5 objection-busting Q&A)`,
-
-        local: `
-- H2: What Is [keyword] in [location]? (local context first — regulations, services, providers)
-- H2: How to Find the Best [keyword] Near You (named evaluation criteria for the local market)
-- H2: [keyword] Costs in [location] ${ctx.year} (real ranges from local providers or [ADD LOCAL PRICING])
-- H2: Top [keyword] Options in [location] (named local providers if known — otherwise acknowledge gap)
-- H2: What to Watch Out For (local-specific warnings — scams, unlicensed providers, contract traps)
-- H2: Frequently Asked Questions (5 Q&A from local searches — include city/region name in questions)`,
-    };
-
-    const blueprint = blueprints[ctx.intent] ?? blueprints.informational;
-
     return `STRUCTURE:
-- ONE H1 = the article title only. Primary keyword within first 60 characters of the H1.
-- 5–8 H2 sections. Follow the intent blueprint below — deviate only with a specific reason.
-- H3 subsections under each H2 where depth is needed.
-- Answer the primary search intent in the FIRST 30% of the article — reader should get the core answer before scrolling halfway.
+- ONE H1 = the article title only. Primary keyword within first 60 characters.
+- 5–8 H2 sections. Derive structure from the topic and SERP data — not from a default template.
+- Answer the primary search intent in the FIRST 30% of the article.
 - TITLE-COUNT RULE: if the title contains a number, the content must contain exactly that many H3 items.
-- Each section: what → why → how. Concrete, named examples beat abstract advice every time.
-- Intro: exactly 3 sentences — (1) state the core problem with a specific detail, (2) your unique angle or position, (3) what the reader will learn. No "Welcome to" or "In this article" openers.
-- FAQs MUST align to real People Also Ask queries for "${ctx.keyword}" — write them as actual searcher questions, not generic ones. Every FAQ answer must open with Yes / No / a number / a named tool or time frame.
-
-INTENT BLUEPRINT (${ctx.intent ?? "informational"}):
-${blueprint}`;
+- Intro: 3 sentences — (1) the most useful/surprising fact about "${ctx.keyword}", (2) your unique angle, (3) what the reader gets. No "Welcome to" or "In this article" openers.
+- FAQs MUST align to real People Also Ask queries for "${ctx.keyword}". Every FAQ answer opens with Yes / No / a number / a named tool or time frame.
+- DO NOT use the pattern: What Is X → Why X Matters → How to X → Common Mistakes → FAQ. This is predictable and AI-detectable.`;
 }
 
 const PROMPT_INJECTION_RE = /(?:ignore\s+(?:previous|all|above)\s+instructions?|system\s*:|<\|im_start\|>|<\|im_end\|>|\[INST\]|<<SYS>>|<\|system\|>|\[SYSTEM\])/gi;
@@ -909,45 +832,46 @@ export function getAuthorGrounding(author: AuthorProfile, ctx: PromptContext): s
 }
 
 export function getHumanizePrompt(content: string, ctx: PromptContext): string {
-    return `You are a senior human editor. Rewrite the article below to sound like it was written by a confident practitioner, not an AI. The goal is zero detectable AI patterns and zero word repetition.
+    return `You are a senior editor at a trade publication. Your task is an editorial rewrite — not a "humanization" pass. The goal is to make this read like a confident practitioner wrote it from experience.
 
 Keyword: "${ctx.keyword}"
 Intent: ${ctx.intent}
 
-HUMANIZATION RULES — apply every single one:
-1. ACTIVE VOICE: Replace every passive construction with an active one.
+EDITORIAL REWRITE RULES:
+
+1. ACTIVE VOICE: Replace every passive construction.
    BAD: "The keyword should be included in the title."
    GOOD: "Put the keyword in the title."
 
-2. SENTENCE LENGTH: Break any sentence over 28 words into two. Mix short (8–12 words), medium (13–20), and longer (21–28) sentences in alternating patterns. Never write more than two sentences of the same length category back-to-back.
+2. SENTENCE LENGTH: Break sentences over 28 words into two. Alternate short (8-12w), medium (13-20w), longer (21-28w). Never two identical categories back-to-back.
 
-3. OPENER VARIETY: Never start two consecutive sentences with the same word. Vary openers with: time phrases ("Three months in..."), numbers ("Two things to remember:"), named tools, contrasting conjunctions ("But", "Yet", "Still"), or action verbs.
+3. OPENER VARIETY: Never start two consecutive sentences with the same word. Vary with: time phrases ("Three months in…"), numbers ("Two things matter here."), named tools, contrasting conjunctions ("But", "Yet", "Still").
 
-4. REPETITION — this is the most important rule:
-   - Scan each 150-word window. If any non-keyword content word appears more than 4 times, rephrase or use a pronoun/synonym.
-   - Never refer to the same subject three times with the same noun in one paragraph. Use pronouns or restructure.
-   BAD:  "The platform tracks your keywords. The platform also monitors backlinks. The platform sends weekly alerts."
-   GOOD: "It tracks your keywords, monitors backlinks, and sends weekly alerts automatically."
+4. REPETITION SWEEP: Scan each 150-word window. Any non-keyword content word appearing 4+ times — rephrase using pronouns or synonyms.
+   BAD:  "The platform tracks keywords. The platform monitors backlinks. The platform sends alerts."
+   GOOD: "It tracks keywords, monitors backlinks, and sends alerts."
 
-5. BANNED PHRASES — replace all of these with plain language:
-   In conclusion / It's worth noting / Furthermore / Moreover / Additionally /
-   Delve into / Dive into / Leverage / Seamlessly / Comprehensive guide /
-   Cutting-edge / Game-changing / Robust / Notably / In today's digital landscape /
-   As we navigate / Now more than ever / When it comes to / In the realm of /
-   It is important to / It is essential to / It is crucial to / Final thoughts /
-   Key takeaways (remove unless followed by bullets) / To summarise / In summary /
-   Unlock the potential / Drive engagement / Foster growth / Empower users.
+5. REMOVE these phrases (replace with plain alternatives, do not just delete):
+   In conclusion / Furthermore / Moreover / Delve into / Leverage / Robust /
+   Comprehensive guide / Cutting-edge / Game-changing / Now more than ever /
+   When it comes to / It is important to / Final thoughts / To summarise / Empower users.
 
-6. CONTRACTIONS: Add natural contractions throughout — "you'll", "it's", "don't", "here's", "we've". At least one per paragraph.
+6. CONTRACTIONS: At least one per paragraph — "you'll", "it's", "don't", "here's".
 
-7. OPINION SIGNALS: Each major section (H2) must contain at least one direct stance:
-   - A contradiction: "Standard advice says X. In practice, Y works better."
-   - A named exception: "This breaks when [condition] — do [Y] instead."
-   - A practitioner note: "Most people miss this. Don't."
+7. OPINION SIGNALS: Each H2 must contain one of:
+   - "Standard advice says X. In practice, Y works better."
+   - "This breaks when [condition] — do [Y] instead."
+   - "Most people miss this. Don't."
 
-8. FAQ ANSWERS: Every FAQ answer must open with: Yes / No / a number / a tool name / a time frame. Never "It depends" or "Generally".
+8. MICRO-IMPERFECTIONS: Add one controlled irregularity per 400 words:
+   - A sentence fragment for emphasis: "That's the real problem."
+   - An abrupt transition: "Here's what changes everything."
+   - A short standalone emphatic line: "Most teams ignore this."
+   These feel like a real writer. Use sparingly.
 
-9. Return ONLY the rewritten HTML — no markdown fences, no commentary, no preamble.
+9. FAQ ANSWERS: Every FAQ answer opens with Yes / No / a number / a tool name / a time frame.
+
+10. Return ONLY the rewritten HTML — no markdown fences, no commentary.
 
 ARTICLE:
 ${content}`;

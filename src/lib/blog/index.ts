@@ -6,11 +6,9 @@ import { getFunnelForIntent, SearchIntent as FunnelIntent } from "../aeo/funnels
 import {
     getSerpContextForKeyword,
     classifySerpFormat,
-    formatToPromptHint,
-    buildCompetitorProfiles,
-    buildCompetitorBeatStrategy,
     type SerpContext,
 } from "./serp";
+
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import {
     PromptContext,
@@ -38,6 +36,7 @@ import {
     validateQuickAnswerUniqueness,
     runCompositeValidation,
 } from "./validators";
+import { runFullPipeline } from "./pipeline";
 
 export interface BlogPostDraft {
     title: string;
@@ -376,9 +375,10 @@ export async function humanizePost(content: string, ctx: PromptContext): Promise
     if (!ai) return content;
     try {
         const response = await ai.models.generateContent({
-            model: AI_MODELS.GEMINI_3_FLASH,
+            // Use Pro for final editorial quality — Flash produces noticeable AI stiffness
+            model: AI_MODELS.GEMINI_PRO,
             contents: getHumanizePrompt(content, ctx),
-            config: { temperature: 0.9, maxOutputTokens: 6000 },
+            config: { temperature: 0.85, maxOutputTokens: 8000 },
         });
         const humanized = response.text?.trim();
         if (!humanized || humanized.length < content.length * 0.5) return content;
@@ -544,29 +544,11 @@ export async function generateEvergreenPost(
         siteDomain: siteContext?.domain,
     });
 
-    const siteGrounding = siteContext ? `
-Business context:
-- Name: "${displayName}"
-- Description: "${siteContext.description}"
-- Services: ${siteContext.headings.slice(0, 5).join(" | ")}
-
-Position ${displayName} as the authority where naturally relevant — educate first, sell second.` : "";
-
-    let serpContextSection = "";
-    let formatHint = "";
-    let beatStrategy = "";
+    let serpContext: SerpContext | null = null;
     try {
-        // Use pre-fetched SERP context if the caller already has it
-        // (avoids a duplicate Serper API call when called from the Inngest job).
-        const serpData = precomputedSerpContext ?? await getSerpContextForKeyword(primaryKeyword, true);
-        if (serpData) {
-            serpContextSection = `\n${serpData.formattedContext}`;
-            const formatSignal = classifySerpFormat(serpData.results);
-            formatHint = `\n${formatToPromptHint(formatSignal, primaryKeyword)}`;
-            const profiles = buildCompetitorProfiles(serpData.results);
-            if (profiles.length > 0) {
-                beatStrategy = `\n${buildCompetitorBeatStrategy(profiles, primaryKeyword)}`;
-            }
+        serpContext = precomputedSerpContext ?? await getSerpContextForKeyword(primaryKeyword, true);
+        if (serpContext) {
+            const formatSignal = classifySerpFormat(serpContext.results);
             if (formatSignal.format === "tool" && formatSignal.confidence === "high") {
                 logger.warn(`[Blog Engine] SERP for "${primaryKeyword}" is tool-dominated. A blog may underperform.`);
             }
@@ -575,45 +557,26 @@ Position ${displayName} as the authority where naturally relevant — educate fi
         logger.error("[Blog Engine] SERP context failed:", { error: (e as Error)?.message });
     }
 
-    const response = await ai.models.generateContent({
-        model: AI_MODELS.GEMINI_3_FLASH,
-        contents: `You are a senior technical writer producing a definitive guide on: "${category}".
+    // ── 4-Stage Editorial Pipeline ─────────────────────────────────────────────
+    const pipeline = await runFullPipeline({ keyword: primaryKeyword, serpContext, ctx, author, tone });
 
-Target keywords: ${keywords.join(", ")}
-PRIMARY KEYWORD: "${primaryKeyword}"
-${siteGrounding}
-${serpContextSection}
-${formatHint}
-${beatStrategy}
-${getClaimRules(ctx)}
-${getToneRules(ctx)}
-${getScopeRules(ctx)}
-${getStructureRules(ctx)}
-${getAuthorGrounding(author, ctx)}
+    // Build a synthetic GeminiBlogResponse from pipeline output so buildPost
+    // can assemble HTML, inject photos, FAQs, and run validation unchanged.
+    const syntheticResponse: GeminiBlogResponse = {
+        title: pipeline.title,
+        slug: pipeline.slug,
+        content: pipeline.markdownContent,
+        excerpt: pipeline.quickAnswer,
+        metaDescription: pipeline.metaDescription,
+        targetKeywords: keywords,
+        suggestedImagePrompt: primaryKeyword,
+        faqs: [],
+        sections: pipeline.outline.sections.map(s => ({ heading: s.heading, imageQuery: s.keyEntities[0] ?? primaryKeyword })),
+        quickAnswer: pipeline.quickAnswer,
+        comparisonTable: [],
+    };
 
-CONTENT STRUCTURE — derive from the SERP data above, not from a template:
-- Open with the single most useful insight a practitioner would not already know
-- Cover every table-stakes section listed in the beat strategy (these are mandatory)
-- Dedicate at least one H2 to an underserved angle competitors miss
-- Include one "Honest take:" paragraph with a frank editorial opinion
-- Close with a Frequently Asked Questions section — answers must start with Yes/No/a number/a named tool
-- DO NOT follow a predictable "What is X → Why X matters → How to X" template unless the SERP data shows that format wins
-
-KEYWORD RULES: "${primaryKeyword}" in first sentence. Used 8-15 times. In at least 2 H2s.
-TITLE-COUNT RULE: If title contains a number, content must have exactly that many H3 items.
-Tone: ${tone || "Authoritative and direct — trusted expert explaining to a peer, not a textbook"}.
-${ctx.riskTier === "high" ? "HIGH-RISK: Add a disclaimer section — informational only, not professional advice." : ""}
-Updated ${new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}.`,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: buildBlogResponseSchema(ctx),
-            temperature: 0.7,
-            maxOutputTokens: 8192,
-        },
-    });
-
-    if (!response.text) throw new Error("Gemini returned empty text.");
-    return buildPost(JSON.parse(response.text) as GeminiBlogResponse, author, ctx, siteId);
+    return buildPost(syntheticResponse, author, ctx, siteId);
 }
 
 export async function generateBlogFromKeywordGap(
@@ -626,8 +589,7 @@ export async function generateBlogFromKeywordGap(
     intentOverride?: string,
     siteId?: string
 ): Promise<BlogPostDraft> {
-    const ai = getAiClient();
-    if (!ai) throw new Error("GEMINI_API_KEY is missing.");
+    if (!getAiClient()) throw new Error("GEMINI_API_KEY is missing.");
 
     const intent = (intentOverride as SearchIntent) ?? detectIntent(keyword);
     const ctx = buildPromptContext({
@@ -643,65 +605,32 @@ export async function generateBlogFromKeywordGap(
         position > 20 ? "barely visible — write highly authoritative, exhaustive content"
             : position > 10 ? "on page 2 — write content detailed enough to overtake page 1"
                 : "on page 1 but ranking low — write content that deserves top 3";
+    logger.debug(`[Blog Engine] Keyword gap post: "${keyword}" at position ${position} (${positionHint})`, { impressions });
 
-    let serpContextSection = "";
-    let formatHint = "";
-    let beatStrategy = "";
+    let serpContext: SerpContext | null = null;
     try {
-        const serpData = await getSerpContextForKeyword(keyword, true);
-        if (serpData) {
-            serpContextSection = `\n${serpData.formattedContext}`;
-            const formatSignal = classifySerpFormat(serpData.results);
-            formatHint = `\n${formatToPromptHint(formatSignal, keyword)}`;
-            const profiles = buildCompetitorProfiles(serpData.results);
-            if (profiles.length > 0) {
-                beatStrategy = `\n${buildCompetitorBeatStrategy(profiles, keyword)}`;
-            }
-        }
+        serpContext = await getSerpContextForKeyword(keyword, true);
     } catch (e: unknown) {
         logger.error("[Blog Engine] SERP context failed:", { error: (e as Error)?.message });
     }
 
-    const response = await ai.models.generateContent({
-        model: AI_MODELS.GEMINI_3_FLASH,
-        contents: `You are a senior SEO content strategist. Write an article targeting: "${keyword}".
+    const pipeline = await runFullPipeline({ keyword, serpContext, ctx, author });
 
-CONTEXT:
-- Current SERP position: ${position} (${positionHint})
-- Monthly impressions: ${impressions.toLocaleString()}
-- Search intent: ${intent}
-- Site: ${siteDomain || "our site"}
-${targetUrl ? `- Existing URL to improve: ${targetUrl}` : ""}
-${serpContextSection}
-${formatHint}
-${beatStrategy}
-${getClaimRules(ctx)}
-${getToneRules(ctx)}
-${getScopeRules(ctx)}
-${getStructureRules(ctx)}
-${getAuthorGrounding(author, ctx)}
+    const syntheticResponse: GeminiBlogResponse = {
+        title: pipeline.title,
+        slug: pipeline.slug,
+        content: pipeline.markdownContent,
+        excerpt: pipeline.quickAnswer,
+        metaDescription: pipeline.metaDescription,
+        targetKeywords: [keyword],
+        suggestedImagePrompt: keyword,
+        faqs: [],
+        sections: pipeline.outline.sections.map(s => ({ heading: s.heading, imageQuery: s.keyEntities[0] ?? keyword })),
+        quickAnswer: pipeline.quickAnswer,
+        comparisonTable: [],
+    };
 
-CONTENT STRUCTURE — built from the SERP data above:
-- Structure must be derived from competitor gaps, not a default template
-- Must cover every table-stakes heading competitors share
-- Must go deeper on at least one underserved angle no competitor fully addresses
-- Include an "Honest take:" paragraph with a real editorial opinion
-- FAQ section at the end; each answer starts with Yes/No/a number/a named tool
-
-KEYWORD RULES: "${keyword}" in first sentence. Used 8-15 times. In at least 2 H2s. 10+ semantic variations.
-TITLE-COUNT RULE: If title contains a number, content must have exactly that many H3 items.
-${ctx.riskTier === "high" ? "HIGH-RISK: Add a disclaimer section — informational only, not professional advice." : ""}
-Updated ${new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}.`,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: buildBlogResponseSchema(ctx),
-            temperature: 0.4,
-            maxOutputTokens: 8192,
-        },
-    });
-
-    if (!response.text) throw new Error("Gemini returned empty text.");
-    return buildPost(JSON.parse(response.text) as GeminiBlogResponse, author, ctx, siteId);
+    return buildPost(syntheticResponse, author, ctx, siteId);
 }
 
 export async function generateBlogFromCompetitorGap(
@@ -716,8 +645,7 @@ export async function generateBlogFromCompetitorGap(
     siteId?: string,
     precomputedSerpContext?: SerpContext | null
 ): Promise<BlogPostDraft> {
-    const ai = getAiClient();
-    if (!ai) throw new Error("GEMINI_API_KEY is missing.");
+    if (!getAiClient()) throw new Error("GEMINI_API_KEY is missing.");
 
     const intent = (intentOverride as SearchIntent) ?? detectIntent(keyword);
     const ctx = buildPromptContext({
@@ -729,63 +657,30 @@ export async function generateBlogFromCompetitorGap(
         siteDomain,
     });
 
-    let serpContextSection = "";
-    let formatHint = "";
-    let beatStrategy = "";
+    logger.debug(`[Blog Engine] Competitor gap post: "${keyword}" vs ${competitorDomain}`, { searchVolume, difficulty });
+
+    let serpContext: SerpContext | null = null;
     try {
-        // Use pre-fetched SERP context if provided (avoids duplicate Serper API call).
-        const serpData = precomputedSerpContext ?? await getSerpContextForKeyword(keyword, true);
-        if (serpData) {
-            serpContextSection = `\n${serpData.formattedContext}`;
-            const formatSignal = classifySerpFormat(serpData.results);
-            formatHint = `\n${formatToPromptHint(formatSignal, keyword)}`;
-            const profiles = buildCompetitorProfiles(serpData.results);
-            if (profiles.length > 0) {
-                beatStrategy = `\n${buildCompetitorBeatStrategy(profiles, keyword)}`;
-            }
-        }
+        serpContext = precomputedSerpContext ?? await getSerpContextForKeyword(keyword, true);
     } catch (e: unknown) {
         logger.error("[Blog Engine] SERP context failed:", { error: (e as Error)?.message });
     }
 
-    const response = await ai.models.generateContent({
-        model: AI_MODELS.GEMINI_3_FLASH,
-        contents: `You are a senior content strategist at ${ctx.displayName || siteDomain || "our company"}.
-Write expert content that outranks "${competitorDomain}" for "${keyword}".
+    const pipeline = await runFullPipeline({ keyword, serpContext, ctx, author, tone });
 
-CONTEXT:
-- Keyword: "${keyword}"
-- Monthly search volume: ${searchVolume.toLocaleString()}
-- SEO difficulty: ${difficulty}/100
-- Competitor to outrank: ${competitorDomain}
-${serpContextSection}
-${formatHint}
-${beatStrategy}
-${getClaimRules(ctx)}
-${getToneRules(ctx)}
-${getScopeRules(ctx)}
-${getStructureRules(ctx)}
-${getAuthorGrounding(author, ctx)}
+    const syntheticResponse: GeminiBlogResponse = {
+        title: pipeline.title,
+        slug: pipeline.slug,
+        content: pipeline.markdownContent,
+        excerpt: pipeline.quickAnswer,
+        metaDescription: pipeline.metaDescription,
+        targetKeywords: [keyword],
+        suggestedImagePrompt: keyword,
+        faqs: [],
+        sections: pipeline.outline.sections.map(s => ({ heading: s.heading, imageQuery: s.keyEntities[0] ?? keyword })),
+        quickAnswer: pipeline.quickAnswer,
+        comparisonTable: [],
+    };
 
-COMPETITOR GAP APPROACH:
-${beatStrategy ? "Use the beat strategy above to drive your structure." : `Think about what ${competitorDomain}'s article likely lacks — generic advice, missing depth, no real examples.`}
-Do NOT open with "Are you looking for…" or "In this article…" or any variation.
-Open with the single most surprising or useful fact about "${keyword}" — something a practitioner would not expect.
-Take a clear editorial position early. Include one "Honest take:" paragraph with frank opinion, not sales copy.
-
-KEYWORD RULES: "${keyword}" in first sentence. Used 10-16 times. In at least 2 H2s. 12+ semantic variations.
-TITLE-COUNT RULE: If title contains a number, content must have exactly that many H3 items.
-Tone: ${tone || "Authoritative and direct"}.
-${ctx.riskTier === "high" ? "HIGH-RISK: Add a disclaimer section — informational only, not professional advice." : ""}
-Updated ${new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}.`,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: buildBlogResponseSchema(ctx),
-            temperature: 0.4,
-            maxOutputTokens: 8192,
-        },
-    });
-
-    if (!response.text) throw new Error("Gemini returned empty text.");
-    return buildPost(JSON.parse(response.text) as GeminiBlogResponse, author, ctx, siteId);
+    return buildPost(syntheticResponse, author, ctx, siteId);
 }
