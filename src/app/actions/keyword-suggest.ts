@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { fetchGSCKeywords, normaliseSiteUrl } from "@/lib/gsc";
+import { getUserGscToken } from "@/lib/gsc/token";
 
 const GSC_RULES = {
     buriedPosition: 20,
@@ -68,19 +69,14 @@ export async function getSiteKeywordSuggestions(
         }
 
         try {
-            const gscToken = await prisma.account.findFirst({
-                where: { userId, provider: "google" },
-                select: { access_token: true },
-            });
-
-            if (gscToken?.access_token) {
-                const raw = await fetchGSCKeywords(
-                    gscToken.access_token,
-                    normaliseSiteUrl(site.domain),
-                    90,
-                    500
-                );
-                const gscKeywords = raw.slice(0, 300);
+            const accessToken = await getUserGscToken(userId);
+            const raw = await fetchGSCKeywords(
+                accessToken,
+                normaliseSiteUrl(site.domain),
+                90,
+                500
+            );
+            const gscKeywords = raw.slice(0, 300);
 
                 const buried = gscKeywords
                     .filter(
@@ -92,39 +88,41 @@ export async function getSiteKeywordSuggestions(
                     .sort((a, b) => b.impressions - a.impressions)
                     .slice(0, 5);
 
-                for (const kw of buried) {
-                    addSuggestion({
-                        keyword: kw.keyword.slice(0, 200),
-                        impressions: kw.impressions,
-                        position: Math.round(kw.position),
-                        reason: `${kw.impressions.toLocaleString()} searches/month — ranking #${Math.round(kw.position)}, a dedicated post could reach page 1`,
-                        source: "gsc_gap",
-                    });
-                }
+            for (const kw of buried) {
+                addSuggestion({
+                    keyword: kw.keyword.slice(0, 200),
+                    impressions: kw.impressions,
+                    position: Math.round(kw.position),
+                    reason: `${kw.impressions.toLocaleString()} searches/month — ranking #${Math.round(kw.position)}, a dedicated post could reach page 1`,
+                    source: "gsc_gap",
+                });
+            }
 
-                const noClicks = gscKeywords
-                    .filter(
-                        (kw) =>
-                            kw.impressions >= GSC_RULES.noClicksMinImpressions &&
-                            kw.clicks <= GSC_RULES.maxClicks &&
-                            kw.position > GSC_RULES.minPosition &&
-                            !coveredKeywords.has(kw.keyword.toLowerCase().trim())
-                    )
-                    .sort((a, b) => b.impressions - a.impressions)
-                    .slice(0, 3);
+            const noClicks = gscKeywords
+                .filter(
+                    (kw) =>
+                        kw.impressions >= GSC_RULES.noClicksMinImpressions &&
+                        kw.clicks <= GSC_RULES.maxClicks &&
+                        kw.position > GSC_RULES.minPosition &&
+                        !coveredKeywords.has(kw.keyword.toLowerCase().trim())
+                )
+                .sort((a, b) => b.impressions - a.impressions)
+                .slice(0, 3);
 
-                for (const kw of noClicks) {
-                    addSuggestion({
-                        keyword: kw.keyword.slice(0, 200),
-                        impressions: kw.impressions,
-                        position: Math.round(kw.position),
-                        reason: `${kw.impressions.toLocaleString()} searches, only ${kw.clicks} clicks — no dedicated page for this yet`,
-                        source: "no_content",
-                    });
-                }
+            for (const kw of noClicks) {
+                addSuggestion({
+                    keyword: kw.keyword.slice(0, 200),
+                    impressions: kw.impressions,
+                    position: Math.round(kw.position),
+                    reason: `${kw.impressions.toLocaleString()} searches, only ${kw.clicks} clicks — no dedicated page for this yet`,
+                    source: "no_content",
+                });
             }
         } catch (err) {
-            logger.warn("[KeywordSuggest] GSC fetch failed", { error: (err as Error)?.message });
+            const msg = (err as Error)?.message ?? "";
+            if (!msg.includes("GSC_NOT_CONNECTED") && !msg.includes("GSC_REFRESH_TOKEN_MISSING")) {
+                logger.warn("[KeywordSuggest] GSC fetch failed", { error: msg });
+            }
         }
 
         if (suggestions.length < 8) {

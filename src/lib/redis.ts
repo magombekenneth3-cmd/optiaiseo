@@ -29,3 +29,5 @@ export const redis = new Redis({
     url:   url   ?? "http://localhost",
     token: token ?? "placeholder",
 });
+
+export const isRedisConfigured = !!(url && token);
