@@ -38,10 +38,10 @@ import { logger } from "@/lib/logger";
 // ── Per-tier page budget ──────────────────────────────────────────────────────
 
 const PAGE_LIMIT: Record<string, number> = {
-  FREE:       5,
-  STARTER:   10,
-  PRO:        25,
-  AGENCY:     50,
+  FREE: 5,
+  STARTER: 10,
+  PRO: 25,
+  AGENCY: 50,
 };
 
 async function getTierPageLimit(siteId: string): Promise<number> {
@@ -68,8 +68,8 @@ export const runPageAuditJob = inngest.createFunction(
     id: "run-page-audit",
     name: "Run Multi-Page Audit (Fan-Out)",
     retries: 2,
-  
-      triggers: [{ event: "audit.pages.run" }],
+
+    triggers: [{ event: "audit.pages.run" }],
   },
   async ({ event, step }) => {
     const { siteId, auditId, domain, tier, auditMode } = event.data as {
@@ -161,8 +161,8 @@ export const processPageAuditJob = inngest.createFunction(
       limit: CONCURRENCY.pageAuditChild,
       key: "event.data.siteId", // one concurrent worker per site — never hammer target servers
     },
-  
-      triggers: [{ event: "audit.page.single" }],
+
+    triggers: [{ event: "audit.page.single" }],
   },
   async ({ event, step }) => {
     const { siteId, auditId, pageUrl } = event.data as {

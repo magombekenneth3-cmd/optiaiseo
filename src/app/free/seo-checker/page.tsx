@@ -187,10 +187,20 @@ export default function FreeSeoCheckerPage() {
                                 />
                             </div>
                             {errorMsg && (
-                                <div className="flex items-start gap-2 px-4 py-3 rounded-xl text-sm border"
+                                <div className="flex flex-col gap-2 px-4 py-3 rounded-xl text-sm border"
                                     style={{ background: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.25)', color: '#f87171' }}>
-                                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                                    <span>{errorMsg}</span>
+                                    <div className="flex items-start gap-2">
+                                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                        <span>{errorMsg}</span>
+                                    </div>
+                                    {activeAuditId && (
+                                        <a
+                                            href={`/free/results/${activeAuditId}`}
+                                            className="text-xs underline underline-offset-2 opacity-80 hover:opacity-100 pl-6"
+                                        >
+                                            Check if your results are ready →
+                                        </a>
+                                    )}
                                 </div>
                             )}
                             <button
