@@ -187,6 +187,23 @@ function assembleHtml(params: {
 </div>`;
         } else {
             const displayName = ctx.displayName ?? "Recommended Approach";
+            const tableRows = comparisonTable.map((row, i) => {
+                const isFlagged = flaggedIndexes.includes(i);
+                const rowStyle = isFlagged
+                    ? 'background:#fffbeb;border-left:3px solid #f59e0b;'
+                    : '';
+                const flagNote = isFlagged
+                    ? `<span style="font-size:0.7rem;color:#92400e;display:block;margin-top:2px;">⚠ Verify stat before publishing</span>`
+                    : '';
+                return `
+<tr style="${rowStyle}">
+  <td style="padding:12px 16px;color:#374151;">${row.problem}${flagNote}</td>
+  <td style="padding:12px 16px;color:#6b7280;">${row.industryAvg}</td>
+  <td style="padding:12px 16px;color:#059669;font-weight:600;">${row.fix}</td>
+  <td style="padding:12px 16px;color:#374151;">${row.result}</td>
+</tr>`;
+            }).join("\n");
+
             comparisonHtml = `
 <div style="margin:2rem 0;overflow-x:auto;border:1px solid #e5e7eb;border-radius:12px;">
   <table style="width:100%;border-collapse:collapse;font-size:0.9rem;text-align:left;">
@@ -198,21 +215,11 @@ function assembleHtml(params: {
         <th style="padding:12px 16px;font-weight:700;color:#1e293b;">Result</th>
       </tr>
     </thead>
-    <tbody style="color:#475569;">
-      ${comparisonTable.map((row, i) => {
-                const badge = flaggedIndexes.includes(i)
-                    ? `<span style="font-size:0.7rem;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;margin-left:6px;font-weight:700;">[Verify]</span>`
-                    : "";
-                return `
-      <tr style="border-bottom:1px solid #f1f5f9;">
-        <td style="padding:12px 16px;color:#ef4444;font-weight:500;">${row.problem}</td>
-        <td style="padding:12px 16px;">${row.industryAvg}</td>
-        <td style="padding:12px 16px;color:#10b981;font-weight:600;">${row.fix}</td>
-        <td style="padding:12px 16px;font-weight:700;">${row.result}${badge}</td>
-      </tr>`;
-            }).join("")}
+    <tbody>
+      ${tableRows}
     </tbody>
   </table>
+  ${flaggedIndexes.length > 0 ? `<p style="font-size:0.75rem;color:#92400e;padding:8px 16px;margin:0;border-top:1px solid #fde68a;background:#fffbeb;">⚠ Rows marked in amber contain unverified statistics — replace with sourced data before publishing.</p>` : ''}
 </div>`;
         }
     }

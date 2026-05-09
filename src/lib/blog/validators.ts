@@ -200,6 +200,14 @@ export function runCompositeValidation(params: {
         score -= table.warnings.length * 5;
     }
 
+    const banned = auditBannedPhrases(params.htmlContent);
+    warnings.push(...banned.warnings);
+    score -= Math.min(banned.warnings.length * 3, 15);
+
+    const rhythmWarnings = auditRhythm(params.htmlContent);
+    warnings.push(...rhythmWarnings);
+    score -= Math.min(rhythmWarnings.length * 3, 12);
+
     const wordCount = params.markdownContent.split(/\s+/).length;
     if (wordCount < 1500) {
         warnings.push(`Content is ${wordCount} words — aim for at least 2000.`);

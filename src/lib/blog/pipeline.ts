@@ -81,11 +81,27 @@ function parseJsonSafe<T>(text: string, fallback: T): T {
     }
 }
 
-function wordCountTarget(ctx: PromptContext): number {
-    return ctx.intent === "transactional" ? 1500
+function wordCountTarget(ctx: PromptContext, serpContext: SerpContext | null): number {
+    const intentBase =
+        ctx.intent === "transactional" ? 1500
         : ctx.intent === "commercial" ? 2200
         : ctx.intent === "local" ? 1800
         : 2200;
+
+    if (!serpContext) return intentBase;
+
+    const competitorCounts = serpContext.results
+        .map(r => r.wordCount ?? 0)
+        .filter(n => n > 300);
+
+    if (competitorCounts.length === 0) return intentBase;
+
+    const avgCompetitorWords = Math.round(
+        competitorCounts.reduce((a, b) => a + b, 0) / competitorCounts.length
+    );
+    const serpTarget = Math.round(avgCompetitorWords * 1.1);
+
+    return Math.min(Math.max(intentBase, serpTarget), 4000);
 }
 
 // ─── Stage 1: Research Brain ──────────────────────────────────────────────────
@@ -178,7 +194,7 @@ export async function runOutlinePlanner(
 ): Promise<OutlinePlan> {
     const ai = getClient();
 
-    const targetWords = wordCountTarget(ctx);
+    const targetWords = wordCountTarget(ctx, serpContext);
     const serpHeadings = serpContext?.results.slice(0, 3)
         .flatMap(r => r.scrapedHeadings ?? [])
         .slice(0, 10)
@@ -271,11 +287,17 @@ RULES:
 
 // ─── Stage 3: Section Writer ──────────────────────────────────────────────────
 
-/**
- * Writes ONE section at a time, passing editorial memory between calls.
- * Uses Pro — actual prose quality matters here.
- * Returns the full Markdown article assembled from all sections.
- */
+function enforceFaqOpeners(faqMarkdown: string): string {
+    const VALID_OPENER = /^(yes|no|\d|never|always|most|few|it takes|within|about|roughly|typically|around|immediately|[A-Z][a-z]+(?:SEO|AI|IO|JS|QL)?)\b/i;
+    return faqMarkdown.replace(
+        /(^|\n)(#{2,3}\s.+?\n+)([^#\n].+)/gm,
+        (match, prefix, heading, answer) => {
+            if (VALID_OPENER.test(answer.trim())) return match;
+            return `${prefix}${heading}**[EDITOR: rewrite this answer to open with Yes/No/a number/a tool name/a time frame]** ${answer}`;
+        }
+    );
+}
+
 export async function runSectionWriter(
     outline: OutlinePlan,
     brain: ResearchBrain,
@@ -295,7 +317,10 @@ export async function runSectionWriter(
 
     for (const section of outline.sections) {
         const sectionText = await writeSingleSection(ai, section, outline, brain, author, ctx, memory);
-        sections.push(sectionText);
+        const finalText = section.evidenceType === "faq"
+            ? enforceFaqOpeners(sectionText)
+            : sectionText;
+        sections.push(finalText);
 
         // Update editorial memory
         memory.previousSectionSummary = sectionText.slice(0, 300) + "…";
@@ -330,7 +355,9 @@ async function writeSingleSection(
         : "";
 
     const memoryNote = memory.previousSectionSummary
-        ? `PREVIOUS SECTION ENDED WITH: "${memory.previousSectionSummary}"\nDo NOT repeat these concepts: ${memory.recentConcepts.slice(0, 8).join(", ")}`
+        ? `PREVIOUS SECTION ENDED WITH: "${memory.previousSectionSummary}"
+Do NOT repeat these concepts from earlier sections: ${memory.recentConcepts.slice(-8).join(", ")}
+Do NOT re-introduce these entities as if new: ${[...memory.usedEntities].slice(-6).join(", ")}`
         : "";
 
     const entityNote = memory.usedEntities.size > 0
@@ -441,80 +468,92 @@ Output: ONLY the section content in Markdown. Include the ## heading. No preambl
 export async function runEditorialRewrite(
     draft: string,
     ctx: PromptContext,
-): Promise<string> {
+): Promise<{ content: string; truncated: boolean }> {
     const ai = getClient();
+    const CHUNK_SIZE = 18_000;
 
-    // Chunk if needed — Pro has large context but let's be safe
-    if (draft.length > 20000) {
-        logger.warn("[Pipeline] Draft too long for single editorial pass — truncating to 20k chars");
-    }
-    const workingDraft = draft.slice(0, 20000);
+    const chunks = splitAtH2Boundaries(draft, CHUNK_SIZE);
+    const rewrittenChunks: string[] = [];
+    let previousSummary = "";
 
-    const prompt = `You are a senior editor at a trade publication. Your job is to rewrite the article below so it reads like a confident practitioner wrote it — not an AI, and not a content marketer.
+    for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+
+        const continuityNote = previousSummary
+            ? `CONTINUITY: The previous section ended with: "${previousSummary}". Do not re-introduce topics already covered.`
+            : "";
+
+        const prompt = `You are a senior editor at a trade publication. Rewrite the article section below so it reads like a confident practitioner wrote it — not an AI, and not a content marketer.
 
 KEYWORD: "${ctx.keyword}"
+${continuityNote}
 
 EDITORIAL INSTRUCTIONS — apply every one:
 
 1. REPETITION SWEEP: Scan each 150-word window. If any non-keyword content word appears more than 4 times, rephrase using pronouns, synonyms, or sentence restructuring.
-   BAD:  "The platform tracks keywords. The platform also monitors backlinks. The platform sends alerts."
-   GOOD: "It tracks keywords, monitors backlinks, and sends weekly alerts."
-
 2. SENTENCE LENGTH MIX: Break any sentence over 28 words into two. Mix short (8-12w), medium (13-20w), and longer (21-28w). Never two identical length categories back-to-back.
-
-3. OPENER VARIETY: Never start two consecutive sentences with the same word. Vary with: time phrases ("Three weeks in…"), numbers ("Two things matter here."), named tools, contrasting conjunctions ("But", "Yet", "Still").
-
+3. OPENER VARIETY: Never start two consecutive sentences with the same word.
 4. ACTIVE VOICE: Replace every passive construction.
-   BAD: "The keyword should be included in the title."
-   GOOD: "Put the keyword in the title."
-
 5. CONTRACTIONS: Add natural contractions throughout — "you'll", "it's", "don't", "here's", "we've". At least one per paragraph.
-
-6. OPINION SIGNALS: Each H2 section must contain at least one of:
-   - Contradiction: "Standard advice says X. In practice, Y works better."
-   - Named exception: "This breaks when [condition] — do [Y] instead."
-   - Practitioner note: "Most people miss this. Don't."
-
-7. REMOVE THESE PHRASES (replace with plain language, do not just delete):
-   In conclusion / It's worth noting / Furthermore / Moreover / Additionally /
-   Delve into / Leverage / Seamlessly / Comprehensive guide / Cutting-edge /
-   Game-changing / Robust / Now more than ever / When it comes to / In today's digital landscape /
-   It is important to / It is essential to / Final thoughts / To summarise / In summary /
-   Unlock the potential / Drive engagement / Foster growth / Empower users
-
+6. OPINION SIGNALS: Each H2 section must contain at least one contradiction, named exception, or practitioner note.
+7. REMOVE THESE PHRASES (replace with plain language): In conclusion / It's worth noting / Furthermore / Moreover / Additionally / Delve into / Leverage / Seamlessly / Comprehensive guide / Cutting-edge / Game-changing / Robust / Now more than ever / When it comes to / In today's digital landscape / It is important to / It is essential to / Final thoughts / To summarise / In summary / Unlock the potential / Drive engagement / Foster growth / Empower users
 8. FAQ ANSWERS: Every FAQ answer must open with: Yes / No / a number / a tool name / a time frame.
-
-9. MICRO-IMPERFECTIONS: Add one or two controlled irregularities per 500 words:
-   - A sentence fragment used for emphasis: "That's the real problem."
-   - An abrupt transition that signals a shift: "Here's what changes everything."
-   - A short emphatic standalone: "Most teams ignore this. Don't be most teams."
-
+9. MICRO-IMPERFECTIONS: Add one or two controlled irregularities per 500 words (fragment for emphasis, abrupt transition, short emphatic standalone).
 10. PRESERVE: All factual claims, named entities, statistics with sources, heading structure, FAQ questions. Do NOT invent new facts.
 
-Return ONLY the rewritten article in Markdown — the same heading structure, no commentary, no preamble.
+Return ONLY the rewritten content in Markdown — same heading structure, no commentary.
 
-ARTICLE:
-${workingDraft}`;
+CONTENT:
+${chunk}`;
 
-    try {
-        const response = await ai.models.generateContent({
-            model: AI_MODELS.GEMINI_PRO,
-            contents: prompt,
-            config: { temperature: 0.8, maxOutputTokens: 8192 },
-        });
-        const rewritten = response.text?.trim() ?? "";
-        if (!rewritten || rewritten.length < workingDraft.length * 0.4) {
-            logger.warn("[Pipeline] Editorial rewrite returned too-short output — keeping draft");
-            return workingDraft;
+        try {
+            const response = await ai.models.generateContent({
+                model: AI_MODELS.GEMINI_PRO,
+                contents: prompt,
+                config: { temperature: 0.8, maxOutputTokens: 8192 },
+            });
+            const rewritten = response.text?.trim() ?? "";
+            if (!rewritten || rewritten.length < chunk.length * 0.4) {
+                logger.warn("[Pipeline] Editorial rewrite chunk returned too-short output — keeping original", { chunk: i });
+                rewrittenChunks.push(chunk);
+            } else {
+                const cleaned = rewritten
+                    .replace(/^```(?:markdown|html)?\s*/i, "")
+                    .replace(/\s*```$/i, "")
+                    .trim();
+                rewrittenChunks.push(cleaned);
+                previousSummary = cleaned.slice(-200).replace(/\s+/g, " ");
+            }
+        } catch (e) {
+            logger.warn("[Pipeline] Editorial rewrite chunk failed — keeping original", {
+                chunk: i,
+                error: (e as Error).message,
+            });
+            rewrittenChunks.push(chunk);
         }
-        // Strip any markdown fence the model adds
-        return rewritten.replace(/^```(?:markdown|html)?\s*/i, "").replace(/\s*```$/i, "").trim();
-    } catch (e) {
-        logger.warn("[Pipeline] Editorial rewrite failed — returning original draft", {
-            error: (e as Error).message,
-        });
-        return workingDraft;
     }
+
+    return {
+        content: rewrittenChunks.join("\n\n"),
+        truncated: false,
+    };
+}
+
+function splitAtH2Boundaries(text: string, maxChars: number): string[] {
+    const sections = text.split(/(?=^## )/m);
+    const chunks: string[] = [];
+    let current = "";
+
+    for (const section of sections) {
+        if ((current + section).length > maxChars && current.length > 0) {
+            chunks.push(current.trim());
+            current = section;
+        } else {
+            current += (current ? "\n\n" : "") + section;
+        }
+    }
+    if (current.trim()) chunks.push(current.trim());
+    return chunks.length > 0 ? chunks : [text];
 }
 
 // ─── Convenience: Full Pipeline ───────────────────────────────────────────────
@@ -552,8 +591,11 @@ export async function runFullPipeline(params: {
     logger.debug("[Pipeline] Stage 3 — Section Writer", { keyword, sections: outline.sections.length });
     const rawDraft = await runSectionWriter(outline, brain, author, ctx);
 
-    logger.debug("[Pipeline] Stage 4 — Editorial Rewrite", { keyword });
-    const polishedMarkdown = await runEditorialRewrite(rawDraft, ctx);
+    logger.debug("[Pipeline] Stage 4 — Editorial Rewrite", { keyword, chunks: Math.ceil(rawDraft.length / 18000) });
+    const { content: polishedMarkdown, truncated } = await runEditorialRewrite(rawDraft, ctx);
+    if (truncated) {
+        logger.warn("[Pipeline] Editorial rewrite was truncated", { keyword });
+    }
 
     return {
         title: outline.title,
