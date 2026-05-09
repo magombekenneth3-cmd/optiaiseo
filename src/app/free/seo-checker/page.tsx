@@ -44,9 +44,13 @@ export default function FreeSeoCheckerPage() {
     const [activeAuditId, setActiveAuditId] = useState<string | null>(null);
     const esRef = useRef<EventSource | null>(null);
     const reconnectCount = useRef(0);
+    const streamTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
-        return () => { esRef.current?.close(); };
+        return () => {
+            esRef.current?.close();
+            if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current);
+        };
     }, []);
 
     function normalizeUrl(raw: string): string {
@@ -95,6 +99,13 @@ export default function FreeSeoCheckerPage() {
         const es = new EventSource(`/api/free/progress/${auditId}`);
         esRef.current = es;
 
+        if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current);
+        streamTimeoutRef.current = setTimeout(() => {
+            es.close();
+            setPhase('error');
+            setErrorMsg('This is taking longer than expected. Your report may still be processing — try refreshing in a minute.');
+        }, 90_000);
+
         es.onmessage = (evt) => {
             try {
                 const payload: ProgressEvent = JSON.parse(evt.data);
@@ -102,11 +113,13 @@ export default function FreeSeoCheckerPage() {
                 setStep(payload.step ?? '');
 
                 if (payload.status === 'DONE' && payload.redirectTo) {
+                    if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current);
                     es.close();
                     setProgress(100);
                     setStep('Complete ✓ — loading your report...');
                     setTimeout(() => { window.location.href = payload.redirectTo!; }, 800);
                 } else if (payload.status === 'FAILED') {
+                    if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current);
                     es.close();
                     setPhase('error');
                     setErrorMsg(payload.error ?? 'Audit failed. Please try again.');
@@ -117,6 +130,7 @@ export default function FreeSeoCheckerPage() {
         es.onerror = () => {
             reconnectCount.current += 1;
             if (reconnectCount.current >= 3) {
+                if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current);
                 es.close();
                 setPhase((prev) => {
                     if (prev === 'streaming') {

@@ -153,8 +153,8 @@ export function SignupForm() {
                         onChange={(e) => setEmail(e.target.value)}
                         className={inputClass}
                         placeholder="you@example.com"
-                        aria-invalid={!!error}
-                        aria-describedby={error ? "signup-form-error" : undefined}
+                        aria-invalid={!!error && error !== "Passwords do not match."}
+                        aria-describedby={error && error !== "Passwords do not match." ? "signup-form-error" : undefined}
                     />
                 </div>
 
@@ -165,7 +165,7 @@ export function SignupForm() {
 
                 <div>
                     <label htmlFor="signup-confirm" className="block text-sm font-medium text-foreground mb-1.5">Confirm password</label>
-                    <input id="signup-confirm" type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} className={inputClass} placeholder="Repeat your password" />
+                    <input id="signup-confirm" type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} className={inputClass} placeholder="Repeat your password" aria-invalid={error === "Passwords do not match."} aria-describedby={error === "Passwords do not match." ? "signup-form-error" : undefined} />
                 </div>
 
                 <button

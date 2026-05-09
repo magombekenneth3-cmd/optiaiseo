@@ -108,6 +108,7 @@ export default function FreeResultClient({
     const [email, setEmail] = useState('');
     const [unlocking, setUnlocking] = useState(false);
     const [unlocked, setUnlocked] = useState(false);
+    const [unlockedEmail, setUnlockedEmail] = useState('');
     const [allRecs, setAllRecs] = useState<Rec[]>([]);
     const [emailError, setEmailError] = useState('');
     const [shared, setShared] = useState(false);
@@ -156,6 +157,7 @@ export default function FreeResultClient({
             const data = await res.json();
             if (res.ok && data.allRecs) {
                 setAllRecs(data.allRecs);
+                setUnlockedEmail(email);
                 setUnlocked(true);
             } else {
                 setEmailError(data.error ?? 'Something went wrong. Please try again.');
@@ -257,6 +259,18 @@ export default function FreeResultClient({
                         </h2>
                     </div>
 
+                    {unlocked && unlockedEmail && (
+                        <div
+                            className="flex items-start gap-3 rounded-xl px-4 py-3 mb-4 border"
+                            style={{ background: 'rgba(16,185,129,0.08)', borderColor: 'rgba(16,185,129,0.25)' }}
+                        >
+                            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--brand)' }} />
+                            <p className="text-sm" style={{ color: 'var(--brand)' }}>
+                                Full report unlocked and sent to <strong>{unlockedEmail}</strong> — check your inbox.
+                            </p>
+                        </div>
+                    )}
+
                     <div className="flex flex-col gap-3">
                         {displayedRecs.map((rec, i) => (
                             <div
@@ -338,7 +352,10 @@ export default function FreeResultClient({
                                         onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
                                     />
                                     {emailError && (
-                                        <p className="text-xs" style={{ color: '#f87171' }}>{emailError}</p>
+                                        <div className="flex items-start gap-2 px-3 py-2 rounded-lg border" style={{ background: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.25)', color: '#f87171' }}>
+                                            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                            <p className="text-xs">{emailError}</p>
+                                        </div>
                                     )}
                                     <button
                                         type="submit"

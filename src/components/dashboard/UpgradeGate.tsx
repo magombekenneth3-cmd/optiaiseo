@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+const CREDITS_PRICE = "$9";
+
 interface UpgradeGateProps {
     reason: "credits" | "sites" | "audits" | "blogs" | "aeo";
     currentTier: string;
@@ -8,8 +10,8 @@ interface UpgradeGateProps {
 const UPGRADE_COPY = {
     credits: {
         title: "Out of credits",
-        body: "Credits refill monthly. Buy 50 more for $9, or upgrade your plan for a larger monthly allowance.",
-        cta: "Buy credits — $9",
+        body: `Credits refill monthly. Buy 50 more for ${CREDITS_PRICE}, or upgrade your plan for a larger monthly allowance.`,
+        cta: `Buy credits — ${CREDITS_PRICE}`,
         href: "/dashboard/billing?tab=credits",
     },
     sites: {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import SiteFooter from "@/components/marketing/SiteFooter";
+import { CopyEmailButton } from "./CopyEmailButton";
 
 const CONTACT_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
@@ -76,6 +77,7 @@ export default function ContactPage() {
             >
               support@optiaiseo.online
             </a>
+            <CopyEmailButton email="support@optiaiseo.online" />
             <p className="text-xs text-muted-foreground mt-1.5">Bugs, feature requests, account help, billing issues</p>
           </div>
 
@@ -88,6 +90,7 @@ export default function ContactPage() {
             >
               support@optiaiseo.online
             </a>
+            <CopyEmailButton email="support@optiaiseo.online" />
             <p className="text-xs text-muted-foreground mt-1.5">Agency partnerships, media enquiries, affiliate programme</p>
           </div>
         </div>
