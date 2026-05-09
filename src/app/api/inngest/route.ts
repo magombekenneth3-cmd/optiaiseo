@@ -58,6 +58,7 @@ import {
     competitorAlertsSiteJob,
     indexingSiteJob,
     weeklyAutoReauditJob,
+    backlinksSiteJob,
 } from "@/lib/inngest/functions/cron-workers";
 
 // ── Rank tracking (cron + event fan-out child) ──────────────────────────────
@@ -79,6 +80,10 @@ import { blogCitationMonitorJob } from "@/lib/inngest/functions/blog-citation-mo
 
 // ── Backlink checking (event-triggered) ─────────────────────────────────────
 import { backlinkCheckSite } from "@/lib/inngest/functions/backlinks";
+import { rankAlertCheckerJob } from "@/lib/inngest/functions/rank-alert-checker";
+import { weeklyDigestJob } from "@/lib/inngest/functions/weekly-digest";
+import { githubAutofixSiteJob } from "@/lib/inngest/functions/github-autofix";
+import { detectCategoryJob, discoverMarketJob } from "@/lib/inngest/functions/intelligence-jobs";
 
 // ── Competitor refresh + velocity (cron + event fan-out child) ───────────────
 import {
@@ -132,12 +137,14 @@ export const { GET, POST, PUT } = serve({
 
         // ── Rank tracking ────────────────────────────────────────────────
         rankTrackerSiteJob,         // event: rank.tracker.site + cron 04:00 UTC
+        rankAlertCheckerJob,        // listens rank.tracker.site — rank drop/win alerts
         trackedRankCheckerSiteJob,  // fan-out child: tracked.rank.check.site
         trackedRankCheckerCronJob,  // daily cron trigger (06:00 UTC)
         cronDailyRankTracker,       // fan-out cron (04:00 UTC)
 
         // ── Backlinks ────────────────────────────────────────────────────
         backlinkCheckSite,          // event: backlinks.check.site + Mon 03:00 UTC cron
+        backlinksSiteJob,           // fan-out child: backlinks.check.site — must be registered
         cronWeeklyBacklinks,        // weekly backlinks fan-out cron (Mon 03:00 UTC)
 
         // ── Competitor analysis ──────────────────────────────────────────
@@ -166,6 +173,7 @@ export const { GET, POST, PUT } = serve({
 
         // ── Email & planner ──────────────────────────────────────────────
         sendWeeklyDigestJob,
+        weeklyDigestJob,            // cron Mon 07:00 UTC
         generatePlannerBriefJob,
 
         // ── Query discovery (cron + fan-out child) ───────────────────────
@@ -219,5 +227,12 @@ export const { GET, POST, PUT } = serve({
 
         runKeywordSerpAnalysisJob,      // event: serp-analysis/requested
         cronWeeklySerpAnalysis,         // weekly re-run cron (Sat 08:00 UTC)
+
+        // ── GitHub auto-fix ──────────────────────────────────────────────
+        githubAutofixSiteJob,       // event: github.autofix.site
+
+        // ── Market intelligence ──────────────────────────────────────────
+        detectCategoryJob,          // event: intelligence/detect.category
+        discoverMarketJob,          // event: intelligence/discover.market
     ],
 });
