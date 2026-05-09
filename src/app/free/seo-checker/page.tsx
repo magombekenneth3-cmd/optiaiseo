@@ -16,6 +16,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Search, Sparkles, Shield, Zap, CheckCircle2, AlertCircle } from 'lucide-react';
 import SeoCheckerContent from "@/components/seoContext/SeoContext";
+import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 
 type Phase = 'idle' | 'loading' | 'streaming' | 'error';
 
@@ -129,13 +130,10 @@ export default function FreeSeoCheckerPage() {
     }
 
     return (
-        <div className="min-h-screen bg-background text-foreground flex flex-col">
-            {/* Nav */}
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
             <nav className="border-b border-border px-4 sm:px-6 py-3 flex items-center justify-between bg-card/60 backdrop-blur-sm sticky top-0 z-10">
                 <Link href="/" className="font-bold text-lg" style={{ color: 'var(--brand)' }}>OptiAISEO</Link>
-                <a href="/signup" className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors font-medium">
-                    Sign up free →
-                </a>
+                <NavAuthSection ctaText="Sign up free →" ctaHref="/signup" ctaClassName="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors font-medium" />
             </nav>
 
             <main className="flex-1 flex flex-col items-center justify-center px-4 py-12">

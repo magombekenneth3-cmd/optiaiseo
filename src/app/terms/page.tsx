@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
+import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 
 export const metadata: Metadata = {
     title: "Terms of Service | OptiAISEO",
@@ -39,9 +40,7 @@ export default function TermsPage() {
                         </div>
                         <span className="font-semibold tracking-tight">OptiAISEO</span>
                     </Link>
-                    <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                        Sign In
-                    </Link>
+                    <NavAuthSection ctaText="Sign up free" ctaHref="/signup" ctaClassName="text-sm font-semibold bg-foreground text-background px-4 py-2 rounded-full hover:opacity-90 transition-all" />
                 </div>
             </nav>
 

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { NavAuthSection } from "./NavAuthSection";
 
 interface MarketingNavProps {
   theme?: "light" | "dark";
@@ -15,6 +16,7 @@ const NAV_LINKS = [
 
 export function MarketingNav({ theme = "dark" }: MarketingNavProps) {
   const pathname = usePathname();
+  void theme;
 
   return (
     <nav
@@ -42,20 +44,7 @@ export function MarketingNav({ theme = "dark" }: MarketingNavProps) {
           ))}
         </div>
 
-        <div className="flex items-center gap-3">
-          <Link
-            href="/login"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Log in
-          </Link>
-          <Link
-            href="/signup"
-            className="text-sm font-semibold bg-foreground text-background px-4 py-2 rounded-full hover:opacity-90 transition-all"
-          >
-            Try free →
-          </Link>
-        </div>
+        <NavAuthSection />
       </div>
     </nav>
   );

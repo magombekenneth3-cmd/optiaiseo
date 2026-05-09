@@ -5,6 +5,7 @@ import Link from "next/link";
 import { runFreeGsoCheck } from "@/app/actions/freeGsoCheck";
 import { Bot, ArrowRight, Lock, Check, X, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 
 interface ScanResult {
     domain: string;
@@ -47,8 +48,7 @@ export default function FreeGsoCheckerPage() {
                         <span className="font-bold text-sm tracking-tight">OptiAISEO</span>
                     </Link>
                     <div className="flex items-center gap-4">
-                        <Link href="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground hidden sm:block">Log in</Link>
-                        <Link href="/signup" className="text-sm font-semibold bg-foreground text-background px-4 py-2 rounded-full hover:opacity-90">Get full report</Link>
+                        <NavAuthSection ctaText="Get full report" ctaHref="/signup" ctaClassName="text-sm font-semibold bg-foreground text-background px-4 py-2 rounded-full hover:opacity-90" />
                     </div>
                 </div>
             </nav>

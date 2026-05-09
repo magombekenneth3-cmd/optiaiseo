@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { ArrowRight, BookOpen } from "lucide-react";
 import SiteFooter from "@/components/marketing/SiteFooter";
+import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 
 const BLOG_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
@@ -73,8 +74,7 @@ export default async function BlogIndexPage() {
                         <Link href="/free/seo-checker" className="text-muted-foreground hover:text-foreground hidden sm:block">Free tools</Link>
                         <Link href="/blog" className="text-foreground border-b-2 border-brand pb-0.5">Blog</Link>
                         <div className="h-4 w-px bg-border hidden sm:block" />
-                        <Link href="/login" className="text-muted-foreground hover:text-foreground">Log in</Link>
-                        <Link href="/signup" className="font-semibold bg-foreground text-background px-4 py-2 rounded-full hover:opacity-90 transition-all active:scale-95">Get started free</Link>
+                        <NavAuthSection ctaText="Get started free" ctaHref="/signup" ctaClassName="font-semibold bg-foreground text-background px-4 py-2 rounded-full hover:opacity-90 transition-all active:scale-95" />
                     </div>
                 </div>
             </nav>

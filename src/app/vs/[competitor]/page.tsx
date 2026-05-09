@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { ALTERNATIVES } from "../alternatives-data";
 import SiteFooter from "@/components/marketing/SiteFooter";
+import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1873,20 +1874,7 @@ export default async function VsPage({ params }: Props) {
             </div>
             <span className="font-bold text-sm tracking-tight">OptiAISEO</span>
           </Link>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground hidden sm:block"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/signup"
-              className="text-sm font-semibold bg-foreground text-background px-4 py-2 rounded-full hover:opacity-90 transition-all"
-            >
-              Try OptiAISEO free →
-            </Link>
-          </div>
+          <NavAuthSection ctaText="Try OptiAISEO free →" ctaHref="/signup" />
         </div>
       </nav>
 

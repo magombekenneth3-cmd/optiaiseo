@@ -15,6 +15,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Check } from "lucide-react";
 import SiteFooter from "@/components/marketing/SiteFooter";
+import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
@@ -191,8 +192,7 @@ export default function VsIndexPage() {
           </Link>
           <div className="flex items-center gap-4">
             <Link href="/pricing" className="text-sm text-muted-foreground hover:text-foreground hidden sm:block transition-colors">Pricing</Link>
-            <Link href="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Log in</Link>
-            <Link href="/signup" className="text-sm font-semibold bg-foreground text-background px-4 py-2 rounded-full hover:opacity-90 transition-all">Try free →</Link>
+            <NavAuthSection ctaText="Try free →" ctaHref="/signup" />
           </div>
         </div>
       </nav>

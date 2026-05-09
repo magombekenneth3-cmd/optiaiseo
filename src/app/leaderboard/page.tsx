@@ -4,6 +4,7 @@ import { ArrowRight, Zap } from "lucide-react";
 import { getLeaderboardIndex } from "@/lib/leaderboard";
 import type { Niche } from "@/lib/leaderboard";
 import SiteFooter from "@/components/marketing/SiteFooter";
+import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
@@ -52,12 +53,7 @@ export default async function LeaderboardIndexPage() {
                         </div>
                         <span className="font-bold text-sm tracking-tight">OptiAISEO</span>
                     </Link>
-                    <div className="flex items-center gap-3">
-                        <Link href="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground hidden sm:block">Log in</Link>
-                        <Link href="/signup" className="text-sm font-semibold bg-foreground text-background px-4 py-2 rounded-full hover:opacity-90 transition-all">
-                            Check your score →
-                        </Link>
-                    </div>
+                    <NavAuthSection ctaText="Check your score →" ctaHref="/signup" />
                 </div>
             </nav>
 
