@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Microscope, RefreshCw, X, AlertTriangle, CheckCircle, XCircle, TrendingUp, TrendingDown, Link, FileText, Target, Layers } from "lucide-react";
 import { analyseKeywordVsSerp, forceRefreshSerpAnalysis, type SerpAnalysisResult, type SerpFix } from "@/app/actions/serp-analysis";
 
@@ -73,19 +73,57 @@ export function KeywordSerpPanel({ keyword, position, impressions, clicks, landi
   const [activeTab, setActiveTab] = useState<TabId>("serp");
   const [data, setData] = useState<SerpAnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [polling, setPolling] = useState(false);
+  const [pollStatus, setPollStatus] = useState<string>("Analysing…");
   const [error, setError] = useState<string | null>(null);
   const [triggered, setTriggered] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPoll = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    setPolling(false);
+  }, []);
+
+  useEffect(() => () => stopPoll(), [stopPoll]);
+
+  const startPolling = useCallback((analysisId: string) => {
+    setPolling(true);
+    let attempt = 0;
+    pollRef.current = setInterval(async () => {
+      attempt++;
+      try {
+        const res = await fetch(`/api/serp-analysis/status?id=${analysisId}`);
+        if (!res.ok) { stopPoll(); setError("Status check failed."); return; }
+        const json = await res.json() as { status: string; data?: SerpAnalysisResult; error?: string };
+        const statusMap: Record<string, string> = {
+          PENDING:  "Queuing analysis…",
+          SCRAPING: "Fetching SERP + scraping pages…",
+          PLANNING: "Generating AI fix plan…",
+        };
+        setPollStatus(statusMap[json.status] ?? "Analysing…");
+        if (json.status === "COMPLETED" && json.data) {
+          stopPoll(); setLoading(false); setData(json.data);
+        } else if (json.status === "FAILED") {
+          stopPoll(); setLoading(false); setError(json.error ?? "Analysis failed. Please retry.");
+        } else if (attempt > 60) {
+          stopPoll(); setLoading(false); setError("Timed out. Please retry.");
+        }
+      } catch { /* network blip — keep polling */ }
+    }, 3000);
+  }, [stopPoll]);
 
   const run = useCallback(async (force = false) => {
     setLoading(true);
     setError(null);
     setTriggered(true);
+    stopPoll();
     const fn = force ? forceRefreshSerpAnalysis : analyseKeywordVsSerp;
     const res = await fn(siteId, keyword, landingUrl);
+    if (res.error) { setLoading(false); setError(res.error); return; }
+    if (res.pending && res.analysisId) { setPollStatus("Queuing analysis…"); startPolling(res.analysisId); return; }
     setLoading(false);
-    if (res.error) { setError(res.error); return; }
-    setData(res.data);
-  }, [siteId, keyword, landingUrl]);
+    setData(res.data ?? null);
+  }, [siteId, keyword, landingUrl, stopPoll, startPolling]);
 
   const ctrPotential = impressions > 0
     ? Math.round(((impressions * 0.278 - clicks) / impressions) * 100)
@@ -145,7 +183,17 @@ export function KeywordSerpPanel({ keyword, position, impressions, clicks, landi
         </div>
       </div>
 
-      {loading && <Skeleton />}
+      {(loading || polling) && (
+        <div className="space-y-4 p-4">
+          {polling && (
+            <div className="flex items-center gap-2 px-2 py-1">
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              <span className="text-xs text-muted-foreground">{pollStatus}</span>
+            </div>
+          )}
+          <Skeleton />
+        </div>
+      )}
 
       {!loading && error && (
         <div className="px-6 py-8 flex flex-col items-center gap-3 text-center">

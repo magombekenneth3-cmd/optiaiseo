@@ -38,6 +38,7 @@ import {
     checkOneQueryJob,
 } from "@/lib/inngest/functions/query-library";
 import { runSerpGapAnalysisJob } from "@/lib/inngest/functions/serp-gap-analysis";
+import { runKeywordSerpAnalysisJob } from "@/lib/inngest/functions/keyword-serp-analysis";
 
 // ── Cron schedule functions (NEW fan-out architecture) ──────────────────────
 // These were exported but never registered → their schedules never fired.
@@ -49,6 +50,7 @@ import {
     cronWeeklyAeo,
     cronDailyBlog,
     cronWeeklyCompetitorAlerts,
+    cronWeeklySerpAnalysis,
 } from "@/lib/inngest/functions/cron-schedule";
 
 // ── Cron-workers: event-listeners + weekly cron ─────────────────────────────
@@ -214,5 +216,8 @@ export const { GET, POST, PUT } = serve({
         // ── SERP Gap Analysis ────────────────────────────────────────────
         // IMPORTANT: must be registered or serp-gap/requested events are dropped
         runSerpGapAnalysisJob,
+
+        runKeywordSerpAnalysisJob,      // event: serp-analysis/requested
+        cronWeeklySerpAnalysis,         // weekly re-run cron (Sat 08:00 UTC)
     ],
 });

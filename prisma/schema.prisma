@@ -1198,27 +1198,31 @@ model SerpGapAnalysis {
 
 
 model KeywordSerpAnalysis {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   siteId           String
   keyword          String
   landingUrl       String
-  serpResults      Json
-  fixes            Json
-  headingGaps      Json
-  wordCountAvg     Int
-  wordCountPage    Int
+  status           String    @default("PENDING")
+  errorMessage     String?
+  serpResults      Json      @default("[]")
+  fixes            Json      @default("[]")
+  headingGaps      Json      @default("[]")
+  wordCountAvg     Int       @default(0)
+  wordCountPage    Int       @default(0)
   drGap            Int?
   rdGapRoot        Int?
   rdGapPage        Int?
-  opportunityDoms  Json     @default("[]")
-  intentMismatch   Boolean  @default(false)
+  opportunityDoms  Json      @default("[]")
+  intentMismatch   Boolean   @default(false)
   intentNote       String?
   contentType      String?
-  disclaimerNeeded Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  expiresAt        DateTime
-  site             Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  disclaimerNeeded Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+  expiresAt        DateTime  @default(now())
+  site             Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@unique([siteId, keyword])
   @@index([siteId])
+  @@index([expiresAt])
 }

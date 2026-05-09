@@ -3,7 +3,6 @@ import { getKeywordRankingsFast, generateBlogForKeyword } from "@/app/actions/ke
 import { AlertCircle, Zap, ArrowRight, TrendingUp, Search } from "lucide-react";
 import { ConnectGSCButton } from "@/components/ConnectGSCButton";
 
-// ─── Next step banner ─────────────────────────────────────────────────────────
 function NextStep({
     icon: Icon,
     title,
@@ -54,7 +53,6 @@ export const metadata: Metadata = {
     description: "Monitor keyword rankings and generate targeted blog content.",
 };
 
-// ─── Position badge ───────────────────────────────────────────────────────────
 function PositionBadge({ position }: { position: number }) {
     if (position <= 3)
         return (
@@ -105,12 +103,9 @@ import { hasFeature } from "@/lib/stripe/plans";
 import { RevenueSimulator } from "@/components/dashboard/RevenueSimulator";
 import { CtrDiagnosisBanner } from "@/components/dashboard/CtrDiagnosisBanner";
 import { KeywordPlaybookPanel } from "@/components/dashboard/KeywordPlaybookPanel";
-// PATCH: import the new filterable client table
 import { AllKeywordsTable } from "./AllKeywordsTable";
-// PATCH: import the tabbed panel wrapper
 import { KeywordTabPanels } from "./KeywordTabPanels";
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
 type SiteRow = { id: string; domain: string };
 type TrackedKwRow = { id: string; keyword: string; snapshots: { position: number; recordedAt: Date; searchVolume: number | null; cpc: number | null }[]; roi: ReturnType<typeof estimateKeywordRoi> | null; opportunityGapUsd: number };
 type VisibilityRow = { score: number; trend: string; top10Pct: number } | null;
@@ -166,7 +161,6 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
         }
     }
 
-    // ── Error state ──
     if (!rankingsRes.success || !rankingsRes.data) {
         const isGscNotConnected = rankingsRes.error?.includes("Connect Google") ||
             rankingsRes.error?.includes("reconnect GSC");
@@ -256,16 +250,12 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
     const activeSiteId = siteId || resolvedSiteId;
     const activeSite = userSites.find(s => s.id === activeSiteId);
 
-    // ── Helpers for stat card semantics ───────────────────────────────────────
-
-    // PATCH: avg position gets a semantic colour — green is good (low pos), red is bad (high pos)
     function avgPositionColor(pos: number) {
         if (pos <= 10) return "text-emerald-400";
         if (pos <= 30) return "text-amber-400";
         return "text-red-400";
     }
 
-    // PATCH: visibility score — blue only when actually scoring, muted/red when 0
     function visScoreColor(score: number) {
         if (score === 0)  return "text-muted-foreground";
         if (score < 30)   return "text-red-400";
@@ -273,7 +263,6 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
         return "text-blue-400";
     }
 
-    // PATCH: visibility score subtext — was "0% in top 10" with no guidance
     function visScoreSubtext(vis: NonNullable<VisibilityRow>) {
         if (vis.score === 0) return "Not yet visible — fix critical issues";
         if (vis.trend === "improving") return "↑ Improving";
@@ -285,7 +274,6 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
     return (
         <div className="flex flex-col gap-8 w-full max-w-6xl mx-auto">
 
-            {/* Header */}
             <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight mb-1">Keyword Rankings</h1>
@@ -305,16 +293,13 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
                 )}
             </div>
 
-            {/* ── Summary stat cards ── */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {/* 1 — Total Keywords (unchanged) */}
                 <div className="card-surface p-5 flex flex-col gap-1">
                     <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Total Keywords</p>
                     <p className="text-3xl font-bold">{summary.total}</p>
                     <p className="text-xs text-muted-foreground">{summary.totalClicks.toLocaleString()} clicks</p>
                 </div>
 
-                {/* 2 — Avg Position: PATCHED colour + border */}
                 <div className={`card-surface p-5 flex flex-col gap-1 ${
                     summary.avgPosition <= 10 ? "border-l-4 border-l-emerald-500"
                     : summary.avgPosition <= 30 ? "border-l-4 border-l-amber-500"
@@ -327,14 +312,12 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
                     <p className="text-xs text-muted-foreground">{summary.totalImpressions.toLocaleString()} impressions</p>
                 </div>
 
-                {/* 3 — On Page 1 (unchanged) */}
                 <div className="card-surface p-5 flex flex-col gap-1 border-l-4 border-l-emerald-500">
                     <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">On Page 1</p>
                     <p className="text-3xl font-bold text-emerald-400">{summary.page1Pct}%</p>
                     <p className="text-xs text-muted-foreground">{summary.page1Count} keywords</p>
                 </div>
 
-                {/* 4 — Visibility Score: PATCHED colour + copy */}
                 {visibilityScore ? (
                     <div className={`card-surface p-5 flex flex-col gap-1 ${
                         visibilityScore.score === 0 ? "border-l-4 border-l-red-500"
@@ -476,7 +459,6 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
                 />
             )}
 
-            {/* All keywords table — PATCHED: now uses AllKeywordsTable with search */}
             <AllKeywordsTable keywords={keywords} siteId={activeSiteId} />
 
         </div>

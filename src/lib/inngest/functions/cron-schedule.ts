@@ -226,7 +226,7 @@ export const cronMonthlyRateLimitCleanup = inngest.createFunction(
         id: "cron-monthly-ratelimit-cleanup",
         name: "Cron: Monthly Rate-Limit Key Cleanup",
         retries: 2,
-        triggers: [{ cron: "30 0 1 * *" }], // 00:30 UTC on 1st of every month
+        triggers: [{ cron: "30 0 1 * *" }],
     },
     async ({ step }) => {
         const result = await step.run("cleanup-orphaned-rl-keys", () =>
@@ -240,5 +240,55 @@ export const cronMonthlyRateLimitCleanup = inngest.createFunction(
         });
 
         return result;
+    },
+);
+
+export const cronWeeklySerpAnalysis = inngest.createFunction(
+    {
+        id: "cron-weekly-serp-analysis",
+        name: "Cron: Weekly SERP Analysis Re-run",
+        retries: 0,
+        triggers: [{ cron: "0 8 * * 6" }],
+    },
+    async ({ step }) => {
+        const expired = await step.run("fetch-expired-analyses", () =>
+            prisma.keywordSerpAnalysis.findMany({
+                where: {
+                    status: "COMPLETED",
+                    expiresAt: { lt: new Date() },
+                },
+                select: {
+                    id: true,
+                    keyword: true,
+                    landingUrl: true,
+                    siteId: true,
+                    site: { select: { domain: true, userId: true } },
+                },
+                take: 500,
+            })
+        );
+
+        if (expired.length === 0) {
+            logger.info("[CronWeeklySerpAnalysis] No expired analyses — skipping");
+            return { queued: 0 };
+        }
+
+        await step.sendEvent(
+            "fan-out-serp-analysis",
+            expired.map((a) => ({
+                name: "serp-analysis/requested" as const,
+                data: {
+                    analysisId:     a.id,
+                    siteId:         a.siteId,
+                    userId:         a.site.userId,
+                    keyword:        a.keyword,
+                    landingPageUrl: a.landingUrl,
+                    domain:         a.site.domain,
+                },
+            })),
+        );
+
+        logger.info(`[CronWeeklySerpAnalysis] Queued ${expired.length} re-analyses`);
+        return { queued: expired.length };
     },
 );

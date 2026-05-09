@@ -19,6 +19,7 @@ export const CREDIT_COSTS = {
     citation_gap_check:  8,   // AEO citation gap analysis
     repurpose_format:    3,   // Content repurposing
     serp_gap_analysis:   5,   // SERP gap + implementation plan
+    serp_analysis:       5,   // Keyword vs SERP analysis panel
 } as const;
 
 export type CreditAction = keyof typeof CREDIT_COSTS;
@@ -34,6 +35,7 @@ export const ACTION_LABELS: Record<CreditAction, string> = {
     citation_gap_check:  "Citation Gap Check",
     repurpose_format:    "Content Repurpose",
     serp_gap_analysis:   "SERP Gap Analysis",
+    serp_analysis:       "Keyword SERP Analysis",
 };
 
 export const FREE_MONTHLY_CREDITS    =   50;

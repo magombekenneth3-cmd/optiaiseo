@@ -150,3 +150,10 @@ export const checkFixLimit = (userId: string, tier: string): Promise<RateLimitRe
     const { monthKey, resetAt } = getCalendarMonthWindow();
     return checkRateLimit(`fix:${userId}:${monthKey}`, limits[tier?.toUpperCase()] ?? 20, resetAt);
 };
+
+export const checkSerpAnalysisLimit = (userId: string, tier: string): Promise<RateLimitResult> => {
+    const limits: Record<string, number> = { FREE: 0, STARTER: 5, PRO: 30, AGENCY: 200 };
+    const { monthKey, resetAt } = getCalendarMonthWindow();
+    const cap = limits[tier?.toUpperCase()] ?? 0;
+    return checkRateLimit(`serp-analysis:${userId}:${monthKey}`, cap, resetAt);
+};

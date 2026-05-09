@@ -13,4 +13,5 @@ export {
     checkCompetitorRefreshLimit,
     checkAeoVerifyLimit,
     checkFixLimit,
+    checkSerpAnalysisLimit,
 } from "./monthly";
