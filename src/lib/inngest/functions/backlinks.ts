@@ -35,7 +35,7 @@ export const backlinkCheckSite = inngest.createFunction(
             const { prisma } = await import("@/lib/prisma");
             const sites = await step.run("fetch-sites", () =>
                 prisma.site.findMany({
-                    where:  { user: { subscriptionTier: { in: ["PRO", "AGENCY", "ENTERPRISE"] } } },
+                    where:  { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },
                     select: { id: true, domain: true },
                 })
             );

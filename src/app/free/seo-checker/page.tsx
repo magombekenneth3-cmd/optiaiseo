@@ -40,7 +40,9 @@ export default function FreeSeoCheckerPage() {
     const [progress, setProgress] = useState(0);
     const [step, setStep] = useState('');
     const [errorMsg, setErrorMsg] = useState('');
+    const [activeAuditId, setActiveAuditId] = useState<string | null>(null);
     const esRef = useRef<EventSource | null>(null);
+    const reconnectCount = useRef(0);
 
     useEffect(() => {
         return () => { esRef.current?.close(); };
@@ -77,6 +79,8 @@ export default function FreeSeoCheckerPage() {
                 return;
             }
             auditId = data.auditId;
+            setActiveAuditId(auditId);
+            reconnectCount.current = 0;
         } catch {
             setPhase('error');
             setErrorMsg('Network error — please check your connection and try again.');
@@ -110,14 +114,17 @@ export default function FreeSeoCheckerPage() {
         };
 
         es.onerror = () => {
-            es.close();
-            setPhase((prev) => {
-                if (prev === 'streaming') {
-                    setErrorMsg('Connection lost. Refreshing may load your result.');
-                    return 'error';
-                }
-                return prev;
-            });
+            reconnectCount.current += 1;
+            if (reconnectCount.current >= 3) {
+                es.close();
+                setPhase((prev) => {
+                    if (prev === 'streaming') {
+                        setErrorMsg('Connection lost. Refreshing may load your result.');
+                        return 'error';
+                    }
+                    return prev;
+                });
+            }
         };
     }
 

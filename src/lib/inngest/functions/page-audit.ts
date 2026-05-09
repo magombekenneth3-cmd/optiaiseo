@@ -39,9 +39,9 @@ import { logger } from "@/lib/logger";
 
 const PAGE_LIMIT: Record<string, number> = {
   FREE:       5,
+  STARTER:   10,
   PRO:        25,
   AGENCY:     50,
-  ENTERPRISE: 100,
 };
 
 async function getTierPageLimit(siteId: string): Promise<number> {

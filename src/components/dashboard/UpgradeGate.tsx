@@ -38,13 +38,18 @@ const UPGRADE_COPY = {
     },
 } satisfies Record<UpgradeGateProps["reason"], { title: string; body: string; cta: string; href: string }>;
 
-export function UpgradeGate({ reason, currentTier: _currentTier }: UpgradeGateProps) {
+export function UpgradeGate({ reason, currentTier }: UpgradeGateProps) {
     const copy = UPGRADE_COPY[reason];
+    const isPaidUser = ["STARTER", "PRO", "AGENCY", "ENTERPRISE"].includes((currentTier ?? "").toUpperCase());
+
+    const body = (reason === "credits" && isPaidUser)
+        ? "Credits refill monthly. Buy more credits to continue, or contact support about higher limits."
+        : copy.body;
     return (
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-5 rounded-xl border border-amber-500/20 bg-amber-500/5">
             <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm mb-1">{copy.title}</p>
-                <p className="text-xs text-muted-foreground leading-relaxed">{copy.body}</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">{body}</p>
             </div>
             <Link
                 href={copy.href}

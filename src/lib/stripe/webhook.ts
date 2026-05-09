@@ -24,6 +24,9 @@ export function assertStripePriceIds(): void {
     if (!process.env.STRIPE_STARTER_PRICE_ID) missing.push("STRIPE_STARTER_PRICE_ID")
     if (!process.env.STRIPE_PRO_PRICE_ID) missing.push("STRIPE_PRO_PRICE_ID")
     if (!process.env.STRIPE_AGENCY_PRICE_ID) missing.push("STRIPE_AGENCY_PRICE_ID")
+    if (!process.env.STRIPE_STARTER_ANNUAL_PRICE_ID) missing.push("STRIPE_STARTER_ANNUAL_PRICE_ID")
+    if (!process.env.STRIPE_PRO_ANNUAL_PRICE_ID) missing.push("STRIPE_PRO_ANNUAL_PRICE_ID")
+    if (!process.env.STRIPE_AGENCY_ANNUAL_PRICE_ID) missing.push("STRIPE_AGENCY_ANNUAL_PRICE_ID")
 
     if (missing.length > 0) {
         logger.warn("[Stripe] Missing price ID env vars — paid-plan webhooks will not work correctly", {
@@ -34,9 +37,12 @@ export function assertStripePriceIds(): void {
 
 function getTierFromPriceId(priceId: string | null | undefined): string {
     if (!priceId) return "FREE"
-    if (priceId === process.env.STRIPE_AGENCY_PRICE_ID) return "AGENCY"
-    if (priceId === process.env.STRIPE_PRO_PRICE_ID) return "PRO"
-    if (priceId === process.env.STRIPE_STARTER_PRICE_ID) return "STARTER"
+    if (priceId === process.env.STRIPE_AGENCY_PRICE_ID)         return "AGENCY"
+    if (priceId === process.env.STRIPE_PRO_PRICE_ID)            return "PRO"
+    if (priceId === process.env.STRIPE_STARTER_PRICE_ID)        return "STARTER"
+    if (priceId === process.env.STRIPE_AGENCY_ANNUAL_PRICE_ID)  return "AGENCY"
+    if (priceId === process.env.STRIPE_PRO_ANNUAL_PRICE_ID)     return "PRO"
+    if (priceId === process.env.STRIPE_STARTER_ANNUAL_PRICE_ID) return "STARTER"
     return "__UNKNOWN__"
 }
 
@@ -269,7 +275,8 @@ export async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> 
 
     if (priceId === process.env.STRIPE_CREDIT_PACK_PRICE_ID) {
         const { addCreditPackCredits } = await import("@/lib/credits")
-        await addCreditPackCredits(subscription.userId, 50)
+        const { CREDIT_PACK } = await import("@/lib/stripe/plans")
+        await addCreditPackCredits(subscription.userId, CREDIT_PACK.credits)
         await bumpSessionVersion(subscription.userId)
         logger.debug("[Webhook] Credit pack purchased", { userId: subscription.userId })
         return

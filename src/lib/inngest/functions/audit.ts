@@ -49,7 +49,7 @@ export const processManualAuditJob = inngest.createFunction(
         });
 
         // Step 2: Save results to the PENDING audit record
-        const isPaid = ["PRO", "AGENCY", "ENTERPRISE"].includes((tier ?? "").toUpperCase());
+        const isPaid = ["STARTER", "PRO", "AGENCY"].includes((tier ?? "").toUpperCase());
         // For homepage-only mode, mark completed immediately — no fan-out needed
         const fanOut = auditMode !== "homepage";
 

@@ -136,7 +136,7 @@ export function JobPoller({
     return (
       <div className="flex items-center gap-2 text-sm text-amber-400">
         <Clock className="w-4 h-4 shrink-0" />
-        <span className="font-medium">Job timed out. Please retry or check the Inngest dashboard.</span>
+        <span className="font-medium">This is taking longer than expected. Please try again or contact support if the issue persists.</span>
       </div>
     );
   }

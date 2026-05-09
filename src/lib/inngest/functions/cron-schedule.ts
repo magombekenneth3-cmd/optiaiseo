@@ -27,7 +27,7 @@ import { cleanupOrphanedRateLimitKeys } from "@/lib/rate-limit";
 
 async function getPaidSites() {
     return prisma.site.findMany({
-        where: { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },
+        where: { user: { subscriptionTier: { in: ["STARTER", "PRO", "AGENCY"] } } },
         select: { id: true, domain: true, userId: true },
     });
 }

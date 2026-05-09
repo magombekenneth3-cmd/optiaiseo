@@ -1,11 +1,10 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState } from "react";
 import { generateInternalLinkingSuggestions, type InternalLinkSuggestion } from "@/app/actions/internalLinking";
 import { Link, Zap, Copy, ExternalLink, X } from "lucide-react";
 
- 
+
 export function InternalLinksModal({ blog, onClose }: { blog: any; onClose: () => void }) {
     const [loading, setLoading] = useState(false);
     const [suggestions, setSuggestions] = useState<InternalLinkSuggestion[] | null>(null);

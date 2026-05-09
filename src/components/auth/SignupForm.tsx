@@ -48,7 +48,13 @@ export function SignupForm() {
 
     const handleOAuth = async (provider: string) => {
         setLoading(provider);
-        await signIn(provider, { callbackUrl: "/dashboard" });
+        try {
+            await signIn(provider, { callbackUrl: "/dashboard" });
+        } catch {
+            setError("Could not connect — please try again.");
+        } finally {
+            setLoading(null);
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {

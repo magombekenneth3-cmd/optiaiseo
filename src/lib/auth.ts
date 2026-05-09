@@ -224,6 +224,22 @@ export const authOptions: NextAuthOptions = {
                     } catch {
                         // Non-fatal — user is still created
                     }
+
+                    try {
+                        const { inngest } = await import("@/lib/inngest/client");
+                        await inngest.send({
+                            name: "user.registered",
+                            data: {
+                                userId: dbUser.id,
+                                email: dbUser.email!,
+                                name: dbUser.name ?? dbUser.email!.split("@")[0],
+                            },
+                        });
+                    } catch (err) {
+                        logger.warn("[Auth] inngest user.registered failed for OAuth user", {
+                            error: (err as Error)?.message,
+                        });
+                    }
                 } else if (!dbUser.name && user.name) {
                     dbUser = await prisma.user.update({
                         where: { email: user.email },

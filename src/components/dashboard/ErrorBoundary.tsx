@@ -55,11 +55,6 @@ export class DashboardErrorBoundary extends Component<Props, State> {
                     <p className="text-sm text-muted-foreground leading-relaxed mb-1">
                         Something went wrong loading this section. This is likely a temporary issue.
                     </p>
-                    {error?.message && (
-                        <p className="text-[11px] font-mono text-red-400/70 bg-card rounded-lg px-3 py-2 mt-2 text-left">
-                            {error.message}
-                        </p>
-                    )}
                 </div>
                 <button
                     onClick={this.reset}

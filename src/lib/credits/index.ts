@@ -109,7 +109,6 @@ export async function resetMonthlyCredits(): Promise<void> {
         { tier: "STARTER",   amount: STARTER_MONTHLY_CREDITS },
         { tier: "PRO",       amount: PRO_MONTHLY_CREDITS },
         { tier: "AGENCY",    amount: AGENCY_MONTHLY_CREDITS },
-        { tier: "ENTERPRISE", amount: AGENCY_MONTHLY_CREDITS }, // Enterprise gets Agency allowance minimum
     ];
 
     let totalUsersReset = 0;

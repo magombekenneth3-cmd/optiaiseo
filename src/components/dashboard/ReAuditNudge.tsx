@@ -41,14 +41,19 @@ export function ReAuditNudge({ daysSince, siteId, siteUrl }: Props) {
     async function runAudit() {
         setLoading(true);
         try {
-            await fetch("/api/audits/run", {
+            const res = await fetch("/api/audits/run", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ siteId, url: siteUrl }),
             });
+            if (!res.ok) {
+                throw new Error(`Server error ${res.status}`);
+            }
             router.push("/dashboard/audits");
         } catch {
             setLoading(false);
+            const { toast } = await import("sonner");
+            toast.error("Failed to start audit — please try again.");
         }
     }
 

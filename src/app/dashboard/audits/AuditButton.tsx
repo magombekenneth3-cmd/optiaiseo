@@ -160,13 +160,11 @@ export function AuditButton({
 }) {
     const router = useRouter();
     const [isPending, setIsPending] = useState(false);
-    const [_newAuditId, setNewAuditId] = useState<string | null>(null);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [pendingSiteId, setPendingSiteId] = useState<string | null>(null);
 
     const handleAudit = async (targetSiteId: string, mode: AuditMode) => {
         setIsPending(true);
-        setNewAuditId(null);
         setIsDropdownOpen(false);
         setPendingSiteId(null);
 
@@ -189,7 +187,6 @@ export function AuditButton({
 
             if (res.success && (res as any).audit?.id) {
                 const auditId = (res as any).audit.id;
-                setNewAuditId(auditId);
                 // Refresh immediately so AuditPoller receives the new PENDING audit
                 // and starts polling without requiring a manual page refresh.
                 router.refresh();

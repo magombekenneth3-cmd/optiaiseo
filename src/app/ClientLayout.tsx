@@ -39,7 +39,7 @@ export default function ClientLayout({
       <Toaster
         position="bottom-right"
         richColors={false}
-        theme="dark"
+        theme={theme as "dark" | "light"}
         visibleToasts={5}
         toastOptions={{
           duration: 4000,

@@ -12,7 +12,6 @@ import { toast } from "sonner";
 import { ContentScoreResult, OutlineHeading } from "@/lib/content-scoring";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 
-// ─── unchanged helpers ────────────────────────────────────────────────────────
 
 function HighlightedContent({
     content,
@@ -67,7 +66,7 @@ function getScoreLabel(score: number): { headline: string; sub: string } {
     return { headline: "Early draft", sub: "Add content and a keyword to score" };
 }
 
-// ─── upgraded ProgressBar ─────────────────────────────────────────────────────
+
 
 function ProgressBar({
     label,
@@ -106,7 +105,7 @@ function ProgressBar({
     );
 }
 
-// ─── upgraded OutlineBuilder ──────────────────────────────────────────────────
+
 
 function OutlineBuilder({ suggestions }: { suggestions: OutlineHeading[] }) {
     if (!suggestions.length) return null;
@@ -447,12 +446,12 @@ export function ContentEditor({
                         const density = wordCount > 0 ? (matches / wordCount) * 100 : 0;
                         const densityColor =
                             density < 0.5 ? "text-rose-400"
-                            : density > 3  ? "text-amber-400"
-                            :                "text-emerald-400";
+                                : density > 3 ? "text-amber-400"
+                                    : "text-emerald-400";
                         const densityHint =
                             density < 0.5 ? "Low — add more uses"
-                            : density > 3  ? "High — possible stuffing"
-                            :                "Good density";
+                                : density > 3 ? "High — possible stuffing"
+                                    : "Good density";
                         return (
                             <span
                                 className={`flex items-center gap-1.5 text-xs ${densityColor}`}

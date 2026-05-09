@@ -83,7 +83,7 @@ export function showActionError(result: ActionFailResult): void {
                     <div className="flex flex-col gap-0.5">
                         <span className="font-semibold text-sm">Session expired</span>
                         <span className="text-xs opacity-80">Please sign in again to continue.</span>
-                        <a href="/auth/signin" className="text-xs text-blue-400 underline underline-offset-2 hover:text-blue-300 mt-1">
+                        <a href="/login" className="text-xs text-blue-400 underline underline-offset-2 hover:text-blue-300 mt-1">
                             Sign in →
                         </a>
                     </div>
@@ -160,7 +160,7 @@ function RateLimitToast({ message }: { message: string }) {
         <div className="flex items-start gap-2.5">
             <Clock className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
             <div className="flex flex-col gap-0.5">
-                <span className="font-semibold text-sm">Slow down!</span>
+                <span className="font-semibold text-sm">Limit reached</span>
                 <span className="text-xs opacity-80 leading-relaxed">{message}</span>
             </div>
         </div>

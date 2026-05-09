@@ -43,12 +43,19 @@ export function ScoreDropAlert({ delta, topIssue, auditId }: Props) {
             </div>
 
             {/* CTA */}
-            {auditId && (
+            {auditId ? (
                 <Link
                     href={`/dashboard/audits/${auditId}`}
                     className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold transition-all hover:scale-105 active:scale-95 shadow-md"
                 >
                     Fix now →
+                </Link>
+            ) : (
+                <Link
+                    href="/dashboard/audits"
+                    className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold transition-all hover:scale-105 active:scale-95 shadow-md"
+                >
+                    Run a new audit →
                 </Link>
             )}
         </div>

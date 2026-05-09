@@ -1,506 +1,486 @@
-# AISEO Platform — Senior Developer Guide
-*Architecture · Patterns · Operational Rules*
+ 1 · ENTERPRISE tier referenced but never defined Tier type is "FREE | STARTER | PRO | AGENCY" — no ENTERPRISE. Yet audit.ts, page-audit.ts, backlinks.ts and credits/index.ts all branch on "ENTERPRISE". getPlan("ENTERPRISE") silently falls back to FREE limits — paid users get downgraded. 2 · STARTER excluded from cron fan-out (weekly audit, backlinks) cron-schedule.ts getPaidSites() queries subscriptionTier IN ["PRO","AGENCY"] only. STARTER plan pays for audits (auditsPerMonth: 15) but their sites are never queued by weekly audit or backlinks crons — a silent feature regression for paying users. 3 · Credit pack amount hardcoded in webhook (not from CREDIT_PACK constant) handleInvoicePaid() calls addCreditPackCredits(userId, 50). The canonical CREDIT_PACK.credits constant in plans.ts is also 50 — but they're not linked. Changing CREDIT_PACK.credits silently leaves the webhook granting the wrong amount. 4 · Site-limit check bypasses guards.ts — reads raw JWT tier, not effective tier site.ts calls withinLimit(user.subscriptionTier, "sites", …) directly on the session tier without going through getUserTier(). Trial users get FREE limits (1 site) even during their 7-day PRO trial; subscription expiry / past_due also not checked here. 5 · Annual billing: webhook maps apriceId → tier but annual price IDs aren't mapped getTierFromPriceId() only checks STRIPE_STARTER_PRICE_ID / _PRO_ / _AGENCY_. Annual variants (STRIPE_STARTER_ANNUAL_PRICE_ID etc.) are never compared, so an annual subscription fires the "__UNKNOWN__" branch → user stays on FREE. 6 · plans.test.ts fixtures don't match actual plan prices (stale test data) Test fixture has STARTER=$29, PRO=$79, AGENCY=$199. Actual plans.ts has STARTER=$19, PRO=$49, AGENCY=$149. Tests pass using invented prices — any pricing regression in the real config would go undetected. 7 · Credentials signup doesn't emit user.registered — no drip / magic audit signup.ts (credentials flow) calls inngest.send("user.registered"). But auth.ts signIn() for OAuth providers creates users too — without ever emitting the event. OAuth new users get no referral-code generation via Inngest and no magic first audit. Critical High Medium Billing Test quality Onboarding Files involved: stripe/plans.ts · stripe/webhook.ts · stripe/guards.ts · inngest/functions/cron-schedul
+
+
+ # Bug Analysis & Fix Guide
+
+Seven confirmed bugs across billing, scheduling, and onboarding. Each section describes exactly where the code is broken, why it matters, and the minimal surgical fix.
 
 ---
 
-## Stack at a glance
+## Bug 1 — `ENTERPRISE` tier referenced but never defined
 
-| Layer | Technology |
-|---|---|
-| Framework | Next.js 15 (App Router) |
-| Database | Prisma + PostgreSQL (66 models) |
-| Cache / Rate limiting | Upstash Redis |
-| Background jobs | Inngest (30+ registered jobs) |
-| Auth | NextAuth (JWT + OAuth) |
+**Severity:** Critical · Billing  
+**Files:** `src/lib/inngest/functions/audit.ts`, `src/lib/inngest/functions/page-audit.ts`, `src/lib/inngest/functions/backlinks.ts`, `src/lib/credits/index.ts`
 
----
+### What's broken
 
-## 1. Architecture Overview
+`plans.ts` defines `Tier = "FREE" | "STARTER" | "PRO" | "AGENCY"` — no `ENTERPRISE`. Yet four files branch on the string `"ENTERPRISE"`:
 
-AISEO is a multi-tenant SaaS platform for AI-powered SEO analysis, AEO (Answer Engine Optimisation), blog generation, and self-healing content. Understanding the data flow and module ownership upfront will save you hours of searching.
+- **`audit.ts` line ~88:** `const isPaid = ["PRO", "AGENCY", "ENTERPRISE"].includes(...)` — harmless here because ENTERPRISE still lands in the truthy branch, but it's a lie the type system can't catch.
+- **`page-audit.ts` lines ~22–28:** `PAGE_LIMIT` map includes `ENTERPRISE: 100`. `getTierPageLimit()` reads `site.user.subscriptionTier` straight from the DB. If the string `"ENTERPRISE"` ever reaches the DB, the lookup works — but no Stripe webhook can write it because `getTierFromPriceId()` never produces it.
+- **`backlinks.ts` cron fan-out line ~33:** `subscriptionTier: { in: ["PRO", "AGENCY", "ENTERPRISE"] }` — same ghost tier, no effect in practice but inconsistent.
+- **`credits/index.ts` `resetMonthlyCredits()`:** Has an `"ENTERPRISE"` entry that grants `AGENCY_MONTHLY_CREDITS`. This runs against the DB, so if someone manually sets a user's tier to `"ENTERPRISE"` in the DB, it would credit them. Again no code path sets that tier legitimately.
 
-### 1.1 Request lifecycle
+The real danger is `getPlan("ENTERPRISE")` silently falling back to `PLANS.FREE` (see `getPlan()` in `plans.ts`: `return PLANS[tier as Tier] ?? PLANS.FREE`). Any guard call using the raw tier string from the DB would give a previously-enterprise user FREE limits.
 
-Every authenticated page action flows through this chain:
+### Fix
 
-```
-Browser → Next.js Page/Route → Server Action → getAuthenticatedUser()
-       → consumeCredits() → lib/ logic → Prisma → PostgreSQL
-```
-
-Background work is entirely handled by Inngest, never by API route timeouts. The general rule: if an operation takes more than 2 seconds, it belongs in an Inngest job.
-
-### 1.2 Module ownership map
-
-| Path | Owns |
-|---|---|
-| `src/lib/aeo/` | AEO checks — multi-model citation, schema gaps, knowledge graph, diagnosis, fix engine |
-| `src/lib/blog/` | Blog generation pipeline — SERP context, prompt rules, internal links, repurpose jobs |
-| `src/lib/gsc/` | Google Search Console — OAuth tokens, keyword metrics, decay detection, opportunity scoring |
-| `src/lib/seo-audit/` | Audit engine — modular plugin architecture, `AuditModule` interface, scoring weights |
-| `src/lib/self-healing/` | GSoV drop detection, healing action selection, impact measurement |
-| `src/lib/inngest/` | All background job definitions + the Inngest client singleton |
-| `src/lib/stripe/` | Billing — tier definitions, feature gates, webhook idempotency, plan limits |
-| `src/lib/rate-limit/` | Two-layer rate limiting: burst (sliding window) + monthly (calendar quota) |
-| `src/lib/competitors/` | Competitor detection, traffic tier scoring, velocity tracking, similarity filters |
-| `src/lib/pdf/` | White-label PDF report generation (audit reports, monthly reports, AEO reports) |
-| `src/lib/recommendations/` | Data-driven recommendation engine (`engine.ts`) — GSC-backed, scored by traffic opportunity |
-
----
-
-## 2. Core Patterns Every Developer Must Know
-
-### 2.1 Server Action authentication
-
-Every Server Action that touches user data must begin with `requireUser()`. This is the primary authoritative auth check used across the codebase — do not call `getServerSession()` directly in actions.
-
-> **Two helpers exist — use `requireUser()` for most actions:**
-> - `requireUser()` from `@/lib/auth/require-user` — used by `audit.ts`, `blog.ts`, `aeoAutopilot.ts` and most actions.
-> - `getAuthenticatedUser()` from `@/lib/server-only` — legacy helper, still used in some older actions. Both are valid but `requireUser()` is the established standard.
+**Option A (recommended) — add ENTERPRISE as a first-class tier alias for AGENCY:**
 
 ```ts
-"use server"
-import { requireUser } from "@/lib/auth/require-user";
+// src/lib/stripe/plans.ts — add after AGENCY block
+export const PLANS = {
+  // ... existing tiers ...
+  ENTERPRISE: {
+    ...PLANS.AGENCY,
+    name: "Enterprise",
+    tier: "ENTERPRISE" as const,
+  },
+} as const
 
-export async function myAction(siteId: string) {
-  const auth = await requireUser();
-  if (!auth.ok) return auth.error;   // typed AuthFail shortcut
-  const { user } = auth;
-  // ... your logic
+export type Tier = "FREE" | "STARTER" | "PRO" | "AGENCY" | "ENTERPRISE"
+```
+
+Then update `assertStripePriceIds()` and `getTierFromPriceId()` in `webhook.ts` to map an enterprise price ID when you have one.
+
+**Option B — remove ENTERPRISE references and normalise to AGENCY everywhere:**
+
+```ts
+// src/lib/inngest/functions/page-audit.ts
+const PAGE_LIMIT: Record<string, number> = {
+  FREE:   5,
+  STARTER: 10,
+  PRO:    25,
+  AGENCY: 50,   // remove ENTERPRISE line
+};
+
+// src/lib/inngest/functions/audit.ts
+const isPaid = ["STARTER", "PRO", "AGENCY"].includes((tier ?? "").toUpperCase());
+
+// src/lib/credits/index.ts — remove ENTERPRISE row from tiers array
+const tiers = [
+  { tier: "FREE",    amount: FREE_MONTHLY_CREDITS },
+  { tier: "STARTER", amount: STARTER_MONTHLY_CREDITS },
+  { tier: "PRO",     amount: PRO_MONTHLY_CREDITS },
+  { tier: "AGENCY",  amount: AGENCY_MONTHLY_CREDITS },
+  // ← ENTERPRISE row removed
+];
+```
+
+Option A is safer if you plan to introduce an enterprise tier later. Option B removes dead code now.
+
+---
+
+## Bug 2 — STARTER excluded from cron fan-out
+
+**Severity:** Critical · Billing (silent feature regression for paying users)  
+**File:** `src/lib/inngest/functions/cron-schedule.ts`
+
+### What's broken
+
+`getPaidSites()` is the single shared helper used by every cron fan-out (weekly audit, backlinks, rank tracker, AEO, blog, competitor alerts):
+
+```ts
+// cron-schedule.ts ~line 22
+async function getPaidSites() {
+    return prisma.site.findMany({
+        where: { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },
+        //                                          ^^^^^^^^^^^^^^^^^^^
+        //                                          STARTER missing here
+        select: { id: true, domain: true, userId: true },
+    });
 }
 ```
 
-> **Why:** `requireUser()` does a session check AND a DB user lookup in one round-trip. It gives you the full `User` row (including tier, credits, preferences) without a second query.
-
-### 2.2 Credit consumption
-
-Expensive operations (audit, AEO check, blog gen, competitor analysis) must deduct credits atomically before running. The deduction uses a raw SQL `UPDATE` with a `WHERE credits >= cost` guard — it is impossible to go negative.
+STARTER pays for `auditsPerMonth: 15`, `backlinks: false` (feature flag), and `rankTracking: true`. Their sites are silently skipped by every cron job. The backlink fan-out (`backlinks.ts`) has an identical inline filter:
 
 ```ts
-import { consumeCredits } from "@/lib/credits";
+// backlinks.ts ~line 33
+where: { user: { subscriptionTier: { in: ["PRO", "AGENCY", "ENTERPRISE"] } } },
+```
 
-const result = await consumeCredits(user.id, "fullAudit");
-if (!result.allowed) {
-  return { success: false, error: "Insufficient credits", remaining: result.remaining };
+The backlinks feature flag (`backlinks: false` for STARTER in `plans.ts`) means STARTER users legitimately shouldn't get the backlinks cron — but they should get the weekly audit and rank tracker.
+
+### Fix
+
+Split `getPaidSites()` into two helpers — one for all paid tiers, one for backlink-eligible tiers:
+
+```ts
+// cron-schedule.ts
+
+/** All paid tiers — used for audits, rank tracking, AEO, blog, competitor alerts */
+async function getPaidSites() {
+    return prisma.site.findMany({
+        where: { user: { subscriptionTier: { in: ["STARTER", "PRO", "AGENCY"] } } },
+        select: { id: true, domain: true, userId: true },
+    });
+}
+
+/** Tiers with backlinks feature enabled (PRO and above) */
+async function getBacklinkEligibleSites() {
+    return prisma.site.findMany({
+        where: { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },
+        select: { id: true, domain: true, userId: true },
+    });
 }
 ```
 
-Credit costs are defined in `src/lib/credits/constants.ts`. Do not hardcode numbers at the call site.
-
-### 2.3 Rate limiting — two layers
-
-Rate limiting is split into two complementary systems:
-
-- **Burst limiter** — per-minute/per-hour sliding window via `rateLimit(limiterName, identifier)`. Use this for API calls that can spike.
-- **Monthly quota** — calendar-month counter via `checkAuditLimit(userId, tier)`. This is the plan-level limit (e.g. 15 audits/month on Starter).
+Then update `cronWeeklyBacklinks` to call `getBacklinkEligibleSites()`:
 
 ```ts
-import { rateLimit, checkAuditLimit } from "@/lib/rate-limit";
-
-// Layer 1: burst
-const limited = await rateLimit("auditRun", `${userId}:${siteId}`);
-if (limited) return limited;
-
-// Layer 2: monthly quota
-const quota = await checkAuditLimit(userId, user.tier);
-if (!quota.allowed) return { error: "Monthly limit reached", resetAt: quota.resetAt };
+// cronWeeklyBacklinks handler
+const sites = await step.run("fetch-backlink-sites", getBacklinkEligibleSites);
 ```
 
-> **Fail-open policy:** Monthly rate limits fail open on Redis errors — a cache blip should never lock a user out. Burst limits are backed by Upstash's sliding window which has its own retry logic.
-
-#### Named burst limiters reference
-
-| Key | Identifier | Limit | Window | Purpose |
-|---|---|---|---|---|
-| `auth` | IP | 10 | 15 min | Sign-in / sign-up brute-force |
-| `passwordReset` | IP+email | 3 | 1 h | Account enumeration guard |
-| `api` | userId | 120 | 1 min | General authenticated API calls |
-| `blogGenerate` | userId | 5 | 1 min | Expensive Gemini generation |
-| `aeoCheck` | userId | 3 | 1 min | Multi-LLM AEO checks |
-| `voiceSession` | userId | 5 | 1 h | LiveKit token issuance |
-| `auditRun` | userId+siteId | 3 | 5 min | Live-site crawl |
-| `competitorFetch` | userId | 10 | 1 h | Serper / DataForSEO calls |
-| `githubPr` | userId | 5 | 1 h | GitHub API PR creation |
-| `citationGap` | siteId | 1 | 6 h | Perplexity / Gemini citation gap |
-
-### 2.4 Background jobs — Inngest patterns
-
-All Inngest functions must be registered in `src/app/api/inngest/route.ts`. An unregistered function causes its trigger events to be **silently dropped** — there is no error, the job just never runs.
+And update the inline filter in `backlinks.ts` to match:
 
 ```ts
-// Every fan-out child job MUST be registered:
-export const { GET, POST, PUT } = serve({
-  client: inngest,
-  functions: [
-    parentJob,
-    childFanOutJob,  // ← easy to forget, catastrophic if missing
-  ],
-});
-```
-
-Fan-out pattern: the parent job fires `inngest.send()` with N events (one per site/page), and a registered child function processes each one independently. This avoids Inngest's 2-hour step timeout for large datasets.
-
-### 2.5 Audit engine — module interface
-
-The SEO audit system is fully modular. Each check implements `AuditModule`. The engine pre-fetches HTML once, then runs all modules in parallel via `Promise.all`.
-
-```ts
-interface AuditModule {
-  id: string;
-  requiresHtml?: boolean;  // set false for schema-only or API-only modules
-  run(context: AuditModuleContext): Promise<AuditModuleResult>;
-}
-
-// Adding a new check:
-// 1. Implement AuditModule in src/lib/seo-audit/modules/your-module.ts
-// 2. Register it in the AuditEngine constructor or registerModule()
-// 3. Score weights are in SCORING_WEIGHTS (ROI_IMPACT: 0.6, AI_VISIBILITY: 0.4)
+// backlinks.ts cron fan-out branch
+where: { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },
+// (remove ENTERPRISE — it's not a real tier, see Bug 1)
 ```
 
 ---
 
-## 3. Database & Prisma
+## Bug 3 — Credit pack amount hardcoded in webhook
 
-### 3.1 Schema at a glance
+**Severity:** High · Billing  
+**File:** `src/lib/stripe/webhook.ts`
 
-66 models in `prisma/schema.prisma`. Key ownership relationships:
-
-| Model | Purpose |
-|---|---|
-| `User` | Central entity. Has Subscription, Sites, Credits, StrategyMemory |
-| `Site` | The SEO subject. Owns Audits, AeoReports, Competitors, Keywords, Blogs |
-| `AeoReport` | Multi-model AEO snapshot. Stores `generativeShareOfVoice` (0–100) |
-| `Audit / PageAudit` | Full-site vs per-page. `PageAudit` is the fan-out child |
-| `TrackedKeyword` | User-pinned keyword rows. Separate from GSC-derived data |
-| `SelfHealingLog` | Records every auto-fix action and its healing outcome |
-| `StrategyMemory` | Aria voice agent memory — typed entries with optional expiry |
-| `HealingOutcome` | Measured impact of a healing action (before/after GSoV diff) |
-| `CreditHistory` | Immutable audit log of every credit deduction |
-| `DripSequence` | Lead nurture state — tracks which drip emails have fired |
-
-### 3.2 Prisma singleton pattern
-
-The Prisma client in `src/lib/prisma.ts` uses the global singleton pattern to survive Next.js hot-reload. Connection pool size is environment-aware (20 in prod, 5 in dev). A slow-query logger fires at 500ms.
-
-> **Import rule:** Always import via the named export: `import { prisma } from "@/lib/prisma"`. The file also has a default export which is a legacy leftover — remove it in the next cleanup pass.
-
-### 3.3 Raw SQL for atomicity
-
-Credit deduction uses `prisma.$executeRaw` to atomically check-and-decrement in a single statement. This is the only place in the codebase where raw SQL is acceptable. For everything else, use the Prisma query API.
+### What's broken
 
 ```ts
-// Atomic deduct — safe from race conditions
-const result = await prisma.$executeRaw`
-  UPDATE "User"
-  SET credits = credits - ${cost}
-  WHERE id = ${userId}
-  AND credits >= ${cost}
-`;
-// result === 1 means success, 0 means insufficient credits
+// webhook.ts handleInvoicePaid(), ~line 112
+await addCreditPackCredits(subscription.userId, 50)
+//                                              ^^
+//                                              hardcoded — not CREDIT_PACK.credits
 ```
 
----
-
-## 4. Authentication & Session
-
-### 4.1 JWT cache layer
-
-Session hydration uses a Redis read-through cache keyed by email with a 5-minute TTL. This avoids a DB round-trip on every authenticated request. Cache is busted in two scenarios:
-
-- **Tier change:** Stripe webhook calls `bumpSessionVersion(userId)` which increments a `sessionVersion` field in `User.preferences` and deletes the Redis key.
-- **Manual bust:** Call `redis.del(jwtCacheKey(email))` from any server context.
-
-### 4.2 Account lockout
-
-Brute-force protection is in `src/lib/auth/lockout.ts`. After 5 failed login attempts within a window, the account is locked for 15 minutes. This is Redis-backed. The lockout check runs before bcrypt comparison to avoid timing attacks.
-
-### 4.3 Admin guard
-
-Admin-only routes use `ensureAdminRole(email: string)` from `src/lib/admin-guard.ts`. It takes the user's **email string**, not the full user object. Note: `src/lib/auth/admin-guard.ts` exists but is just a re-export barrel pointing back to the root-level file — always import directly from `@/lib/admin-guard`.
-
----
-
-## 5. AEO System — Answer Engine Optimisation
-
-AEO is the platform's core differentiator. It measures how well a brand appears when LLMs answer queries, not just when Google ranks pages.
-
-### 5.1 Multi-model check pipeline
-
-An AEO audit calls multiple LLMs in parallel and aggregates results:
-
-| Model | Role |
-|---|---|
-| Gemini (primary) | Citation detection, schema gap analysis, AIO (AI Overview) check |
-| Perplexity | Citation likelihood scoring with source attribution |
-| OpenAI (GPT-4) | Brand mention detection in conversational queries |
-| Claude | Optional — cross-check for brand fact accuracy |
-| Grok | Optional — X/Twitter context brand mentions |
-
-### 5.2 Generative Share of Voice (GSoV)
-
-GSoV (0–100) is the primary AEO score. It is stored in `AeoReport.generativeShareOfVoice`. The self-healing engine monitors GSoV drop between consecutive reports. Drop triggers:
-
-- Absolute drop ≥ 10 points (when previous GSoV ≥ 20)
-- Relative drop ≥ 15% (when previous GSoV < 20)
-
-When a drop is detected, `detectGsovDrop()` returns `true` and the healing engine selects the appropriate fix action (`PR`, `CONTENT`, `SCHEMA`, or `ALERT`).
-
-### 5.3 Fix engine
-
-AEO fixes flow through `src/lib/aeo/fix-engine.ts`. It calls the SEO AI layer (`src/lib/seo/ai.ts`) for framework-aware code generation, then passes the result through a QA validation step before creating a GitHub PR or returning the patch.
-
-> **Framework detection:** The fix engine detects the site's framework (Next.js, React-Vite, WordPress, etc.) and applies framework-specific constraints. For Next.js, it enforces the Metadata API for meta tags and prohibits hooks in layout files. Never bypass the framework map.
-
----
-
-## 6. Billing & Tier System
-
-### 6.1 Tier definitions
-
-Four tiers in `src/lib/stripe/plans.ts`: `FREE`, `STARTER`, `PRO`, `AGENCY`.
-
-| Tier | Key limits |
-|---|---|
-| `FREE` | 1 site, 5 audits/month, 50 credits, GSC only |
-| `STARTER` | 3 sites, 15 audits/month, 150 credits, rank tracking, 2 competitors/site |
-| `PRO` | 10 sites, 50 audits/month, 500 credits, Ahrefs, white-label |
-| `AGENCY` | 50 sites, 200 audits/month, 2000 credits, client portal, developer API |
-
-### 6.2 Feature gating
-
-Use `hasFeature(tier, featureKey)` for any UI or API that should be tier-restricted. Do not read the feature map directly.
+`plans.ts` defines:
 
 ```ts
-import { hasFeature } from "@/lib/stripe/plans";
+export const CREDIT_PACK = {
+    credits: 50,   // ← canonical value
+    price: 9,
+    ...
+} as const
+```
 
-if (!hasFeature(user.tier, "competitor")) {
-  return { error: "Upgrade to Starter to access competitor analysis" };
+Both are `50` today, so there's no live defect — but the connection is broken. If someone changes `CREDIT_PACK.credits` to e.g. `100`, the webhook will keep granting 50.
+
+### Fix
+
+Import the constant and use it:
+
+```ts
+// webhook.ts — add to imports
+import { CREDIT_PACK } from "@/lib/stripe/plans"
+
+// inside handleInvoicePaid()
+await addCreditPackCredits(subscription.userId, CREDIT_PACK.credits)
+```
+
+One line change. The linter should prevent the literal from creeping back.
+
+---
+
+## Bug 4 — Site-limit check bypasses `guards.ts`
+
+**Severity:** High · Billing  
+**File:** `src/app/actions/site.ts`
+
+### What's broken
+
+```ts
+// site.ts createSite() inside $transaction
+const { withinLimit } = await import("@/lib/stripe/plans")
+// ...
+if (!withinLimit(user.subscriptionTier, "sites", currentSiteCount)) {
+//               ^^^^^^^^^^^^^^^^^^^^
+//               raw JWT tier — not the effective tier
+```
+
+`user.subscriptionTier` comes from the session JWT which is populated in `auth.ts` directly from `dbUser.subscriptionTier`. It is never passed through `getUserTier()` (in `guards.ts`), which is the only place that:
+
+1. Calls `resolveEffectiveTier()` — honours 7-day PRO trials.
+2. Checks `sub.status === "canceled"` or `sub.status === "past_due"`.
+3. Checks `sub.currentPeriodEnd < new Date()` for expired subscriptions.
+
+Consequences:
+- A user in their 7-day free PRO trial gets `subscriptionTier = "FREE"` in the DB (trials are tracked via `trialEndsAt`, not the tier column), so they hit the FREE 1-site cap instead of the PRO 10-site cap.
+- A `past_due` user keeps their paid site limit because the webhook sets `subscriptionTier = "FREE"` only after `invoice.payment_failed` fires — there's a race window.
+
+### Fix
+
+Replace the raw `withinLimit` call with `requireWithinLimit` from `guards.ts`:
+
+```ts
+// site.ts — change import
+import { requireWithinLimit } from "@/lib/stripe/guards"
+
+// inside createSite(), replace the $transaction block check:
+const newSite = await prisma.$transaction(async (tx) => {
+    const currentSiteCount = await tx.site.count({ where: { userId: user.id } })
+
+    // requireWithinLimit calls getUserTier() which handles trials + expiry
+    await requireWithinLimit(user.id, "sites", currentSiteCount)
+    //    ^ throws TierError if over limit
+
+    return tx.site.create({ ... })
+})
+```
+
+Catch the `TierError` in the outer try/catch:
+
+```ts
+} catch (err: unknown) {
+    if (err instanceof TierError) {
+        return { success: false, error: err.message }
+    }
+    // ... existing error handling
 }
 ```
 
-### 6.3 Stripe webhook idempotency
-
-Every Stripe webhook is stored in `WebhookEvent` with a unique `[provider, providerEventId]` constraint. The handler checks this before processing to prevent double-execution on Stripe retries. Expired `IdempotencyKey` rows are cleaned up by a scheduled job.
+Note: `requireWithinLimit` does a DB round-trip (to resolve tier) outside the Prisma transaction. This is acceptable — the transaction itself is the atomicity boundary for the site count. The tier resolution is read-only and non-transactional by design.
 
 ---
 
-## 7. Blog Generation Pipeline
+## Bug 5 — Annual billing: annual price IDs never mapped
 
-### 7.1 Pipeline stages
+**Severity:** Critical · Billing  
+**File:** `src/lib/stripe/webhook.ts`
 
-Blog generation is a multi-stage pipeline running inside a single Inngest job (`generateBlogJob`):
-
-| Stage | Description |
-|---|---|
-| 1. SERP context | Fetches top-10 Google results via Serper, scrapes competitor headings and word counts |
-| 2. Intent detection | Classifies keyword intent (informational, commercial, navigational, transactional) |
-| 3. Prompt context | Builds `PromptContext` — business type, tone rules, funnel stage, internal link targets |
-| 4. Gemini generation | Streams blog content using structured schema output (`Type.OBJECT` with strict field definitions) |
-| 5. Internal linking | Post-processes output to inject relevant internal links from the site's published pages |
-| 6. Humanise pass | Optional second Gemini call to reduce AI-detectable patterns |
-| 7. CMS publish | Optional — pushes to WordPress/Webflow/Hashnode via `publishBlogToCmsJob` |
-
-### 7.2 Prompt rules system
-
-All prompt construction goes through `src/lib/blog/rules.ts`. Rules are functional — `getClaimRules(tone, businessType)`, `getToneRules()`, `getStructureRules()` etc. Never inline prompt strings in the Inngest job. Add new rules as functions, compose them in `buildPromptContext()`.
-
----
-
-## 8. Observability
-
-### 8.1 Logging
-
-Always use the `logger` singleton from `src/lib/logger.ts`. It emits JSON lines in all environments (debug suppressed in prod). Never use `console.log` directly.
+### What's broken
 
 ```ts
-import { logger, formatError } from "@/lib/logger";
-
-logger.info("[AEO] Check complete", { siteId, score });
-
-try { ... } catch(err) {
-  logger.error("[AEO] Check failed", { siteId, error: formatError(err) });
+function getTierFromPriceId(priceId: string | null | undefined): string {
+    if (!priceId) return "FREE"
+    if (priceId === process.env.STRIPE_AGENCY_PRICE_ID)  return "AGENCY"
+    if (priceId === process.env.STRIPE_PRO_PRICE_ID)     return "PRO"
+    if (priceId === process.env.STRIPE_STARTER_PRICE_ID) return "STARTER"
+    return "__UNKNOWN__"
+    //     ^^^^^^^^^^^^^
+    //     annual price IDs fall here → user stays on FREE
 }
 ```
 
-Use `formatError(err)` in the meta object — it handles non-Error throws and preserves stack traces.
+`plans.ts` declares `annualPriceId` for every paid tier (reading from `STRIPE_STARTER_ANNUAL_PRICE_ID`, `STRIPE_PRO_ANNUAL_PRICE_ID`, `STRIPE_AGENCY_ANNUAL_PRICE_ID`). None of these environment variables are checked in `getTierFromPriceId()`.
 
-### 8.2 Distributed tracing (OTEL)
+When an annual subscriber pays, Stripe fires `checkout.session.completed` and `invoice.paid` with the annual `priceId`. `getTierFromPriceId()` returns `"__UNKNOWN__"`. `assertKnownTier()` blocks the update and fires an admin alert. The user is never upgraded — they stay on FREE despite having paid for a year.
 
-OpenTelemetry is configured in `src/lib/telemetry.ts` and initialised via Next.js instrumentation. Wrap expensive operations with `traced()`:
+`assertStripePriceIds()` also only checks the three monthly IDs, so annual price ID misconfiguration is invisible at startup.
+
+### Fix
 
 ```ts
-import { traced } from "@/lib/telemetry";
+// webhook.ts
 
-const result = await traced(
-  "aeo.multimodel.check",
-  { siteId, keyword },
-  () => auditMultiModelMentions(url, queries)
-);
+export function assertStripePriceIds(): void {
+    const required = [
+        "STRIPE_STARTER_PRICE_ID",
+        "STRIPE_PRO_PRICE_ID",
+        "STRIPE_AGENCY_PRICE_ID",
+        // Add annual variants:
+        "STRIPE_STARTER_ANNUAL_PRICE_ID",
+        "STRIPE_PRO_ANNUAL_PRICE_ID",
+        "STRIPE_AGENCY_ANNUAL_PRICE_ID",
+    ]
+    const missing = required.filter(k => !process.env[k])
+    if (missing.length > 0) {
+        logger.warn("[Stripe] Missing price ID env vars", { missing })
+    }
+}
+
+function getTierFromPriceId(priceId: string | null | undefined): string {
+    if (!priceId) return "FREE"
+
+    // Monthly
+    if (priceId === process.env.STRIPE_AGENCY_PRICE_ID)         return "AGENCY"
+    if (priceId === process.env.STRIPE_PRO_PRICE_ID)            return "PRO"
+    if (priceId === process.env.STRIPE_STARTER_PRICE_ID)        return "STARTER"
+
+    // Annual — ADD THESE:
+    if (priceId === process.env.STRIPE_AGENCY_ANNUAL_PRICE_ID)  return "AGENCY"
+    if (priceId === process.env.STRIPE_PRO_ANNUAL_PRICE_ID)     return "PRO"
+    if (priceId === process.env.STRIPE_STARTER_ANNUAL_PRICE_ID) return "STARTER"
+
+    return "__UNKNOWN__"
+}
 ```
 
-The tracer is a no-op when `OTEL_EXPORTER_OTLP_ENDPOINT` is not set, so adding `traced()` calls is always safe in development.
+No other changes needed — the rest of the webhook correctly uses the returned tier string.
 
-### 8.3 Slow query detection
-
-Prisma emits a `query` event. Any query exceeding 500ms is logged as a warning with the (truncated) query string. Watch for these in staging — they usually indicate a missing index or an N+1 pattern.
+> **Env var checklist:** Make sure `STRIPE_STARTER_ANNUAL_PRICE_ID`, `STRIPE_PRO_ANNUAL_PRICE_ID`, and `STRIPE_AGENCY_ANNUAL_PRICE_ID` are set in Railway (or whatever hosting you use). Without them `process.env.*` returns `undefined` and the comparisons silently evaluate to `priceId === undefined` — always false — so annual subs still hit `"__UNKNOWN__"`.
 
 ---
 
-## 9. Security Rules
+## Bug 6 — `plans.test.ts` fixtures don't match actual plan prices
 
-### 9.1 SSRF prevention
+**Severity:** Medium · Test quality  
+**File:** `tests/unit/plans.test.ts`
 
-Any code that fetches a user-supplied URL must call `isValidPublicDomain(domain)` from `src/lib/security.ts` before making the request. It blocks localhost, `.local`, `.internal` TLDs, and all direct IP addresses including the AWS metadata endpoint (`169.254.169.254`).
+### What's broken
 
-> **Hard rule:** Never skip `isValidPublicDomain()` for user-submitted URLs. Every audit, AEO check, and crawler endpoint is a potential SSRF vector. The self-healing GitHub PR path is also covered — see `BLOCKED_PATH_PREFIXES` in `src/lib/github/index.ts`.
+The test file defines its own inline `PLANS` fixture instead of importing from `src/lib/stripe/plans.ts`. The fixture prices are stale:
 
-### 9.2 GitHub PR safety
+| Tier    | Test fixture | Actual `plans.ts` |
+|---------|-------------|-------------------|
+| STARTER | $29/mo      | $19/mo            |
+| PRO     | $79/mo      | $49/mo            |
+| AGENCY  | $199/mo     | $149/mo           |
 
-The GitHub auto-fix path blocks writes to `.github/workflows/`, `.git/`, and `.env` via `BLOCKED_PATH_PREFIXES`. File size is capped at 1MB. Never extend these limits without a security review.
+The tests pass because they only validate internal consistency (annual < monthly × 12, credits escalate, etc.) — not that the values match production. A pricing change in `plans.ts` would go completely undetected.
 
-### 9.3 Environment validation
+### Fix
 
-All environment variables are validated at startup via Zod schema in `src/lib/env.ts`. Production-only vars (Stripe keys, Upstash credentials) use `z.string().min(1)` conditionally. The Dockerfile sets `SKIP_ENV_VALIDATION=1` during `next build` to avoid requiring secrets at build time.
+Remove the inline fixture and import directly from the source. The env-var dependency (`process.env.STRIPE_*_PRICE_ID`) is the only wrinkle — stub those before import:
 
----
+```ts
+// tests/unit/plans.test.ts
+import { describe, it, expect, beforeAll, vi } from "vitest"
 
-## 10. Inngest Jobs — Complete Inventory
+beforeAll(() => {
+    // Stub price IDs so plans.ts can be imported without real env vars
+    vi.stubEnv("STRIPE_STARTER_PRICE_ID", "price_starter_monthly_test")
+    vi.stubEnv("STRIPE_PRO_PRICE_ID", "price_pro_monthly_test")
+    vi.stubEnv("STRIPE_AGENCY_PRICE_ID", "price_agency_monthly_test")
+    vi.stubEnv("STRIPE_STARTER_ANNUAL_PRICE_ID", "price_starter_annual_test")
+    vi.stubEnv("STRIPE_PRO_ANNUAL_PRICE_ID", "price_pro_annual_test")
+    vi.stubEnv("STRIPE_AGENCY_ANNUAL_PRICE_ID", "price_agency_annual_test")
+    vi.stubEnv("STRIPE_CREDIT_PACK_PRICE_ID", "price_credit_pack_test")
+})
 
-All jobs are registered in `src/app/api/inngest/route.ts`. Fan-out children are called out explicitly — forgetting to register a child causes silent event drops.
+// Import AFTER stubEnv so the module reads the stubbed values
+const { PLANS, CREDIT_PACK } = await import("@/lib/stripe/plans")
 
-### 10.1 Core pipeline jobs
+describe("PLANS — pricing matches source", () => {
+    it("STARTER monthly price is $19", () => {
+        expect(PLANS.STARTER.price.monthly).toBe(19)
+    })
+    it("PRO monthly price is $49", () => {
+        expect(PLANS.PRO.price.monthly).toBe(49)
+    })
+    it("AGENCY monthly price is $149", () => {
+        expect(PLANS.AGENCY.price.monthly).toBe(149)
+    })
+    it("annual price is cheaper than monthly × 12 for each tier", () => {
+        for (const plan of [PLANS.STARTER, PLANS.PRO, PLANS.AGENCY]) {
+            expect(plan.price.annual * 12).toBeLessThan(plan.price.monthly * 12)
+        }
+    })
+})
 
-| Job | Description |
-|---|---|
-| `generateBlogJob` | Full blog generation — SERP → AI → links → humanise → optional CMS publish |
-| `runAeoAuditJob` | Per-site AEO check orchestrator |
-| `processAeoSiteJob` | Fan-out child: one AEO check per site |
-| `runWeeklyAuditJob` | Cron-triggered full-site audit |
-| `processManualAuditJob` | Dashboard "Run Audit" button — non-blocking, user-initiated |
-| `runPageAuditJob` | Fan-out parent: dispatches per-page audit events |
-| `processPageAuditJob` | Fan-out child: single page audit — **MUST be registered** |
-| `computeBenchmarksJob` | Monday 03:00 UTC — builds industry benchmark stats |
-| `measureHealingOutcomesJob` | Daily 4am UTC — measures before/after GSoV for healing actions |
-| `runFullStrategyJob` | Multi-agent parallel strategy orchestration |
-
-### 10.2 Cron and alert jobs
-
-| Job | Description |
-|---|---|
-| `creditsResetJob` | 1st of month 00:00 UTC — resets user credits to tier allowance |
-| `uptimeMonitorJob` | Uptime orchestrator — fans out to `uptimeSiteCheckerJob` |
-| `uptimeSiteCheckerJob` | Fan-out child — checks one site's uptime. **MUST be registered** |
-| `weeklyDigestJob` | Weekly email digest with rank movements and recommendations |
-| `leadDripSequenceJob` | Days 2, 5, 10 post-signup nurture emails |
-| `magicFirstAuditJob` | New user: activation email + first audit trigger |
-| `checkOneQueryJob` | Query library fan-out child — **MUST be registered** |
-| `runSerpGapAnalysisJob` | SERP gap analysis on demand |
-| `freshnessDecayCron` | Content freshness decay scoring — runs daily |
-
----
-
-## 11. Known Technical Debt
-
-### 11.1 Immediate — before next deployment
-
-| Issue | Fix |
-|---|---|
-| Unlisted runtime deps | `p-limit`, `server-only`, and all 4 `@opentelemetry/*` packages are missing from `package.json`. Run: `pnpm add p-limit server-only @opentelemetry/api @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-http @opentelemetry/auto-instrumentations-node` |
-| `prisma.ts` dual export | Both named (`export const prisma`) and default (`export default prisma`) exist. Remove the default export, migrate all import sites with grep. |
-| `genBlogmodal.tsx` dead | Superseded by `BlogStepper.tsx`. Delete `src/app/dashboard/blogs/genBlogmodal.tsx`. |
-| Legacy rate-limit stubs | Root-level `rate-limit/tiered.ts` and `rate-limit/cleanup.ts` are shadowed by the `burst/` subdirectory. Delete both stubs. |
-
-### 11.2 Short-term cleanup
-
-| Issue | Fix |
-|---|---|
-| Missing `knip.json` | Create `knip.json` with entry patterns for `src/lib/inngest/**`, `scripts/**`, `public/**`. This will clear ~200 false-positive unused export warnings. |
-| `hasFeature` alias | `canAccessFeature` in `plans.ts` is a direct alias of `hasFeature`. Remove the alias, update all call sites. |
-| `@livekit/components-core` | Listed in `optimizePackageImports` in `next.config.ts` but flagged unused by knip. Verify voice feature status and either remove or document. |
-| Content scoring Redis | `src/lib/content-scoring/index.ts` creates its own Redis instance instead of using the shared singleton from `@/lib/redis`. Consolidate. |
-
----
-
-## 12. Development Workflow
-
-### 12.1 npm scripts
-
-| Script | Purpose |
-|---|---|
-| `npm run dev:next` | Next.js dev server only (no voice agent) |
-| `npm run dev` | Full stack: Next.js + voice agent via tsx + dotenv |
-| `npm run inngest` | Local Inngest dev server — required for background job testing |
-| `npm run studio` | Prisma Studio — visual DB browser |
-| `npm run migrate` | `prisma migrate dev` — creates migration + regenerates client |
-| `npm run migrate:deploy` | `prisma migrate deploy` — production only, applies pending migrations |
-| `npm run test` | Vitest unit tests (run once) |
-| `npm run test:e2e` | Playwright E2E tests |
-| `npm run agent:dev` | Build `livekit-agent.ts` then start in dev mode |
-
-### 12.2 Minimum local environment variables
-
-```env
-DATABASE_URL=postgresql://user:pass@localhost:5432/aiseo
-NEXTAUTH_SECRET=<random-32-chars>
-NEXTAUTH_URL=http://localhost:3000
-GEMINI_API_KEY=<key>
-UPSTASH_REDIS_REST_URL=<url>       # or use local Redis with REDIS_URL
-UPSTASH_REDIS_REST_TOKEN=<token>
-LIVEKIT_URL=<url>                  # required even if not using voice
-LIVEKIT_API_KEY=<key>
-LIVEKIT_API_SECRET=<secret>
-SKIP_ENV_VALIDATION=1              # set during next build only
+describe("CREDIT_PACK", () => {
+    it("credits value matches source", () => {
+        expect(CREDIT_PACK.credits).toBe(50) // update this test when CREDIT_PACK changes
+    })
+})
 ```
 
-> **Docker Compose:** `docker-compose.yml` provides a local PostgreSQL + Inngest dev server. Set `INNGEST_BASE_URL=http://inngest:8288` inside Docker to route job events to the local server instead of Inngest Cloud.
-
-### 12.3 Adding a new Inngest job — checklist
-
-1. Create the function file in `src/lib/inngest/functions/your-job.ts`
-2. Export it from `src/lib/inngest/functions/index.ts`
-3. Import and add to the `functions: []` array in `src/app/api/inngest/route.ts`
-4. If it is a fan-out child, add a comment noting it must not be removed
-
-### 12.4 Adding a new audit module — checklist
-
-1. Implement `AuditModule` interface in `src/lib/seo-audit/modules/`
-2. Set `requiresHtml: false` if your module uses only API data
-3. Register in the engine constructor and update `AEO_WEIGHTS` if AEO-related (weights must sum to 1.0)
-4. Add credit cost to `src/lib/credits/constants.ts` if the module calls external APIs
+> **Note on `price` shape:** `plans.ts` defines `price: { monthly: 19, annual: 15 }` for paid tiers. The old fixture used `price: number`. Update all test assertions to use `.price.monthly` and `.price.annual`.
 
 ---
 
-## 13. Quick Reference
+## Bug 7 — OAuth signup doesn't emit `user.registered`
 
-### Daily-use imports
+**Severity:** High · Onboarding  
+**Files:** `src/app/actions/signup.ts`, `src/lib/auth.ts`
 
-| Symbol | Import path |
-|---|---|
-| `getAuthenticatedUser` | `import { getAuthenticatedUser } from "@/lib/server-only"` |
-| `prisma` | `import { prisma } from "@/lib/prisma"` |
-| `logger` / `formatError` | `import { logger, formatError } from "@/lib/logger"` |
-| `redis` | `import { redis } from "@/lib/redis"` |
-| `inngest` | `import { inngest } from "@/lib/inngest/client"` |
-| `consumeCredits` | `import { consumeCredits } from "@/lib/credits"` |
-| `rateLimit` | `import { rateLimit } from "@/lib/rate-limit"` |
-| `hasFeature` | `import { hasFeature } from "@/lib/stripe/plans"` |
-| `isValidPublicDomain` | `import { isValidPublicDomain } from "@/lib/security"` |
-| `traced` | `import { traced } from "@/lib/telemetry"` |
-| `bumpSessionVersion` | `import { bumpSessionVersion } from "@/lib/session-version"` |
+### What's broken
 
-### Files that are NOT dead code (knip false positives)
+**Credentials flow** (`signup.ts`) correctly fires `inngest.send("user.registered", ...)` after creating the user. This triggers the drip sequence and magic first audit.
 
-| File / path | Why it is alive |
-|---|---|
-| `src/app/actions/aeoAutopilot.ts` | Referenced by API route and dashboard page |
-| `src/app/actions/onpage.ts` | Referenced by decay API route and audits page |
-| `src/app/actions/services.ts` | Referenced by `auditFix.ts`, `site.ts`, `llmMentions.ts` |
-| `public/embed.js` | Served directly over HTTP — entry point for embed widget |
-| `optiaiseo/assets/editor.js` | WordPress plugin sidebar asset |
-| `src/lib/inngest/functions/cron-*.ts` | All registered in `inngest/route.ts` via `serve()` |
-| `src/lib/rate-limit/index.ts` exports | Consumed through the barrel — knip can't see through it |
-| `src/lib/telemetry.ts` | Initialised by Next.js instrumentation, not imported directly |
+**OAuth flow** (`auth.ts` `signIn` callback) creates new users here:
+
+```ts
+// auth.ts signIn callback ~line 170
+if (!dbUser) {
+    dbUser = await prisma.user.create({ ... })
+
+    try {
+        const code = `REF-${...}`
+        await prisma.referral.create({ ... })
+    } catch { /* Non-fatal */ }
+
+    // ← NO inngest.send("user.registered") here
+}
+```
+
+OAuth users (Google, GitHub) get:
+- ✅ A referral code created inline
+- ✅ The `aiseo_ref` cookie credited to the referrer
+- ❌ No `user.registered` Inngest event
+- ❌ No drip email sequence
+- ❌ No magic first audit
+
+### Fix
+
+Add the Inngest send inside the `!dbUser` branch in `auth.ts`. The `signIn` callback is `async`, so `await` works fine:
+
+```ts
+// auth.ts signIn callback — inside the `if (!dbUser)` block, after referral creation
+
+if (!dbUser) {
+    const trialEndsAt = new Date()
+    trialEndsAt.setDate(trialEndsAt.getDate() + 7)
+    dbUser = await prisma.user.create({
+        data: {
+            email: user.email,
+            name: user.name ?? user.email.split("@")[0],
+            image: user.image,
+            trialEndsAt,
+        },
+    })
+
+    // Referral code (existing)
+    try {
+        const code = `REF-${crypto.randomUUID().replace(/-/g, "").substring(0, 8).toUpperCase()}`
+        await prisma.referral.create({ data: { ownerId: dbUser.id, code } })
+    } catch { /* Non-fatal */ }
+
+    // ← ADD THIS: fire onboarding events for OAuth new users
+    try {
+        const { inngest } = await import("@/lib/inngest/client")
+        await inngest.send({
+            name: "user.registered",
+            data: {
+                userId: dbUser.id,
+                email: dbUser.email!,
+                name: dbUser.name ?? dbUser.email!.split("@")[0],
+            },
+        })
+    } catch (err) {
+        logger.warn("[Auth] inngest user.registered failed for OAuth user", {
+            error: (err as Error)?.message,
+        })
+    }
+}
+```
+
+The `inngest.send` is non-blocking and wrapped in a try/catch — a failure here doesn't block sign-in.
 
 ---
 
-*Generated from live source analysis of the AISEO codebase.*
+## Summary Table
+
+| # | Bug | Severity | File(s) | Impact |
+|---|-----|----------|---------|--------|
+| 1 | `ENTERPRISE` tier undefined | Critical | `plans.ts`, `audit.ts`, `page-audit.ts`, `backlinks.ts`, `credits/index.ts` | Ghost tier, silent FREE fallback for any manual DB entry |
+| 2 | STARTER excluded from cron fan-out | Critical | `cron-schedule.ts`, `backlinks.ts` | Paying STARTER users never get weekly audits or rank tracking |
+| 3 | Credit pack amount hardcoded | High | `webhook.ts` | Changing `CREDIT_PACK.credits` won't update what the webhook grants |
+| 4 | Site limit bypasses guards.ts | High | `site.ts` | Trial users capped at FREE (1 site); expired/past_due not enforced |
+| 5 | Annual price IDs not mapped | Critical | `webhook.ts` | Annual subscribers stay on FREE forever |
+| 6 | Stale test price fixtures | Medium | `plans.test.ts` | Pricing regressions in `plans.ts` go undetected |
+| 7 | OAuth signup missing `user.registered` | High | `auth.ts` | OAuth users get no drip sequence and no magic first audit |
+
+---
+
+## Suggested fix order
+
+1. **Bug 5** — Annual billing breakage. Revenue loss right now.
+2. **Bug 2** — STARTER cron exclusion. Paying users getting nothing.
+3. **Bug 4** — Site limit guard bypass. Trial/expired users hitting wrong limits.
+4. **Bug 7** — OAuth onboarding event. Every OAuth signup misses drip + audit.
+5. **Bug 3** — Credit pack hardcode. Low risk today, time bomb later.
+6. **Bug 1** — ENTERPRISE cleanup. Code hygiene + prevent future confusion.
+7. **Bug 6** — Test fixtures. Important but not user-facing.
