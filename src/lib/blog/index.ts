@@ -18,15 +18,11 @@ import {
     cleanDomainToDisplayName,
 } from "./prompt-context";
 import {
-    getClaimRules,
-    getToneRules,
-    getStructureRules,
-    getScopeRules,
-    getAuthorGrounding,
     getHumanizePrompt,
     getComparisonTableRule,
     getQuickAnswerRule,
 } from "./rules";
+
 import {
     auditBannedPhrases,
     auditComparisonTable,
@@ -472,8 +468,7 @@ export async function generateTrendingPost(
     siteDomain?: string,
     siteId?: string
 ): Promise<BlogPostDraft> {
-    const ai = getAiClient();
-    if (!ai) throw new Error("GEMINI_API_KEY is missing.");
+    if (!getAiClient()) throw new Error("GEMINI_API_KEY is missing.");
 
     const ctx = buildPromptContext({
         keyword: industry,
@@ -484,40 +479,35 @@ export async function generateTrendingPost(
         siteDomain,
     });
 
-    const response = await ai.models.generateContent({
-        model: AI_MODELS.GEMINI_3_FLASH,
-        contents: `You are a senior journalist writing about ${industry} for an audience in ${country}.
+    // Trending posts use the same 4-stage pipeline — the research brain stage
+    // automatically focuses on "what's happening now" via SERP context.
+    // No pre-fetched SERP here; the pipeline fetches it internally.
+    const serpContext = null; // Pipeline Stage 1 will handle SERP internally via keyword
 
-GOAL: Produce the single most useful article on this topic — one practitioners in ${industry} would bookmark and that Perplexity/ChatGPT would cite.
-
-${getClaimRules(ctx)}
-${getToneRules(ctx)}
-${getScopeRules(ctx)}
-${getStructureRules(ctx)}
-${getAuthorGrounding(author, ctx)}
-
-CONTENT STRUCTURE — follow exactly:
-- Intro: 3 sentences per intro rule above. Open with the single most useful fact about ${industry} for ${country} right now.
-- H2: What Is Actually Happening in ${industry} Right Now (name specific companies, tools, people)
-- H2: Why This Matters for ${country} Specifically (local context: regulations, platforms, buyer behaviour)
-- H2: What Most Guides Get Wrong About ${industry} (one contrarian point with a specific reason)
-- H2: Step-by-Step: How to Respond Right Now (numbered H3 steps — concrete actions)
-- H2: Real Example — What Worked and What Didn't (use [ADD REAL CASE STUDY] if unknown, never invent)
-- H2: Frequently Asked Questions (5-7 Q&A, every answer starts with Yes/No/number/named thing)
-
-TITLE-COUNT RULE: If the title contains a number, the content must contain exactly that many H3 items.
-
-Updated ${new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}.`,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: buildBlogResponseSchema(ctx),
-            temperature: 0.7,
-            maxOutputTokens: 8192,
-        },
+    logger.debug(`[Blog Engine] Trending post pipeline: industry="${industry}" country="${country}"`);
+    const pipeline = await runFullPipeline({
+        keyword: industry,
+        serpContext,
+        ctx,
+        author,
+        tone: `Journalist covering ${industry} for a ${country} audience — specific, current, practitioner-focused`,
     });
 
-    if (!response.text) throw new Error("Gemini returned empty text.");
-    return buildPost(JSON.parse(response.text) as GeminiBlogResponse, author, ctx, siteId);
+    const syntheticResponse: GeminiBlogResponse = {
+        title: pipeline.title,
+        slug: pipeline.slug,
+        content: pipeline.markdownContent,
+        excerpt: pipeline.quickAnswer,
+        metaDescription: pipeline.metaDescription,
+        targetKeywords: [industry],
+        suggestedImagePrompt: industry,
+        faqs: [],
+        sections: pipeline.outline.sections.map(s => ({ heading: s.heading, imageQuery: s.keyEntities[0] ?? industry })),
+        quickAnswer: pipeline.quickAnswer,
+        comparisonTable: [],
+    };
+
+    return buildPost(syntheticResponse, author, ctx, siteId);
 }
 
 export async function generateEvergreenPost(

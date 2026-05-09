@@ -17,7 +17,7 @@ import { logger } from "@/lib/logger";
 import type { PromptContext } from "./prompt-context";
 import type { SerpContext } from "./serp";
 import type { AuthorProfile } from "./index";
-import { getAuthorGrounding, getClaimRules } from "./rules";
+import { getAuthorGrounding, getClaimRules, getToneRules, getScopeRules, getStructureRules } from "./rules";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -206,6 +206,10 @@ BANNED STRUCTURES: Do NOT produce the following section pattern:
 "What is X → Why X matters → How to X → Common mistakes → FAQ"
 This is predictable and AI-detectable. Create a narrative that flows differently.
 
+${getScopeRules(ctx)}
+
+${getStructureRules(ctx)}
+
 Produce an outline as JSON with this exact shape:
 
 {
@@ -375,8 +379,9 @@ ${entityNote}
 ${openerNote}
 ${authorNote}
 
-CLAIM RULE: Never write a percentage, dollar amount, or multiplier without naming its source. If no source: state the claim without the number.
-${ctx.riskTier === "high" ? "HIGH-RISK TOPIC: Every factual claim requires a named source or must be removed." : ""}
+${getClaimRules(ctx)}
+
+${getToneRules(ctx)}
 
 MICRO-IMPERFECTION RULE: Real writing has controlled irregularity. You may:
 - Use a sentence fragment for emphasis. Like this.
