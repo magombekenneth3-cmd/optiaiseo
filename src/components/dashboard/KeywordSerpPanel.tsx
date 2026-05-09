@@ -27,6 +27,18 @@ function gapColor(gap: number | null, threshold: number) {
   return gap > threshold ? "text-red-400" : gap > threshold * 0.5 ? "text-amber-400" : "text-emerald-400";
 }
 
+function classifyAnchor(anchor: string, keyword: string): { label: string; amber: boolean } {
+  const a = (anchor ?? "").toLowerCase().trim();
+  const kw = keyword.toLowerCase().trim();
+  if (!a) return { label: "naked URL", amber: false };
+  if (/^https?:\/\//.test(a) || /^www\./.test(a)) return { label: "naked URL", amber: false };
+  const kwWords = kw.split(/\s+/).filter(Boolean);
+  if (kwWords.length > 0 && kwWords.every(w => a.includes(w))) return { label: "keyword match", amber: false };
+  if (kwWords.length > 0 && kwWords.some(w => a.includes(w))) return { label: "partial match", amber: false };
+  if (/^(click here|read more|learn more|here|this|this article|this page|more|source|link|visit|check this)$/i.test(a)) return { label: "generic", amber: true };
+  return { label: "brand", amber: false };
+}
+
 function PriorityBadge({ priority }: { priority: SerpFix["priority"] }) {
   const map = {
     high:   "bg-red-500/15 text-red-400 border border-red-500/25",
@@ -260,6 +272,13 @@ export function KeywordSerpPanel({ keyword, position, impressions, clicks, landi
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs text-muted-foreground">{r.domain}</span>
+                          {r.dr > 0 && (
+                            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded border ${
+                              r.dr >= 70 ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                              : r.dr >= 40 ? "text-amber-400 bg-amber-500/10 border-amber-500/20"
+                              : "text-muted-foreground bg-muted/30 border-border"
+                            }`}>DR {r.dr}</span>
+                          )}
                           {r.url === landingUrl && <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-semibold">Your page</span>}
                         </div>
                         <p className="text-sm font-medium mt-0.5 truncate">{r.title}</p>
@@ -401,25 +420,49 @@ export function KeywordSerpPanel({ keyword, position, impressions, clicks, landi
 
               {data.topAnchors.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Top Anchor Text</p>
-                  <div className="rounded-xl border border-border overflow-hidden">
-                    <table className="w-full text-sm text-left">
-                      <thead className="bg-card/50 text-xs font-semibold text-muted-foreground uppercase border-b border-border">
-                        <tr>
-                          <th className="px-4 py-3">Anchor</th>
-                          <th className="px-4 py-3 text-right">Count</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {data.topAnchors.slice(0, 8).map((a, i) => (
-                          <tr key={i} className="hover:bg-card/30 transition-colors">
-                            <td className="px-4 py-2.5 font-mono text-xs">{a.anchor || "(empty)"}</td>
-                            <td className="px-4 py-2.5 text-right text-muted-foreground">{a.count}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Top Anchor Text</p>
+                  {(() => {
+                    const kwMatchCount = data.topAnchors.filter(a => classifyAnchor(a.anchor, keyword).label === "keyword match").length;
+                    const kwMatchPct = data.topAnchors.length > 0 ? (kwMatchCount / data.topAnchors.length) * 100 : 0;
+                    return (
+                      <>
+                        {kwMatchPct < 10 && (
+                          <p className="text-xs text-amber-400 mb-2">
+                            ⚠ Only {kwMatchPct.toFixed(0)}% of your anchors match &quot;{keyword}&quot;. Request anchors like &quot;{keyword}&quot; or &quot;{keyword} guide&quot; in outreach.
+                          </p>
+                        )}
+                        <div className="rounded-xl border border-border overflow-hidden">
+                          <table className="w-full text-sm text-left">
+                            <thead className="bg-card/50 text-xs font-semibold text-muted-foreground uppercase border-b border-border">
+                              <tr>
+                                <th className="px-4 py-3">Anchor</th>
+                                <th className="px-4 py-3">Type</th>
+                                <th className="px-4 py-3 text-right">Count</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                              {data.topAnchors.slice(0, 8).map((a, i) => {
+                                const { label, amber } = classifyAnchor(a.anchor, keyword);
+                                return (
+                                  <tr key={i} className="hover:bg-card/30 transition-colors">
+                                    <td className="px-4 py-2.5 font-mono text-xs">{a.anchor || "(empty)"}</td>
+                                    <td className="px-4 py-2.5">
+                                      <span className={`text-xs px-1.5 py-0.5 rounded border ${
+                                        label === "keyword match" ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                                        : amber ? "text-amber-400 bg-amber-500/10 border-amber-500/20"
+                                        : "text-muted-foreground bg-muted/30 border-border"
+                                      }`}>{label}</span>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-right text-muted-foreground">{a.count}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -455,8 +498,16 @@ export function KeywordSerpPanel({ keyword, position, impressions, clicks, landi
                   </div>
                 </div>
               ) : (
-                <div className="rounded-xl border border-border/50 bg-card/20 px-4 py-6 text-center text-xs text-muted-foreground">
-                  Add your top SERP competitor as a tracked competitor to unlock outreach opportunity data.
+                <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/10 px-4 py-4">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Link gap data unavailable</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {data.serpResults[0]?.domain
+                        ? <>Add <span className="font-mono text-foreground">{data.serpResults[0].domain}</span> as a tracked competitor to unlock full outreach opportunity analysis.</>
+                        : "Run an analysis to surface outreach opportunities."}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

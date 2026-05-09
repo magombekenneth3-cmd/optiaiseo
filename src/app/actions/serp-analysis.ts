@@ -31,6 +31,7 @@ export interface SerpResult {
     wordCount: number;
     h2Count: number;
     contentType: string;
+    dr: number;
 }
 
 export interface SerpAnalysisResult {

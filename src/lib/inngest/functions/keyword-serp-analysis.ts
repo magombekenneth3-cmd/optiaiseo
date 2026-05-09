@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { logger } from "@/lib/logger";
 import { getSerpContextForKeyword, scrapePageData } from "@/lib/blog/serp";
-import { getBacklinkSummary } from "@/lib/backlinks";
+import { getBacklinkSummary, getCompetitorBacklinkGap } from "@/lib/backlinks";
 import { getCompetitorAuthorityComparison } from "@/lib/seo/competitor-authority";
 import { GoogleGenAI } from "@google/genai";
 import { AI_MODELS } from "@/lib/constants/ai-models";
@@ -69,16 +69,27 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
                     getBacklinkSummary(domain, siteId).catch(() => null),
                 ]);
 
-                const mappedResults = top10.map((r, i) => ({
-                    position:    i + 1,
-                    domain:      extractDomain(r.link),
-                    title:       r.title,
-                    snippet:     r.snippet?.slice(0, 180) ?? "",
-                    url:         r.link,
-                    wordCount:   r.wordCount ?? 0,
-                    h2Count:     (r.scrapedHeadings ?? []).length,
-                    contentType: "",
-                }));
+                const trackedDrMap = new Map<string, number>(
+                    (authorityResult?.competitors ?? []).map((c) => [
+                        c.domain.replace(/^www\./, ""),
+                        c.dr ?? 0,
+                    ])
+                );
+
+                const mappedResults = top10.map((r, i) => {
+                    const d = extractDomain(r.link);
+                    return {
+                        position:    i + 1,
+                        domain:      d,
+                        title:       r.title,
+                        snippet:     r.snippet?.slice(0, 180) ?? "",
+                        url:         r.link,
+                        wordCount:   r.wordCount ?? 0,
+                        h2Count:     (r.scrapedHeadings ?? []).length,
+                        contentType: "",
+                        dr:          trackedDrMap.get(d) ?? 0,
+                    };
+                });
 
                 const wordCounts = mappedResults.map(r => r.wordCount).filter(w => w > 0);
                 const avg = wordCounts.length
@@ -159,15 +170,30 @@ AVG_WORDS=${wordCountAvg} YOUR_WORDS=${userWordCount}`;
             }
         });
 
+        const { opportunityDoms, rdGapRoot } = await step.run("fetch-link-gap", async () => {
+            const topSerpDomain = serpResults[0]?.domain;
+            if (!topSerpDomain || topSerpDomain === domain.replace(/^www\./, "")) {
+                return { opportunityDoms: [] as { domain: string; dr: number }[], rdGapRoot: null as number | null };
+            }
+            try {
+                const gapReport = await getCompetitorBacklinkGap(domain, topSerpDomain, 20);
+                return {
+                    opportunityDoms: gapReport.gap.opportunityDomains,
+                    rdGapRoot:       gapReport.gap.referringDomains > 0 ? gapReport.gap.referringDomains : null,
+                };
+            } catch {
+                return { opportunityDoms: [] as { domain: string; dr: number }[], rdGapRoot: null as number | null };
+            }
+        });
+
         await step.run("save-and-notify", async () => {
             const drGap         = authorityComp?.competitors[0]?.drGap ?? null;
             const clientRDs     = backlinkSummary?.referringDomains ?? 0;
             const pageBacklinks = await prisma.backlinkDetail
                 .count({ where: { siteId, targetUrl: { contains: landingPageUrl } } })
                 .catch(() => 0);
-            const opportunityDoms = ([] as { domain: string; dr: number }[]);
             const disclaimerNeeded =
-                (drGap !== null && drGap > 30) || clientRDs < 10;
+                (drGap !== null && drGap > 30) || clientRDs < 10 || (rdGapRoot !== null && rdGapRoot > 100);
 
             const userWordCount = userPage.text
                 ? userPage.text.split(/\s+/).filter(Boolean).length
@@ -185,6 +211,7 @@ AVG_WORDS=${wordCountAvg} YOUR_WORDS=${userWordCount}`;
                     wordCountAvg,
                     wordCountPage:  userWordCount,
                     drGap:          drGap ?? undefined,
+                    rdGapRoot:      rdGapRoot ?? undefined,
                     rdGapPage:      pageBacklinks,
                     opportunityDoms: opportunityDoms as unknown as Prisma.InputJsonValue,
                     intentMismatch: aiResult.intentMismatch,
