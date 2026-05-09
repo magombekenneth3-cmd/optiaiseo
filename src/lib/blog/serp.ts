@@ -8,12 +8,10 @@ export interface SerpResult {
   link: string;
   snippet: string;
   scrapedContent?: string;
-  /** H2/H3 headings extracted directly from the page's HTML DOM */
   scrapedHeadings?: string[];
-  /** JSON-LD / microdata schema types found on the page */
   scrapedSchemaTypes?: string[];
-  /** Published or modified date extracted from structured data / meta tags */
   scrapedPublishedDate?: string | null;
+  wordCount?: number;
 }
 
 export interface PeopleAlsoAsk {
@@ -447,6 +445,7 @@ export async function getSerpContextForKeyword(
           result.scrapedHeadings = page.headings;
           result.scrapedSchemaTypes = page.schemaTypes;
           result.scrapedPublishedDate = page.publishedDate;
+          result.wordCount = page.text ? page.text.split(/\s+/).filter(Boolean).length : 0;
         })
       );
     }

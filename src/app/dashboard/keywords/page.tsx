@@ -477,7 +477,7 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
             )}
 
             {/* All keywords table — PATCHED: now uses AllKeywordsTable with search */}
-            <AllKeywordsTable keywords={keywords} />
+            <AllKeywordsTable keywords={keywords} siteId={activeSiteId} />
 
         </div>
     );

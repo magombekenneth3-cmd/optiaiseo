@@ -214,6 +214,8 @@ model Site {
   healingPlans           HealingPlan[]
   mentionCorrectionLogs  MentionCorrectionLog[]
   serpGapAnalyses        SerpGapAnalysis[]
+  keywordSerpAnalyses    KeywordSerpAnalysis[]
+
 
   marketCategoryId String?
   marketCategory   MarketCategory? @relation(fields: [marketCategoryId], references: [id])
@@ -1194,3 +1196,29 @@ model SerpGapAnalysis {
   @@index([userId])
 }
 
+
+model KeywordSerpAnalysis {
+  id               String   @id @default(cuid())
+  siteId           String
+  keyword          String
+  landingUrl       String
+  serpResults      Json
+  fixes            Json
+  headingGaps      Json
+  wordCountAvg     Int
+  wordCountPage    Int
+  drGap            Int?
+  rdGapRoot        Int?
+  rdGapPage        Int?
+  opportunityDoms  Json     @default("[]")
+  intentMismatch   Boolean  @default(false)
+  intentNote       String?
+  contentType      String?
+  disclaimerNeeded Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  expiresAt        DateTime
+  site             Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, keyword])
+  @@index([siteId])
+}

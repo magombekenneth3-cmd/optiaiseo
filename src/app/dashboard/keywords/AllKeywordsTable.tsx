@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { TrendingUp, Search, ArrowUpDown, Zap } from "lucide-react";
+import { TrendingUp, Search, ArrowUpDown, Zap, Microscope } from "lucide-react";
 import { KeywordSparkline } from "@/components/dashboard/KeywordSparkline";
 import { DifficultyBadge } from "@/components/dashboard/DifficultyBadge";
 import { IntentBadge } from "@/components/dashboard/IntentBadge";
+import { KeywordSerpPanel } from "@/components/dashboard/KeywordSerpPanel";
 
 function PositionBadge({ position }: { position: number }) {
   if (position <= 3)
@@ -41,15 +42,17 @@ type SortDir = "asc" | "desc";
 
 interface Props {
   keywords: GscKeyword[];
+  siteId: string;
 }
 
 const PAGE_SIZE = 100;
 
-export function AllKeywordsTable({ keywords }: Props) {
-  const [query, setQuery]   = useState("");
-  const [tab, setTab]       = useState<FilterTab>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("impressions");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+export function AllKeywordsTable({ keywords, siteId }: Props) {
+  const [query, setQuery]       = useState("");
+  const [tab, setTab]           = useState<FilterTab>("all");
+  const [sortKey, setSortKey]   = useState<SortKey>("impressions");
+  const [sortDir, setSortDir]   = useState<SortDir>("desc");
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const byTab = keywords.filter(kw => {
     if (tab === "page1")     return kw.position <= 10;
@@ -169,6 +172,7 @@ export function AllKeywordsTable({ keywords }: Props) {
                 <span className="inline-flex items-center gap-1"><Zap className="w-3 h-3" /> Opportunity <ArrowUpDown className="w-3 h-3" /></span>
               </th>
               <th className="px-6 py-3">Best Landing Page</th>
+              <th className="px-6 py-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -177,7 +181,8 @@ export function AllKeywordsTable({ keywords }: Props) {
               const isTrendingDown = kw.position > 20 && kw.ctr < 1;
               const opp = opportunityClicks(kw);
               return (
-                <tr key={i} className="hover:bg-card transition-colors relative group">
+                <>
+                  <tr key={i} className="hover:bg-card transition-colors relative group">
                   <td className="px-6 py-3.5 font-medium max-w-[220px] truncate flex items-center gap-2" title={kw.keyword}>
                     {kw.keyword}
                     {isTrendingUp   && <span title="Trending Up"><TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" /></span>}
@@ -211,12 +216,40 @@ export function AllKeywordsTable({ keywords }: Props) {
                   <td className="px-6 py-3.5 text-muted-foreground text-xs max-w-[200px] truncate" title={kw.url}>
                     {kw.url.replace(/^https?:\/\/[^/]+/, "") || "/"}
                   </td>
-                </tr>
+                  <td className="px-6 py-3.5">
+                    <button
+                      onClick={() => setExpandedRow(expandedRow === kw.keyword ? null : kw.keyword)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                        expandedRow === kw.keyword
+                          ? "bg-primary/15 border-primary/25 text-primary"
+                          : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
+                      }`}
+                    >
+                      <Microscope className="w-3 h-3" />
+                      {expandedRow === kw.keyword ? "Close" : "Analyse"}
+                    </button>
+                  </td>
+                  </tr>
+                  {expandedRow === kw.keyword && (
+                    <tr>
+                      <td colSpan={11} className="p-0">
+                        <KeywordSerpPanel
+                          keyword={kw.keyword}
+                          position={kw.position}
+                          impressions={kw.impressions}
+                          clicks={kw.clicks}
+                          landingUrl={kw.url}
+                          siteId={siteId}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </>
               );
             })}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-6 py-12 text-center text-muted-foreground">
+                <td colSpan={11} className="px-6 py-12 text-center text-muted-foreground">
                   {query.trim() ? `No keywords matching "${query}"` : tab === "quickwins" ? "No quick-win keywords found. Come back once you have page-2 rankings." : "No keyword data yet. Make sure your site has traffic and is verified in Search Console."}
                 </td>
               </tr>

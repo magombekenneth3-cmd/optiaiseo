@@ -1,486 +1,628 @@
- 1 · ENTERPRISE tier referenced but never defined Tier type is "FREE | STARTER | PRO | AGENCY" — no ENTERPRISE. Yet audit.ts, page-audit.ts, backlinks.ts and credits/index.ts all branch on "ENTERPRISE". getPlan("ENTERPRISE") silently falls back to FREE limits — paid users get downgraded. 2 · STARTER excluded from cron fan-out (weekly audit, backlinks) cron-schedule.ts getPaidSites() queries subscriptionTier IN ["PRO","AGENCY"] only. STARTER plan pays for audits (auditsPerMonth: 15) but their sites are never queued by weekly audit or backlinks crons — a silent feature regression for paying users. 3 · Credit pack amount hardcoded in webhook (not from CREDIT_PACK constant) handleInvoicePaid() calls addCreditPackCredits(userId, 50). The canonical CREDIT_PACK.credits constant in plans.ts is also 50 — but they're not linked. Changing CREDIT_PACK.credits silently leaves the webhook granting the wrong amount. 4 · Site-limit check bypasses guards.ts — reads raw JWT tier, not effective tier site.ts calls withinLimit(user.subscriptionTier, "sites", …) directly on the session tier without going through getUserTier(). Trial users get FREE limits (1 site) even during their 7-day PRO trial; subscription expiry / past_due also not checked here. 5 · Annual billing: webhook maps apriceId → tier but annual price IDs aren't mapped getTierFromPriceId() only checks STRIPE_STARTER_PRICE_ID / _PRO_ / _AGENCY_. Annual variants (STRIPE_STARTER_ANNUAL_PRICE_ID etc.) are never compared, so an annual subscription fires the "__UNKNOWN__" branch → user stays on FREE. 6 · plans.test.ts fixtures don't match actual plan prices (stale test data) Test fixture has STARTER=$29, PRO=$79, AGENCY=$199. Actual plans.ts has STARTER=$19, PRO=$49, AGENCY=$149. Tests pass using invented prices — any pricing regression in the real config would go undetected. 7 · Credentials signup doesn't emit user.registered — no drip / magic audit signup.ts (credentials flow) calls inngest.send("user.registered"). But auth.ts signIn() for OAuth providers creates users too — without ever emitting the event. OAuth new users get no referral-code generation via Inngest and no magic first audit. Critical High Medium Billing Test quality Onboarding Files involved: stripe/plans.ts · stripe/webhook.ts · stripe/guards.ts · inngest/functions/cron-schedul
-
-
- # Bug Analysis & Fix Guide
-
-Seven confirmed bugs across billing, scheduling, and onboarding. Each section describes exactly where the code is broken, why it matters, and the minimal surgical fix.
+# Keyword Ranking Report — Full Feature Spec
+## Combining SERP Analysis + Backlink Intelligence
 
 ---
 
-## Bug 1 — `ENTERPRISE` tier referenced but never defined
+## What This Does (and Why It's Different Now)
 
-**Severity:** Critical · Billing  
-**Files:** `src/lib/inngest/functions/audit.ts`, `src/lib/inngest/functions/page-audit.ts`, `src/lib/inngest/functions/backlinks.ts`, `src/lib/credits/index.ts`
+The previous spec treated backlinks as a gap. They're not — **they're already in the app**.
+DataForSEO powers the backlink layer. The app already has:
 
-### What's broken
+- `getBacklinkSummary(domain)` — total backlinks, referring domains, Domain Rating, new/lost last week, toxic count
+- `getCompetitorBacklinkGap(yourDomain, competitorDomain)` — side-by-side gap + opportunity domains list
+- `getCompetitorAuthorityComparison(siteId)` — DR comparison against all tracked competitors from stored snapshots
+- `analyseToxicity(links)` — three-rule toxic detection (exact-match anchor, DR < 5 spam, toxic keywords)
+- `BacklinkGapReport` — full typed struct with `gap.opportunityDomains` sorted by DR descending
 
-`plans.ts` defines `Tier = "FREE" | "STARTER" | "PRO" | "AGENCY"` — no `ENTERPRISE`. Yet four files branch on the string `"ENTERPRISE"`:
-
-- **`audit.ts` line ~88:** `const isPaid = ["PRO", "AGENCY", "ENTERPRISE"].includes(...)` — harmless here because ENTERPRISE still lands in the truthy branch, but it's a lie the type system can't catch.
-- **`page-audit.ts` lines ~22–28:** `PAGE_LIMIT` map includes `ENTERPRISE: 100`. `getTierPageLimit()` reads `site.user.subscriptionTier` straight from the DB. If the string `"ENTERPRISE"` ever reaches the DB, the lookup works — but no Stripe webhook can write it because `getTierFromPriceId()` never produces it.
-- **`backlinks.ts` cron fan-out line ~33:** `subscriptionTier: { in: ["PRO", "AGENCY", "ENTERPRISE"] }` — same ghost tier, no effect in practice but inconsistent.
-- **`credits/index.ts` `resetMonthlyCredits()`:** Has an `"ENTERPRISE"` entry that grants `AGENCY_MONTHLY_CREDITS`. This runs against the DB, so if someone manually sets a user's tier to `"ENTERPRISE"` in the DB, it would credit them. Again no code path sets that tier legitimately.
-
-The real danger is `getPlan("ENTERPRISE")` silently falling back to `PLANS.FREE` (see `getPlan()` in `plans.ts`: `return PLANS[tier as Tier] ?? PLANS.FREE`). Any guard call using the raw tier string from the DB would give a previously-enterprise user FREE limits.
-
-### Fix
-
-**Option A (recommended) — add ENTERPRISE as a first-class tier alias for AGENCY:**
-
-```ts
-// src/lib/stripe/plans.ts — add after AGENCY block
-export const PLANS = {
-  // ... existing tiers ...
-  ENTERPRISE: {
-    ...PLANS.AGENCY,
-    name: "Enterprise",
-    tier: "ENTERPRISE" as const,
-  },
-} as const
-
-export type Tier = "FREE" | "STARTER" | "PRO" | "AGENCY" | "ENTERPRISE"
-```
-
-Then update `assertStripePriceIds()` and `getTierFromPriceId()` in `webhook.ts` to map an enterprise price ID when you have one.
-
-**Option B — remove ENTERPRISE references and normalise to AGENCY everywhere:**
-
-```ts
-// src/lib/inngest/functions/page-audit.ts
-const PAGE_LIMIT: Record<string, number> = {
-  FREE:   5,
-  STARTER: 10,
-  PRO:    25,
-  AGENCY: 50,   // remove ENTERPRISE line
-};
-
-// src/lib/inngest/functions/audit.ts
-const isPaid = ["STARTER", "PRO", "AGENCY"].includes((tier ?? "").toUpperCase());
-
-// src/lib/credits/index.ts — remove ENTERPRISE row from tiers array
-const tiers = [
-  { tier: "FREE",    amount: FREE_MONTHLY_CREDITS },
-  { tier: "STARTER", amount: STARTER_MONTHLY_CREDITS },
-  { tier: "PRO",     amount: PRO_MONTHLY_CREDITS },
-  { tier: "AGENCY",  amount: AGENCY_MONTHLY_CREDITS },
-  // ← ENTERPRISE row removed
-];
-```
-
-Option A is safer if you plan to introduce an enterprise tier later. Option B removes dead code now.
+This means the ranking report can give a **complete, honest diagnosis** for every keyword — not just "your content is thin" but "your content is thin AND your page has zero referring domains while the #1 result has 847". That's a fundamentally more useful output for client work.
 
 ---
 
-## Bug 2 — STARTER excluded from cron fan-out
+## Revised Panel Structure
 
-**Severity:** Critical · Billing (silent feature regression for paying users)  
-**File:** `src/lib/inngest/functions/cron-schedule.ts`
+When a user clicks **"Analyse vs SERP"** on any keyword row, the panel opens with **four tabs** instead of three:
 
-### What's broken
-
-`getPaidSites()` is the single shared helper used by every cron fan-out (weekly audit, backlinks, rank tracker, AEO, blog, competitor alerts):
-
-```ts
-// cron-schedule.ts ~line 22
-async function getPaidSites() {
-    return prisma.site.findMany({
-        where: { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },
-        //                                          ^^^^^^^^^^^^^^^^^^^
-        //                                          STARTER missing here
-        select: { id: true, domain: true, userId: true },
-    });
-}
+```
+[ SERP Comparison ]  [ Fix Suggestions ]  [ Heading Gaps ]  [ Link Authority ]
 ```
 
-STARTER pays for `auditsPerMonth: 15`, `backlinks: false` (feature flag), and `rankTracking: true`. Their sites are silently skipped by every cron job. The backlink fan-out (`backlinks.ts`) has an identical inline filter:
+The fourth tab is entirely powered by existing backlink infrastructure. No new API integrations needed.
 
-```ts
-// backlinks.ts ~line 33
-where: { user: { subscriptionTier: { in: ["PRO", "AGENCY", "ENTERPRISE"] } } },
+---
+
+## Tab 1 — SERP Comparison
+
+### Metrics Bar (5 cards)
+
+---
+
+**Card: Your Position**
+- Value: current GSC position, e.g. `#87`
+- Subtext: `Page 9`
+- Colour: red > 20, amber 11–20, blue 4–10, green 1–3
+
+---
+
+**Card: Content Gap**
+- Value: word count delta, e.g. `−1,250 words`
+- Subtext: `Avg top-10: 2,140 · Your page: 890`
+- Colour: red if your page is more than 40% below average, amber if 20–40%, green if within 20%
+
+---
+
+**Card: Domain Rating vs Top 3**
+- Value: your DR vs average DR of top 3 ranking pages, e.g. `DR 28 vs DR 74`
+- Subtext: `Gap: −46` shown in red if gap > 20, amber if 10–20, green if ≤ 10
+- Source: `getCompetitorAuthorityComparison(siteId)` — reads from stored snapshots, zero API cost
+
+---
+
+**Card: Referring Domains to This Page**
+- Value: number of referring domains pointing to the specific landing page URL (not the root domain), e.g. `3 RDs`
+- Subtext: `Top-3 avg: 124 RDs`
+- Source: `getBacklinkDetails(domain)` filtered to `targetUrl === landingPageUrl`
+- Colour: red if your page RDs < 10% of top-3 average
+
+---
+
+**Card: CTR Potential**
+- Value: estimated gain if page reached position 1–3, e.g. `+28%`
+- Subtext: `If top 3`
+- Calculation: `(impressions × 0.278 − clicks) / impressions`
+
+---
+
+### SERP Results List
+
+Each of the top 10 results rendered as a card:
+
+---
+
+**Competitor result card**
+
+```
+#1  ahrefs.com                                           DR 89 · 847 RDs to page
+    10 Clearscope Alternatives for Content Optimization (2025)
+    We tested 10 tools. Surfer SEO and Frase top our list…
+
+    [ 2,800 words ]  [ List article ]  [ 12 H2s ]
 ```
 
-The backlinks feature flag (`backlinks: false` for STARTER in `plans.ts`) means STARTER users legitimately shouldn't get the backlinks cron — but they should get the weekly audit and rank tracker.
+Fields:
+- `position` — coloured badge (green ≤ 3, blue ≤ 10, amber ≤ 20, red > 20)
+- `domain` — bare hostname in muted text
+- `DR` — Domain Rating pulled from DataForSEO for the competitor's root domain
+- `RDs to page` — referring domains pointing to the specific result URL (scraped from DataForSEO or estimated)
+- `title` — full page title from SERP
+- `snippet` — Google snippet, truncated ~160 chars
+- `word count` — scraped via Cheerio
+- `content type` — Claude-inferred: List article / Comparison / Review listing / Guide / Tool page
+- `H2 count` — number of H2 headings found on the page
 
-### Fix
+---
 
-Split `getPaidSites()` into two helpers — one for all paid tiers, one for backlink-eligible tiers:
+**Your page card (highlighted)**
 
-```ts
-// cron-schedule.ts
+Same fields as above, but:
+- Amber border
+- Badge: `Your page`
+- All metrics shown in context — e.g. word count in amber if below average, RDs in red if far below top-3
+- If not in top 10: shown below the list with label `Your page (position #87, not in top 10)`
 
-/** All paid tiers — used for audits, rank tracking, AEO, blog, competitor alerts */
-async function getPaidSites() {
-    return prisma.site.findMany({
-        where: { user: { subscriptionTier: { in: ["STARTER", "PRO", "AGENCY"] } } },
-        select: { id: true, domain: true, userId: true },
-    });
-}
+---
 
-/** Tiers with backlinks feature enabled (PRO and above) */
-async function getBacklinkEligibleSites() {
-    return prisma.site.findMany({
-        where: { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },
-        select: { id: true, domain: true, userId: true },
-    });
-}
+## Tab 2 — Fix Suggestions
+
+AI-generated, prioritised fix cards. Each card references real data from both the SERP and backlink layers so fixes are specific — not generic SEO advice.
+
+Cards ordered High → Medium → Low.
+
+---
+
+### Fix Card Structure
+
 ```
+[ Priority ]  [ Icon ]  Fix title — specific and data-referenced
 
-Then update `cronWeeklyBacklinks` to call `getBacklinkEligibleSites()`:
+              Description: 1–2 sentences. References actual numbers, URLs,
+              or competitor names pulled from the combined analysis.
 
-```ts
-// cronWeeklyBacklinks handler
-const sites = await step.run("fetch-backlink-sites", getBacklinkEligibleSites);
-```
-
-And update the inline filter in `backlinks.ts` to match:
-
-```ts
-// backlinks.ts cron fan-out branch
-where: { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },
-// (remove ENTERPRISE — it's not a real tier, see Bug 1)
+              [ Quick action button if applicable ]
 ```
 
 ---
 
-## Bug 3 — Credit pack amount hardcoded in webhook
-
-**Severity:** High · Billing  
-**File:** `src/lib/stripe/webhook.ts`
-
-### What's broken
-
-```ts
-// webhook.ts handleInvoicePaid(), ~line 112
-await addCreditPackCredits(subscription.userId, 50)
-//                                              ^^
-//                                              hardcoded — not CREDIT_PACK.credits
-```
-
-`plans.ts` defines:
-
-```ts
-export const CREDIT_PACK = {
-    credits: 50,   // ← canonical value
-    price: 9,
-    ...
-} as const
-```
-
-Both are `50` today, so there's no live defect — but the connection is broken. If someone changes `CREDIT_PACK.credits` to e.g. `100`, the webhook will keep granting 50.
-
-### Fix
-
-Import the constant and use it:
-
-```ts
-// webhook.ts — add to imports
-import { CREDIT_PACK } from "@/lib/stripe/plans"
-
-// inside handleInvoicePaid()
-await addCreditPackCredits(subscription.userId, CREDIT_PACK.credits)
-```
-
-One line change. The linter should prevent the literal from creeping back.
+### Example Cards — Content Fixes
 
 ---
 
-## Bug 4 — Site-limit check bypasses `guards.ts`
+**Card: High priority — content length**
 
-**Severity:** High · Billing  
-**File:** `src/app/actions/site.ts`
-
-### What's broken
-
-```ts
-// site.ts createSite() inside $transaction
-const { withinLimit } = await import("@/lib/stripe/plans")
-// ...
-if (!withinLimit(user.subscriptionTier, "sites", currentSiteCount)) {
-//               ^^^^^^^^^^^^^^^^^^^^
-//               raw JWT tier — not the effective tier
 ```
+[ High ]  📄  Page is 1,250 words below the top-3 average
 
-`user.subscriptionTier` comes from the session JWT which is populated in `auth.ts` directly from `dbUser.subscriptionTier`. It is never passed through `getUserTier()` (in `guards.ts`), which is the only place that:
-
-1. Calls `resolveEffectiveTier()` — honours 7-day PRO trials.
-2. Checks `sub.status === "canceled"` or `sub.status === "past_due"`.
-3. Checks `sub.currentPeriodEnd < new Date()` for expired subscriptions.
-
-Consequences:
-- A user in their 7-day free PRO trial gets `subscriptionTier = "FREE"` in the DB (trials are tracked via `trialEndsAt`, not the tier column), so they hit the FREE 1-site cap instead of the PRO 10-site cap.
-- A `past_due` user keeps their paid site limit because the webhook sets `subscriptionTier = "FREE"` only after `invoice.payment_failed` fires — there's a race window.
-
-### Fix
-
-Replace the raw `withinLimit` call with `requireWithinLimit` from `guards.ts`:
-
-```ts
-// site.ts — change import
-import { requireWithinLimit } from "@/lib/stripe/guards"
-
-// inside createSite(), replace the $transaction block check:
-const newSite = await prisma.$transaction(async (tx) => {
-    const currentSiteCount = await tx.site.count({ where: { userId: user.id } })
-
-    // requireWithinLimit calls getUserTier() which handles trials + expiry
-    await requireWithinLimit(user.id, "sites", currentSiteCount)
-    //    ^ throws TierError if over limit
-
-    return tx.site.create({ ... })
-})
+          Your /vs/clearscope page has ~890 words. The three pages outranking
+          you average 2,140 words. Priority sections to add: pricing comparison
+          table, "who is it best for?" verdict, free trial information, FAQ.
 ```
-
-Catch the `TierError` in the outer try/catch:
-
-```ts
-} catch (err: unknown) {
-    if (err instanceof TierError) {
-        return { success: false, error: err.message }
-    }
-    // ... existing error handling
-}
-```
-
-Note: `requireWithinLimit` does a DB round-trip (to resolve tier) outside the Prisma transaction. This is acceptable — the transaction itself is the atomicity boundary for the site count. The tier resolution is read-only and non-transactional by design.
 
 ---
 
-## Bug 5 — Annual billing: annual price IDs never mapped
+**Card: High priority — intent mismatch**
 
-**Severity:** Critical · Billing  
-**File:** `src/lib/stripe/webhook.ts`
-
-### What's broken
-
-```ts
-function getTierFromPriceId(priceId: string | null | undefined): string {
-    if (!priceId) return "FREE"
-    if (priceId === process.env.STRIPE_AGENCY_PRICE_ID)  return "AGENCY"
-    if (priceId === process.env.STRIPE_PRO_PRICE_ID)     return "PRO"
-    if (priceId === process.env.STRIPE_STARTER_PRICE_ID) return "STARTER"
-    return "__UNKNOWN__"
-    //     ^^^^^^^^^^^^^
-    //     annual price IDs fall here → user stays on FREE
-}
 ```
+[ High ]  🎯  Search intent mismatch — top results are listicles, yours is a comparison
 
-`plans.ts` declares `annualPriceId` for every paid tier (reading from `STRIPE_STARTER_ANNUAL_PRICE_ID`, `STRIPE_PRO_ANNUAL_PRICE_ID`, `STRIPE_AGENCY_ANNUAL_PRICE_ID`). None of these environment variables are checked in `getTierFromPriceId()`.
-
-When an annual subscriber pays, Stripe fires `checkout.session.completed` and `invoice.paid` with the annual `priceId`. `getTierFromPriceId()` returns `"__UNKNOWN__"`. `assertKnownTier()` blocks the update and fires an admin alert. The user is never upgraded — they stay on FREE despite having paid for a year.
-
-`assertStripePriceIds()` also only checks the three monthly IDs, so annual price ID misconfiguration is invisible at startup.
-
-### Fix
-
-```ts
-// webhook.ts
-
-export function assertStripePriceIds(): void {
-    const required = [
-        "STRIPE_STARTER_PRICE_ID",
-        "STRIPE_PRO_PRICE_ID",
-        "STRIPE_AGENCY_PRICE_ID",
-        // Add annual variants:
-        "STRIPE_STARTER_ANNUAL_PRICE_ID",
-        "STRIPE_PRO_ANNUAL_PRICE_ID",
-        "STRIPE_AGENCY_ANNUAL_PRICE_ID",
-    ]
-    const missing = required.filter(k => !process.env[k])
-    if (missing.length > 0) {
-        logger.warn("[Stripe] Missing price ID env vars", { missing })
-    }
-}
-
-function getTierFromPriceId(priceId: string | null | undefined): string {
-    if (!priceId) return "FREE"
-
-    // Monthly
-    if (priceId === process.env.STRIPE_AGENCY_PRICE_ID)         return "AGENCY"
-    if (priceId === process.env.STRIPE_PRO_PRICE_ID)            return "PRO"
-    if (priceId === process.env.STRIPE_STARTER_PRICE_ID)        return "STARTER"
-
-    // Annual — ADD THESE:
-    if (priceId === process.env.STRIPE_AGENCY_ANNUAL_PRICE_ID)  return "AGENCY"
-    if (priceId === process.env.STRIPE_PRO_ANNUAL_PRICE_ID)     return "PRO"
-    if (priceId === process.env.STRIPE_STARTER_ANNUAL_PRICE_ID) return "STARTER"
-
-    return "__UNKNOWN__"
-}
+          9 of 10 results are "X alternatives to Clearscope" roundups covering
+          5–10 tools. Your page compares Clearscope vs OptimAI only. Google is
+          surfacing list intent for this keyword. Either broaden to a roundup
+          or target a more specific comparison keyword like "clearscope vs optimai".
 ```
-
-No other changes needed — the rest of the webhook correctly uses the returned tier string.
-
-> **Env var checklist:** Make sure `STRIPE_STARTER_ANNUAL_PRICE_ID`, `STRIPE_PRO_ANNUAL_PRICE_ID`, and `STRIPE_AGENCY_ANNUAL_PRICE_ID` are set in Railway (or whatever hosting you use). Without them `process.env.*` returns `undefined` and the comparisons silently evaluate to `priceId === undefined` — always false — so annual subs still hit `"__UNKNOWN__"`.
 
 ---
 
-## Bug 6 — `plans.test.ts` fixtures don't match actual plan prices
+**Card: High priority — title framing**
 
-**Severity:** Medium · Test quality  
-**File:** `tests/unit/plans.test.ts`
-
-### What's broken
-
-The test file defines its own inline `PLANS` fixture instead of importing from `src/lib/stripe/plans.ts`. The fixture prices are stale:
-
-| Tier    | Test fixture | Actual `plans.ts` |
-|---------|-------------|-------------------|
-| STARTER | $29/mo      | $19/mo            |
-| PRO     | $79/mo      | $49/mo            |
-| AGENCY  | $199/mo     | $149/mo           |
-
-The tests pass because they only validate internal consistency (annual < monthly × 12, credits escalate, etc.) — not that the values match production. A pricing change in `plans.ts` would go completely undetected.
-
-### Fix
-
-Remove the inline fixture and import directly from the source. The env-var dependency (`process.env.STRIPE_*_PRICE_ID`) is the only wrinkle — stub those before import:
-
-```ts
-// tests/unit/plans.test.ts
-import { describe, it, expect, beforeAll, vi } from "vitest"
-
-beforeAll(() => {
-    // Stub price IDs so plans.ts can be imported without real env vars
-    vi.stubEnv("STRIPE_STARTER_PRICE_ID", "price_starter_monthly_test")
-    vi.stubEnv("STRIPE_PRO_PRICE_ID", "price_pro_monthly_test")
-    vi.stubEnv("STRIPE_AGENCY_PRICE_ID", "price_agency_monthly_test")
-    vi.stubEnv("STRIPE_STARTER_ANNUAL_PRICE_ID", "price_starter_annual_test")
-    vi.stubEnv("STRIPE_PRO_ANNUAL_PRICE_ID", "price_pro_annual_test")
-    vi.stubEnv("STRIPE_AGENCY_ANNUAL_PRICE_ID", "price_agency_annual_test")
-    vi.stubEnv("STRIPE_CREDIT_PACK_PRICE_ID", "price_credit_pack_test")
-})
-
-// Import AFTER stubEnv so the module reads the stubbed values
-const { PLANS, CREDIT_PACK } = await import("@/lib/stripe/plans")
-
-describe("PLANS — pricing matches source", () => {
-    it("STARTER monthly price is $19", () => {
-        expect(PLANS.STARTER.price.monthly).toBe(19)
-    })
-    it("PRO monthly price is $49", () => {
-        expect(PLANS.PRO.price.monthly).toBe(49)
-    })
-    it("AGENCY monthly price is $149", () => {
-        expect(PLANS.AGENCY.price.monthly).toBe(149)
-    })
-    it("annual price is cheaper than monthly × 12 for each tier", () => {
-        for (const plan of [PLANS.STARTER, PLANS.PRO, PLANS.AGENCY]) {
-            expect(plan.price.annual * 12).toBeLessThan(plan.price.monthly * 12)
-        }
-    })
-})
-
-describe("CREDIT_PACK", () => {
-    it("credits value matches source", () => {
-        expect(CREDIT_PACK.credits).toBe(50) // update this test when CREDIT_PACK changes
-    })
-})
 ```
+[ High ]  📋  "alternatives" missing from title and H1
 
-> **Note on `price` shape:** `plans.ts` defines `price: { monthly: 19, annual: 15 }` for paid tiers. The old fixture used `price: number`. Update all test assertions to use `.price.monthly` and `.price.annual`.
+          Every top-10 result includes "alternatives" or "competitors" in the
+          title tag. Your H1 reads "Clearscope vs OptimAI — Feature Comparison".
+          Reframe to match navigational intent.
+```
 
 ---
 
-## Bug 7 — OAuth signup doesn't emit `user.registered`
+### Example Cards — Authority / Backlink Fixes
 
-**Severity:** High · Onboarding  
-**Files:** `src/app/actions/signup.ts`, `src/lib/auth.ts`
+---
 
-### What's broken
+**Card: High priority — page-level authority gap**
 
-**Credentials flow** (`signup.ts`) correctly fires `inngest.send("user.registered", ...)` after creating the user. This triggers the drip sequence and magic first audit.
+```
+[ High ]  🔗  This specific page has 3 referring domains; top-3 average is 124
 
-**OAuth flow** (`auth.ts` `signIn` callback) creates new users here:
+          Content improvements alone are unlikely to close a gap this large.
+          The #1 result (ahrefs.com/blog/clearscope-alternatives) has 847 RDs.
+          Your domain's DR (28) is also 46 points below the top-3 average (74).
+          See the Link Authority tab for outreach targets already identified
+          in your competitor gap report.
+
+          [ Go to Link Authority tab → ]
+```
+
+---
+
+**Card: Medium priority — internal linking**
+
+```
+[ Medium ]  🔀  No internal links from high-traffic pages to /vs/clearscope
+
+            Your homepage and /blog index have strong internal PageRank but
+            don't link to this comparison page. Adding 2–3 contextual internal
+            links from posts about "content optimisation tools" or "SEO writing"
+            would pass authority to this page at zero cost.
+```
+
+---
+
+**Card: Medium priority — heading gaps**
+
+```
+[ Medium ]  🔤  6 H2 topics in top results are missing from this page
+
+            "Pricing comparison", "Who is it for?", "Free trial options",
+            "AI writing features", "Final verdict", "FAQ". See the Heading
+            Gaps tab for full breakdown with frequency data.
+
+            [ Go to Heading Gaps tab → ]
+```
+
+---
+
+**Card: Medium priority — anchor text**
+
+```
+[ Medium ]  ⚓  Your 3 referring domains all use branded anchor text
+
+            "OptimAI", "OptimAI review", "OptimAI tool" — none reference
+            "clearscope alternative" or similar. When doing outreach, request
+            keyword-rich anchors for this page specifically, not just brand links.
+```
+
+---
+
+**Card: Low priority — FAQ / PAA**
+
+```
+[ Low ]  ❓  4 People Also Ask questions not answered on this page
+
+         "Is Clearscope worth it?", "What is cheaper than Clearscope?",
+         "Does Clearscope have a free trial?", "How does Clearscope score content?"
+         Adding a FAQ section targeting these could capture featured snippet
+         positions and improve engagement time.
+```
+
+---
+
+**Card: Low priority — schema**
+
+```
+[ Low ]  🏷️  No FAQ or Comparison schema detected
+
+         Top-ranking pages use FAQPage and ItemList schema. Adding structured
+         data won't directly boost rankings but increases rich result eligibility
+         and click-through rate.
+```
+
+---
+
+### Fix Card Priority Rules
+
+| Priority | When applied |
+|----------|-------------|
+| High | Backlink/authority gap > 30 RDs or DR gap > 20; intent mismatch; word count > 40% below average |
+| Medium | Internal linking gaps; anchor text diversity issues; heading gaps (3+ missing); meta issues |
+| Low | Schema, FAQ, PAA, image alt text, minor structural issues |
+
+---
+
+### Fix Card — Authority Gap Threshold Logic
+
+The authority gap card priority escalates based on the severity of the RD gap:
+
+- RD gap < 20 → Low priority (content fixes will likely be enough)
+- RD gap 20–100 → Medium priority (content + internal links + some outreach)
+- RD gap > 100 → High priority (explicit warning: content fixes alone won't close this)
+- DR gap > 30 AND RD gap > 50 → High priority + disclaimer card explaining the timeline reality
+
+---
+
+### Disclaimer Card (shown when authority gap is severe)
+
+```
+ℹ️  Ranking timeline note
+
+    The domain authority and page-level link gap for this keyword is significant.
+    Content fixes are still worthwhile and will improve quality signals, but
+    closing a 100+ RD gap typically takes 3–6 months of consistent outreach.
+    Set realistic expectations with your client before starting.
+```
+
+This card is always shown (not flagged as high/medium/low) when `gap.referringDomains > 100` or `gap.domainRating > 30`. It is the most important card for client communication — prevents overpromising.
+
+---
+
+## Tab 3 — Heading Gaps
+
+Unchanged from previous spec. Semantic H2/H3 topic comparison between top-10 results and the user's page.
+
+```
+Topic / H2 heading (top results)    | Freq in top 10 | Your page
+------------------------------------|----------------|----------
+Pricing comparison                  | 9/10           | ✗ Missing
+Who is it best for?                 | 8/10           | ✗ Missing
+Free trial / free plan              | 7/10           | ✗ Missing
+AI writing features                 | 6/10           | ✗ Missing
+Integrations (Google Docs, WP)      | 5/10           | ✓ Covered
+Final verdict / recommendation      | 9/10           | ✗ Missing
+Content editor comparison           | 7/10           | ✓ Covered
+Keyword grading / NLP               | 6/10           | ✓ Covered
+```
+
+- Sorted by frequency descending
+- Topics are semantically clustered by Claude (not exact H2 string match)
+- `✓ Covered` — green · `✗ Missing` — red
+
+---
+
+## Tab 4 — Link Authority (New)
+
+Entirely powered by existing backlink infrastructure. No new API calls beyond what already runs.
+
+---
+
+### Section 1: Authority Comparison (3 cards)
+
+---
+
+**Card: Your Domain Rating**
+- Value: your DR, e.g. `DR 28`
+- Subtext: `Top-3 avg: DR 74 · Gap: −46`
+- Source: `getCompetitorAuthorityComparison(siteId)` — reads from stored Ahrefs snapshots, zero extra cost
+- Colour: red if gap > 30, amber if 15–30, green if ≤ 15
+
+---
+
+**Card: Referring Domains (Root Domain)**
+- Value: your total referring domains, e.g. `412 RDs`
+- Subtext: `Top-3 competitor avg: 2,840 RDs`
+- Source: `BacklinkSummary.referringDomains` from `getBacklinkSummary(domain)`
+
+---
+
+**Card: Page-Level RDs**
+- Value: referring domains pointing to the specific ranking page URL, e.g. `3 RDs`
+- Subtext: `Top-3 avg: 124 RDs to their page`
+- Source: `getBacklinkDetails(domain)` filtered by `targetUrl === landingPageUrl`
+- Note: this is the most important card — root domain RDs don't directly help a specific page
+
+---
+
+### Section 2: Backlink Profile Health (3 cards)
+
+---
+
+**Card: Toxic Backlinks**
+- Value: count of toxic links, e.g. `7 toxic`
+- Subtext: `Of 412 total referring domains`
+- Source: `BacklinkSummary.toxicCount` from DB count (no DataForSEO cost)
+- Colour: red if toxic% > 5%, amber if 2–5%, green if < 2%
+- Note shown if toxic count > 10: "Toxic links may be suppressing rankings. Consider a disavow file."
+
+---
+
+**Card: New vs Lost (Last 7 Days)**
+- Value: `+12 new · −3 lost`
+- Source: `BacklinkSummary.newLastWeek` and `lostLastWeek`
+- Colour: green if net positive, red if net negative
+
+---
+
+**Card: Dofollow Ratio**
+- Value: e.g. `68% dofollow`
+- Source: `QualitySummary.doFollow / QualitySummary.total`
+- Subtext: healthy range is typically 50–80%
+
+---
+
+### Section 3: Outreach Opportunity Table
+
+Pulled directly from `BacklinkGapReport.gap.opportunityDomains` — already computed by `getCompetitorBacklinkGap()`.
+
+```
+Domain                  | DR  | Links to Competitor | Status
+------------------------|-----|---------------------|--------
+searchenginejournal.com | 88  | 3                   | Opportunity
+moz.com/blog            | 91  | 1                   | Opportunity
+backlinko.com           | 87  | 2                   | Opportunity
+semrush.com/blog        | 85  | 5                   | Opportunity
+...
+```
+
+- Sorted by DR descending (highest authority first — already the sort order in `opportunityDomains`)
+- Shows up to 20 rows (the `maxOpportunities` default in `getCompetitorBacklinkGap`)
+- "Status" column: always "Opportunity" in MVP; can expand to "In progress / Won" in future
+- Table header note: `Domains that link to [competitor] but not to you — sorted by authority`
+
+---
+
+### Section 4: Top Anchor Text
+
+Small table showing the client's current anchor text distribution:
+
+```
+Anchor text          | Count | Type
+---------------------|-------|----------
+optimai              | 18    | Brand
+optimai review       | 7     | Brand
+seo tool             | 4     | Partial match
+click here           | 3     | Generic
+clearscope alt...    | 1     | Keyword match   ← want more of these
+```
+
+- Source: `BacklinkSummary.topAnchors` — already returned by DataForSEO
+- "Type" column: Claude-inferred from anchor text (brand / keyword match / partial match / generic / naked URL)
+- Highlight in amber: if keyword-match anchors for the target keyword are < 10% of total
+- Note shown: "For this keyword, request anchors like 'clearscope alternative' or 'clearscope vs X' in outreach"
+
+---
+
+## Data Flow — What Calls What
+
+```
+analyseKeywordVsSerp(siteId, keyword, landingPageUrl)
+│
+├── DB cache check (KeywordSerpAnalysis table)
+│   └── If fresh hit → return immediately
+│
+├── fetchSerpContext(keyword)                     [existing — src/lib/blog/serp.ts]
+│   ├── Serper API → top-10 results
+│   └── Cheerio scrape → word count, H2s, schema types per result
+│
+├── scrapeUserPage(landingPageUrl)                [existing Cheerio scraper]
+│   └── title, H1, H2s, word count, meta description
+│
+├── getCompetitorAuthorityComparison(siteId)      [existing — src/lib/seo/competitor-authority.ts]
+│   └── DB snapshots — zero DataForSEO cost
+│
+├── getBacklinkSummary(clientDomain, siteId)      [existing — src/lib/backlinks/index.ts]
+│   ├── DataForSEO (Redis-cached 24h)
+│   └── DB toxic count (always fresh, no API cost)
+│
+├── getCompetitorBacklinkGap(                     [existing — src/lib/backlinks/index.ts]
+│     clientDomain,
+│     topRankingDomain   ← domain of #1 SERP result
+│   )
+│   └── opportunityDomains — referring domains to outreach
+│
+└── Claude structured output call
+    ├── Input: SERP context + user page data + backlink gap metrics
+    └── Output: fixes[], headingGaps[], intentMismatch, disclaimerNeeded
+```
+
+---
+
+## Claude Prompt — Updated for Backlink Awareness
+
+```
+You are an SEO analyst. Given the combined SERP, content, and backlink data below,
+return a JSON object matching this exact shape — no markdown, no prose:
+
+{
+  fixes: {
+    title: string,
+    description: string,         // must reference actual numbers from the data
+    priority: "high" | "medium" | "low",
+    category: "content" | "structure" | "intent" | "links" | "authority" | "schema",
+    linkToTab: "heading-gaps" | "link-authority" | null
+  }[],
+  headingGaps: {
+    topic: string,
+    freqInTop10: number,
+    coveredOnYourPage: boolean
+  }[],
+  wordCountAvgTop10: number,
+  wordCountYourPage: number,
+  intentMismatch: boolean,
+  intentNote: string | null,
+  contentTypeTop10: string,
+  disclaimerNeeded: boolean      // true if rdGap > 100 OR drGap > 30
+}
+
+Rules:
+- fixes: max 7 items, ordered high → medium → low
+- Every fix description must reference actual numbers (word counts, DR values, RD counts,
+  competitor names) from the data provided — no generic advice
+- If rdGap > 100 or drGap > 30, set disclaimerNeeded: true and include a HIGH priority
+  authority fix card explaining the timeline reality
+- headingGaps: semantic clustering only — de-duplicate, include topics appearing in ≥ 3/10 results
+- linkToTab: set to "link-authority" for any authority/backlink fix, "heading-gaps" for
+  content structure fixes, null otherwise
+
+SERP DATA:
+{{serpContext}}
+
+USER PAGE DATA:
+Title: {{pageTitle}}
+H1: {{pageH1}}
+H2s: {{pageH2s}}
+Word count: {{pageWordCount}}
+Meta: {{pageMetaDesc}}
+
+BACKLINK DATA (client):
+Domain Rating: {{clientDR}}
+Referring Domains (root): {{clientRDs}}
+Referring Domains (this page): {{pageRDs}}
+Toxic backlinks: {{toxicCount}}
+Top anchors: {{topAnchors}}
+
+BACKLINK GAP (client vs #1 result):
+DR gap: {{drGap}}
+RD gap (root domain): {{rdGapRoot}}
+RD gap (this page vs #1 page): {{rdGapPage}}
+Opportunity domains (top 5): {{opportunityDomains}}
+```
+
+---
+
+## Files to Create or Modify
+
+### New: `src/app/actions/serp-analysis.ts`
+
+Server action. Orchestrates the full pipeline:
+1. DB cache check
+2. `fetchSerpContext(keyword)` — Serper + Cheerio
+3. `scrapeUserPage(landingPageUrl)` — Cheerio only
+4. `getCompetitorAuthorityComparison(siteId)` — DB snapshots, free
+5. `getBacklinkSummary(domain, siteId)` — DataForSEO (cached)
+6. `getCompetitorBacklinkGap(domain, serpResult[0].domain)` — DataForSEO (cached)
+7. Claude call with structured prompt
+8. Write to `KeywordSerpAnalysis` with 7-day TTL
+
+---
+
+### New: `src/components/dashboard/KeywordSerpPanel.tsx`
+
+Four-tab panel component. Props:
 
 ```ts
-// auth.ts signIn callback ~line 170
-if (!dbUser) {
-    dbUser = await prisma.user.create({ ... })
-
-    try {
-        const code = `REF-${...}`
-        await prisma.referral.create({ ... })
-    } catch { /* Non-fatal */ }
-
-    // ← NO inngest.send("user.registered") here
+interface KeywordSerpPanelProps {
+  keyword: string;
+  position: number;
+  impressions: number;
+  clicks: number;
+  landingUrl: string;
+  siteId: string;
 }
 ```
 
-OAuth users (Google, GitHub) get:
-- ✅ A referral code created inline
-- ✅ The `aiseo_ref` cookie credited to the referrer
-- ❌ No `user.registered` Inngest event
-- ❌ No drip email sequence
-- ❌ No magic first audit
+Internal state: `activeTab`, `data: SerpAnalysisResult | null`, `loading`, `error`, `cachedAt`.
 
-### Fix
+---
 
-Add the Inngest send inside the `!dbUser` branch in `auth.ts`. The `signIn` callback is `async`, so `await` works fine:
+### Edit: `src/app/dashboard/keywords/AllKeywordsTable.tsx`
 
-```ts
-// auth.ts signIn callback — inside the `if (!dbUser)` block, after referral creation
+- Add `expandedRow: string | null` state
+- Add "Analyse" column (header + cells)
+- Render `<KeywordSerpPanel>` when row is expanded
 
-if (!dbUser) {
-    const trialEndsAt = new Date()
-    trialEndsAt.setDate(trialEndsAt.getDate() + 7)
-    dbUser = await prisma.user.create({
-        data: {
-            email: user.email,
-            name: user.name ?? user.email.split("@")[0],
-            image: user.image,
-            trialEndsAt,
-        },
-    })
+---
 
-    // Referral code (existing)
-    try {
-        const code = `REF-${crypto.randomUUID().replace(/-/g, "").substring(0, 8).toUpperCase()}`
-        await prisma.referral.create({ data: { ownerId: dbUser.id, code } })
-    } catch { /* Non-fatal */ }
+### New: Prisma migration — `KeywordSerpAnalysis`
 
-    // ← ADD THIS: fire onboarding events for OAuth new users
-    try {
-        const { inngest } = await import("@/lib/inngest/client")
-        await inngest.send({
-            name: "user.registered",
-            data: {
-                userId: dbUser.id,
-                email: dbUser.email!,
-                name: dbUser.name ?? dbUser.email!.split("@")[0],
-            },
-        })
-    } catch (err) {
-        logger.warn("[Auth] inngest user.registered failed for OAuth user", {
-            error: (err as Error)?.message,
-        })
-    }
+```prisma
+model KeywordSerpAnalysis {
+  id                String   @id @default(cuid())
+  siteId            String
+  keyword           String
+  landingUrl        String
+  serpResults       Json
+  fixes             Json
+  headingGaps       Json
+  wordCountAvg      Int
+  wordCountPage     Int
+  drGap             Int?
+  rdGapRoot         Int?
+  rdGapPage         Int?
+  opportunityDoms   Json
+  intentMismatch    Boolean  @default(false)
+  intentNote        String?
+  disclaimerNeeded  Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  expiresAt         DateTime
+
+  @@unique([siteId, keyword])
+  @@index([siteId])
 }
 ```
 
-The `inngest.send` is non-blocking and wrapped in a try/catch — a failure here doesn't block sign-in.
+---
+
+## Cost Per Analysis
+
+| Step | Cost | Notes |
+|------|------|-------|
+| Serper search | ~1 credit | Cached at DB level (7-day TTL) |
+| Page scrapes (top 3) | Free | Cheerio HTTP fetch |
+| `getBacklinkSummary` | DataForSEO credit | Redis-cached 24h — likely already warm |
+| `getCompetitorBacklinkGap` | DataForSEO credit | Redis-cached — likely already warm for tracked competitors |
+| `getCompetitorAuthorityComparison` | Free | DB snapshots only |
+| Claude call | ~3K tokens in / ~1K out | Negligible |
+
+After first fetch, repeat opens cost nothing (DB cache). The heaviest cost is when the competitor in position #1 is not already a tracked competitor — that triggers a fresh DataForSEO `referring-domains` call.
+
+**Mitigation:** Only call `getCompetitorBacklinkGap` if the `#1 SERP domain` is in `site.competitors`. If not, fall back to DR-only comparison from `getCompetitorAuthorityComparison`. Show a note: "Add [domain] as a competitor to unlock full link gap analysis."
 
 ---
 
-## Summary Table
+## What This Report Tells a Client That Others Don't
 
-| # | Bug | Severity | File(s) | Impact |
-|---|-----|----------|---------|--------|
-| 1 | `ENTERPRISE` tier undefined | Critical | `plans.ts`, `audit.ts`, `page-audit.ts`, `backlinks.ts`, `credits/index.ts` | Ghost tier, silent FREE fallback for any manual DB entry |
-| 2 | STARTER excluded from cron fan-out | Critical | `cron-schedule.ts`, `backlinks.ts` | Paying STARTER users never get weekly audits or rank tracking |
-| 3 | Credit pack amount hardcoded | High | `webhook.ts` | Changing `CREDIT_PACK.credits` won't update what the webhook grants |
-| 4 | Site limit bypasses guards.ts | High | `site.ts` | Trial users capped at FREE (1 site); expired/past_due not enforced |
-| 5 | Annual price IDs not mapped | Critical | `webhook.ts` | Annual subscribers stay on FREE forever |
-| 6 | Stale test price fixtures | Medium | `plans.test.ts` | Pricing regressions in `plans.ts` go undetected |
-| 7 | OAuth signup missing `user.registered` | High | `auth.ts` | OAuth users get no drip sequence and no magic first audit |
+Most SEO tools show content gaps OR backlink gaps — separately. This panel shows both **for a specific keyword and its specific ranking page**, with a single prioritised action list that tells the client clearly:
+
+- Whether content fixes are enough (small authority gap → yes)
+- Whether outreach is needed (large RD gap → yes, here are the targets)
+- Whether the keyword is worth pursuing at all right now (DR gap > 40 with 100+ RD gap → be honest about the timeline)
+- Exactly which H2s to add, which anchors to request in outreach, and which internal pages to link from
+
+That combination — and the disclaimer card when the gap is severe — is what makes it genuinely useful for client work rather than just another content brief tool.
 
 ---
 
-## Suggested fix order
+## Out of Scope (Future)
 
-1. **Bug 5** — Annual billing breakage. Revenue loss right now.
-2. **Bug 2** — STARTER cron exclusion. Paying users getting nothing.
-3. **Bug 4** — Site limit guard bypass. Trial/expired users hitting wrong limits.
-4. **Bug 7** — OAuth onboarding event. Every OAuth signup misses drip + audit.
-5. **Bug 3** — Credit pack hardcode. Low risk today, time bomb later.
-6. **Bug 1** — ENTERPRISE cleanup. Code hygiene + prevent future confusion.
-7. **Bug 6** — Test fixtures. Important but not user-facing.
+- "Apply fix" button → opens blog editor pre-filled with missing H2 sections
+- Outreach CRM — track status of opportunity domains (contacted / won / declined)
+- Scheduled re-analysis — weekly cron to re-run expired analyses and notify on position changes
+- Export to PDF for client reporting
+- Multi-keyword comparison — run analysis across all page-2 keywords at once and rank by easiest win
