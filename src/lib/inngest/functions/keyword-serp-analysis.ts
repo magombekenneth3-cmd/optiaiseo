@@ -1,18 +1,3 @@
-/**
- * Inngest background job — Keyword vs SERP Analysis
- *
- * Triggered by: "serp-analysis/requested"
- * Payload: { analysisId, siteId, userId, keyword, landingPageUrl, domain }
- *
- * Steps:
- *   1. fetch-serp         — getSerpContextForKeyword (Serper API)
- *   2. scrape-authority   — page scrape + authority comparison + backlink summary (parallel)
- *   3. ai-fixes           — Gemini structured output (fixes, heading gaps, intent)
- *   4. save-and-notify    — upsert KeywordSerpAnalysis to COMPLETED + fire completion event
- *
- * Concurrency: max 2 jobs per siteId — prevents one site from starving Serper quota.
- * Retries: 2 — transient network/API errors recover automatically.
- */
 
 import { inngest } from "../client";
 import { NonRetriableError } from "inngest";
@@ -57,7 +42,6 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
             throw new NonRetriableError("Missing required fields in serp-analysis/requested payload");
         }
 
-        // ── Step 1: Fetch SERP ───────────────────────────────────────────────────
         const serpContext = await step.run("fetch-serp", async () => {
             await prisma.keywordSerpAnalysis.update({
                 where: { id: analysisId },
@@ -75,7 +59,6 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
             return ctx;
         });
 
-        // ── Step 2: Scrape + authority (parallel) ────────────────────────────────
         const { userPage, authorityComp, backlinkSummary, serpResults, wordCountAvg } =
             await step.run("scrape-authority", async () => {
                 const top10 = serpContext.results.slice(0, 10);
@@ -111,7 +94,6 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
                 };
             });
 
-        // ── Step 3: AI fixes + heading gaps ─────────────────────────────────────
         const aiResult = await step.run("ai-fixes", async () => {
             await prisma.keywordSerpAnalysis.update({
                 where: { id: analysisId },
@@ -177,7 +159,6 @@ AVG_WORDS=${wordCountAvg} YOUR_WORDS=${userWordCount}`;
             }
         });
 
-        // ── Step 4: Save + notify ────────────────────────────────────────────────
         await step.run("save-and-notify", async () => {
             const drGap         = authorityComp?.competitors[0]?.drGap ?? null;
             const clientRDs     = backlinkSummary?.referringDomains ?? 0;
