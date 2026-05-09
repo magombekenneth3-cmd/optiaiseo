@@ -31,8 +31,8 @@ const PLANS: Record<string, Plan> = {
         name: "Starter",
         priceId: "price_starter_monthly",
         annualPriceId: "price_starter_annual",
-        price: 29,
-        annualPrice: 279,  // ~$23.25/mo — saves ~20%
+        price: 19,
+        annualPrice: 180,  // $15/mo × 12 — saves ~21%
         credits: 150,
         features: ["Full SEO Audits", "AEO Score", "AI Blog Generation (10/mo)", "Keyword Tracking"],
         tier: "STARTER",
@@ -41,8 +41,8 @@ const PLANS: Record<string, Plan> = {
         name: "Pro",
         priceId: "price_pro_monthly",
         annualPriceId: "price_pro_annual",
-        price: 79,
-        annualPrice: 759,  // ~$63.25/mo
+        price: 49,
+        annualPrice: 468,  // $39/mo × 12 — saves ~20%
         credits: 500,
         features: ["Full SEO Audits", "AEO Score", "AI Blog Generation (50/mo)", "Keyword Tracking", "Backlink Monitoring", "Competitor Gap", "Priority Support"],
         tier: "PRO",
@@ -51,8 +51,8 @@ const PLANS: Record<string, Plan> = {
         name: "Agency",
         priceId: "price_agency_monthly",
         annualPriceId: "price_agency_annual",
-        price: 199,
-        annualPrice: 1899, // ~$158.25/mo
+        price: 149,
+        annualPrice: 1428, // $119/mo × 12 — saves ~20%
         credits: 2000,
         features: ["Full SEO Audits", "AEO Score", "AI Blog Generation (150/mo)", "Keyword Tracking", "Backlink Monitoring", "Competitor Gap", "Priority Support", "White-Label Reports", "Team Members", "Client Portal"],
         tier: "AGENCY",

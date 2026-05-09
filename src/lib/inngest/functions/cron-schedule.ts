@@ -32,6 +32,13 @@ async function getPaidSites() {
     });
 }
 
+async function getBacklinkEligibleSites() {
+    return prisma.site.findMany({
+        where: { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },
+        select: { id: true, domain: true, userId: true },
+    });
+}
+
 // ── Weekly audit fan-out (Monday 2am UTC) ────────────────────────────────────
 
 export const cronWeeklyAudit = inngest.createFunction(
@@ -69,7 +76,7 @@ export const cronWeeklyBacklinks = inngest.createFunction(
         triggers: [{ cron: "0 3 * * 1" }],
     },
     async ({ step }) => {
-        const sites = await step.run("fetch-paid-sites", getPaidSites);
+        const sites = await step.run("fetch-backlink-sites", getBacklinkEligibleSites);
 
         if (sites.length === 0) {
             logger.info("[CronWeeklyBacklinks] No paid sites — skipping fan-out");

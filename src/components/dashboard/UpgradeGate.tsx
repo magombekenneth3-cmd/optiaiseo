@@ -40,7 +40,7 @@ const UPGRADE_COPY = {
 
 export function UpgradeGate({ reason, currentTier }: UpgradeGateProps) {
     const copy = UPGRADE_COPY[reason];
-    const isPaidUser = ["STARTER", "PRO", "AGENCY", "ENTERPRISE"].includes((currentTier ?? "").toUpperCase());
+    const isPaidUser = ["STARTER", "PRO", "AGENCY"].includes((currentTier ?? "").toUpperCase());
 
     const body = (reason === "credits" && isPaidUser)
         ? "Credits refill monthly. Buy more credits to continue, or contact support about higher limits."

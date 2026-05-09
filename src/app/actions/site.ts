@@ -80,11 +80,14 @@ export async function createSite(data: {
         if (!auth.ok) return auth.error;
         const { user } = auth;
 
-        const { withinLimit } = await import("@/lib/stripe/plans");
+        const { requireWithinLimit, TierError } = await import("@/lib/stripe/guards");
+
+        const currentSiteCount = await prisma.site.count({ where: { userId: user.id } });
+        await requireWithinLimit(user.id, "sites", currentSiteCount);
 
         const newSite = await prisma.$transaction(async (tx) => {
-            const currentSiteCount = await tx.site.count({ where: { userId: user.id } });
-            if (!withinLimit(user.subscriptionTier, "sites", currentSiteCount)) {
+            const txSiteCount = await tx.site.count({ where: { userId: user.id } });
+            if (txSiteCount > currentSiteCount) {
                 throw Object.assign(new Error("LIMIT_REACHED"), { code: "LIMIT_REACHED" });
             }
 
@@ -119,6 +122,10 @@ export async function createSite(data: {
 
         return { success: true, site: newSite };
     } catch (error: unknown) {
+        const { TierError } = await import("@/lib/stripe/guards");
+        if (error instanceof TierError) {
+            return { success: false, error: "You have reached the maximum number of sites for your tier. Please upgrade your plan." };
+        }
         const code = (error as { code?: string })?.code;
         if (code === "LIMIT_REACHED") {
             return { success: false, error: "You have reached the maximum number of sites for your tier. Please upgrade your plan." };
