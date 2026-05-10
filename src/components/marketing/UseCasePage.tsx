@@ -194,12 +194,12 @@ export default function UseCasePage({
         </section>
 
         {/* CTA banner */}
-        <section className="bg-foreground text-background py-20">
+        <section className="bg-zinc-950 text-white py-20">
           <div className="max-w-3xl mx-auto px-6 text-center">
             <h2 className="text-3xl md:text-4xl font-black tracking-tight mb-4">
               Ready to stop reporting and start fixing?
             </h2>
-            <p className="text-background/60 mb-8 max-w-xl mx-auto">
+            <p className="text-white/65 mb-8 max-w-xl mx-auto">
               Free forever. Connect your site in 2 minutes. Your first audit runs automatically.
             </p>
             <Link

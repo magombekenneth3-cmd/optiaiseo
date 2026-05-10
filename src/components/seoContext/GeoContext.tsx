@@ -242,12 +242,12 @@ export default function GsoCheckerContent() {
             </section>
 
             {/* ── 6. CTA banner ────────────────────────────────────────────────────── */}
-            <section className="bg-foreground text-background py-20">
+            <section className="bg-zinc-950 text-white py-20">
                 <div className="max-w-3xl mx-auto px-6 text-center">
                     <h2 className="text-3xl md:text-4xl font-black tracking-tight mb-4">
                         Track your AI score weekly, not once
                     </h2>
-                    <p className="text-background/60 mb-8 max-w-xl mx-auto text-sm leading-relaxed">
+                    <p className="text-white/65 mb-8 max-w-xl mx-auto text-sm leading-relaxed">
                         A one-time check tells you where you stand today. OptiAISEO Pro tracks your GSoV every week, shows competitor movement, and tells you exactly what content to create to improve your AI citation rate.
                     </p>
                     <Link

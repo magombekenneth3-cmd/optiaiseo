@@ -243,12 +243,12 @@ export default function RedditSeoContent() {
             </section>
 
             {/* ── 6. CTA ───────────────────────────────────────────────────────────── */}
-            <section className="bg-foreground text-background py-20">
+            <section className="bg-zinc-950 text-white py-20">
                 <div className="max-w-3xl mx-auto px-6 text-center">
                     <h2 className="text-3xl md:text-4xl font-black tracking-tight mb-4">
                         Turn Reddit signals into content that ranks
                     </h2>
-                    <p className="text-background/60 mb-8 max-w-xl mx-auto text-sm leading-relaxed">
+                    <p className="text-white/65 mb-8 max-w-xl mx-auto text-sm leading-relaxed">
                         OptiAISEO Pro takes Reddit opportunity data and generates a full SEO-optimised article brief — complete with target keywords, heading structure, and competitor angle — ready to publish in one click.
                     </p>
                     <Link
