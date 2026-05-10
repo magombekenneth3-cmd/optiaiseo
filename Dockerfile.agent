@@ -1,100 +1,53 @@
-# syntax=docker/dockerfile:1.4
-# ─────────────────────────────────────────────────────────────────────────────
-# Dockerfile.agent — LiveKit Voice Agent Worker
-#
-# Stage map:
-#   build-base     → node:20-slim + openssl + python3/make/g++ + pnpm
-#   runtime-base   → node:20-slim + ffmpeg + openssl (minimal runtime)
-#   fetch          → warm pnpm content-addressable store
-#   deps           → pnpm install --offline
-#   builder        → esbuild livekit-agent.ts → livekit-agent.js
-#   runner         → final image FROM runtime-base
-# ─────────────────────────────────────────────────────────────────────────────
-
-# ── Build base: compile tools + pnpm ──────────────────────────────────────────
-FROM node:20-slim AS build-base
+FROM node:20-slim AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-ENV PNPM_STORE_DIR="/pnpm/store"
 
 RUN apt-get update -qq && \
-    apt-get install -y --no-install-recommends \
-    openssl ca-certificates python3 make g++ && \
+    apt-get install -y --no-install-recommends openssl ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
-RUN corepack enable && corepack prepare pnpm@8.15.1 --activate
+RUN npm install -g pnpm@8.15.1 --prefer-online
 
-# ── Runtime base: ffmpeg + openssl, NO build tools ────────────────────────────
-FROM node:20-slim AS runtime-base
-
-RUN apt-get update -qq && \
-    apt-get install -y --no-install-recommends \
-    ffmpeg openssl ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
-# ── Fetch stage: warm the pnpm content-addressable store ──────────────────────
-FROM build-base AS fetch
+FROM base AS fetch
 WORKDIR /app
-
-# Prevents onnxruntime-node postinstall from trying to download CUDA
-# binaries from github.com (blocked in restricted Docker DNS environments).
 ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
+COPY .npmrc pnpm-lock.yaml ./
+RUN pnpm fetch
 
-COPY pnpm-lock.yaml ./
-
-RUN printf 'supportedArchitectures:\n  os:\n    - linux\n  cpu:\n    - x64\n  libc:\n    - glibc\n' > .npmrc
-
-RUN \
-    pnpm fetch
-
-# ── Deps stage ─────────────────────────────────────────────────────────────────
 FROM fetch AS deps
 WORKDIR /app
-
 ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
+COPY .npmrc package.json pnpm-lock.yaml ./
+COPY prisma ./prisma
+RUN NODE_OPTIONS="--max-old-space-size=2048" \
+    pnpm install --frozen-lockfile --offline && \
+    pnpm exec prisma generate
 
-COPY package.json pnpm-lock.yaml ./
-
-RUN \
-    NODE_OPTIONS="--max-old-space-size=4096" \
-    PRISMA_SKIP_CLI_ENGINES_DOWNLOAD=true \
-    pnpm install --frozen-lockfile --offline
-
-# ── Builder: esbuild the agent ─────────────────────────────────────────────────
-FROM build-base AS builder
+FROM deps AS builder
 WORKDIR /app
-
-COPY --from=deps /app/node_modules ./node_modules
-
-COPY livekit-agent.ts   ./
-COPY src/lib            ./src/lib
-COPY src/app/api/livekit ./src/app/api/livekit
-COPY tsconfig.json      ./
-COPY prisma             ./prisma
-
-RUN ./node_modules/.bin/esbuild livekit-agent.ts \
+ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
+COPY . .
+RUN pnpm exec esbuild livekit-agent.ts \
     --bundle \
     --platform=node \
     --packages=external \
-    --external:playwright \
-    --external:chromium-bidi \
     --outfile=livekit-agent.js
 
-# ── Runner: minimal production image ──────────────────────────────────────────
-FROM runtime-base AS runner
+FROM base AS runner
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY prisma ./prisma
-
-RUN npx prisma generate
-
-COPY --from=builder /app/livekit-agent.js ./livekit-agent.js
-
 ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
 
-EXPOSE 8081
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser  --system --uid 1001 nextjs
+
+COPY --from=builder --chown=nextjs:nodejs /app/livekit-agent.js ./livekit-agent.js
+COPY --from=deps    --chown=nextjs:nodejs /app/node_modules     ./node_modules
+COPY --from=deps    --chown=nextjs:nodejs /app/prisma           ./prisma
+
+RUN npm install -g prisma@5.22.0 --prefer-online
+
+USER nextjs
+
 CMD ["node", "livekit-agent.js", "start"]
