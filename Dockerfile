@@ -92,6 +92,13 @@ RUN cp -rL node_modules/@prisma/client /tmp/client-real && \
 
 RUN pnpm run build
 
+# Compile custom server.ts to server.js
+RUN pnpm exec esbuild server.ts \
+    --bundle \
+    --platform=node \
+    --packages=external \
+    --outfile=server.js
+
 # ── agent-bundle: esbuild the LiveKit agent ───────────────────────────────────
 FROM builder AS agent-bundle
 RUN pnpm exec esbuild livekit-agent.ts \
@@ -125,6 +132,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 
 COPY --from=deps   --chown=nextjs:nodejs /app/prisma            ./prisma
 
+COPY --from=builder      --chown=nextjs:nodejs /app/server.js        ./server.js
 COPY --from=agent-bundle --chown=nextjs:nodejs /app/livekit-agent.js ./livekit-agent.js
 
 RUN mkdir -p ./node_modules/.prisma ./node_modules/@prisma
