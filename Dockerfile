@@ -79,11 +79,14 @@ RUN cp -rL node_modules/@prisma/client /tmp/client-real && \
 RUN pnpm run build
 
 # Compile custom server.ts to server.js
+# next-auth/jwt is imported by server.ts for WebSocket auth — it must be bundled
+# because the runner stage node_modules only contains @prisma/client (explicit copy)
+# and the Next.js standalone minimal set (which does NOT include next-auth).
+# Only 'next' and '@prisma/client' are safe to keep external.
 RUN pnpm exec esbuild server.ts \
     --bundle \
     --platform=node \
     --external:next \
-    --external:next-auth \
     --external:@prisma/client \
     --external:.prisma/client \
     --outfile=server.js
