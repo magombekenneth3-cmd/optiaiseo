@@ -57,7 +57,6 @@ export default async function HealingLogPage({ params }: { params: Promise<{ id:
   const site = await prisma.site.findFirst({
     where: {
       id,
-      // @ts-expect-error — session user has id
       userId: session.user.id,
     },
     select: { id: true, domain: true },
