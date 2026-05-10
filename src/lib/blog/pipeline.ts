@@ -11,13 +11,13 @@
  * the current section, not 15 rule systems at once.
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { callGemini, callGeminiJson } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { logger } from "@/lib/logger";
 import type { PromptContext } from "./prompt-context";
 import type { SerpContext } from "./serp";
 import type { AuthorProfile } from "./index";
-import { getAuthorGrounding, getClaimRules, getToneRules, getScopeRules, getStructureRules } from "./rules";
+import { getClaimRules, getToneRules, getScopeRules, getStructureRules } from "./rules";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,15 +65,8 @@ interface EditorialMemory {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getClient(): GoogleGenAI {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) throw new Error("GEMINI_API_KEY is not set");
-    return new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 120_000 } });
-}
-
 function parseJsonSafe<T>(text: string, fallback: T): T {
     try {
-        // Strip markdown fences if present
         const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
         return JSON.parse(cleaned) as T;
     } catch {
@@ -115,8 +108,6 @@ export async function runResearchBrain(
     serpContext: SerpContext | null,
     ctx: PromptContext,
 ): Promise<ResearchBrain> {
-    const ai = getClient();
-
     const serpSummary = serpContext
         ? `TOP SERP RESULTS SUMMARY:\n${serpContext.results.slice(0, 3).map((r, i) =>
             `[Rank ${i + 1}] ${r.title}\nSnippet: ${r.snippet}`
@@ -166,12 +157,13 @@ Rules:
     };
 
     try {
-        const response = await ai.models.generateContent({
+        return await callGeminiJson<ResearchBrain>(prompt, {
             model: AI_MODELS.GEMINI_FLASH,
-            contents: prompt,
-            config: { temperature: 0.4, maxOutputTokens: 2048 },
+            temperature: 0.4,
+            maxOutputTokens: 2048,
+            timeoutMs: 60_000,
+            maxRetries: 3,
         });
-        return parseJsonSafe<ResearchBrain>(response.text ?? "", fallback);
     } catch (e) {
         logger.warn("[Pipeline] Research brain failed — using fallback", { error: (e as Error).message });
         return fallback;
@@ -192,8 +184,6 @@ export async function runOutlinePlanner(
     ctx: PromptContext,
     tone?: string,
 ): Promise<OutlinePlan> {
-    const ai = getClient();
-
     const targetWords = wordCountTarget(ctx, serpContext);
     const serpHeadings = serpContext?.results.slice(0, 3)
         .flatMap(r => r.scrapedHeadings ?? [])
@@ -272,17 +262,28 @@ RULES:
         estimatedTotal: targetWords,
     };
 
-    try {
-        const response = await ai.models.generateContent({
-            model: AI_MODELS.GEMINI_FLASH,
-            contents: prompt,
-            config: { temperature: 0.6, maxOutputTokens: 3000 },
+    const raw = await callGemini(prompt, {
+        model: AI_MODELS.GEMINI_FLASH,
+        temperature: 0.3,
+        maxOutputTokens: 3000,
+        timeoutMs: 60_000,
+        maxRetries: 3,
+    });
+
+    const parsed = parseJsonSafe<OutlinePlan | null>(raw, null);
+    if (!parsed || !Array.isArray(parsed.sections) || parsed.sections.length === 0) {
+        logger.error("[Pipeline] Outline planner returned unparseable JSON — throwing for Inngest retry", {
+            rawSlice: raw.slice(0, 300),
         });
-        return parseJsonSafe<OutlinePlan>(response.text ?? "", fallback);
-    } catch (e) {
-        logger.warn("[Pipeline] Outline planner failed — using fallback", { error: (e as Error).message });
-        return fallback;
+        throw new Error("[Pipeline] Outline generation failed — could not parse a valid outline from model response.");
     }
+
+    logger.debug("[Pipeline] Outline parsed successfully", {
+        title: parsed.title,
+        sections: parsed.sections.length,
+    });
+
+    return parsed;
 }
 
 // ─── Stage 3: Section Writer ──────────────────────────────────────────────────
@@ -304,7 +305,6 @@ export async function runSectionWriter(
     author: AuthorProfile,
     ctx: PromptContext,
 ): Promise<string> {
-    const ai = getClient();
     const memory: EditorialMemory = {
         usedEntities: new Set(),
         usedSentenceOpeners: new Set(),
@@ -316,27 +316,37 @@ export async function runSectionWriter(
     const sections: string[] = [];
 
     for (const section of outline.sections) {
-        const sectionText = await writeSingleSection(ai, section, outline, brain, author, ctx, memory);
+        const sectionText = await writeSingleSection(section, outline, brain, author, ctx, memory);
+
+        const stripped = sectionText.replace(/\*?\*?\[EDITOR:[^\]]*\]\*?\*?\s*/g, "").trim();
+
         const finalText = section.evidenceType === "faq"
-            ? enforceFaqOpeners(sectionText)
-            : sectionText;
+            ? enforceFaqOpeners(stripped)
+            : stripped;
         sections.push(finalText);
 
-        memory.previousSectionSummary = sectionText.slice(0, 300) + "…";
+        memory.previousSectionSummary = finalText.slice(0, 300) + "…";
 
-        const words = sectionText.toLowerCase().match(/\b[a-z]{5,}\b/g) ?? [];
+        const words = finalText.toLowerCase().match(/\b[a-z]{5,}\b/g) ?? [];
         const topConcepts = [...new Set(words)].slice(0, 5);
         memory.recentConcepts = [...memory.recentConcepts, ...topConcepts].slice(-15);
 
-        const openerMatch = sectionText.match(/^([A-Z][a-z]+)/m);
+        const openerMatch = finalText.match(/^([A-Z][a-z]+)/m);
         if (openerMatch) memory.usedSentenceOpeners.add(openerMatch[1].toLowerCase());
+    }
+
+    const failedCount = sections.filter(s => s.includes("[Section generation failed")).length;
+    if (failedCount > 0) {
+        throw new Error(
+            `[Pipeline] ${failedCount}/${sections.length} sections failed. ` +
+            "Rethrowing for Inngest retry — will not save placeholder content to DB."
+        );
     }
 
     return `# ${outline.title}\n\n${sections.join("\n\n")}`;
 }
 
 async function writeSingleSection(
-    ai: GoogleGenAI,
     section: OutlineSection,
     outline: OutlinePlan,
     brain: ResearchBrain,
@@ -427,24 +437,32 @@ Output: ONLY the section content in Markdown. Include the ## heading. No preambl
     const fallbackText = `## ${section.heading}\n\n[Section generation failed — regenerate this section.]`;
 
     try {
-        const response = await ai.models.generateContent({
+        const text = await callGemini(prompt, {
             model: AI_MODELS.GEMINI_PRO,
-            contents: prompt,
-            config: { temperature: 0.75, maxOutputTokens: 2048 },
+            temperature: 0.75,
+            maxOutputTokens: 2048,
+            timeoutMs: 90_000,
+            maxRetries: 3,
         });
 
-        const text = response.text?.trim() ?? "";
-        if (text.length < 80) return fallbackText;
+        const trimmed = text.trim();
+        if (trimmed.length < 80) {
+            logger.warn("[Pipeline] Section writer returned suspiciously short output", {
+                heading: section.heading,
+                length: trimmed.length,
+            });
+            return fallbackText;
+        }
 
         for (const entity of section.keyEntities) {
-            if (text.toLowerCase().includes(entity.toLowerCase())) {
+            if (trimmed.toLowerCase().includes(entity.toLowerCase())) {
                 memory.usedEntities.add(entity);
             }
         }
 
-        return text;
+        return trimmed;
     } catch (e) {
-        logger.warn("[Pipeline] Section writer failed", {
+        logger.warn("[Pipeline] Section writer failed after all retries", {
             heading: section.heading,
             error: (e as Error).message,
         });
@@ -464,7 +482,6 @@ export async function runEditorialRewrite(
     draft: string,
     ctx: PromptContext,
 ): Promise<{ content: string; truncated: boolean }> {
-    const ai = getClient();
     const CHUNK_SIZE = 18_000;
 
     const chunks = splitAtH2Boundaries(draft, CHUNK_SIZE);
@@ -502,17 +519,20 @@ CONTENT:
 ${chunk}`;
 
         try {
-            const response = await ai.models.generateContent({
+            const rewritten = await callGemini(prompt, {
                 model: AI_MODELS.GEMINI_PRO,
-                contents: prompt,
-                config: { temperature: 0.8, maxOutputTokens: 8192 },
+                temperature: 0.8,
+                maxOutputTokens: 8192,
+                timeoutMs: 90_000,
+                maxRetries: 2,
             });
-            const rewritten = response.text?.trim() ?? "";
-            if (!rewritten || rewritten.length < chunk.length * 0.4) {
+
+            const trimmed = rewritten.trim();
+            if (!trimmed || trimmed.length < chunk.length * 0.4) {
                 logger.warn("[Pipeline] Editorial rewrite chunk returned too-short output — keeping original", { chunk: i });
                 rewrittenChunks.push(chunk);
             } else {
-                const cleaned = rewritten
+                const cleaned = trimmed
                     .replace(/^```(?:markdown|html)?\s*/i, "")
                     .replace(/\s*```$/i, "")
                     .trim();

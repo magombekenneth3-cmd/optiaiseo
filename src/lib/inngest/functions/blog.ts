@@ -46,7 +46,7 @@ function buildAuthorFromSite(site: {
 }
 
 async function runFactCheckValidation(content: string): Promise<{
-    qualityScore: number;
+    qualityScore: number | null;
     issues: string[];
     suggestions: string[];
 }> {
@@ -77,19 +77,21 @@ Only output valid JSON, nothing else.
 Article excerpt:
 ${chunk}`,
                 { maxOutputTokens: 2048, temperature: 0.2, timeoutMs: 60000 }
-            ).catch((): { qualityScore: number; issues: string[]; suggestions: string[] } => ({
-                qualityScore: 55,
-                issues: [`Chunk ${idx + 1}: fact-check failed — manual review required.`],
-                suggestions: [],
-            }))
+            ).catch((): null => {
+                logger.warn(`[Blog/FactCheck] Chunk ${idx + 1} timed out — excluded from quality score`);
+                return null;
+            })
         )
     );
 
-    const allIssues = results.flatMap(r => r.issues ?? []);
-    const allSuggestions = results.flatMap(r => r.suggestions ?? []);
-    const qualityScore = Math.round(
-        results.reduce((sum, r) => sum + (r.qualityScore ?? 55), 0) / results.length
+    const validResults = results.filter(
+        (r): r is { qualityScore: number; issues: string[]; suggestions: string[] } => r !== null
     );
+    const allIssues = validResults.flatMap(r => r.issues ?? []);
+    const allSuggestions = validResults.flatMap(r => r.suggestions ?? []);
+    const qualityScore: number | null = validResults.length > 0
+        ? Math.round(validResults.reduce((sum, r) => sum + (r.qualityScore ?? 100), 0) / validResults.length)
+        : null;
 
     return { qualityScore, issues: allIssues, suggestions: allSuggestions };
 }
@@ -675,12 +677,21 @@ ${liveBlogPost.content.substring(0, 14000)}`,
         });
 
 
-        const qualityScore = Math.min(factCheck.qualityScore, liveBlogPost.validationScore);
+        const qualityScore = factCheck.qualityScore !== null
+            ? Math.min(factCheck.qualityScore, liveBlogPost.validationScore)
+            : liveBlogPost.validationScore;
 
         if (factCheck.issues.length > 0) {
             logger.warn(`[Blog/Pipeline] Fact-check issues (score ${qualityScore}/100):`, {
                 issues: factCheck.issues,
+                factCheckAvailable: factCheck.qualityScore !== null,
             });
+        }
+
+        const PLACEHOLDER_PATTERN = /\[Section generation failed|\[EDITOR:/i;
+        if (PLACEHOLDER_PATTERN.test(liveBlogPost.content)) {
+            logger.error("[Blog/Pipeline] Content contains placeholder text — marking FAILED, will not publish", { siteId, keyword });
+            liveBlogPost.validationErrors.push("Content contains unresolved placeholder sections. Regenerate before publishing.");
         }
 
         const interactiveWidget = await step.run("generate-interactive-widget", async () => {
