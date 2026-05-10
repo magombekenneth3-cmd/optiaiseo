@@ -11,9 +11,10 @@ const envSchema = z.object({
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
     GEMINI_API_KEY: z.string().min(1),
-    LIVEKIT_URL: z.string().min(1),
-    LIVEKIT_API_KEY: z.string().min(1),
-    LIVEKIT_API_SECRET: z.string().min(1),
+    // LiveKit — only required for voice agent feature; SEO app works without it
+    LIVEKIT_URL: z.string().optional(),
+    LIVEKIT_API_KEY: z.string().optional(),
+    LIVEKIT_API_SECRET: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
     PERPLEXITY_API_KEY: z.string().optional(),
@@ -116,6 +117,13 @@ export const env = (() => {
         // so env.ts is evaluated on the FIRST incoming request — not at process start.
         // Re-throwing crashes the layout module mid-request and triggers the global error
         // boundary ("Something went wrong") even for the static home page.
+        // Log each failing field individually so Railway shows actionable output
+        if (e instanceof Error && 'issues' in (e as any)) {
+            const issues = (e as any).issues as Array<{ path: string[]; message: string }>;
+            issues.forEach(issue => {
+                console.error(`[Env] MISSING/INVALID: ${issue.path.join('.')} — ${issue.message}`);
+            });
+        }
         const message = e instanceof Error ? e.message : String(e);
         console.error(
             `[Env] CRITICAL: Environment validation failed — check Railway env vars.\n` +
@@ -153,10 +161,15 @@ export function validateEnv() {
         'DATABASE_URL',
         'NEXTAUTH_SECRET',
         'NEXTAUTH_URL',
-        'LIVEKIT_URL',
-        'LIVEKIT_API_KEY',
-        'LIVEKIT_API_SECRET',
+        // LIVEKIT vars are voice-agent-only — warn separately, don't block startup
     ];
+
+    // Warn separately for LiveKit so the voice feature degrades gracefully
+    const livekitVars = ['LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET'];
+    const missingLivekit = livekitVars.filter(key => !process.env[key]);
+    if (missingLivekit.length > 0) {
+        logger.warn(`[Env] Voice agent disabled — missing LiveKit vars: ${missingLivekit.join(', ')}`);
+    }
 
     const missing = required.filter(key => !process.env[key]);
     if (missing.length > 0) {

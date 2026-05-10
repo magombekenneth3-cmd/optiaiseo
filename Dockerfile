@@ -60,24 +60,10 @@ ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
 ARG LIVEKIT_URL
 ENV LIVEKIT_URL=${LIVEKIT_URL}
 
-# Runtime secrets passed as build-args (Fly.io Metal builder does not support
-# --mount=type=secret; ARG/ENV is the only supported pattern on this platform).
-# hadolint ignore=DL3025
-ARG UPSTASH_REDIS_REST_TOKEN
-ENV UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN}
-# hadolint ignore=DL3025
-ARG NEXTAUTH_SECRET
-ENV NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
-# Runtime vars needed so prerender workers don't log CRITICAL missing-var warnings
-# hadolint ignore=DL3025
-ARG GEMINI_API_KEY
-ENV GEMINI_API_KEY=${GEMINI_API_KEY}
-# hadolint ignore=DL3025
-ARG LIVEKIT_API_KEY
-ENV LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
-# hadolint ignore=DL3025
-ARG LIVEKIT_API_SECRET
-ENV LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+# NOTE: Secrets (UPSTASH_REDIS_REST_TOKEN, NEXTAUTH_SECRET, GEMINI_API_KEY,
+# LIVEKIT_API_KEY, LIVEKIT_API_SECRET) are NOT passed as build ARGs.
+# SKIP_ENV_VALIDATION=1 suppresses runtime validation during build.
+# All secrets are injected by Railway at runtime via environment variables.
 
 COPY . .
 
@@ -147,6 +133,14 @@ COPY --from=deps --chown=nextjs:nodejs /root/.cache/puppeteer /app/.cache/puppet
 
 RUN npm install -g tsx prisma@5.22.0 --prefer-online
 
+# Startup script: run migrations then start the server
+RUN printf '#!/bin/sh\nset -e\necho "[Startup] Running Prisma migrations..."\nprisma migrate deploy\necho "[Startup] Starting server..."\nexec node server.js\n' > /app/start.sh && chmod +x /app/start.sh
+
 USER nextjs
 EXPOSE 3000
-CMD ["node", "server.js"]
+
+# Health check: wait up to 60s for the app to respond on /
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:3000/ || exit 1
+
+CMD ["/bin/sh", "/app/start.sh"]
