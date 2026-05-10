@@ -38,7 +38,6 @@ export const runFreeAuditJob = inngest.createFunction(
 
         if (!auditId || !url) throw new NonRetriableError('Missing auditId or url');
 
-        // ── Phase 1.3: shared engine factory ─────────────────────────────────
         // getAuditEngine('free') runs the same 3 modules (OnPage + Technical +
         // ContentQuality) that were previously wired by hand, but via the single
         // PROFILE_MODULES registry — no more duplicate module configuration.
@@ -53,7 +52,6 @@ export const runFreeAuditJob = inngest.createFunction(
             return result;
         });
 
-        // ── Persist results ───────────────────────────────────────────────────
         await step.run('save-results', async () => {
             const categoryScores = Object.fromEntries(
                 report.categories.map(c => [c.id, c.score])

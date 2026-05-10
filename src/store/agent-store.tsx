@@ -9,7 +9,6 @@
 
 import { createContext, useContext, useReducer, ReactNode } from "react";
 
-// ── Supported chart types the agent can push ──────────────────────────
 export type ChartType =
   | "keyword_bar" // keyword → count
   | "competitor_bar" // competitor word-count comparison

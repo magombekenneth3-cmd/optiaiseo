@@ -2,9 +2,7 @@ import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem } f
 import { parse, HTMLElement } from 'node-html-parser';
 import { fetchHtml } from '../utils/fetch-html';
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 /** Max HTML size accepted for parsing (10 MB). Prevents memory exhaustion. */
 const MAX_HTML_BYTES = 10 * 1024 * 1024;
@@ -49,9 +47,7 @@ const LOCAL_BUSINESS_TYPES = new Set([
     'TravelAgency', 'Restaurant', 'Hotel', 'Bar', 'Cafe', 'Bakery',
 ]);
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Returns true if a schema @type value (string or string[]) matches any
@@ -179,9 +175,7 @@ function hasPhoneNumber(pageText: string, links: HTMLElement[]): boolean {
     return PHONE_PATTERN_INTL.test(sample) || PHONE_PATTERN_LOCAL.test(sample);
 }
 
-// ---------------------------------------------------------------------------
 // Score calculation
-// ---------------------------------------------------------------------------
 
 function calculateScore(items: ChecklistItem[]): { score: number; passed: number; failed: number; warnings: number } {
     const analyzable = items.filter(i => i.status !== 'Skipped' && i.status !== 'Info');
@@ -194,9 +188,7 @@ function calculateScore(items: ChecklistItem[]): { score: number; passed: number
     return { score, passed, failed, warnings };
 }
 
-// ---------------------------------------------------------------------------
 // Module
-// ---------------------------------------------------------------------------
 
 export const LocalModule: AuditModule = {
     id: 'local-seo',
@@ -205,7 +197,6 @@ export const LocalModule: AuditModule = {
     run: async (context: AuditModuleContext): Promise<AuditCategoryResult> => {
         const items: ChecklistItem[] = [];
 
-        // ── 1. Resolve HTML ────────────────────────────────────────────────
         const html = context.html;
 
         if (!html) {
@@ -232,7 +223,6 @@ export const LocalModule: AuditModule = {
         // Collect links once; reused by multiple checks
         const links = root.querySelectorAll('a[href]');
 
-        // ── 2. Local directory / Google Business links ─────────────────────
         const directoryLinksFound = links.reduce((count, a) => {
             const href = a.getAttribute('href') ?? '';
             return count + (LOCAL_DIRECTORY_PATTERNS.some(pattern => href.includes(pattern)) ? 1 : 0);
@@ -253,7 +243,6 @@ export const LocalModule: AuditModule = {
             aiVisibilityImpact: 85,
         });
 
-        // ── 3. Map embed ───────────────────────────────────────────────────
         // NOTE: Map embeds typically live on /contact pages rather than the
         // homepage. A Warning here is expected for non-contact pages — filter
         // by audit URL before acting on this signal.
@@ -276,7 +265,6 @@ export const LocalModule: AuditModule = {
             aiVisibilityImpact: 60,
         });
 
-        // ── 4. NAP schema & reviews ────────────────────────────────────────
         const schemaElements = root.querySelectorAll('script[type="application/ld+json"]');
         const { hasLocalBusinessSchema, hasValidNap, hasReviewSchema } = checkSchemas(schemaElements);
 
@@ -314,7 +302,6 @@ export const LocalModule: AuditModule = {
             aiVisibilityImpact: 70,
         });
 
-        // ── 5. Phone number visibility ─────────────────────────────────────
         const pageText = root.querySelector('body')?.textContent ?? '';
         const phoneVisible = hasPhoneNumber(pageText, links);
 
@@ -333,7 +320,6 @@ export const LocalModule: AuditModule = {
             aiVisibilityImpact: 65,
         });
 
-        // ── 6. Score ───────────────────────────────────────────────────────
         const { score, passed, failed, warnings } = calculateScore(items);
 
         return {

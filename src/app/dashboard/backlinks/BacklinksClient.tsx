@@ -161,7 +161,6 @@ export default function BacklinksClient({
     const searchParams = useSearchParams();
     const effectiveSiteId = siteId || searchParams.get("siteId");
 
-    // ── State — seeded from server-prefetched props ───────────────────────────
     const [summary, setSummary] = useState<BacklinkSummary | null>(initialSummary);
     const [stored, setStored] = useState<StoredBacklink[]>(initialStored);
     const [alerts, setAlerts] = useState<BacklinkAlert[]>([]);
@@ -179,7 +178,6 @@ export default function BacklinksClient({
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
     const [domainSearch, setDomainSearch] = useState("");
 
-    // ── Fetch helpers ────────────────────────────────────────────────────────
 
     const fetchLive = useCallback(async (bust = false) => {
         if (!effectiveSiteId) return;
@@ -238,7 +236,6 @@ export default function BacklinksClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [effectiveSiteId]);
 
-    // ── Derived table data ───────────────────────────────────────────────────
 
     const filteredStored = stored
         .filter(b => !filterToxic || b.isToxic)
@@ -260,7 +257,6 @@ export default function BacklinksClient({
         else { setSortCol(col); setSortDir("desc"); }
     };
 
-    // ── No site selected ─────────────────────────────────────────────────────
 
     if (!effectiveSiteId) return (
         <div style={{
@@ -272,7 +268,6 @@ export default function BacklinksClient({
         </div>
     );
 
-    // ── Render ───────────────────────────────────────────────────────────────
 
     return (
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 0 80px" }}>

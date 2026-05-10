@@ -14,7 +14,6 @@ export async function POST(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        // ── Auth ──────────────────────────────────────────────────────────────
         const user = await getAuthUser(req);
         if (!user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -22,11 +21,9 @@ export async function POST(
 
         const { id } = await params;
 
-        // ── Rate limit: 1 full repurpose per blog per 24 hours ────────────────
         const limited = await rateLimit("blogRepurpose", `blog:${id}`);
         if (limited) return limited;
 
-        // ── Parse body ────────────────────────────────────────────────────────
         const body = await req.json().catch(() => ({}));
         const { formats = ALL_FORMATS } = body as { formats?: RepurposeFormat[] };
 
@@ -40,7 +37,6 @@ export async function POST(
             );
         }
 
-        // ── Ownership check ───────────────────────────────────────────────────
         const dbUser = await prisma.user.findUnique({
             where: { email: user!.email },
         });
@@ -56,7 +52,6 @@ export async function POST(
             return NextResponse.json({ error: "Blog not found" }, { status: 404 });
         }
 
-        // ── Run repurpose engine ──────────────────────────────────────────────
         logger.info("[Repurpose] Starting", {
             blogId: id,
             formats: validFormats,

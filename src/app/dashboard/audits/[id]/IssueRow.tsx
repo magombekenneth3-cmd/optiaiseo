@@ -29,7 +29,6 @@ import { PrReviewModal, type PrReviewPayload } from "@/components/PrReviewModal"
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/Badge";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 type FixState =
     | { status: "idle" }
@@ -42,7 +41,6 @@ type FixState =
     | { status: "done_manual"; guide: ManualFixGuide }
     | { status: "error"; message: string };
 
-// ── Severity config ───────────────────────────────────────────────────────────
 
 const SEV_CONFIG: Record<string, { label: string; barCls: string; badgeCls: string; dotCls: string }> = {
     error: {
@@ -65,7 +63,6 @@ const SEV_CONFIG: Record<string, { label: string; barCls: string; badgeCls: stri
     },
 };
 
-// ── CopyButton ────────────────────────────────────────────────────────────────
 
 function CopyButton({ text }: { text: string }) {
     const [copied, setCopied] = useState(false);
@@ -85,7 +82,6 @@ function CopyButton({ text }: { text: string }) {
     );
 }
 
-// ── ManualGuidePanel ──────────────────────────────────────────────────────────
 
 function ManualGuidePanel({ guide }: { guide: ManualFixGuide }) {
     return (
@@ -142,7 +138,6 @@ function ManualGuidePanel({ guide }: { guide: ManualFixGuide }) {
     );
 }
 
-// ── ContextForm ───────────────────────────────────────────────────────────────
 
 function ContextForm({
     fields,
@@ -215,7 +210,6 @@ function ContextForm({
     );
 }
 
-// ── IssueRow ──────────────────────────────────────────────────────────────────
 
 export function IssueRow({
     issue,

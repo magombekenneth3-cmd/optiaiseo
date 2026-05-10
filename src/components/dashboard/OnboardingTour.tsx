@@ -7,7 +7,6 @@ import { useFocusTrap } from "@/hooks/use-focus-trap";
 const STORAGE_KEY = "aiseo_tour_dismissed";
 const INLINE_DONE_KEY = "aiseo_inline_complete";
 
-// ── Inline SVG Illustrations ─────────────────────────────────────────────────
 
 function DomainIllustration() {
   return (
@@ -154,7 +153,6 @@ function VoiceIllustration() {
   );
 }
 
-// ── Step definitions ──────────────────────────────────────────────────────────
 
 interface Step {
   icon: string;
@@ -208,7 +206,6 @@ const STEPS: Step[] = [
   },
 ];
 
-// ── Main component ────────────────────────────────────────────────────────────
 
 export function OnboardingTour({ onboardingDone }: { onboardingDone: boolean }) {
   const [visible, setVisible] = useState(false);
@@ -260,8 +257,6 @@ export function OnboardingTour({ onboardingDone }: { onboardingDone: boolean }) 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [visible, dismiss, next, prev]);
-
-
 
 
   if (!visible) return null;

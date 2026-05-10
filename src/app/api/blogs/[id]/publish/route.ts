@@ -34,7 +34,6 @@ async function checkOriginality(text: string): Promise<{ isOriginal: boolean, co
 import { prisma } from "@/lib/prisma";
 import { pingGoogleIndexingApi } from "@/lib/gsc/indexing";
 
-// ── HASHNODE GRAPHQL HELPER ───────────────────────────────────────────────────
 
 import { syndicateToHashnode } from "@/lib/blog/hashnode";
 
@@ -109,7 +108,6 @@ async function publishToHashnode(
     }
 }
 
-// ── ROUTE HANDLER ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
@@ -139,7 +137,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             }, { status: 409 });
         }
 
-        // ── SYNDICATION & INDEXING ─────────────────────────────────────────────
 
         const canonicalUrl = `https://${blog.site.domain}/blog/${blog.slug}`;
 

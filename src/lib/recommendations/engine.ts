@@ -19,9 +19,7 @@
 
 import { getGscOpportunities, type GscOpportunity } from "@/lib/keywords/gsc-opportunities";
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 export type RecommendationPriority = "critical" | "high" | "medium" | "low";
 export type RecommendationEffort   = "low" | "medium" | "high";
@@ -68,10 +66,8 @@ export interface RecommendationResult {
   };
 }
 
-// ---------------------------------------------------------------------------
 // CTR benchmarks by average position bucket
 // Source: industry averages (Backlinko / Advanced Web Ranking 2024)
-// ---------------------------------------------------------------------------
 
 const CTR_BENCHMARKS: Array<{ maxPosition: number; expectedCtr: number }> = [
   { maxPosition: 1,  expectedCtr: 0.278 },
@@ -99,9 +95,7 @@ function ctrGapClicks(opp: GscOpportunity): number {
   return Math.round(gap * opp.impressions);
 }
 
-// ---------------------------------------------------------------------------
 // GSC-derived recommendation builders
-// ---------------------------------------------------------------------------
 
 interface GscInsights {
   /** Keywords pos 4–10 with CTR well below benchmark */
@@ -148,7 +142,6 @@ function buildGscRecommendations(
 ): Recommendation[] {
   const recs: Recommendation[] = [];
 
-  // ── Low CTR on page 1 ─────────────────────────────────────────────────────
   if (insights.lowCtrPage1.length > 0) {
     const top = insights.lowCtrPage1[0];
     const totalMissed = insights.lowCtrPage1.reduce(
@@ -185,7 +178,6 @@ function buildGscRecommendations(
     });
   }
 
-  // ── Nearly page 1 ─────────────────────────────────────────────────────────
   if (insights.nearlyPage1.length > 0) {
     const totalImpressions = insights.nearlyPage1.reduce(
       (s, o) => s + o.impressions,
@@ -215,7 +207,6 @@ function buildGscRecommendations(
     });
   }
 
-  // ── Featured snippet candidates ────────────────────────────────────────────
   if (insights.snippetCandidates.length > 0) {
     const top = insights.snippetCandidates[0];
 
@@ -241,7 +232,6 @@ function buildGscRecommendations(
     });
   }
 
-  // ── Low-hanging fruit (pos 21–30) ─────────────────────────────────────────
   if (insights.lowHanging.length > 0) {
     const top = insights.lowHanging[0];
 
@@ -270,9 +260,7 @@ function buildGscRecommendations(
   return recs;
 }
 
-// ---------------------------------------------------------------------------
 // Setup / integration recommendations (conditional on site state)
-// ---------------------------------------------------------------------------
 
 function buildSetupRecommendations(ctx: SiteContext): Recommendation[] {
   const recs: Recommendation[] = [];
@@ -370,9 +358,7 @@ function buildSetupRecommendations(ctx: SiteContext): Recommendation[] {
   return recs;
 }
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
 export async function buildRecommendations(
   ctx: SiteContext,

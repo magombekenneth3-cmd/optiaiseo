@@ -15,7 +15,6 @@ import type { WhiteLabelConfig } from "./shared";
 
 export type { WhiteLabelConfig };
 
-// ── Public types ──────────────────────────────────────────────────────────────
 
 export interface AuditFinding {
     category: string;
@@ -42,7 +41,6 @@ export interface AuditReportData {
     whiteLabel?: WhiteLabelConfig;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const CATEGORY_ICONS: Record<string, string> = {
     basics: "◈", "on-page": "◎", onpage: "◎", technical: "⌬",
@@ -79,7 +77,6 @@ function sectionHeader(title: string): string {
     </div>`;
 }
 
-// ── HTML builder ──────────────────────────────────────────────────────────────
 
 function buildAuditHtml(data: AuditReportData): string {
     const wl = data.whiteLabel ?? {};
@@ -95,12 +92,10 @@ function buildAuditHtml(data: AuditReportData): string {
         day: "numeric", month: "long", year: "numeric",
     });
 
-    // ── Logo / Brand ──
     const logoHtml = logoUrl
         ? `<img src="${esc(logoUrl)}" style="height:28px;display:block" alt="${esc(brand)}">`
         : `<span style="font-size:13px;font-weight:800;color:${primary};letter-spacing:0.06em;text-transform:uppercase">${esc(brand)}</span>`;
 
-    // ── Category scores grid ──
     const catEntries = Object.entries(data.categoryScores ?? {});
     const categoryGrid = catEntries.length > 0 ? `
     <div class="section">
@@ -125,7 +120,6 @@ function buildAuditHtml(data: AuditReportData): string {
         </div>
     </div>` : "";
 
-    // ── Core Web Vitals ──
     const v = data.vitals ?? {};
     const hasVitals = v.lcp != null || v.cls != null || v.inp != null;
     const vitalsHtml = hasVitals ? `
@@ -159,7 +153,6 @@ function buildAuditHtml(data: AuditReportData): string {
         })() : ""}
     </div>` : "";
 
-    // ── Findings table ──
     const groupedFindings = data.findings.reduce<Record<string, AuditFinding[]>>((acc, f) => {
         const cat = f.category || "General";
         if (!acc[cat]) acc[cat] = [];
@@ -189,7 +182,6 @@ function buildAuditHtml(data: AuditReportData): string {
             </tr>`;
         }).join("");
 
-    // ── Summary stats bar ──
     const summaryBar = `
     <div style="display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.2)">
         <div style="flex:1;padding:20px 24px;border-right:1px solid rgba(255,255,255,0.06)">
@@ -293,7 +285,6 @@ ${categoryGrid}
 </html>`;
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
 
 export async function generateAuditReportPdf(data: AuditReportData): Promise<Buffer> {
     return renderHtmlToPdf(buildAuditHtml(data), "audit");

@@ -291,7 +291,6 @@ ${buildContext(ctx)}
 
 Return ONLY the complete updated file content for ${ctx.filePath}.`,
 
-    // ── ADVANCED CONTENT & INTENT ─────────────────────────────────────────────
 
     "content-decay-detector": (ctx) => `You are a senior SEO content strategist.
 ${FRAMEWORK_RULES[ctx.framework]}
@@ -324,7 +323,6 @@ ${buildContext(ctx)}
 
 Return ONLY the complete updated file content for ${ctx.filePath}.`,
 
-    // ── TECHNICAL ──────────────────────────────────────────────────────────────
 
     "robots-txt": (ctx) => `You are a senior SEO engineer.
 ${HARD_CONSTRAINTS}
@@ -409,7 +407,6 @@ TASK: Provide the configuration to redirect all HTTP traffic to HTTPS. Output th
 
 Return ONLY the configuration snippets with clear comments labelling each platform. No explanation outside the code.`,
 
-    // ── SCHEMA ────────────────────────────────────────────────────────────────
 
     "schema-organization": (ctx) => `You are a senior schema.org expert.
 ${FRAMEWORK_RULES[ctx.framework]}
@@ -594,7 +591,6 @@ ${buildContext(ctx)}
 
 Return ONLY the complete ${ctx.filePath} content.`,
 
-    // ── LOCAL SEO ─────────────────────────────────────────────────────────────
 
     "nap-consistency": (ctx) => `You are a senior local SEO engineer.
 ${FRAMEWORK_RULES[ctx.framework]}
@@ -661,7 +657,6 @@ Directories to include:
 
 Return ONLY the formatted markdown checklist.`,
 
-    // ── AEO / ANSWER ENGINE OPTIMIZATION ─────────────────────────────────────
 
     "ai-overview-optimizer": (ctx) => `You are a highly specialized AEO (Answer Engine Optimization) expert.
 ${FRAMEWORK_RULES[ctx.framework]}
@@ -677,7 +672,6 @@ CONTEXT:
 ${buildContext(ctx)}
 
 Return ONLY the updated ${ctx.filePath} content incorporating the Q&A block and schema.`,
-
 
 
     "entity-density": (ctx) => `You are a senior SEO/AEO expert specializing in Knowledge Graph optimization.
@@ -797,7 +791,6 @@ ${buildContext(ctx)}
 
 Return ONLY the complete ${ctx.filePath} content with all three schemas injected.`,
 
-    // ── OFF-PAGE ──────────────────────────────────────────────────────────────
 
     "backlink-profile": (ctx) => `You are a senior link-building strategist.
 
@@ -848,7 +841,6 @@ ${buildContext(ctx)}
 
 Return ONLY the corrected ${ctx.filePath} with fixed link attributes.`,
 
-    // ── EEAT ─────────────────────────────────────────────────────────────────
 
     "eeat_about": (ctx) => `You are a senior content strategist and SEO copywriter.
 ${FRAMEWORK_RULES[ctx.framework]}
@@ -904,7 +896,6 @@ ${buildContext(ctx)}
 
 Return ONLY the complete file content for ${ctx.filePath}.`,
 
-    // ── AEO LEGACY ALIASES (backward compat with existing aeoFix.ts IDs) ─────
     "tech_canonical": (ctx) => PROMPTS["canonical-tag"](ctx),
     "tech_sitemap": (ctx) => PROMPTS["xml-sitemap"](ctx),
     "schema_faq": (ctx) => PROMPTS["schema-faq"](ctx),

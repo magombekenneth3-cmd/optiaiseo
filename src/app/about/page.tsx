@@ -25,7 +25,6 @@ export const metadata: Metadata = {
   },
 };
 
-// ── Organization schema with full entity signals ──────────────────────────────
 const organizationSchema = {
   "@context": "https://schema.org",
   "@type": "Organization",
@@ -70,7 +69,6 @@ const organizationSchema = {
   },
 };
 
-// ── Service schema — explicit offering list for AI citation ───────────────────
 const serviceSchema = {
   "@context": "https://schema.org",
   "@type": "Service",
@@ -147,7 +145,6 @@ const serviceSchema = {
   },
 };
 
-// ── AboutPage schema ──────────────────────────────────────────────────────────
 const webPageSchema = {
   "@context": "https://schema.org",
   "@type": "AboutPage",
@@ -164,7 +161,6 @@ const webPageSchema = {
   },
 };
 
-// ── Services listed on-page ───────────────────────────────────────────────────
 const SERVICES = [
   {
     title: "Generative Engine Optimization (GEO)",

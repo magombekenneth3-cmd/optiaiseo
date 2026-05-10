@@ -4,7 +4,6 @@ import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
-// ── Filter schema produced by Gemini ─────────────────────────────────────────
 const FilterSchema = z.object({
     entity: z.enum(["audits", "keywords", "aeoReports", "blogs", "competitors", "rankSnapshots"]),
     filters: z.record(z.string(), z.unknown()).optional(),
@@ -15,7 +14,6 @@ const FilterSchema = z.object({
 
 type Filter = z.infer<typeof FilterSchema>;
 
-// ── Entity → Prisma query builder ────────────────────────────────────────────
 async function runEntityQuery(siteId: string, filter: Filter) {
     const { entity, orderBy, limit } = filter;
     const take = limit ?? 20;
@@ -98,7 +96,6 @@ async function runEntityQuery(siteId: string, filter: Filter) {
     }
 }
 
-// ── Gemini NL→Filter conversion ──────────────────────────────────────────────
 async function nlToFilter(query: string): Promise<Filter> {
     const { callGemini } = await import("@/lib/gemini");
 
@@ -142,7 +139,6 @@ Rules:
     return FilterSchema.parse(parsed);
 }
 
-// ── Route handler ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
     const user = await getAuthUser(req);
     if (!user)

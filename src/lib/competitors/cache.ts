@@ -14,9 +14,7 @@ import type { BusinessFingerprint, VerificationVerdict } from "./types";
 const FP_TTL_SEC     = 60 * 60 * 24;   // 24 hours
 const VERIFY_TTL_SEC = 60 * 60;         // 1 hour
 
-// ---------------------------------------------------------------------------
 // Redis client (lazy — never imported at module level to avoid breaking CI)
-// ---------------------------------------------------------------------------
 
 async function getRedis() {
     try {
@@ -27,9 +25,7 @@ async function getRedis() {
     }
 }
 
-// ---------------------------------------------------------------------------
 // SHA-256 helper for cache key hashing
-// ---------------------------------------------------------------------------
 
 async function sha256Short(input: string): Promise<string> {
     try {
@@ -48,9 +44,7 @@ async function sha256Short(input: string): Promise<string> {
     }
 }
 
-// ---------------------------------------------------------------------------
 // In-process fallback (used in dev / when Redis is unavailable)
-// ---------------------------------------------------------------------------
 
 const FP_TTL_MS     = FP_TTL_SEC     * 1000;
 const VERIFY_TTL_MS = VERIFY_TTL_SEC * 1000;
@@ -59,9 +53,7 @@ interface CacheEntry<T> { value: T; expiresAt: number; }
 const _fpMap:     Map<string, CacheEntry<BusinessFingerprint>>  = new Map();
 const _verifyMap: Map<string, CacheEntry<VerificationVerdict[]>> = new Map();
 
-// ---------------------------------------------------------------------------
 // Fingerprint cache
-// ---------------------------------------------------------------------------
 
 export async function getFingerprintCache(domain: string): Promise<BusinessFingerprint | null> {
     const key = `comp:fp:${domain}`;
@@ -95,9 +87,7 @@ export async function setFingerprintCache(domain: string, value: BusinessFingerp
     _fpMap.set(key, { value, expiresAt: Date.now() + FP_TTL_MS });
 }
 
-// ---------------------------------------------------------------------------
 // Verification cache (key is a SHA-256 hash of the domain list + service labels)
-// ---------------------------------------------------------------------------
 
 export async function getVerificationCache(rawKey: string): Promise<VerificationVerdict[] | null> {
     const hash = await sha256Short(rawKey);
@@ -132,9 +122,7 @@ export async function setVerificationCache(rawKey: string, value: VerificationVe
     _verifyMap.set(key, { value, expiresAt: Date.now() + VERIFY_TTL_MS });
 }
 
-// ---------------------------------------------------------------------------
 // Cache stats (for logging)
-// ---------------------------------------------------------------------------
 
 export function getCacheStats() {
     return {

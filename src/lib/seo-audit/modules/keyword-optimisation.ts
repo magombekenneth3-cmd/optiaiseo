@@ -7,9 +7,7 @@
 import { parse } from "node-html-parser";
 import type { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem } from "../types";
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 function toText(html: string): string {
     return html
@@ -49,9 +47,7 @@ function score(items: ChecklistItem[]): AuditCategoryResult {
     return { id: KeywordOptimisationModule.id, label: KeywordOptimisationModule.label, items, score: s, passed, failed, warnings };
 }
 
-// ---------------------------------------------------------------------------
 // Module
-// ---------------------------------------------------------------------------
 
 export const KeywordOptimisationModule: AuditModule = {
     id:    "keyword-optimisation",
@@ -82,7 +78,6 @@ export const KeywordOptimisationModule: AuditModule = {
         const root   = parse(context.html);
         const fullText = toText(context.html);
 
-        // ── 1. Keyword in Title ─────────────────────────────────────────────
         {
             const titleText = (root.querySelector("title")?.textContent ?? "").trim().toLowerCase();
             const inTitle   = titleText.includes(kw);
@@ -105,7 +100,6 @@ export const KeywordOptimisationModule: AuditModule = {
             });
         }
 
-        // ── 2. Keyword in H1 ───────────────────────────────────────────────
         {
             const h1Text = (root.querySelector("h1")?.textContent ?? "").trim().toLowerCase();
             const inH1   = h1Text.includes(kw);
@@ -129,7 +123,6 @@ export const KeywordOptimisationModule: AuditModule = {
             });
         }
 
-        // ── 3. Keyword in URL Slug ─────────────────────────────────────────
         {
             const slug      = context.url.toLowerCase().replace(/https?:\/\/[^/]+/, "");
             const kwSlug    = kw.replace(/\s+/g, "-");
@@ -155,7 +148,6 @@ export const KeywordOptimisationModule: AuditModule = {
             });
         }
 
-        // ── 4. Keyword in Meta Description ────────────────────────────────
         {
             const metaEl   = root.querySelector("meta[name='description']") ?? root.querySelector("meta[name='Description']");
             const metaText = (metaEl?.getAttribute("content") ?? "").trim().toLowerCase();
@@ -181,7 +173,6 @@ export const KeywordOptimisationModule: AuditModule = {
             });
         }
 
-        // ── 5. Keyword in First 100 Words ─────────────────────────────────
         {
             const bodyEl   = root.querySelector("main") ?? root.querySelector("article") ?? root.querySelector("body");
             const bodyText = toText(bodyEl?.innerHTML ?? context.html);
@@ -205,7 +196,6 @@ export const KeywordOptimisationModule: AuditModule = {
             });
         }
 
-        // ── 6. Keyword in H2 / H3 Subheadings ────────────────────────────
         {
             const h2Texts = Array.from(root.querySelectorAll("h2, h3")).map(el => el.textContent.trim().toLowerCase());
             const matchingH = h2Texts.filter(h => h.includes(kw));
@@ -232,7 +222,6 @@ export const KeywordOptimisationModule: AuditModule = {
             });
         }
 
-        // ── 7. Keyword Density ────────────────────────────────────────────
         {
             const dens = density(fullText, kw);
             const wc   = wordCount(fullText);
@@ -265,7 +254,6 @@ export const KeywordOptimisationModule: AuditModule = {
             });
         }
 
-        // ── 8. LSI / Semantic Keyword Coverage ───────────────────────────
         {
             // Check if related semantic terms / variations appear on the page
             // We derive simple variations: plural, gerund, adjective forms

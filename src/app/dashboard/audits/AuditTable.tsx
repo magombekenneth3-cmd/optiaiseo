@@ -7,7 +7,6 @@ import Link from "next/link";
 import { Loader2, ArrowRight } from "lucide-react";
 import { DeleteAuditButton } from "./DeleteAuditButton";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 type AuditRow = {
   id: string;
@@ -21,7 +20,6 @@ type AuditRow = {
   site: { id: string; domain: string };
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function scoreColor(s: number) {
   if (s >= 80) return "text-emerald-400";
@@ -58,7 +56,6 @@ function ScoreArc({ score }: { score: number }) {
   );
 }
 
-// ── StatusBadge ───────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { cls: string; dot: string; label: string; pulse?: boolean }> = {
@@ -98,7 +95,6 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ── DeltaBadge ────────────────────────────────────────────────────────────────
 
 function DeltaBadge({ delta }: { delta: number }) {
   if (delta === 0) return null;
@@ -115,7 +111,6 @@ function DeltaBadge({ delta }: { delta: number }) {
   );
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────────
 
 function EmptyState() {
   return (
@@ -139,7 +134,6 @@ function EmptyState() {
   );
 }
 
-// ── AuditTable ────────────────────────────────────────────────────────────────
 
 export function AuditTable({
   initialAudits,

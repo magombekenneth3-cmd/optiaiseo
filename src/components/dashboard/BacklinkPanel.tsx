@@ -8,7 +8,6 @@ type Overview  = Awaited<ReturnType<typeof getBacklinkOverview>>;
 type LinkList  = Awaited<ReturnType<typeof getBacklinkList>>;
 type GapReport = Awaited<ReturnType<typeof getBacklinkGap>>;
 
-// ── Stat card ─────────────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, color = "", border = "" }: {
     label: string; value: string | number; sub?: string; color?: string; border?: string;
 }) {
@@ -21,14 +20,12 @@ function StatCard({ label, value, sub, color = "", border = "" }: {
     );
 }
 
-// ── DR colour ─────────────────────────────────────────────────────────────────
 function drColor(dr: number) {
     if (dr >= 60) return "text-emerald-400";
     if (dr >= 30) return "text-amber-400";
     return "text-red-400";
 }
 
-// ── Section header ────────────────────────────────────────────────────────────
 function SectionHeader({ icon: Icon, title, sub }: { icon: React.ElementType; title: string; sub?: string }) {
     return (
         <div className="flex items-center gap-2 mb-4">
@@ -41,7 +38,6 @@ function SectionHeader({ icon: Icon, title, sub }: { icon: React.ElementType; ti
     );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
 export function BacklinkPanel({ siteId, competitorDomains }: {
     siteId: string;
     competitorDomains: string[];
@@ -80,7 +76,6 @@ export function BacklinkPanel({ siteId, competitorDomains }: {
     const alerts  = overview?.success ? overview.alerts  : [];
     const details = linkList?.success  ? linkList.details : [];
 
-    // ── Loading skeleton ──────────────────────────────────────────────────────
     if (isPending && !overview) {
         return (
             <div className="space-y-4 animate-pulse">
@@ -94,7 +89,6 @@ export function BacklinkPanel({ siteId, competitorDomains }: {
         );
     }
 
-    // ── Error state ───────────────────────────────────────────────────────────
     if (overview && !overview.success) {
         return (
             <div className="py-12 text-center text-sm text-muted-foreground">

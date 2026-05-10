@@ -8,9 +8,7 @@
 import { callGemini as geminiCall } from "@/lib/gemini/client";
 import type { FrameworkContext } from "./context-inference";
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 export interface ManualFixGuide {
     steps: string[];
@@ -45,9 +43,7 @@ export interface GeneratedFix {
     reasoning?: string;
 }
 
-// ---------------------------------------------------------------------------
 // Gemini wrapper
-// ---------------------------------------------------------------------------
 
 export async function callGeminiForFix(
     prompt: string,
@@ -64,9 +60,7 @@ export async function callGeminiForFix(
     }
 }
 
-// ---------------------------------------------------------------------------
 // JSON parsing
-// ---------------------------------------------------------------------------
 
 export function parseFixJson<T>(text: string): T | null {
     try {
@@ -80,9 +74,7 @@ export function parseFixJson<T>(text: string): T | null {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Validation
-// ---------------------------------------------------------------------------
 
 /** Returns an error string if the fix is unsafe/invalid, null if OK. */
 export function validateFix(
@@ -125,9 +117,7 @@ export function validateFix(
     return null;
 }
 
-// ---------------------------------------------------------------------------
 // Confidence scoring
-// ---------------------------------------------------------------------------
 
 export function scoreFix(content: string, issueId: string): number {
     let score = 0;
@@ -149,9 +139,7 @@ export function scoreFix(content: string, issueId: string): number {
 
 export const CONFIDENCE_THRESHOLD = 2;
 
-// ---------------------------------------------------------------------------
 // Prompt builder
-// ---------------------------------------------------------------------------
 
 /**
  * Builds the Gemini prompt for generating a code fix.

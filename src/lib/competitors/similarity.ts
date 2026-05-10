@@ -13,10 +13,8 @@
 
 import type { BusinessFingerprint, SimilarityResult } from "./types";
 
-// ---------------------------------------------------------------------------
 // Synonym groups — tokens in the same group are treated as identical
 // Each set defines a cluster of interchangeable terms.
-// ---------------------------------------------------------------------------
 
 const SYNONYM_GROUPS: string[][] = [
     // SEO / Search
@@ -72,9 +70,7 @@ for (const group of SYNONYM_GROUPS) {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
 /**
  * Computes weighted similarity between a site's fingerprint and a candidate's.
@@ -102,9 +98,7 @@ export function computeSimilarity(
     };
 }
 
-// ---------------------------------------------------------------------------
 // Axis scorers
-// ---------------------------------------------------------------------------
 
 /**
  * Synonym-aware Jaccard similarity between service arrays.
@@ -197,9 +191,7 @@ function audienceSimilarity(a: string, b: string): number {
     return clamp(intersection.size / union.size);
 }
 
-// ---------------------------------------------------------------------------
 // Competitor type derivation
-// ---------------------------------------------------------------------------
 
 function deriveType(
     overall:       number,
@@ -224,9 +216,7 @@ function deriveType(
     return "content";
 }
 
-// ---------------------------------------------------------------------------
 // Penalty helpers (used by detect.ts)
-// ---------------------------------------------------------------------------
 
 /**
  * Returns a multiplier (0–1) to apply to the raw SERP score
@@ -242,9 +232,7 @@ export function typePenalty(type: SimilarityResult["competitorType"]): number {
     return PENALTIES[type] ?? 0.5;
 }
 
-// ---------------------------------------------------------------------------
 // Utility
-// ---------------------------------------------------------------------------
 
 const STOP_WORDS = new Set(["the", "a", "an", "and", "or", "for", "of", "in", "to", "with", "is", "on", "at", "by"]);
 

@@ -535,7 +535,6 @@ export default function KnowledgeGraphEditor({ siteId, domain }: KnowledgeGraphE
     const [propagateMsg, setPropagateMsg] = useState<string | null>(null);
     const propagateMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // ── Load facts ────────────────────────────────────────────────────────────
     const loadFacts = useCallback(async () => {
         setLoading(true);
         setLoadError(null);
@@ -553,7 +552,6 @@ export default function KnowledgeGraphEditor({ siteId, domain }: KnowledgeGraphE
 
     useEffect(() => { loadFacts(); }, [loadFacts]);
 
-    // ── Propagate ─────────────────────────────────────────────────────────────
     const handlePropagate = async () => {
         setPropagating(true);
         setPropagateMsg(null);
@@ -575,7 +573,6 @@ export default function KnowledgeGraphEditor({ siteId, domain }: KnowledgeGraphE
         }
     };
 
-    // ── Mutations ─────────────────────────────────────────────────────────────
     const handleUpdate = (updated: BrandFact) => {
         setFacts((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
     };
@@ -588,7 +585,6 @@ export default function KnowledgeGraphEditor({ siteId, domain }: KnowledgeGraphE
         setFacts((prev) => [fact, ...prev]);
     };
 
-    // ── Grouping ──────────────────────────────────────────────────────────────
     const groupedFacts = facts.reduce<Record<string, BrandFact[]>>((acc, f) => {
         (acc[f.factType] ??= []).push(f);
         return acc;

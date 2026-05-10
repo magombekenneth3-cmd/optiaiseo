@@ -13,12 +13,10 @@ import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { CONCURRENCY } from "../concurrency";
 
-// ── Local types ───────────────────────────────────────────────────────────────
 
 type SiteRow = { id: string; domain: string; competitors: { id: string; domain: string }[] };
 type AlertSiteRow = { id: string; domain: string };
 
-// ── 1. Weekly keyword gap auto-refresh ───────────────────────────────────────
 
 export const weeklyCompetitorRefreshJob = inngest.createFunction(
   {
@@ -81,7 +79,6 @@ export const weeklyCompetitorRefreshJob = inngest.createFunction(
   }
 );
 
-// ── 2. Per-competitor refresh handler ────────────────────────────────────────
 
 export const singleCompetitorRefreshJob = inngest.createFunction(
   {
@@ -123,7 +120,6 @@ export const singleCompetitorRefreshJob = inngest.createFunction(
   }
 );
 
-// ── 3. Weekly alert fan-out cron ─────────────────────────────────────────────
 
 export const weeklyCompetitorAlertsJob = inngest.createFunction(
   {

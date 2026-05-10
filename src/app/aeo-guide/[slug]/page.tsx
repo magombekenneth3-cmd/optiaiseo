@@ -5,9 +5,7 @@ import AEO_PAGES from "@/data/aeo-pages.json";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 interface AeoPage {
   slug: string;
@@ -26,17 +24,13 @@ interface Faq {
   a: string;
 }
 
-// ---------------------------------------------------------------------------
 // Static params
-// ---------------------------------------------------------------------------
 
 export async function generateStaticParams() {
   return (AEO_PAGES as AeoPage[]).map((p) => ({ slug: p.slug }));
 }
 
-// ---------------------------------------------------------------------------
 // Metadata
-// ---------------------------------------------------------------------------
 
 export async function generateMetadata({
   params,
@@ -59,9 +53,6 @@ export async function generateMetadata({
   };
 }
 
-// ---------------------------------------------------------------------------
-// Content engine — unique sections per intent
-// ---------------------------------------------------------------------------
 
 function buildDescription(page: AeoPage): string {
   const map: Record<string, string> = {
@@ -214,9 +205,7 @@ const INTENT_COLOR: Record<string, string> = {
   advanced: "bg-red-500/10 text-red-400 border-red-500/20",
 };
 
-// ---------------------------------------------------------------------------
 // Page component
-// ---------------------------------------------------------------------------
 
 export default async function AeoGuidePage({
   params,

@@ -94,7 +94,6 @@ export function auditBannedPhrases(htmlContent: string): { warnings: string[] } 
         if (pattern.test(text)) warnings.push(message);
     }
 
-    // ── Word repetition scanner ───────────────────────────────────────────────
     // Flags any non-keyword content word appearing >5 times in a 200-word window.
     // This is the most common cause of AI-sounding "over-repetition" complaints.
     const STOP_WORDS = new Set([

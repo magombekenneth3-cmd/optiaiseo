@@ -12,7 +12,6 @@ import { callGeminiJson } from "@/lib/gemini/client";
 import { generateServiceSchema } from "@/lib/schema/serviceSchema";
 import type { ServiceEntity } from "@/app/actions/entityDiscovery";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface EntityPagePlan {
   entity: ServiceEntity;
@@ -30,7 +29,6 @@ export interface EntityPagePlan {
   internalLinks: { text: string; slug: string }[];
 }
 
-// ── generateEntityPage ─────────────────────────────────────────────────────────
 
 /**
  * Calls Gemini to produce a complete entity-page plan —
@@ -142,7 +140,6 @@ Return ONLY valid JSON:
   };
 }
 
-// ── assembleEntityPageHtml ─────────────────────────────────────────────────────
 
 /**
  * Assembles the EntityPagePlan into a complete, self-contained HTML body.

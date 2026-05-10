@@ -13,7 +13,6 @@ const SENTRY_DSN = "https://326f0baf46b218070968e5ae53a04b28@o4511315040075776.i
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    // ── Node.js server runtime ──────────────────────────────────────────────
     try {
       const Sentry = await import("@sentry/nextjs");
       Sentry.init({
@@ -36,7 +35,6 @@ export async function register() {
   }
 
   if (process.env.NEXT_RUNTIME === "edge") {
-    // ── Edge runtime ────────────────────────────────────────────────────────
     try {
       const Sentry = await import("@sentry/nextjs");
       Sentry.init({

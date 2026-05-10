@@ -19,7 +19,6 @@
 import { logger } from "@/lib/logger";
 import crypto from "crypto";
 
-// ── Lazy-load Upstash Vector so missing env vars don't crash at import ────────
 let _index: import("@upstash/vector").Index | null = null;
 
 async function getIndex(): Promise<import("@upstash/vector").Index | null> {
@@ -37,7 +36,6 @@ async function getIndex(): Promise<import("@upstash/vector").Index | null> {
     }
 }
 
-// ── Gemini embedding (768-dim, text-embedding-004) ────────────────────────────
 // Uses the GEMINI_API_KEY already required by the rest of the system.
 // No additional API key needed — this replaces the previous OpenAI dependency.
 async function embed(text: string): Promise<number[] | null> {
@@ -52,12 +50,10 @@ async function embed(text: string): Promise<number[] | null> {
     }
 }
 
-// ── Deterministic vector ID ────────────────────────────────────────────────────
 function vectorId(namespace: string, prompt: string): string {
     return `${namespace}:${crypto.createHash("sha256").update(prompt).digest("hex").slice(0, 32)}`;
 }
 
-// ── TTL helper ────────────────────────────────────────────────────────────────
 const DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
 interface CachePayload {
@@ -71,7 +67,6 @@ function isExpired(payload: CachePayload): boolean {
     return ageSeconds > payload.ttlSeconds;
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
 
 export interface CachedLLMOptions {
     /** Feature namespace for organisation: "aeo" | "audit" | "blog" | "seo-ai" */
@@ -116,7 +111,6 @@ export async function cachedLLMCall(opts: {
         return call();
     }
 
-    // ── Query for semantic near-match ─────────────────────────────────────────
     try {
         const results = await index.query({
             vector:          embedding,
@@ -137,7 +131,6 @@ export async function cachedLLMCall(opts: {
         logger.warn("[SemanticCache] Query error:", { err });
     }
 
-    // ── Cache miss — call the LLM ─────────────────────────────────────────────
     logger.debug(`[SemanticCache] MISS ns=${namespace}`);
     const response = await call();
 

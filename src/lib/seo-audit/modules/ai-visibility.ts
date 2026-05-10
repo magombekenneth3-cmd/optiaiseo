@@ -148,7 +148,6 @@ export const AiVisibilityModule: AuditModule = {
         }
 
 
-        // ── AEO CHECK 1: Citation-readiness ──────────────────────────────────
         if (context.html) {
             const root = parse(context.html);
             const combinedSchema = root
@@ -199,7 +198,6 @@ export const AiVisibilityModule: AuditModule = {
                 details: { hasArticleSchema, hasAuthorInSchema, hasDateModified, hasAuthoritativeLink, citationScore },
             });
 
-            // ── AEO CHECK 2: Answer-box structure ─────────────────────────────
             const h1Text = root.querySelector('h1')?.text.trim().toLowerCase() ?? '';
             const bodyContainer = root.querySelector('main, article, [role="main"]')
                 ?? root.querySelector('.content, .post-content, .entry-content')
@@ -238,7 +236,6 @@ export const AiVisibilityModule: AuditModule = {
                 details: { keywordCoveragePercent: Math.round(keywordCoverage * 100), hasDirectOpeningSentence },
             });
 
-            // ── AEO CHECK 3: Conversational headings ──────────────────────────
             const QUESTION_RE = /^(what|how|why|is|are|can|does|do|should|which|when|where|who|will)\b/i;
             const subheadings = root.querySelectorAll('h2, h3');
             const totalHeadings = subheadings.length;
@@ -268,7 +265,6 @@ export const AiVisibilityModule: AuditModule = {
                 details: { totalHeadings, questionHeadings: questionCount, questionRatioPercent: Math.round(questionRatio * 100) },
             });
 
-            // ── AEO CHECK 4: LLM Citation Probe ─────────────────────────
             // Only runs when GEMINI_API_KEY is configured (avoids billing in test/free tier)
             if (process.env.GEMINI_API_KEY) {
                 try {

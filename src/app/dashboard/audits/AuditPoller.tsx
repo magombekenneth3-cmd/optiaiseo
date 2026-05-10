@@ -40,7 +40,6 @@ export function AuditPoller({ processingAuditIds, initialIntervalMs = 6000 }: Au
     const [displayPct, setDisplayPct] = useState(0);
     const prevLengthRef               = useRef(processingAuditIds.length);
 
-    // ── Completion detection ─────────────────────────────────────────────────
     useEffect(() => {
         const prev = prevLengthRef.current;
         const curr = processingAuditIds.length;
@@ -82,7 +81,6 @@ export function AuditPoller({ processingAuditIds, initialIntervalMs = 6000 }: Au
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [processingAuditIds.length]);
 
-    // ── Reset on idle ────────────────────────────────────────────────────────
     useEffect(() => {
         if (processingAuditIds.length === 0) {
             attemptRef.current = 0;

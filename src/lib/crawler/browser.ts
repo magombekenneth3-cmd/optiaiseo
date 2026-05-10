@@ -11,7 +11,6 @@ const BROWSER_POOL_SIZE = process.env.BROWSER_POOL_SIZE ? parseInt(process.env.B
 const browserPool: Browser[] = [];
 let poolIndex = 0;
 
-// ── Graceful shutdown ─────────────────────────────────────────────────────────
 // Close all pooled Chromium instances when the Node process exits so they are
 // never orphaned.  Runs on SIGTERM (container stop), SIGINT (Ctrl-C) and the
 // normal 'exit' event.

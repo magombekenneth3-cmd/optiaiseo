@@ -6,9 +6,7 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import type { Blog, Site } from "@prisma/client";
 
-// ─────────────────────────────────────────────────────────────
 // Redis — lazy, safe, never blocks import
-// ─────────────────────────────────────────────────────────────
 
 let _redis: IORedis | null = null;
 
@@ -36,9 +34,7 @@ function getRedis(): IORedis | null {
     }
 }
 
-// ─────────────────────────────────────────────────────────────
 // Cache
-// ─────────────────────────────────────────────────────────────
 
 const CACHE_TTL = 86_400;
 
@@ -66,9 +62,7 @@ async function setCache(key: string, value: unknown): Promise<void> {
     }
 }
 
-// ─────────────────────────────────────────────────────────────
 // Retry — exponential backoff for Gemini 429s / timeouts
-// ─────────────────────────────────────────────────────────────
 
 async function withRetry<T>(
     fn: () => Promise<T>,

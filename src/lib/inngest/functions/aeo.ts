@@ -7,7 +7,6 @@ import { runAeoAudit, runAeoAuditLite } from "@/lib/aeo";
 import { CREDIT_COSTS } from "@/lib/credits";
 import { CONCURRENCY } from "../concurrency";
 
-// ── AEO Deep Audit Job ────────────────────────────────────────────────────────
 
 export const runAeoAuditJob = inngest.createFunction(
     {
@@ -91,7 +90,6 @@ export const runAeoAuditJob = inngest.createFunction(
                     topRecommendations: result.topRecommendations,
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     multiModelResults: result.modelCitationResults as any,
-                    // Fix 7: persist computed layer scores and diagnosis
                     layerScores: result.layerScores as object ?? null,
                     diagnosis: result.diagnosis as object ?? null,
                 },
@@ -108,7 +106,6 @@ export const runAeoAuditJob = inngest.createFunction(
     }
 );
 
-// ── AEO Rank Job ──────────────────────────────────────────────────────────────
 
 export const runAeoRankJob = inngest.createFunction(
     {
@@ -155,7 +152,6 @@ export const runAeoRankJob = inngest.createFunction(
     }
 );
 
-// ── Weekly AEO Tracker ────────────────────────────────────────────────────────
 
 export const weeklyAeoTracker = inngest.createFunction(
     {
@@ -218,7 +214,6 @@ export const processAeoSiteJob = inngest.createFunction(
                     topRecommendations: result.topRecommendations,
                     checks: result.checks as object,
                     status: "COMPLETED",
-                    // Fix 8: persist computed layer scores and diagnosis
                     layerScores: result.layerScores as object ?? null,
                     diagnosis: result.diagnosis as object ?? null,
                 },
@@ -226,7 +221,6 @@ export const processAeoSiteJob = inngest.createFunction(
             });
         });
 
-        // Fix 9: Sync entity Knowledge Graph — same step as runAeoAuditJob
         await step.run("sync-entity-kg", async () => {
             const { syncEntityKnowledgeGraph } = await import("@/lib/aeo/entity-kg-sync");
             await syncEntityKnowledgeGraph(siteId, domain, result);

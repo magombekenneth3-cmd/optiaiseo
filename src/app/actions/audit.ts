@@ -135,7 +135,6 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
 
     clearSessionCaches();
 
-    // ── Non-blocking: create a PENDING placeholder and hand off to Inngest ──
     const newAudit = await prisma.audit.create({
       data: {
         siteId: site.id,

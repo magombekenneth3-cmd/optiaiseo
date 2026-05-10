@@ -42,7 +42,6 @@ export const TechnicalModule: AuditModule = {
             (async () => {
                 const psiCacheKey = `psi:v1:${context.url}`;
                 try {
-                    // ── PSI Redis cache (24hr TTL) ──────────────────────────
                     const { redis } = await import('@/lib/redis');
                     const cached = await redis.get(psiCacheKey);
                     if (cached) {
@@ -115,14 +114,11 @@ export const TechnicalModule: AuditModule = {
         ]);
 
 
-        // Phase 1.2: append to frameworkHints[] for engine consensus resolution
         if (crawlerRes.frameworkDetected) {
             context.frameworkHints.push(crawlerRes.frameworkDetected);
         }
 
-        // ─────────────────────────────────────────────────────────────
         // 1. JS Hydration & Framework Rendering
-        // ─────────────────────────────────────────────────────────────
         items.push({
             id: 'js-hydration',
             label: 'JavaScript Hydration & Framework Rendering',
@@ -136,9 +132,7 @@ export const TechnicalModule: AuditModule = {
             details: { framework: crawlerRes.frameworkDetected, hydrationMs: crawlerRes.hydrationTimeMs, risks: crawlerRes.crawlerRisks.length },
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 2. Indexability (noindex meta)
-        // ─────────────────────────────────────────────────────────────
         const noindexTag = root.querySelector('meta[name="robots"][content*="noindex"]');
         items.push({
             id: 'indexability',
@@ -152,9 +146,7 @@ export const TechnicalModule: AuditModule = {
             aiVisibilityImpact: 100,
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 3. SSL / HTTPS
-        // ─────────────────────────────────────────────────────────────
         const isHttps = context.url.startsWith('https://');
         items.push({
             id: 'ssl-certificate',
@@ -186,9 +178,7 @@ export const TechnicalModule: AuditModule = {
             });
         }
 
-        // ─────────────────────────────────────────────────────────────
         // 4. Robots.txt & XML Sitemap
-        // ─────────────────────────────────────────────────────────────
         const sitemapResult = await validateRobotsAndSitemap(context.url).catch(() => ({ robotsTxtExists: false, sitemapExists: false }));
         items.push({
             id: 'robots-txt',
@@ -210,9 +200,7 @@ export const TechnicalModule: AuditModule = {
             aiVisibilityImpact: 90,
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 5. Schema Markup (quick presence check; full audit in schema.ts)
-        // ─────────────────────────────────────────────────────────────
         const schemaElements = root.querySelectorAll('script[type="application/ld+json"]');
         const hasMicrodata = (html || '').includes('itemtype=');
         const hasSomeSchema = schemaElements.length > 0 || hasMicrodata;
@@ -229,9 +217,7 @@ export const TechnicalModule: AuditModule = {
             details: { jsonLdBlocks: schemaElements.length, microdata: hasMicrodata },
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 6. Hreflang Tags
-        // ─────────────────────────────────────────────────────────────
         const hreflangTags = root.querySelectorAll('link[rel="alternate"][hreflang]');
         items.push({
             id: 'hreflang-tags',
@@ -246,9 +232,7 @@ export const TechnicalModule: AuditModule = {
             details: { count: hreflangTags.length },
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 7. Render-Blocking Scripts (non-tracking)
-        // ─────────────────────────────────────────────────────────────
         const headEl = root.querySelector('head');
         const headScripts = headEl ? headEl.querySelectorAll('script[src]') : [];
         const renderBlockingScripts = headScripts.filter(s => {
@@ -292,9 +276,7 @@ export const TechnicalModule: AuditModule = {
             details: { domNodes: domNodeCount },
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 8. Font Loading — font-display:swap & preconnect
-        // ─────────────────────────────────────────────────────────────
         const hasGoogleFontsLink = root.querySelectorAll('link[href*="fonts.googleapis.com"]').length > 0;
         const hasGoogleFontsPreconnect = root.querySelectorAll('link[rel="preconnect"][href*="fonts.googleapis.com"], link[rel="preconnect"][href*="fonts.gstatic.com"]').length > 0;
         const hasFontDisplaySwap = (html || '').includes('font-display:swap') || (html || '').includes('font-display: swap');
@@ -337,9 +319,7 @@ export const TechnicalModule: AuditModule = {
             });
         }
 
-        // ─────────────────────────────────────────────────────────────
         // 9. Resource Hints (preload / prefetch / preconnect / dns-prefetch)
-        // ─────────────────────────────────────────────────────────────
         const preloadLinks = root.querySelectorAll('link[rel="preload"]').length;
         const prefetchLinks = root.querySelectorAll('link[rel="prefetch"]').length;
         const preconnectLinks = root.querySelectorAll('link[rel="preconnect"]').length;
@@ -362,9 +342,7 @@ export const TechnicalModule: AuditModule = {
             details: { preload: preloadLinks, prefetch: prefetchLinks, preconnect: preconnectLinks, dnsPrefetch },
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 10. Image CLS Risk (missing width/height attributes)
-        // ─────────────────────────────────────────────────────────────
         const allImages = root.querySelectorAll('img');
         const imgsWithoutDimensions = allImages.filter(img => !img.getAttribute('width') || !img.getAttribute('height'));
         const _imgsWithoutLazy = allImages.filter(img => !img.hasAttribute('loading') && !img.hasAttribute('fetchpriority'));
@@ -385,9 +363,7 @@ export const TechnicalModule: AuditModule = {
             details: { total: allImages.length, missingDimensions: imgsWithoutDimensions.length },
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 11. Next.js-Specific Checks
-        // ─────────────────────────────────────────────────────────────
         const framework = crawlerRes.frameworkDetected;
         if (framework?.toLowerCase().includes('next')) {
             const rawImgTags = root.querySelectorAll('img').filter(img => {
@@ -430,9 +406,7 @@ export const TechnicalModule: AuditModule = {
             });
         }
 
-        // ─────────────────────────────────────────────────────────────
         // 12. Core Web Vitals (PageSpeed Insights)
-        // ─────────────────────────────────────────────────────────────
         if (psiData === 'timeout') {
             items.push({
                 id: 'core-web-vitals-timeout',
@@ -649,9 +623,7 @@ export const TechnicalModule: AuditModule = {
             });
         }
 
-        // ─────────────────────────────────────────────────────────────
         // 13. Gzip / Brotli Compression
-        // ─────────────────────────────────────────────────────────────
         let gzipStatus: 'Pass' | 'Fail' = 'Fail';
         let gzipEncoding = 'none';
         let gzipFinding = '';
@@ -769,9 +741,7 @@ export const TechnicalModule: AuditModule = {
             });
         }
 
-        // ─────────────────────────────────────────────────────────────
         // 14. www vs non-www Redirect Consistency
-        // ─────────────────────────────────────────────────────────────
         let wwwStatus: 'Pass' | 'Warning' | 'Fail' = 'Pass';
         let wwwFinding = '';
         let wwwDetails: Record<string, string | number | boolean> = {};
@@ -872,9 +842,7 @@ export const TechnicalModule: AuditModule = {
             details: { probeHttpStatus: soft404HttpStatus ?? 0 },
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 15. Speed Improvement Forecast
-        // ─────────────────────────────────────────────────────────────
         // Build a synthesised forecast from all warnings/failures found so far
         const speedFindings: Array<{ issue: string; estimatedSavingMs: number; effort: string }> = [];
 
@@ -916,9 +884,7 @@ export const TechnicalModule: AuditModule = {
             details: { issuesFound: speedFindings.length, estimatedTotalSavingMs: totalEstimatedMs },
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 16. Mobile Touch Target Size
-        // ─────────────────────────────────────────────────────────────
         const interactiveEls = root.querySelectorAll('a, button, input[type="submit"], input[type="button"]');
         let smallTargetCount = 0;
         interactiveEls.forEach(el => {
@@ -950,9 +916,7 @@ export const TechnicalModule: AuditModule = {
             details: { smallTargetsDetected: smallTargetCount },
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 17. Font Size Legibility (Mobile)
-        // ─────────────────────────────────────────────────────────────
         const styleBlocks = root.querySelectorAll('style');
         const allInlineCss = styleBlocks.map(s => s.textContent || '').join(' ');
         // Look for body/p font-size declarations that are too small
@@ -981,9 +945,7 @@ export const TechnicalModule: AuditModule = {
             details: { smallFontDeclarationsFound: smallFontMatches.length },
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 18. Mobile-Specific Meta Tags
-        // ─────────────────────────────────────────────────────────────
         const hasThemeColor = root.querySelector('meta[name="theme-color"]') !== null;
         const hasAppleTouchIcon = root.querySelector('link[rel="apple-touch-icon"]') !== null;
         const hasAppleWebApp = root.querySelector('meta[name="apple-mobile-web-app-capable"]') !== null;
@@ -1106,9 +1068,7 @@ export const TechnicalModule: AuditModule = {
             details: { hops: redirectHops, chain: redirectChain.join(' → '), hasLoop, hasTemporaryRedirect, redirectTypes: redirectStatuses.join(',') },
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 23. Invisible Text (SEO Cloaking / Accessibility Risk)
-        // ─────────────────────────────────────────────────────────────
         const textElements = root.querySelectorAll('p, span, div, h1, h2, h3, h4, h5, h6, a, li');
         let invisibleCount = 0;
         const invisibleExamples: string[] = [];
@@ -1157,9 +1117,7 @@ export const TechnicalModule: AuditModule = {
             details: { invisibleCount, invisibleExamples: invisibleExamples.join(', ') }
         });
 
-        // ─────────────────────────────────────────────────────────────
         // Score
-        // ─────────────────────────────────────────────────────────────
         const analyzableItems = items.filter(i => i.status !== 'Skipped' && i.status !== 'Info');
         const passed = analyzableItems.filter(i => i.status === 'Pass').length;
         const failed = analyzableItems.filter(i => i.status === 'Fail').length;

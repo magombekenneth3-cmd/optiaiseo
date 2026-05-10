@@ -51,7 +51,6 @@ export async function GET(req: NextRequest) {
   const bust = req.nextUrl.searchParams.get("bust") === "1";
   const cacheKey = sovCacheKey(siteId);
 
-  // ── Redis read (skip on ?bust=1) ──────────────────────────────────────────
   if (!bust) {
     try {
       const cached = await redis.get<SovCachedPayload>(cacheKey);
@@ -63,7 +62,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── DB aggregation (90-day window) ────────────────────────────────────────
   const since = new Date();
   since.setDate(since.getDate() - 90);
 
@@ -78,7 +76,6 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  // ── Per-model stats ────────────────────────────────────────────────────────
   const modelMap = new Map<string, { mentions: number; total: number }>();
 
   for (const r of records) {
@@ -97,12 +94,10 @@ export async function GET(req: NextRequest) {
     }))
     .sort((a, b) => b.mentionRate - a.mentionRate);
 
-  // ── Overall rate ──────────────────────────────────────────────────────────
   const totalAll = records.length;
   const mentionsAll = records.filter((r) => r.brandMentioned).length;
   const overallRate = totalAll > 0 ? Math.round((mentionsAll / totalAll) * 100) : 0;
 
-  // ── 30-day daily trend ────────────────────────────────────────────────────
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -126,7 +121,6 @@ export async function GET(req: NextRequest) {
 
   const payload: SovCachedPayload = { byModel, overallRate, trend };
 
-  // ── Redis write ───────────────────────────────────────────────────────────
   try {
     await redis.set(cacheKey, payload, { ex: SOV_CACHE_TTL_S });
   } catch {

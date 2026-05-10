@@ -107,7 +107,6 @@ function toDisplayNameNoSplit(slug: string): string {
 }
 
 export function extractBrandIdentity(rawDomain: string, brandNameOverride?: string | null): BrandIdentity {
-    // ── 1. Normalise to bare domain ──────────────────────────────────────────
     const domain = rawDomain
         .toLowerCase()
         .replace(/^https?:\/\//, "")
@@ -115,10 +114,8 @@ export function extractBrandIdentity(rawDomain: string, brandNameOverride?: stri
         .replace(/\/.*$/, "")
         .trim();
 
-    // ── 2. Extract the leftmost label ────────────────────────────────────────
     const firstLabel = domain.split(".")[0];
 
-    // ── 3. Detect explicit word boundaries ───────────────────────────────────
     // Only split if the original slug (before lowercasing) has separators or
     // camelCase. Since domains are always lowercase, we can only detect
     // hyphens/underscores here — camelCase detection is left for non-domain
@@ -141,7 +138,6 @@ export function extractBrandIdentity(rawDomain: string, brandNameOverride?: stri
         displayName = brandNameOverride?.trim() || toDisplayNameNoSplit(firstLabel);
     }
 
-    // ── 4. Build all variants ────────────────────────────────────────────────
     // Include every reasonable way a human or LLM might write the brand name.
     const spaced = words.map((w) => w.toLowerCase()).join(" ");     // "opti ai seo" (only useful if split)
     const collapsed = firstLabel.toLowerCase();                      // "optiaiseo"
@@ -171,7 +167,6 @@ export function extractBrandIdentity(rawDomain: string, brandNameOverride?: stri
 
     const variants = Array.from(variantSet).filter((v) => v.length >= 3);
 
-    // ── 5. Compile citation regex ─────────────────────────────────────────────
     const escapedDomain = domain.replace(/\./g, "\\.");
     const parts = [
         `(?:www\\.)?${escapedDomain}`,
@@ -186,7 +181,6 @@ export function isBrandCited(responseText: string, identity: BrandIdentity): boo
     return identity.citationRegex.test(responseText);
 }
 
-// ── Gap 2: Mention confidence classification ──────────────────────────────────
 //
 // brandProminenceScore() returns 0–100. Scores 10–40 are "low confidence" —
 // the regex found something, but it may be a partial match or a co-mention

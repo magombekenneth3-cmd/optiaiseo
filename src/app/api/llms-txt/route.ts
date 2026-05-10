@@ -23,7 +23,6 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-        // ── Fetch site + real content from DB ─────────────────────────────────
         const site = await prisma.site.findFirst({
             where: { domain: { contains: domain } },
             select: {
@@ -68,7 +67,6 @@ export async function GET(req: NextRequest) {
             },
         });
 
-        // ── Extract structured content ─────────────────────────────────────────
 
         // Collect all target keywords across published posts (de-duped, top 5 by frequency)
         type BlogRow = {
@@ -133,7 +131,6 @@ export async function GET(req: NextRequest) {
             blogs.flatMap((b: BlogRow) => (b.targetKeywords as string[] | null) ?? []).slice(0, 6)
         )].join(", ");
 
-        // ── Assemble llms.txt document ─────────────────────────────────────────
         const lines: string[] = [
             `# llms.txt for ${site.domain}`,
             `> Structured knowledge document for AI answer engines, LLM crawlers, and generative search systems.`,

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { Globe, Zap, ClipboardList, Loader2, CheckCircle, ChevronRight, Sparkles } from "lucide-react";
 
-// ── 4.2: Five dashboard states ────────────────────────────────────────────────
 export type DashboardState =
     | "no_site"
     | "no_audit"

@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { bustLeaderboardCache } from "@/lib/leaderboard";
 
-// ── Percentile helper ─────────────────────────────────────────────────────────
 function percentile(sorted: number[], p: number): number {
     if (sorted.length === 0) return 0;
     const idx = Math.max(0, Math.ceil((p / 100) * sorted.length) - 1);
@@ -13,7 +12,6 @@ function percentile(sorted: number[], p: number): number {
 type NicheKey = "saas" | "ecommerce" | "local" | "agency" | "blog" | "other";
 type TechStack = "nextjs" | "wordpress" | "shopify" | "other";
 
-// ── Win 8: Weekly benchmark recomputation ─────────────────────────────────────
 export const computeBenchmarksJob = inngest.createFunction(
     {
         id: "compute-benchmarks",
@@ -120,7 +118,6 @@ export const computeBenchmarksJob = inngest.createFunction(
     }
 );
 
-// ── Benchmark lookup helper (used by audit UI) ─────────────────────────────────
 export async function getBenchmarkLabel(
     score: number,
     metric: string,

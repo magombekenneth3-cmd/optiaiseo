@@ -42,7 +42,6 @@ function buildHref(base: string, siteId: string | null): string {
     return base;
 }
 
-// ── 7 primary nav items ────────────────────────────────────────────────────
 const NAV_ITEMS = [
     { name: "Dashboard",      href: "/dashboard",                 icon: LayoutDashboard,  exact: true,  contextSiteId: false },
     { name: "My Sites",       href: "/dashboard/sites",           icon: Globe,            exact: false, contextSiteId: false },
@@ -53,7 +52,6 @@ const NAV_ITEMS = [
     { name: "AI Content",     href: "/dashboard/blogs",           icon: FileText,         exact: false, contextSiteId: false },
 ];
 
-// ── Account section items ──────────────────────────────────────────────────
 const ACCOUNT_ITEMS = [
     { name: "Billing",       href: "/dashboard/billing",  icon: CreditCard, exact: false, contextSiteId: false },
     { name: "Refer & Earn",  href: "/dashboard/referral", icon: Gift,       exact: false, contextSiteId: false },
@@ -61,7 +59,6 @@ const ACCOUNT_ITEMS = [
     { name: "Talk to Aria",  href: "/dashboard/voice",    icon: Mic,        exact: false, contextSiteId: false },
 ];
 
-// ── "More tools" collapsible group ────────────────────────────────────────
 const SECONDARY_ITEMS = [
     { name: "Recommendations", href: "/dashboard/recommendations", icon: Lightbulb,    contextSiteId: false },
     { name: "SERP Gap Analysis",href: "/dashboard/serp-gap",       icon: BarChart3,    contextSiteId: true  },
@@ -86,7 +83,6 @@ function getDomainInitial(domain: string): string {
     return domain.replace(/^www\./, "").charAt(0).toUpperCase();
 }
 
-// ── Upgraded site picker ───────────────────────────────────────────────────
 function SitePickerDropdown({ sites, activeSiteId }: { sites: Site[]; activeSiteId: string | null }) {
     const router = useRouter();
     const pathname = usePathname();
@@ -192,7 +188,6 @@ function SitePickerDropdown({ sites, activeSiteId }: { sites: Site[]; activeSite
     );
 }
 
-// ── Nav link — supports collapsed icon-only mode ──────────────────────────
 function NavLink({
     item,
     href,
@@ -289,7 +284,6 @@ function NavLink({
     ) : linkEl;
 }
 
-// ── Section label ──────────────────────────────────────────────────────────
 function NavSectionLabel({ children }: { children: React.ReactNode }) {
     return (
         <p className="px-3 pt-4 pb-1 text-xs font-semibold text-muted-foreground/50 uppercase tracking-widest select-none">
@@ -298,7 +292,6 @@ function NavSectionLabel({ children }: { children: React.ReactNode }) {
     );
 }
 
-// ── Inner nav (uses router hooks) ──────────────────────────────────────────
 function SidebarNavInner({
     defaultSiteId,
     sites = [],

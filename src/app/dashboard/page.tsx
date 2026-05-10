@@ -127,7 +127,6 @@ export default async function DashboardPage() {
   startOfMonth.setHours(0, 0, 0, 0);
   const auditsThisMonth = audits.filter(a => new Date(a.runTimestamp) >= startOfMonth).length;
 
-  // ── 4.2: Determine dashboard state ──────────────────────────────────────────
   // Evaluated top-to-bottom; the first matching branch wins. Every combination
   // of (sites, audits, score) is covered explicitly — no catch-all fallback
   // that could incorrectly show "connect your first domain" to existing users.
@@ -139,7 +138,6 @@ export default async function DashboardPage() {
     return "audit_complete";                               // has site + audits (± pending PRs)
   })();
 
-  // ── 2.1: Fetch 6-month metric trend ─────────────────────────────────────────
   const primarySiteId = user.sites[0]?.id ?? null;
   const metricTrend = primarySiteId
     ? await getMetricTrend(primarySiteId, 6).catch(() => [])
@@ -151,7 +149,6 @@ export default async function DashboardPage() {
     ? await getSiteLeaderboardPosition(primarySiteId).catch(() => null)
     : null;
 
-  // ── Uptime (last 7 days) ────────────────────────────────────────────────────
   let uptimeCardData: UptimeCardData | null = null;
   if (primarySiteId) {
     try {
@@ -207,7 +204,6 @@ export default async function DashboardPage() {
     })()
     : null;
 
-  // ── Onboarding progress steps ──────────────────────────────────────────────
   const onboardingSteps = [
     { id: "site", label: "Connect your domain", href: "/dashboard/sites/new", done: hasSites },
     { id: "audit", label: "Run your first audit", href: "/dashboard/audits", done: hasAudits },
@@ -215,7 +211,6 @@ export default async function DashboardPage() {
   ];
   const onboardingDone = onboardingSteps.every((s) => s.done);
 
-  // ── Anti-churn data ───────────────────────────────────────────────────────
   // 1. Recent rank win — keyword that moved up >=3 positions in last 7 days.
   //    Uses two consecutive RankSnapshots for the same keyword on the primary site.
   let rankWin: { keyword: string; delta: number; newPosition: number; winId: string } | null = null;
@@ -278,7 +273,6 @@ export default async function DashboardPage() {
     prisma.teamMember.count({ where: { ownerId: user.id } }).then((n) => n > 0).catch(() => false),
   ]);
 
-  // ── Week 2: Value proof data ─────────────────────────────────────────────
   // startOfMonth already defined above (line ~156) — reused here
 
   const [

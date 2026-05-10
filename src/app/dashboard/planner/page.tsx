@@ -607,12 +607,10 @@ export default function PlannerPage() {
         }));
     }, []);
 
-    // ── Summary stats ─────────────────────────────────────────────────────────
     const totalItems = planner?.items?.length ?? 0;
     const doneItems = planner?.items?.filter((i: any) => i.status === "Done").length ?? 0;
     const inProgItems = planner?.items?.filter((i: any) => i.status === "In Progress" || i.status === "Writing...").length ?? 0;
 
-    // ── Early returns ─────────────────────────────────────────────────────────
     if (!siteId) return (
         <div style={{
             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",

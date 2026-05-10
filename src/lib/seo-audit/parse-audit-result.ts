@@ -84,17 +84,14 @@ export interface ParsedAuditResult {
 export function parseAuditResult(raw: unknown): ParsedAuditResult {
     if (!raw) return emptyResult();
 
-    // ── Shape B: { categories[], recommendations[], overallScore } ────────────
     if (isObject(raw) && ("categories" in raw || "recommendations" in raw)) {
         return parseReportObject(raw as RawReport);
     }
 
-    // ── Shape A: AuditCategoryResult[] ────────────────────────────────────────
     if (Array.isArray(raw) && raw.length > 0 && isObject(raw[0]) && "items" in raw[0]) {
         return parseCategoryArray(raw as RawCategory[]);
     }
 
-    // ── Shape C: flat NormalisedIssue[] (legacy) ──────────────────────────────
     if (Array.isArray(raw)) {
         return parseFlatIssueArray(raw);
     }

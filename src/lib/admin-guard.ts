@@ -25,7 +25,6 @@ function getClientIp(): Promise<string> {
 export async function requireAdminApi(
     req?: NextRequest
 ): Promise<{ userId: string; email: string } | NextResponse> {
-    // ── Rate limit: 30 req/min per IP ─────────────────────────────────────────
     try {
         const ip = req
             ? (req.headers.get("x-forwarded-for") ?? "unknown").split(",")[0].trim()
@@ -51,13 +50,11 @@ export async function requireAdminApi(
         );
     }
 
-    // ── Auth check ────────────────────────────────────────────────────────────
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // ── Role check — read from session (JWT-sourced, same trust level as middleware) ────
     // role is set in the session callback from token.role — no DB round-trip needed.
     if ((session.user as { role?: string }).role !== "SUPER_ADMIN") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });

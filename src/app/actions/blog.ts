@@ -157,7 +157,6 @@ export async function getSiteAuthorDetails(siteId: string) {
     }
 }
 
-// ── Main blog generation action ───────────────────────────────────────────────
 export async function generateBlog(
     targetPipelineType?: string,
     siteId?: string,
@@ -181,7 +180,6 @@ export async function generateBlog(
             };
         }
 
-        // ── Rate limiting ─────────────────────────────────────────────────────
         const effectiveTier = await getEffectiveTier(user.id);
         const rateLimitError = await runRateLimitChecks(user.id, effectiveTier);
         if (rateLimitError) return { success: false, error: rateLimitError };
@@ -198,7 +196,6 @@ export async function generateBlog(
             };
         }
 
-        // ── Author ────────────────────────────────────────────────────────────
         const author = buildAuthorProfile(authorInput, site, user.name);
 
         // Fire author save without blocking — we don't need the result
@@ -206,7 +203,6 @@ export async function generateBlog(
 
         const chosenKeyword = authorInput?.keyword?.trim();
 
-        // ── Parallel data fetch ───────────────────────────────────────────────
         // Original code fired these sequentially; they have no dependency on each
         // other, so run them concurrently. Typical saving: ~600–1200ms per call.
         const [siteContext, gscOpportunities, compKeyword, usedBlogKeywords, seedKeywords] =
@@ -252,7 +248,6 @@ export async function generateBlog(
             (sk: { keyword: string }) => !usedKeywordsSet.has(sk.keyword.toLowerCase())
         );
 
-        // ── Duplicate guard ───────────────────────────────────────────────────
         // If the user explicitly chose a keyword we've already covered, warn
         // rather than burning an LLM call on a duplicate post.
         if (chosenKeyword && usedKeywordsSet.has(chosenKeyword.toLowerCase())) {
@@ -263,7 +258,6 @@ export async function generateBlog(
             // We continue (don't block) — user intent wins — but it's logged.
         }
 
-        // ── Pipeline type resolution (no LLM calls) ───────────────────────────
         // Inngest handles all generation; this action only decides which
         // pipeline the job should run.
         let pipelineType = targetPipelineType || "INDUSTRY";
@@ -281,7 +275,6 @@ export async function generateBlog(
             pipelineType = "INDUSTRY";
         }
 
-        // ── Create GENERATING stub ────────────────────────────────────────────
         // The Inngest job owns all LLM generation and overwrites these placeholder
         // fields with the real content once complete. The stub lets the UI render
         // a spinner immediately without waiting for generation to finish.
@@ -303,7 +296,6 @@ export async function generateBlog(
             },
         });
 
-        // ── Dispatch Inngest — all LLM work happens there ─────────────────────
         try {
             const { inngest } = await import("@/lib/inngest/client");
             await inngest.send({
@@ -356,7 +348,6 @@ export async function generateBlog(
     }
 }
 
-// ── Competitor attack blog ────────────────────────────────────────────────────
 export async function generateAttackBlog(
     siteId: string,
     keyword: string,
@@ -397,7 +388,6 @@ export async function generateAttackBlog(
             }).catch(() => null); // non-fatal
         }
 
-        // ── Create GENERATING stub ────────────────────────────────────────────
         const blog = await prisma.blog.create({
             data: {
                 siteId: site.id,
@@ -411,7 +401,6 @@ export async function generateAttackBlog(
             },
         });
 
-        // ── Dispatch Inngest ──────────────────────────────────────────────────
         try {
             const { inngest } = await import("@/lib/inngest/client");
             await inngest.send({

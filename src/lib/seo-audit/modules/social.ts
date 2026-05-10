@@ -27,9 +27,7 @@ export const SocialModule: AuditModule = {
         }
         const root = parse(html || '');
 
-        // ─────────────────────────────────────────────────────────────
         // 1. Full Open Graph Audit (6 core + 2 recommended properties)
-        // ─────────────────────────────────────────────────────────────
         const getOgContent = (prop: string) => root.querySelector(`meta[property="${prop}"]`)?.getAttribute('content')?.trim() || null;
         const getTwitterContent = (name: string) => root.querySelector(`meta[name="${name}"]`)?.getAttribute('content')?.trim() || null;
 
@@ -86,9 +84,7 @@ export const SocialModule: AuditModule = {
             },
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 2. OG vs <title> mismatch detection
-        // ─────────────────────────────────────────────────────────────
         if (ogTitle && pageTitle && ogTitle.toLowerCase() !== pageTitle.toLowerCase()) {
             items.push({
                 id: 'og-title-mismatch',
@@ -104,9 +100,7 @@ export const SocialModule: AuditModule = {
             });
         }
 
-        // ─────────────────────────────────────────────────────────────
         // 3. Twitter Card — Full Audit
-        // ─────────────────────────────────────────────────────────────
         const twitterCard = getTwitterContent('twitter:card');
         const twitterTitle = getTwitterContent('twitter:title');
         const twitterDesc = getTwitterContent('twitter:description');
@@ -154,9 +148,7 @@ export const SocialModule: AuditModule = {
             },
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 4. OG vs Twitter description mismatch
-        // ─────────────────────────────────────────────────────────────
         if (ogDesc && twitterDesc && ogDesc.toLowerCase() !== twitterDesc.toLowerCase()) {
             items.push({
                 id: 'og-twitter-mismatch',
@@ -172,9 +164,7 @@ export const SocialModule: AuditModule = {
             });
         }
 
-        // ─────────────────────────────────────────────────────────────
         // 5. Facebook Pixel
-        // ─────────────────────────────────────────────────────────────
         const hasPixel = (html || '').includes('connect.facebook.net/en_US/fbevents.js') || (html || '').includes('fbq(');
         items.push({
             id: 'facebook-pixel',
@@ -186,9 +176,7 @@ export const SocialModule: AuditModule = {
             aiVisibilityImpact: 15,
         });
 
-        // ─────────────────────────────────────────────────────────────
         // 6. Social Profile Links & YouTube
-        // ─────────────────────────────────────────────────────────────
         const links = root.querySelectorAll('a[href]');
         const socialPlatforms = ['facebook.com', 'twitter.com', 'x.com', 'instagram.com', 'linkedin.com', 'youtube.com', 'youtu.be', 'tiktok.com', 'pinterest.com'];
         let socialLinksFound = 0;
@@ -252,9 +240,7 @@ export const SocialModule: AuditModule = {
             aiVisibilityImpact: 75,
         });
 
-        // ─────────────────────────────────────────────────────────────
         // Score (exclude Info)
-        // ─────────────────────────────────────────────────────────────
         const analyzableItems = items.filter(i => i.status !== 'Skipped' && i.status !== 'Info');
         const passed = analyzableItems.filter(i => i.status === 'Pass').length;
         const failed = analyzableItems.filter(i => i.status === 'Fail').length;

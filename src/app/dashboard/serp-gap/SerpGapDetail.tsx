@@ -7,7 +7,6 @@ import {
     ArrowUpRight, Bot, User,
 } from "lucide-react";
 
-// ── Minimal local types (mirrors plan-generator.ts) ───────────────────────────
 
 interface PlanTask {
     id: string;
@@ -61,7 +60,6 @@ interface FullAnalysis {
     criticalGapCount: number | null;
 }
 
-// ── Severity colours ──────────────────────────────────────────────────────────
 
 const SEV: Record<string, string> = {
     critical: "border-l-red-500 bg-red-500/5",
@@ -76,7 +74,6 @@ const SEV_BADGE: Record<string, string> = {
     low:      "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
 };
 
-// ── Week timeline card ────────────────────────────────────────────────────────
 
 function WeekCard({ week, focus, tasks }: { week: number; focus: string; tasks: PlanTask[] }) {
     const [open, setOpen] = useState(week === 1);
@@ -137,7 +134,6 @@ function WeekCard({ week, focus, tasks }: { week: number; focus: string; tasks: 
     );
 }
 
-// ── Main detail panel ─────────────────────────────────────────────────────────
 
 export function SerpGapDetail({
     analysisId,

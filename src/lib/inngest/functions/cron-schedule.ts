@@ -23,7 +23,6 @@ import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { cleanupOrphanedRateLimitKeys } from "@/lib/rate-limit";
 
-// ── Shared helper — fetch all paid (PRO + AGENCY) site IDs ──────────────────
 
 async function getPaidSites() {
     return prisma.site.findMany({
@@ -39,7 +38,6 @@ async function getBacklinkEligibleSites() {
     });
 }
 
-// ── Weekly audit fan-out (Monday 2am UTC) ────────────────────────────────────
 
 export const cronWeeklyAudit = inngest.createFunction(
     {
@@ -66,7 +64,6 @@ export const cronWeeklyAudit = inngest.createFunction(
     },
 );
 
-// ── Weekly backlinks fan-out (Monday 3am UTC) ────────────────────────────────
 
 export const cronWeeklyBacklinks = inngest.createFunction(
     {
@@ -96,7 +93,6 @@ export const cronWeeklyBacklinks = inngest.createFunction(
     },
 );
 
-// ── Daily rank tracker fan-out (every day 4am UTC) ──────────────────────────
 
 export const cronDailyRankTracker = inngest.createFunction(
     {
@@ -126,7 +122,6 @@ export const cronDailyRankTracker = inngest.createFunction(
     },
 );
 
-// ── Weekly AEO check fan-out (Monday 5am UTC) ────────────────────────────────
 
 export const cronWeeklyAeo = inngest.createFunction(
     {
@@ -156,7 +151,6 @@ export const cronWeeklyAeo = inngest.createFunction(
     },
 );
 
-// ── Daily blog automation fan-out (every day 6am UTC) ───────────────────────
 
 export const cronDailyBlog = inngest.createFunction(
     {
@@ -186,7 +180,6 @@ export const cronDailyBlog = inngest.createFunction(
     },
 );
 
-// ── Weekly competitor alerts fan-out (Monday 7am UTC) ───────────────────────
 
 export const cronWeeklyCompetitorAlerts = inngest.createFunction(
     {
@@ -216,7 +209,6 @@ export const cronWeeklyCompetitorAlerts = inngest.createFunction(
     },
 );
 
-// ── Monthly rate-limit key cleanup (1st of month, 00:30 UTC) ────────────────
 // Runs 30 min after the credits reset job (00:00 UTC) to avoid Redis contention.
 // Scans all rl:* keys and deletes any whose prefix is no longer in ACTIVE_PREFIXES.
 // @upstash/ratelimit sets TTLs automatically so this is a belt-and-suspenders safety net.

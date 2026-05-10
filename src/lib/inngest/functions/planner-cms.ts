@@ -4,7 +4,6 @@ import { NonRetriableError } from "inngest";
 import { prisma } from "@/lib/prisma";
 import { callGemini } from "@/lib/gemini/client";
 
-// ── Planner Brief Generator ───────────────────────────────────────────────────
 
 export const generatePlannerBriefJob = inngest.createFunction(
     {
@@ -63,9 +62,6 @@ export const generatePlannerBriefJob = inngest.createFunction(
 );
 
 
-
-// ── CMS Auto-Publish (WordPress / Ghost / Hashnode) ──────────────────────────
-
 export const publishBlogToCmsJob = inngest.createFunction(
     {
         id: "publish-blog-to-cms",
@@ -109,7 +105,6 @@ export const publishBlogToCmsJob = inngest.createFunction(
 
         const results: { wordpress?: string; ghost?: string; hashnode?: string } = {};
 
-        // ── Hashnode (primary platform) ───────────────────────────────────────
         if (site.hashnodeToken && site.hashnodePublicationId && !blog.hashnodeUrl) {
             await step.run("publish-to-hashnode", async () => {
                 const { syndicateToHashnode } = await import("@/lib/blog/hashnode");
@@ -149,7 +144,6 @@ export const publishBlogToCmsJob = inngest.createFunction(
             results.hashnode = "published";
         }
 
-        // ── WordPress ─────────────────────────────────────────────────────────
         if (site.wordPressConfig && !blog.wordPressUrl) {
             await step.run("publish-to-wordpress", async () => {
                 const { publishToWordPress } = await import("@/lib/publishers/wordpress");
@@ -166,7 +160,6 @@ export const publishBlogToCmsJob = inngest.createFunction(
             logger.info(`[CMS] WordPress publish complete`, { blogId });
         }
 
-        // ── Ghost ─────────────────────────────────────────────────────────────
         if (site.ghostConfig && !blog.ghostUrl) {
             await step.run("publish-to-ghost", async () => {
                 const { publishToGhost } = await import("@/lib/publishers/ghost");

@@ -9,9 +9,7 @@ import { getUserGscToken } from "@/lib/gsc/token";
 import { normaliseSiteUrl } from "@/lib/gsc";
 import { logger } from "@/lib/logger";
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Types
-// ─────────────────────────────────────────────────────────────────────────────
 
 export interface DiscoveredPage {
     url: string;
@@ -52,13 +50,11 @@ const EMPTY_RESULT = (extra: Partial<PageDiscoveryResult> = {}): PageDiscoveryRe
     ...extra,
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // FIX 1: In-process cache (swap `discoveryCache` calls for Redis in production)
 //
 //   await redis.set(key, JSON.stringify(result), "EX", CACHE_TTL_SECS);
 //   const hit = await redis.get(key);
 //   if (hit) return JSON.parse(hit);
-// ─────────────────────────────────────────────────────────────────────────────
 
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const discoveryCache = new Map<string, { data: PageDiscoveryResult; expiresAt: number }>();
@@ -77,9 +73,7 @@ function setCache(siteId: string, data: PageDiscoveryResult): void {
     discoveryCache.set(siteId, { data, expiresAt: Date.now() + CACHE_TTL_MS });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // FIX 3: SSRF protection — validate every URL before fetching
-// ─────────────────────────────────────────────────────────────────────────────
 
 function isSafeUrl(url: string): boolean {
     try {
@@ -107,10 +101,8 @@ function isSafeUrl(url: string): boolean {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // FIX 4: Concurrency limiter — avoids slamming external servers
 //         (drop-in replacement for p-limit, no new dependency)
-// ─────────────────────────────────────────────────────────────────────────────
 
 function createLimiter(concurrency: number) {
     let active = 0;
@@ -135,9 +127,7 @@ function createLimiter(concurrency: number) {
     };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Sitemap fetcher (Fix 3 + Fix 4 applied)
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function fetchPagesFromSitemap(
     domain: string
@@ -222,9 +212,7 @@ async function fetchPagesFromSitemap(
     return { urls: [...new Set(urls)], sitemapUrl: foundSitemapUrl };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // GSC page fetcher — FIX 2: dynamic row limit instead of hardcoded 5000
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function fetchGSCPages(
     accessToken: string,
@@ -288,7 +276,6 @@ async function fetchGSCPages(
     return { pages: allRows, capped };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // FIX 5: Core discovery logic extracted into its own function so it can be
 //         called from a background job (BullMQ, Inngest, cron, etc.) without
 //         coupling to the HTTP request lifecycle.
@@ -296,7 +283,6 @@ async function fetchGSCPages(
 //   Usage from a queue worker:
 //     import { runDiscovery } from "@/app/actions/pageDiscovery";
 //     await runDiscovery(siteId, userId, { fullExport: true });
-// ─────────────────────────────────────────────────────────────────────────────
 
 export async function runDiscovery(
     siteId: string,

@@ -22,7 +22,6 @@ export async function POST(req: NextRequest) {
     if (!url || !embedKey)
         return NextResponse.json({ error: "Missing url or embedKey" }, { status: 400 });
 
-    // ── SSRF guard ────────────────────────────────────────────────────────────
     const normalized = url.startsWith("http") ? url : `https://${url}`;
     const safeCheck = isSafeUrl(normalized);
     if (!safeCheck.ok || !safeCheck.url) {
@@ -30,7 +29,6 @@ export async function POST(req: NextRequest) {
     }
     const targetUrl = safeCheck.url.href;
 
-    // ── Validate embed key ────────────────────────────────────────────────────
     const owner = await prisma.user.findFirst({
         where: { whiteLabel: { path: ["embedKey"], equals: embedKey } },
         select: { id: true, email: true, name: true, subscriptionTier: true, whiteLabel: true },
@@ -38,7 +36,6 @@ export async function POST(req: NextRequest) {
     if (!owner)
         return NextResponse.json({ error: "Invalid embed key" }, { status: 403 });
 
-    // ── Rate limit: 100 checks per embed key per day ──────────────────────────
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
     const useCount = await prisma.embedLead.count({
@@ -47,7 +44,6 @@ export async function POST(req: NextRequest) {
     if (useCount >= MAX_DAILY)
         return NextResponse.json({ error: "Daily limit reached. Please try again tomorrow." }, { status: 429 });
 
-    // ── Quick SEO check ───────────────────────────────────────────────────────
     let scores: Record<string, number> = {};
     const domain = safeCheck.url.hostname;
     try {
@@ -64,7 +60,6 @@ export async function POST(req: NextRequest) {
         scores = { error: -1 };
     }
 
-    // ── Save lead + notify agency owner ──────────────────────────────────────
     if (leadEmail) {
         await prisma.embedLead.create({
             data: { ownerId: owner.id, email: leadEmail, domain, scores, embedKey },

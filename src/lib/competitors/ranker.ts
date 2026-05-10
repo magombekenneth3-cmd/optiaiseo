@@ -8,9 +8,7 @@
 
 import type { Competitor, DetectedService, SerperSearchResult, SimilarityResult, VerificationVerdict } from "./types";
 
-// ---------------------------------------------------------------------------
 // Scoring constants
-// ---------------------------------------------------------------------------
 
 /** Weights for the final score formula */
 const W = {
@@ -28,9 +26,7 @@ const W = {
  */
 export const SCORE_THRESHOLD = 0.35;
 
-// ---------------------------------------------------------------------------
 // SERP scorer (used internally, and exported for tests)
-// ---------------------------------------------------------------------------
 
 /**
  * Raw SERP score: frequency × 1/√bestPosition
@@ -42,9 +38,7 @@ export function computeSerpScore(frequency: number, bestPosition: number): numbe
     return Math.min(raw / 8, 1);
 }
 
-// ---------------------------------------------------------------------------
 // Final weighted score
-// ---------------------------------------------------------------------------
 
 /**
  * Computes the final composite score for a candidate.
@@ -74,9 +68,7 @@ export function computeFinalScore(
     );
 }
 
-// ---------------------------------------------------------------------------
 // Primary ranker
-// ---------------------------------------------------------------------------
 
 /**
  * Ranks competitor candidates.
@@ -142,9 +134,7 @@ export function rankCompetitors(
         .slice(0, limit);
 }
 
-// ---------------------------------------------------------------------------
 // Fallback ranker (no similarity data)
-// ---------------------------------------------------------------------------
 
 /**
  * Used when primary queries return zero results.
@@ -172,9 +162,7 @@ export function rankCompetitorsFallback(
         .slice(0, limit);
 }
 
-// ---------------------------------------------------------------------------
 // Deduplication
-// ---------------------------------------------------------------------------
 
 /**
  * Deduplicates across multiple services.
@@ -191,9 +179,7 @@ export function deduplicateCompetitors(competitors: Competitor[]): Competitor[] 
     return Array.from(best.values()).sort((a, b) => b.score - a.score);
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 function typePenaltyFromType(type: SimilarityResult["competitorType"]): number {
     const MAP: Record<SimilarityResult["competitorType"], number> = {

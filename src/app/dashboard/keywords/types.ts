@@ -12,7 +12,6 @@ export interface PlannerMsg {
 }
 
 // ─── Colour Maps ──────────────────────────────────────────────────────────────
-// Defined once, consumed everywhere — no more duplicate objects spread across
 // 1 176 lines.
 
 export const INTENT_COLORS: Record<string, string> = {

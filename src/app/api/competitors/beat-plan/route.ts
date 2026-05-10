@@ -78,7 +78,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── Load all available context from Redis in parallel ─────────────────────
   // None of these are blocking — if Redis is down we degrade gracefully.
   const [
     geoReport,

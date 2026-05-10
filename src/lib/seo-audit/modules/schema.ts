@@ -176,7 +176,6 @@ export const SchemaModule: AuditModule = {
             }
         }
 
-        // ── 1. Structured Data Presence ────────────────────────────────────
         const hasMicrodata = html.includes('itemtype=') && html.includes('itemprop=');
 
         if (schemaScripts.length === 0 && !hasMicrodata) {
@@ -208,7 +207,6 @@ export const SchemaModule: AuditModule = {
             });
         }
 
-        // ── 2. JSON Parse Errors ───────────────────────────────────────────
         if (parseErrors > 0) {
             items.push({
                 id: 'schema-parse-errors',
@@ -225,7 +223,6 @@ export const SchemaModule: AuditModule = {
             });
         }
 
-        // ── 3. Per-type Field Validation ───────────────────────────────────
         const checkedTypes = new Set<string>();
 
         for (const block of parsedBlocks) {
@@ -290,7 +287,6 @@ export const SchemaModule: AuditModule = {
             });
         }
 
-        // ── 4. Missing Recommended Schema Types ────────────────────────────
         const detectedTypeNames = new Set(
             parsedBlocks.map(b => (typeof b['@type'] === 'string' ? b['@type'] : ''))
         );
@@ -376,7 +372,6 @@ export const SchemaModule: AuditModule = {
             });
         }
 
-        // ── 5. Microdata (Legacy) ──────────────────────────────────────────
         if (hasMicrodata) {
             items.push({
                 id: 'schema-microdata',
@@ -392,7 +387,6 @@ export const SchemaModule: AuditModule = {
             });
         }
 
-        // ── Score ──────────────────────────────────────────────────────────
         const { score, passed, failed, warnings } = calculateScore(items);
 
         return {

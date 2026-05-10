@@ -33,7 +33,6 @@ export async function checkGoogleAIOverview(
     pageHtml?: string
 ): Promise<AioEligibilityResult> {
 
-    // ── Signal analysis from page HTML ──────────────────────────────────────
     const html = pageHtml ?? '';
     const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
     const firstParagraphMatch = text.match(/(?<=<p[^>]*>)[^<]{40,}/i);
@@ -75,7 +74,6 @@ export async function checkGoogleAIOverview(
         hasConcisSummary,
     };
 
-    // ── Composite eligibility score (on-page signals only) ───────────────────
     let signalScore = 0;
     if (hasFaqSchema)          signalScore += 20;
     if (hasHowToSchema)        signalScore += 15;
@@ -85,7 +83,6 @@ export async function checkGoogleAIOverview(
     if (readabilityOk)         signalScore += 15;
     if (hasConcisSummary)      signalScore += 15;
 
-    // ── Optional live SerpAPI check ──────────────────────────────────────────
     let hasOverview = false;
     let brandMentioned = false;
 

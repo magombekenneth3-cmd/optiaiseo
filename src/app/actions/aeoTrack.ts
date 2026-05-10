@@ -9,9 +9,7 @@ import { extractBrandIdentity, isBrandCited } from "@/lib/aeo/brand-utils";
 import pLimit from "p-limit";
 import { z } from "zod";
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 /** Max keywords to process per tracking run. */
 const MAX_KEYWORDS = 10;
@@ -32,16 +30,11 @@ const FREQUENCY_HOURS: Record<"high" | "medium" | "low", number> = {
     low: 168,
 };
 
-// ---------------------------------------------------------------------------
 // Input schemas
-// ---------------------------------------------------------------------------
 
-// Prisma uses cuid() for all PKs — validate as a non-empty string ≤ 50 chars
 const uuidSchema = z.string().min(1).max(50);
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 interface BatchResult {
     keyword: string;
@@ -76,18 +69,14 @@ type GetAeoShareOfVoiceMetricsResult =
     }
     | ActionError;
 
-// ---------------------------------------------------------------------------
 // Shared auth helper
-// ---------------------------------------------------------------------------
 
 async function getAuthenticatedUserId(): Promise<string | null> {
     const session = await getServerSession(authOptions);
     return session?.user?.id ?? null;
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 async function callGemini(prompt: string): Promise<string> {
     const text = await _callGemini(prompt, {
@@ -171,9 +160,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
     return out;
 }
 
-// ---------------------------------------------------------------------------
 // Action 1: Run tracking
-// ---------------------------------------------------------------------------
 
 export async function runAeoShareOfVoiceCheck(
     siteId: string,
@@ -342,9 +329,7 @@ export async function runAeoShareOfVoiceCheck(
     }
 }
 
-// ---------------------------------------------------------------------------
 // Action 2: Read metrics
-// ---------------------------------------------------------------------------
 
 export async function getAeoShareOfVoiceMetrics(
     siteId: string,

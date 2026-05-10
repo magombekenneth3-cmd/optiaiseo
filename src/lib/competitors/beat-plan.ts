@@ -72,7 +72,6 @@ export async function generateBeatCompetitorPlan(
 
   const key = cacheKey(ctx.siteId, ctx.competitorDomain);
 
-  // ── Redis read ──────────────────────────────────────────────────────────────
   try {
     const cached = await redis.get<BeatCompetitorPlan>(key);
     if (cached) return cached;
@@ -80,7 +79,6 @@ export async function generateBeatCompetitorPlan(
     // Proceed
   }
 
-  // ── Build rich context for the prompt ─────────────────────────────────────
   const gapKeywordsSample = ctx.gapKeywords.slice(0, 8).join('", "');
 
   const contentCtx = ctx.contentProfile
@@ -189,7 +187,6 @@ Respond ONLY in this exact JSON format:
       generatedAt: new Date().toISOString(),
     };
 
-    // ── Redis write ───────────────────────────────────────────────────────────
     try {
       await redis.set(key, plan, { ex: CACHE_TTL_S });
     } catch {

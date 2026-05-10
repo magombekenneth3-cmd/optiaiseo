@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { getPageAudits } from "@/app/actions/audit";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface CategoryScore {
   [categoryId: string]: number;
@@ -24,7 +23,6 @@ interface Props {
   isPaidUser: boolean;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function scoreColor(score: number): string {
   if (score >= 80) return "text-emerald-600 dark:text-emerald-400";
@@ -107,7 +105,6 @@ function ScoreBar({ score }: { score: number }) {
   );
 }
 
-// ── Upsell card ───────────────────────────────────────────────────────────────
 
 function UpsellCard() {
   return (
@@ -144,7 +141,6 @@ function UpsellCard() {
   );
 }
 
-// ── Expanded issues drawer ────────────────────────────────────────────────────
 
 function ExpandedIssues({ page, categoryIds }: { page: PageAuditRow; categoryIds: string[] }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -237,7 +233,6 @@ function ExpandedIssues({ page, categoryIds }: { page: PageAuditRow; categoryIds
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
 
 export default function PageAuditSection({ auditId, isPaidUser }: Props) {
   const [pages, setPages] = useState<PageAuditRow[]>([]);

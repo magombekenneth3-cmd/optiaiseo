@@ -19,9 +19,7 @@ import { z } from "zod";
 
 export type { Framework, AeoCheck };
 
-// ---------------------------------------------------------------------------
 // Return types
-// ---------------------------------------------------------------------------
 
 type ActionError = { success: false; error: string };
 
@@ -52,17 +50,12 @@ export interface AeoRecommendationFix {
 
 type GenerateRecommendationFixResult = AeoRecommendationFix | ActionError;
 
-// ---------------------------------------------------------------------------
 // Input schemas
-// ---------------------------------------------------------------------------
 
-// Prisma uses cuid() for all PKs — validate as a non-empty string ≤ 50 chars
 const uuidSchema = z.string().min(1).max(50);
 const recommendationSchema = z.string().min(1).max(2000);
 
-// ---------------------------------------------------------------------------
 // Shared auth helper
-// ---------------------------------------------------------------------------
 
 async function getAuthenticatedUser() {
   const session = await getServerSession(authOptions);
@@ -70,9 +63,7 @@ async function getAuthenticatedUser() {
   return prisma.user.findUnique({ where: { email: session.user.email } });
 }
 
-// ---------------------------------------------------------------------------
 // Utilities
-// ---------------------------------------------------------------------------
 
 function encodeBase64(str: string): string {
   return Buffer.from(str, "utf-8").toString("base64");
@@ -116,9 +107,7 @@ function fetchWithTimeout(
   );
 }
 
-// ---------------------------------------------------------------------------
 // callGemini — thin wrapper exposed as server action
-// ---------------------------------------------------------------------------
 
 export async function callGemini(prompt: string): Promise<string | null> {
   try {
@@ -129,9 +118,7 @@ export async function callGemini(prompt: string): Promise<string | null> {
   }
 }
 
-// ---------------------------------------------------------------------------
 // validateFixWithQA
-// ---------------------------------------------------------------------------
 
 export async function validateFixWithQA(
   fixContent: string,
@@ -140,9 +127,7 @@ export async function validateFixWithQA(
   return validateFixInternal(fixContent, contextDescription);
 }
 
-// ---------------------------------------------------------------------------
 // generateAeoFix
-// ---------------------------------------------------------------------------
 
 export async function generateAeoFix(
   check: AeoCheck,
@@ -154,9 +139,7 @@ export async function generateAeoFix(
   return generateAeoFixInternal(check, domain, repoUrl);
 }
 
-// ---------------------------------------------------------------------------
 // generateAllFixes
-// ---------------------------------------------------------------------------
 
 export async function generateAllFixes(
   checks: AeoCheck[],
@@ -168,9 +151,7 @@ export async function generateAllFixes(
   return generateAllFixesInternal(checks, domain, repoUrl);
 }
 
-// ---------------------------------------------------------------------------
 // pushFixToGitHub
-// ---------------------------------------------------------------------------
 
 export async function pushFixToGitHub(params: {
   repoUrl: string;
@@ -427,9 +408,7 @@ export async function pushFixToGitHub(params: {
   }
 }
 
-// ---------------------------------------------------------------------------
 // generateAeoRecommendationFix
-// ---------------------------------------------------------------------------
 
 const AeoRecommendationSchema = z.object({
   headline: z.string(),

@@ -5,9 +5,7 @@ import KEYWORDS from "@/data/keywords.json";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 interface Keyword {
   slug: string;
@@ -26,17 +24,12 @@ interface Tool {
   href: string;
 }
 
-// ---------------------------------------------------------------------------
-// Static params — pre-renders all 100 pages at build time
-// ---------------------------------------------------------------------------
 
 export async function generateStaticParams() {
   return (KEYWORDS as Keyword[]).map((k) => ({ slug: k.slug }));
 }
 
-// ---------------------------------------------------------------------------
 // Metadata
-// ---------------------------------------------------------------------------
 
 export async function generateMetadata({
   params,
@@ -70,9 +63,6 @@ export async function generateMetadata({
   };
 }
 
-// ---------------------------------------------------------------------------
-// Tool catalogue — expanded by intent
-// ---------------------------------------------------------------------------
 
 const ALL_TOOLS: Tool[] = [
   // Free
@@ -109,9 +99,7 @@ const ALL_TOOLS: Tool[] = [
   { name: "Perplexity Pages", description: "Leverage Perplexity AI to create citation-rich content that appears in AI-generated answers.", price: "From $20/mo", href: "https://www.perplexity.ai" },
 ];
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 function getTools(intent: string): Tool[] {
   const map: Record<string, string[]> = {
@@ -225,9 +213,7 @@ function buildSchema(page: Keyword, siteUrl: string) {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Page component
-// ---------------------------------------------------------------------------
 
 export default async function ToolsPage({
   params,

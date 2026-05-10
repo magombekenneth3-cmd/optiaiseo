@@ -64,7 +64,6 @@ export async function buildKnowledgeGraph(domain: string) {
         site.coreServices?.split(",")[0]?.trim() ||
         site.domain;
 
-    // ── Build structured Service entity nodes (entity-first) ────────────────
     // Replace the flat coreServices string with typed Service nodes.
     // Each service gets its own @id so AI engines parse it as a distinct entity,
     // and the Organization links to them via hasOfferCatalog.
@@ -85,7 +84,6 @@ export async function buildKnowledgeGraph(domain: string) {
                 : {}),
         }));
 
-    // ── Core Organization node + Service child nodes in @graph ───────────────
     const kg = {
         "@context": "https://schema.org",
         "@graph": [

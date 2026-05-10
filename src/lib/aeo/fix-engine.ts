@@ -18,10 +18,8 @@ import {
 import { buildPrompt, type PromptContext } from "@/lib/seo/prompts";
 import { getFallbackGuide } from "@/lib/seo/fallbacks";
 
-// ── Re-exports ────────────────────────────────────────────────────────────────
 export type { Framework };
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 export interface AeoCheck {
     id: string;
     label: string;
@@ -30,7 +28,6 @@ export interface AeoCheck {
     passed: boolean;
 }
 
-// ── validateFixInternal ───────────────────────────────────────────────────────
 
 import { callGemini as geminiCall } from "@/lib/gemini/client";
 async function callGemini(prompt: string) {
@@ -60,7 +57,6 @@ export async function validateFixInternal(
 }
 
 
-// ── generateSpeakableFix ─────────────────────────────────────────────────────
 //
 // Gap 2: Speakable schema requires real cssSelector paths pointing to existing
 // DOM elements. The generic Gemini prompt path guesses selectors and gets them
@@ -269,7 +265,6 @@ export async function generateAeoFixInternal(
     }
 }
 
-// ── generateAllFixesInternal ──────────────────────────────────────────────────
 /**
  * Generates fixes for all failed checks in batches.
  * Auth is NOT enforced here — callers are responsible.

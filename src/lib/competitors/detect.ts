@@ -44,9 +44,7 @@ export { shouldExclude, isSameBrand, isBlockedDomain, isContentSite, isHostingPl
     from "./filters";
 export { buildSearchQueries } from "./search";
 
-// ---------------------------------------------------------------------------
 // Defaults
-// ---------------------------------------------------------------------------
 
 const DEFAULTS = {
     maxServices:             4,
@@ -64,9 +62,7 @@ const DEFAULTS = {
 const GEO_STRIP_PATTERN =
     /\b(uganda|kenya|nigeria|ghana|ethiopia|tanzania|south africa|rwanda|zambia|zimbabwe|botswana|senegal|morocco|egypt|uk|us|usa|india|australia|new zealand|singapore|malaysia|philippines|indonesia|thailand|vietnam|japan|south korea|china|pakistan|bangladesh|sri lanka|uae|dubai|saudi arabia|qatar|israel|turkey|brazil|argentina|colombia|chile|peru|mexico|canada|germany|france|netherlands|spain|italy|sweden|norway|denmark|finland|poland|portugal|kampala|nairobi|lagos|accra|cairo|johannesburg|cape town|london|manchester|berlin|paris|amsterdam|madrid|rome|new york|los angeles|chicago|san francisco|seattle|austin|toronto|vancouver|sydney|melbourne|mumbai|delhi|bangalore)\b/gi;
 
-// ---------------------------------------------------------------------------
 // Options
-// ---------------------------------------------------------------------------
 
 export interface DetectorOptions {
     anthropicApiKey?: string;
@@ -100,9 +96,7 @@ export interface DetectorOptions {
     };
 }
 
-// ---------------------------------------------------------------------------
 // Main orchestrator
-// ---------------------------------------------------------------------------
 
 export async function detectCompetitorsCore(
     domain:  string,
@@ -146,7 +140,6 @@ export async function detectCompetitorsCore(
         (options.additionalBlockedDomains ?? []).map(extractRoot)
     );
 
-    // ── Step 1: Build site fingerprint ────────────────────────────────────────
     const siteFingerprint = await buildFingerprint(cleanDomain, {
         apiKey:          anthropicApiKey,
         rankingKeywords,
@@ -163,7 +156,6 @@ export async function detectCompetitorsCore(
         cacheStats:    getCacheStats(),
     });
 
-    // ── Step 2: Extract services ──────────────────────────────────────────────
     let services: DetectedService[];
 
     if (rankingKeywords.length >= 3) {
@@ -207,7 +199,6 @@ export async function detectCompetitorsCore(
         });
     }
 
-    // ── GATE 1: Require at least one service to search for ────────────────────
     if (services.length === 0) {
         throw new Error(
             `[competitor-detect] Service extraction returned 0 services for "${cleanDomain}". ` +
@@ -216,7 +207,6 @@ export async function detectCompetitorsCore(
         );
     }
 
-    // ── Step 3 & 4: SERP queries in parallel ─────────────────────────────────
     const allCandidates: Competitor[] = [];
     // Accumulated snippets across all service queries — used in verification
     const allSnippets = new Map<string, string>();
@@ -272,7 +262,6 @@ export async function detectCompetitorsCore(
         })
     );
 
-    // ── GATE 2: At least one service must have produced SERP results ──────────
     // If servicesWithResults === 0 it means every Serper call failed (quota,
     // network, invalid key). Do not proceed — saving nothing is safer than
     // saving whatever scraped noise survived.
@@ -284,10 +273,8 @@ export async function detectCompetitorsCore(
         );
     }
 
-    // ── Step 5: Deduplicate ───────────────────────────────────────────────────
     const deduped = deduplicateCompetitors(allCandidates);
 
-    // ── GATE 3: Require at least 1 candidate after dedup/filtering ────────────
     if (deduped.length === 0) {
         throw new Error(
             `[competitor-detect] All ${allCandidates.length} SERP candidates were removed by the ` +
@@ -296,7 +283,6 @@ export async function detectCompetitorsCore(
         );
     }
 
-    // ── Step 6: Build candidate fingerprints + similarity in parallel ─────────
     const verifyPool = deduped.slice(0, MAX_COMPETITORS + 6); // verify a few extra then trim
     const similarityMap = new Map<string, SimilarityResult>();
 
@@ -315,7 +301,6 @@ export async function detectCompetitorsCore(
         })
     );
 
-    // ── Step 7: AI verification (structured confidence, not binary) ───────────
     const serviceLabels = services.map(s => s.label).join(", ");
     const verificationMap = await verifyCompetitorServices(
         verifyPool,
@@ -326,7 +311,6 @@ export async function detectCompetitorsCore(
         allSnippets,   // ← pass SERP snippets — avoids re-fetching homepages
     );
 
-    // ── Step 8: Re-score with full weighted formula ───────────────────────────
     const rescored: Competitor[] = verifyPool
         .map(c => {
             const sim     = similarityMap.get(c.domain);
@@ -417,9 +401,7 @@ export async function detectCompetitorsCore(
     };
 }
 
-// ---------------------------------------------------------------------------
 // Structured AI verification pass (replaces binary YES/NO)
-// ---------------------------------------------------------------------------
 
 /**
  * Fetches title+meta of each candidate, then asks Claude for a STRUCTURED
@@ -446,7 +428,6 @@ async function verifyCompetitorServices(
         return resultMap;
     }
 
-    // ── Use SERP snippets first; fall back to homepage fetch for gaps ────────
     const list: { domain: string; text: string }[] = [];
     const missingDomains = candidates.filter(c => !serpSnippets.has(c.domain));
 
@@ -564,9 +545,7 @@ JSON array:`;
     return resultMap;
 }
 
-// ---------------------------------------------------------------------------
 // Helper
-// ---------------------------------------------------------------------------
 
 function typePenaltyFromType(type: SimilarityResult["competitorType"]): number {
     const MAP: Record<SimilarityResult["competitorType"], number> = {

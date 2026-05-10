@@ -5,7 +5,6 @@
  * No puppeteer imports here — this module is safe to import in any context.
  */
 
-// ── White-label ───────────────────────────────────────────────────────────────
 
 export interface WhiteLabelConfig {
     logoUrl?: string;
@@ -14,7 +13,6 @@ export interface WhiteLabelConfig {
     clientName?: string;
 }
 
-// ── HTML utilities ────────────────────────────────────────────────────────────
 
 export function esc(s: string | number | undefined | null): string {
     if (s === undefined || s === null) return "";
@@ -36,7 +34,6 @@ export function safeUrl(url: string | undefined): string | undefined {
     }
 }
 
-// ── Score helpers ─────────────────────────────────────────────────────────────
 
 export function scoreColor(score: number): string {
     if (score >= 75) return "#34d978";   // emerald
@@ -80,7 +77,6 @@ export function statusColor(status: string): { bg: string; fg: string; border: s
     }
 }
 
-// ── SVG Score Ring ────────────────────────────────────────────────────────────
 
 export function svgScoreRing(score: number, size = 96): string {
     const r = (size / 2) - 8;
@@ -107,7 +103,6 @@ export function svgScoreRing(score: number, size = 96): string {
 </svg>`;
 }
 
-// ── Mini inline bar ───────────────────────────────────────────────────────────
 
 export function scoreBar(score: number, width = 120, height = 4): string {
     const col = scoreColor(score);
@@ -118,7 +113,6 @@ export function scoreBar(score: number, width = 120, height = 4): string {
 </svg>`;
 }
 
-// ── Shared CSS ────────────────────────────────────────────────────────────────
 
 export function baseStyles(primary: string): string {
     return `

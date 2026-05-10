@@ -35,7 +35,6 @@ function getResend() {
   return new Resend(key);
 }
 
-// ── Issue severity labels sent in the email ───────────────────────────────────
 const SEVERITY_MAP: Record<string, { label: string; fix: string }> = {
   titleScore: {
     label: "Page title needs work",
@@ -59,7 +58,6 @@ const SEVERITY_MAP: Record<string, { label: string; fix: string }> = {
   },
 };
 
-// ── Main job ──────────────────────────────────────────────────────────────────
 
 export const magicFirstAuditJob = inngest.createFunction(
   {
@@ -78,7 +76,6 @@ export const magicFirstAuditJob = inngest.createFunction(
       name?: string;
     };
 
-    // ── Step 1: Wait for user to add a site (up to 10 min) ────────────────────
     const siteEvent = await step.waitForEvent("wait-for-first-site", {
       event: "site.created",
       match: "data.userId",
@@ -103,7 +100,6 @@ export const magicFirstAuditJob = inngest.createFunction(
 
     const { siteId, domain } = siteEvent.data as { siteId: string; domain: string };
 
-    // ── Step 2: Run fast health check ─────────────────────────────────────────
     const healthResult = await step.run("run-health-check", async () => {
       try {
         const { runFreeSeoCheck } = await import("@/lib/seo/free-check");
@@ -114,7 +110,6 @@ export const magicFirstAuditJob = inngest.createFunction(
       }
     });
 
-    // ── Step 3: Identify failing issues ───────────────────────────────────────
     const issues: { label: string; fix: string }[] = [];
     if (healthResult) {
       if (healthResult.titleScore < 60) issues.push(SEVERITY_MAP.titleScore);
@@ -124,7 +119,6 @@ export const magicFirstAuditJob = inngest.createFunction(
       if (healthResult.aeoScore < 60) issues.push(SEVERITY_MAP.aeoScore);
     }
 
-    // ── Step 4: Send activation email ─────────────────────────────────────────
     await step.run("send-activation-email", async () => {
       const html = healthResult
         ? buildActivationEmail({
@@ -153,13 +147,11 @@ export const magicFirstAuditJob = inngest.createFunction(
       });
     });
 
-    // ── Step 5: Queue full audit ───────────────────────────────────────────────
     await step.sendEvent("trigger-full-audit", {
       name: "audit.run",
       data: { siteId },
     });
 
-    // ── Step 6: Track activation AeoEvent ────────────────────────────────────
     await step.run("track-activation-event", async () => {
       await prisma.aeoEvent.create({
         data: {
@@ -180,7 +172,6 @@ export const magicFirstAuditJob = inngest.createFunction(
   }
 );
 
-// ── Email templates ───────────────────────────────────────────────────────────
 
 function buildActivationEmail(params: {
   name: string;

@@ -89,7 +89,6 @@ export function VisibilityForecastPanel({ siteId }: Props) {
             .finally(() => setLoading(false));
     }, [siteId, isGated, userTier]);
 
-    // ── Gated state ────────────────────────────────────────────────────────────
     if (userTier !== null && isGated) {
         return (
             <div className="rounded-xl border border-dashed border-border/60 bg-muted/10 p-5 flex items-center gap-4">
@@ -112,7 +111,6 @@ export function VisibilityForecastPanel({ siteId }: Props) {
         );
     }
 
-    // ── Loading (tier fetch or forecast fetch) ─────────────────────────────────
     if (userTier === null || loading) {
         return (
             <div className="flex items-center gap-3 text-sm text-muted-foreground py-2">
@@ -122,7 +120,6 @@ export function VisibilityForecastPanel({ siteId }: Props) {
         );
     }
 
-    // ── Error / no data ────────────────────────────────────────────────────────
     if (error || !forecast) {
         return (
             <p className="text-xs text-muted-foreground/60 italic py-2">

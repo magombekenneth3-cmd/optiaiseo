@@ -46,7 +46,6 @@ export const GEMINI_2_5_PRO  = GEMINI_PRO_MODEL;
  * Import from this object at every call site.
  */
 export const AI_MODELS = {
-    // ── Gemini ──────────────────────────────────────────────────────────────
     /** Fast batch and general tasks */
     GEMINI_FLASH: 'gemini-2.5-flash',
     /** Very lightweight — keyword clustering, tag generation, summaries */
@@ -64,13 +63,11 @@ export const AI_MODELS = {
     /** Pro reasoning alias — same as GEMINI_PRO */
     GEMINI_3_1_PRO: GEMINI_PRO_MODEL,
 
-    // ── OpenAI ──────────────────────────────────────────────────────────────
     /** Primary OpenAI model for citation checks and complex reasoning */
     OPENAI_PRIMARY: 'gpt-4o',
     /** Text embedding model for semantic search and vector gap analysis */
     OPENAI_EMBEDDING: 'text-embedding-3-small',
 
-    // ── Anthropic ───────────────────────────────────────────────────────────
     /** Primary Anthropic model for brand mention and AEO diversity checks */
     // Updated May 2026: claude-haiku-4-6 provides better reasoning at the same price point.
     ANTHROPIC_PRIMARY: 'claude-haiku-4-6',

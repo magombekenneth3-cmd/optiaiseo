@@ -109,7 +109,6 @@ async function extractEntitiesFromCompetitors(texts: string): Promise<Entity[]> 
     }
 }
 
-// Phase 1: SERP Benchmark
 // Retries and Timeout included in fetch for reliability
 async function getSerpBenchmark(keyword: string) {
     const cacheKey = `content-score:benchmark:${keyword.toLowerCase().trim()}`;
@@ -409,7 +408,6 @@ export const scoreContent = async (
             : 'SERP benchmark failed (API error) — scores use industry averages.';
     }
 
-    // Phase 2: Score against benchmarks
     const textOnly = content.replace(/<[^>]*>?/gm, '');
     const wordsArray = textOnly.split(/\s+/).filter(w => w.length > 0);
     const wordCount = wordsArray.length;
@@ -479,7 +477,6 @@ export const scoreContent = async (
 
     const totalScore = wordCountScore + exactKeywordsScore + nlpScore + headingScore + readabilityScore;
 
-    // Phase 3: Generate actionable recommendations
     const topOpportunities: string[] = [];
 
     if (wordCountScore < 15) {

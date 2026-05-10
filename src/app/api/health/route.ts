@@ -13,7 +13,6 @@ export async function GET() {
     const checks: Record<string, "ok" | "error"> = {};
     let healthy = true;
 
-    // ── Database check ────────────────────────────────────────────────────────
     let pendingJobs = 0;
     try {
         const [, jobCount] = await Promise.all([
@@ -35,7 +34,6 @@ export async function GET() {
         healthy = false;
     }
 
-    // ── Redis check ───────────────────────────────────────────────────────────
     try {
         await redis.ping();
         checks.redis = "ok";

@@ -124,7 +124,6 @@ export async function scrapePageQuality(url: string): Promise<PageQualityResult 
     // Remove noise elements
     $("nav, header, footer, aside, script, style, noscript").remove();
 
-    // ── META ────────────────────────────────────────────────────────────────
     const title = $("title").first().text().trim() || null;
     const metaDescription =
       $("meta[name='description']").attr("content")?.trim() ||
@@ -144,13 +143,11 @@ export async function scrapePageQuality(url: string): Promise<PageQualityResult 
       .filter(Boolean)
       .slice(0, 10);
 
-    // ── WORD COUNT (main/article or body) ──────────────────────────────────
     const mainEl = $("main, article").first();
     const textSource = mainEl.length ? mainEl : $("body");
     const bodyText = textSource.text().replace(/\s+/g, " ").trim();
     const wordCount = countWords(bodyText);
 
-    // ── PARAGRAPHS ─────────────────────────────────────────────────────────
     const paragraphs = $("p")
       .map((_, el) => $(el).text().trim())
       .get()
@@ -167,7 +164,6 @@ export async function scrapePageQuality(url: string): Promise<PageQualityResult 
     const longestParagraphWords =
       wordCounts.length > 0 ? Math.max(...wordCounts) : 0;
 
-    // ── STRUCTURE SIGNALS ──────────────────────────────────────────────────
     const allHeadings = [...h2s, ...h3s].join(" ").toLowerCase();
     const hasFAQSection =
       /faq|frequently asked/i.test(allHeadings) ||
@@ -207,7 +203,6 @@ export async function scrapePageQuality(url: string): Promise<PageQualityResult 
         .filter((_, el) => ctaPattern.test($(el).text()))
         .length > 0;
 
-    // ── E-E-A-T ────────────────────────────────────────────────────────────
     const fullText = $("body").text();
     const hasAuthorMention = /\b(author|written by|by [A-Z][a-z]+)\b/i.test(fullText);
 
@@ -246,7 +241,6 @@ export async function scrapePageQuality(url: string): Promise<PageQualityResult 
         )
         .length > 0;
 
-    // ── SCHEMA ─────────────────────────────────────────────────────────────
     const schemaTypes = extractSchemaTypes(html);
     const schemaLower = schemaTypes.map((t) => t.toLowerCase());
     const hasFAQSchema = schemaLower.some((t) => t.includes("faq"));
@@ -260,7 +254,6 @@ export async function scrapePageQuality(url: string): Promise<PageQualityResult 
     const hasProductSchema = schemaLower.some((t) => t === "product");
     const schemaBreadth = schemaTypes.length;
 
-    // ── TECHNICAL ──────────────────────────────────────────────────────────
     // Re-load without removing elements for meta tags
     const $full = cheerio.load(html);
     const canonicalEl = $full("link[rel='canonical']");

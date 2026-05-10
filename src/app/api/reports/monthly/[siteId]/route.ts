@@ -16,7 +16,6 @@ import { hasFeature } from "@/lib/stripe/plans";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // puppeteer needs headroom on Vercel
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Derive a 0–100 score from the Audit.categoryScores JSON field. */
 function deriveScore(categoryScores: unknown): number {
@@ -27,7 +26,6 @@ function deriveScore(categoryScores: unknown): number {
     return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
 }
 
-// ── Route ─────────────────────────────────────────────────────────────────────
 
 export async function GET(
     req: NextRequest,

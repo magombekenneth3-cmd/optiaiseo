@@ -35,7 +35,6 @@ import { getFullAuditEngine } from "@/lib/seo-audit";
 import { discoverPages } from "@/lib/seo-audit/crawler";
 import { logger } from "@/lib/logger";
 
-// ── Per-tier page budget ──────────────────────────────────────────────────────
 
 const PAGE_LIMIT: Record<string, number> = {
   FREE: 5,
@@ -61,7 +60,6 @@ async function getUserIdForSite(siteId: string): Promise<string | null> {
   return site?.userId ?? null;
 }
 
-// ── Fan-out coordinator ───────────────────────────────────────────────────────
 
 export const runPageAuditJob = inngest.createFunction(
   {
@@ -80,13 +78,11 @@ export const runPageAuditJob = inngest.createFunction(
       auditMode?: "homepage" | "full";
     };
 
-    // ── Step 1: Verify the parent audit still exists ──────────────────────────
     await step.run("verify-parent", async () => {
       const audit = await prisma.audit.findUnique({ where: { id: auditId } });
       if (!audit) throw new NonRetriableError(`Parent audit ${auditId} not found`);
     });
 
-    // ── Step 2: DB-first + GSC page discovery ────────────────────────────────
     // discoverPages() now runs in three tiers:
     //   1. DB  — IndexingLog, Blog URLs, past PageAudit records (fast, no HTTP)
     //   2. GSC — real traffic pages from Search Console, sorted by impressions
@@ -128,7 +124,6 @@ export const runPageAuditJob = inngest.createFunction(
       return { skipped: true, reason: "No sub-pages discovered" };
     }
 
-    // ── Step 3: Fan out — one event per page ─────────────────────────────────
     await step.sendEvent(
       "fan-out-page-audits",
       pagesToAudit.map((pageUrl) => ({
@@ -150,7 +145,6 @@ export const runPageAuditJob = inngest.createFunction(
   }
 );
 
-// ── Per-page worker ───────────────────────────────────────────────────────────
 
 export const processPageAuditJob = inngest.createFunction(
   {

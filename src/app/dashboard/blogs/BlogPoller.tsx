@@ -26,7 +26,6 @@ export function BlogPoller({ generatingBlogIds }: { generatingBlogIds: string[] 
     const attemptRef                  = useRef(0);
     const prevLengthRef               = useRef(generatingBlogIds.length);
 
-    // ── Completion detection ─────────────────────────────────────────────────
     useEffect(() => {
         const prev = prevLengthRef.current;
         const curr = generatingBlogIds.length;
@@ -67,7 +66,6 @@ export function BlogPoller({ generatingBlogIds }: { generatingBlogIds: string[] 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [generatingBlogIds.length]);
 
-    // ── Reset on idle ────────────────────────────────────────────────────────
     useEffect(() => {
         if (generatingBlogIds.length === 0) {
             attemptRef.current = 0;
@@ -75,7 +73,6 @@ export function BlogPoller({ generatingBlogIds }: { generatingBlogIds: string[] 
         }
     }, [generatingBlogIds.length]);
 
-    // ── Polling loop ─────────────────────────────────────────────────────────
     useEffect(() => {
         if (generatingBlogIds.length === 0 || gaveUp) return;
 

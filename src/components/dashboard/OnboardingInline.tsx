@@ -11,7 +11,6 @@ import Link from "next/link";
 
 interface Props { onComplete?: () => void; }
 
-// ── Quick-check result shape ──────────────────────────────────────────────────
 interface QuickCheckResult {
     titleScore: number;
     metaScore:  number;

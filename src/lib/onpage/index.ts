@@ -7,7 +7,6 @@ import { isSafeUrl } from '@/lib/security/safe-url';
 // Never modifies, injects into, or writes to the target site.
 // =============================================================================
 
-// ── FIX #1: Pixel-width title estimator ──────────────────────────────────────
 // Google truncates titles at ~580px, not character count.
 const CHAR_WIDTHS: Record<string, number> = {
     default: 7, ' ': 3,
@@ -19,7 +18,6 @@ function estimateTitlePx(text: string): number {
     return [...text].reduce((sum, c) => sum + (CHAR_WIDTHS[c] ?? CHAR_WIDTHS.default), 0);
 }
 
-// ── FIX #3: Bad alt text heuristic ───────────────────────────────────────────
 const BAD_ALT_REGEX = /^(img|image|photo|pic|banner|logo|icon|thumbnail)[-_]?\d*$/i;
 
 export interface OnPageIssue {
@@ -104,7 +102,6 @@ export const runOnPageAudit = async (url: string, targetKeyword?: string): Promi
     // Parse HTML
     const root = parse(html);
 
-    // ── TITLE TAG ─────────────────────────────────────────────────────────────
     const titleElement = root.querySelector('title');
     const title = titleElement ? titleElement.textContent.trim().replace(/\s+/g, " ") : null;
 
@@ -122,7 +119,6 @@ export const runOnPageAudit = async (url: string, targetKeyword?: string): Promi
         }
     }
 
-    // ── META DESCRIPTION ──────────────────────────────────────────────────────
     const metaDescElement = root.querySelector('meta[name="description"]') || root.querySelector('meta[property="og:description"]');
     const metaDescription = metaDescElement ? metaDescElement.getAttribute('content')?.trim() || null : null;
 
@@ -136,7 +132,6 @@ export const runOnPageAudit = async (url: string, targetKeyword?: string): Promi
         passed.push(`Meta description is good length (${metaDescription.length} chars)`);
     }
 
-    // ── H1 TAG ────────────────────────────────────────────────────────────────
     const h1Elements = root.querySelectorAll('h1');
     const h1Text = h1Elements.length > 0 ? h1Elements[0].textContent.trim().replace(/\s+/g, " ") : null;
 
@@ -148,7 +143,6 @@ export const runOnPageAudit = async (url: string, targetKeyword?: string): Promi
         passed.push(`Single H1 tag found: "${h1Text}"`);
     }
 
-    // ── HEADINGS ──────────────────────────────────────────────────────────────
     const h2Elements = root.querySelectorAll('h2');
     const h3Elements = root.querySelectorAll('h3');
 
@@ -158,7 +152,6 @@ export const runOnPageAudit = async (url: string, targetKeyword?: string): Promi
         passed.push(`${h2Elements.length} H2 headings found`);
     }
 
-    // ── CANONICAL TAG ─────────────────────────────────────────────────────────
     const canonicalElement = root.querySelector('link[rel="canonical"]');
     const canonicalUrl = canonicalElement?.getAttribute('href');
     if (!canonicalUrl) {
@@ -212,7 +205,6 @@ export const runOnPageAudit = async (url: string, targetKeyword?: string): Promi
         passed.push('max-image-preview:large enabled');
     }
 
-    // ── OPEN GRAPH ────────────────────────────────────────────────────────────
     const ogTitle = root.querySelector('meta[property="og:title"]')?.getAttribute('content');
     const ogDescription = root.querySelector('meta[property="og:description"]')?.getAttribute('content');
     const ogImage = root.querySelector('meta[property="og:image"]')?.getAttribute('content');
@@ -222,7 +214,6 @@ export const runOnPageAudit = async (url: string, targetKeyword?: string): Promi
     if (!ogImage) issues.push({ type: "missing_og_image", severity: "info", message: "Missing og:image meta tag", recommendation: "Add og:image with 1200x630 image" });
     if (ogTitle && ogDescription && ogImage) passed.push("Open Graph tags complete");
 
-    // ── IMAGES ────────────────────────────────────────────────────────────────
     const imgElements = root.querySelectorAll('img');
     const imgsWithAlt = imgElements.filter(img => {
         const alt = img.getAttribute('alt');
@@ -256,7 +247,6 @@ export const runOnPageAudit = async (url: string, targetKeyword?: string): Promi
         });
     }
 
-    // ── SCHEMA MARKUP ─────────────────────────────────────────────────────────
     const schemaElements = root.querySelectorAll('script[type="application/ld+json"]');
     const hasSchema = schemaElements.length > 0 || html.includes("itemtype=");
     if (!hasSchema) {
@@ -265,7 +255,6 @@ export const runOnPageAudit = async (url: string, targetKeyword?: string): Promi
         passed.push("Structured data detected");
     }
 
-    // ── WORD COUNT ────────────────────────────────────────────────────────────
     const bodyText = (root.querySelector('body') || root).textContent;
     const textContent = bodyText.replace(/\s+/g, " ").trim();
     const wordCount = textContent.split(" ").filter(w => w.length > 2).length;
@@ -278,7 +267,6 @@ export const runOnPageAudit = async (url: string, targetKeyword?: string): Promi
         passed.push(`Good content length (~${wordCount} words)`);
     }
 
-    // ── LINKS ─────────────────────────────────────────────────────────────────
     const linkElements = root.querySelectorAll('a[href]');
     let parsedOrigin: string;
     try { parsedOrigin = new URL(url).origin; } catch { parsedOrigin = ""; }
@@ -295,7 +283,6 @@ export const runOnPageAudit = async (url: string, targetKeyword?: string): Promi
         passed.push(`${internalLinks} internal links found`);
     }
 
-    // ── KEYWORD DENSITY ───────────────────────────────────────────────────────
     type KeywordStats = {
         keywordInTitle?: boolean; keywordInH1?: boolean; keywordInH2Count?: number;
         keywordDensityBody?: number; keywordCount?: number;
@@ -350,7 +337,6 @@ export const runOnPageAudit = async (url: string, targetKeyword?: string): Promi
         } catch { /* invalid URL — skip */ }
     }
 
-    // ── SCORE ─────────────────────────────────────────────────────────────────
     const criticalIssues = issues.filter(i => i.severity === "critical").length;
     const warningIssues = issues.filter(i => i.severity === "warning").length;
     const score = Math.max(0, 100 - (criticalIssues * 20) - (warningIssues * 8));

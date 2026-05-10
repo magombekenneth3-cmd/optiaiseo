@@ -11,24 +11,17 @@ import { sendAeoDropAlert } from "@/lib/email/aeo-alert";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
-// ---------------------------------------------------------------------------
 // Input schemas
-// ---------------------------------------------------------------------------
 
-// Prisma uses cuid() for all PKs — validate as a non-empty string ≤ 50 chars
 const uuidSchema = z.string().min(1).max(50);
 
-// ---------------------------------------------------------------------------
 // Return types
-// ---------------------------------------------------------------------------
 
 type GetSiteAlertsResult =
     | { success: true; alerts: PredictiveAlert[] }
     | { success: false; error: string };
 
-// ---------------------------------------------------------------------------
 // Action
-// ---------------------------------------------------------------------------
 
 export async function getSiteAlerts(
     siteId: string,

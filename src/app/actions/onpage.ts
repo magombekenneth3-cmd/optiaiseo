@@ -8,9 +8,7 @@ import { revalidatePath } from "next/cache";
 import { inngest } from "@/lib/inngest/client";
 import { checkRateLimit } from "@/lib/rate-limit";
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 const RECENT_REPORT_WINDOW_MS = 30 * 60 * 1000;
 const RATE_LIMIT_MAX = 10;
@@ -18,9 +16,7 @@ const RATE_LIMIT_WINDOW_SECONDS = 3_600;
 const MAX_ISSUES_STORED = 50;
 const AUDIT_TIMEOUT_MS = 15_000;
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 function normalizeUrl(input: string): string {
     try {
@@ -56,7 +52,6 @@ function rejectAfter(ms: number): Promise<never> {
     );
 }
 
-// ---------------------------------------------------------------------------
 // NOTE: The `status` and `scoreDelta` fields used below require a schema
 // migration. Add the following to your OnPageReport model and run:
 //   npx prisma migrate dev --name add-onpage-status-delta
@@ -66,11 +61,8 @@ function rejectAfter(ms: number): Promise<never> {
 //
 // The `as any` casts below are temporary bridges that will resolve
 // automatically once the migration runs and Prisma regenerates its types.
-// ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
 // Public: runOnPageReport
-// ---------------------------------------------------------------------------
 
 export async function runOnPageReport(
     siteId: string,
@@ -157,11 +149,9 @@ export async function runOnPageReport(
     }
 }
 
-// ---------------------------------------------------------------------------
 // Worker helper: completeOnPageReport
 // Call this from your Inngest "onpage.audit.run" handler.
 // All DB writes for a finished audit live here.
-// ---------------------------------------------------------------------------
 
 export async function completeOnPageReport(
     reportId: string,
@@ -211,9 +201,7 @@ export async function completeOnPageReport(
     revalidatePath(`/dashboard/sites/${siteId}`);
 }
 
-// ---------------------------------------------------------------------------
 // Public: getOnPageHistory — cursor pagination + optional distinct-by-URL
-// ---------------------------------------------------------------------------
 
 export async function getOnPageHistory(
     siteId: string,

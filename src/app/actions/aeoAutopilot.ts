@@ -7,7 +7,6 @@ import { logger } from "@/lib/logger";
 import { randomBytes } from "crypto";
 import { z } from "zod";
 
-// Prisma uses cuid() for all PKs — validate as a non-empty string ≤ 50 chars
 const uuidSchema = z.string().min(1).max(50);
 
 type ActionError = { success: false; error: string };

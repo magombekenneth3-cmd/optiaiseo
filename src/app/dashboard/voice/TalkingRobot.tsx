@@ -102,7 +102,6 @@ export function TalkingRobot({
     };
   }, [state]);
 
-  // ── Derived colors by state ──────────────────────────────────────────────
   const isListening = state === "listening";
   const isThinking = state === "thinking";
   const isSpeaking = state === "speaking";

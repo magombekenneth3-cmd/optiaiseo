@@ -232,7 +232,6 @@ export function CitationGapPanel({ siteId, hasCompetitors }: CitationGapPanelPro
     }
   };
 
-  // ── No competitors state ──────────────────────────────────────────────────
   if (!hasCompetitors) {
     return (
       <div className="rounded-xl border border-dashed bg-muted/20 p-8 text-center">

@@ -16,7 +16,6 @@ import {
     ExternalLink,
 } from "lucide-react";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface KeywordRow {
     keyword: string;
@@ -66,7 +65,6 @@ interface KeywordData {
     cannibalization: CannibalizationIssue[];
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function positionColor(pos: number) {
     if (pos <= 3) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
@@ -101,7 +99,6 @@ function fmt(n: number): string {
     return String(n);
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
 
 function SummaryCards({ summary }: { summary: Summary }) {
     const cards = [
@@ -489,7 +486,6 @@ function CannibalizationPanel({ issues }: { issues: CannibalizationIssue[] }) {
     );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
 
 export default function KeywordInsightsSection({ siteId, domain }: { siteId: string; domain: string }) {
     const [data, setData] = useState<KeywordData | null>(null);

@@ -8,7 +8,6 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminApi } from "@/lib/admin-guard";
 
 
-// ── GET /api/admin/cache ──────────────────────────────────────────────────────
 // Critical fix: GET had NO admin check — any authenticated user could read AEO
 // cache stats. Now gated behind requireAdminApi() (SUPER_ADMIN only).
 
@@ -27,7 +26,6 @@ export async function GET(req: NextRequest) {
     }
 }
 
-// ── DELETE /api/admin/cache ───────────────────────────────────────────────────
 // Domain-scoped bust is allowed for any authenticated user (their own domain).
 // Full cache flush is admin-only — now uses requireAdminApi() instead of the
 // ad-hoc isAdmin() helper that checked the incorrect "AGENCY_ADMIN" role.

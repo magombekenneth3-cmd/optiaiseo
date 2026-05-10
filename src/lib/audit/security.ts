@@ -22,7 +22,6 @@ export async function runSecurityAudit(domain: string): Promise<AuditIssue[]> {
     }
 
     try {
-        // ── 1. HTTP Security Headers ──────────────────────────────────────────
         // SSRF guard: follow redirects manually so we can re-validate every hop's hostname.
         // redirect:'follow' would bypass isValidPublicDomain on the final destination.
         let fetchUrl = urlStr;
@@ -82,7 +81,6 @@ export async function runSecurityAudit(domain: string): Promise<AuditIssue[]> {
         checkHeader("X-Frame-Options", "Missing X-Frame-Options", "Prevents clickjacking by restricting how your site can be embedded in iframes.", "warning", "MEDIUM", "Add 'X-Frame-Options: SAMEORIGIN' or 'DENY'.");
         checkHeader("X-Content-Type-Options", "Missing X-Content-Type-Options", "Prevents MIME-sniffing, ensuring browsers respect the declared content type.", "warning", "LOW", "Add 'X-Content-Type-Options: nosniff'.");
 
-        // ── 2. Google Safe Browsing (Malware/Phishing) ────────────────────────
         const safeBrowsingKey = process.env.GOOGLE_SAFE_BROWSING_KEY;
         if (safeBrowsingKey) {
             try {
@@ -120,7 +118,6 @@ export async function runSecurityAudit(domain: string): Promise<AuditIssue[]> {
             }
         }
 
-        // ── 3. SSL Labs API (Certificate Grade) ───────────────────────────────
         // SSL Labs API can be slow as it triggers a new scan. We use the 'fromCache=on' param first.
         try {
             const parsedUrl = new URL(urlStr);

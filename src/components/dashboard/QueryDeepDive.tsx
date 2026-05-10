@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { analyzeQueryRanking, type SerpResult, type QueryAnalysisData } from "@/app/actions/queryAnalysis";
 import type { PageQualityResult } from "@/lib/audit/scrapePageQuality";
 
-// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   keyword: string;
@@ -18,7 +17,6 @@ interface Props {
   onClose: () => void;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function positionColor(pos: number) {
   if (pos <= 3) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
@@ -47,7 +45,6 @@ type ExtendedData = QueryAnalysisData & {
   userPageQuality?: PageQualityResult;
 };
 
-// ── Gap badge ─────────────────────────────────────────────────────────────────
 
 function GapBadge({ user, best, type }: {
   user: number | boolean | null | undefined;
@@ -69,7 +66,6 @@ function GapBadge({ user, best, type }: {
   return <span className="text-amber-400 text-xs font-semibold">⚠ {Math.round(((b - u) / Math.max(b, 1)) * 100)}% gap</span>;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function QueryDeepDive({
   keyword,
@@ -123,7 +119,6 @@ export default function QueryDeepDive({
 
   useEffect(() => { run(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Derive best competitor for comparison table ──────────────────────────
   const bestCompetitor: ExtendedCompetitorDetail | null = (() => {
     if (!data) return null;
     const ranked = (data.competitorDetails as ExtendedCompetitorDetail[])

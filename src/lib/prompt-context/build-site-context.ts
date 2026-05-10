@@ -121,7 +121,6 @@ export async function buildGroundedContext(siteId: string): Promise<GroundedSite
             competitorDomains: competitors.map((c) => c.domain),
         };
 
-        // ── Build the context block string ─────────────────────────────────────
         const lines: string[] = [
             "=== SITE CONTEXT (use this to make your response specific and accurate) ===",
             `Domain: ${site.domain}`,

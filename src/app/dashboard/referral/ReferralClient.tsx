@@ -17,7 +17,6 @@ import {
     TrendingUp, Clock, ExternalLink, Loader2, RefreshCw,
 } from "lucide-react";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Commission {
     id: string;
@@ -37,7 +36,6 @@ interface ReferralData {
     commissions: Commission[];
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmt$(cents: number): string {
     return `$${(cents / 100).toFixed(2)}`;
@@ -48,7 +46,6 @@ function fmtMonth(month: string): string {
     return new Date(Number(y), Number(m) - 1).toLocaleString("default", { month: "long", year: "numeric" });
 }
 
-// ── Stat card ─────────────────────────────────────────────────────────────────
 
 function StatCard({
     label, value, icon: Icon, accent, iconColor, sub,
@@ -81,7 +78,6 @@ function StatCard({
     );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
 
 export function ReferralClient() {
     const [data, setData] = useState<ReferralData | null>(null);
@@ -130,7 +126,6 @@ export function ReferralClient() {
         }
     };
 
-    // ── Loading ──────────────────────────────────────────────────────────────
 
     if (loading) {
         return (
@@ -142,7 +137,6 @@ export function ReferralClient() {
         );
     }
 
-    // ── Error ─────────────────────────────────────────────────────────────────
 
     if (error) {
         return (
@@ -155,7 +149,6 @@ export function ReferralClient() {
         );
     }
 
-    // ── Not activated ─────────────────────────────────────────────────────────
 
     if (!data) {
         return (
@@ -204,7 +197,6 @@ export function ReferralClient() {
         );
     }
 
-    // ── Dashboard ─────────────────────────────────────────────────────────────
 
     const conversionRate = data.signups > 0
         ? Math.round((data.conversions / data.signups) * 100)

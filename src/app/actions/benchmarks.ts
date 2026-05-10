@@ -338,7 +338,6 @@ export async function getSiteBenchmarkContext(
         const latestAeo = site.aeoReports[0];
         const prevAeo = site.aeoReports[1] ?? null;
 
-        // ── Compute site values ───────────────────────────────────────────────
 
         function computeOverallScore(audit: typeof latestAudit | undefined): number | null {
             if (!audit?.categoryScores) return null;
@@ -370,7 +369,6 @@ export async function getSiteBenchmarkContext(
             inp: prevAudit?.inp ?? null,
         };
 
-        // ── Build MetricBenchmark array ───────────────────────────────────────
 
         const metrics: MetricBenchmark[] = [];
         let benchmarkUpdatedAt: Date | null = null;
@@ -420,7 +418,6 @@ export async function getSiteBenchmarkContext(
 
         if (metrics.length === 0) return null;
 
-        // ── Summary ───────────────────────────────────────────────────────────
 
         const strongMetrics = metrics
             .filter((m) => m.band === "top10" || m.band === "top25")

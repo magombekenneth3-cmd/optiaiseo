@@ -2,9 +2,7 @@
 // Competitor detection engine — 5-layer domain filter
 // =============================================================================
 
-// ---------------------------------------------------------------------------
 // Layer 3: Blocked domain roots (TLD-agnostic — "capterra" blocks capterra.ca, .co.uk etc.)
-// ---------------------------------------------------------------------------
 
 const BUILT_IN_BLOCKED_ROOTS = new Set<string>([
     // Social & video
@@ -40,9 +38,7 @@ const BUILT_IN_BLOCKED_ROOTS = new Set<string>([
     "optifine", "curseforge", "modrinth", "minecraftforum",
 ]);
 
-// ---------------------------------------------------------------------------
 // Layer 2: Hosting platform suffixes
-// ---------------------------------------------------------------------------
 
 const HOSTING_PLATFORM_SUFFIXES = new Set<string>([
     "railway.app", "vercel.app", "netlify.app", "pages.dev",
@@ -53,10 +49,8 @@ const HOSTING_PLATFORM_SUFFIXES = new Set<string>([
     "surge.sh", "glitch.me", "replit.dev", "stackblitz.io", "codesandbox.io",
 ]);
 
-// ---------------------------------------------------------------------------
 // Layer 4: Content site patterns — tested only on root segment
 // Prevents "guidedsolutions.co.ug" matching /^guide/
-// ---------------------------------------------------------------------------
 
 const CONTENT_ROOT_PATTERNS: RegExp[] = [
     /^(news|blog|magazine|media|press|journal|post|times|daily|weekly|tribune|herald|gazette|report|digest)/i,
@@ -65,9 +59,7 @@ const CONTENT_ROOT_PATTERNS: RegExp[] = [
     /^(howto|tutorial|learn|guide|tips|advice|reviews|compare|versus|ranked|bestof|top\d+)/i,
 ];
 
-// ---------------------------------------------------------------------------
 // Helper: extract the registrable root word from a hostname
-// ---------------------------------------------------------------------------
 
 /**
  * Extracts the root segment used for block-list matching.
@@ -88,9 +80,7 @@ export function extractRoot(hostname: string): string {
     return parts[0];
 }
 
-// ---------------------------------------------------------------------------
 // Individual filter functions (exported for unit testing)
-// ---------------------------------------------------------------------------
 
 /** Layer 1 — same brand / staging URL check */
 export function isSameBrand(hostname: string, ownRoot: string): boolean {
@@ -126,9 +116,7 @@ export function isContentSite(hostname: string): boolean {
     return CONTENT_ROOT_PATTERNS.some((p) => p.test(root));
 }
 
-// ---------------------------------------------------------------------------
 // Central gate
-// ---------------------------------------------------------------------------
 
 /** Layer 5b — domain segments contain 'alternatives', 'compare', 'versus' etc. */
 export function isAlternativesOrCompareSite(hostname: string): boolean {

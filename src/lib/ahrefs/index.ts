@@ -36,7 +36,6 @@ export const getAhrefsDomainOverview = async (
     domain: string
 ): Promise<AhrefsDomainOverview> => {
 
-    // ── Moz API — Domain Authority only ──────────────────────────────────────
     // Supports two auth methods:
     //   NEW  (post-March 2024): MOZ_API_TOKEN  → single token, header: x-moz-token
     //                           endpoint: https://api.moz.com/jsonrpc
@@ -52,7 +51,6 @@ export const getAhrefsDomainOverview = async (
             let da: number | null = null
 
             if (mozToken) {
-                // ── New token-based API (JSON-RPC) ────────────────────────
                 const res = await fetch("https://api.moz.com/jsonrpc", {
                     method: "POST",
                     headers: {
@@ -76,7 +74,6 @@ export const getAhrefsDomainOverview = async (
                     da = data.result?.site_metrics?.[0]?.domain_authority ?? null
                 }
             } else {
-                // ── Legacy Basic Auth API (V2) ─────────────────────────────
                 const auth = Buffer.from(`${mozAccessId}:${mozSecretKey}`).toString('base64')
                 const res = await fetch("https://lsapi.seomoz.com/v2/url_metrics", {
                     method: "POST",
@@ -128,7 +125,6 @@ export const getAhrefsTopKeywords = async (
     domain: string,
     limit = 50
 ): Promise<{ data: AhrefsKeyword[] | null; warning?: string }> => {
-    // ── DataForSEO domain organic keywords (real data, no Ahrefs key needed) ──
     const login    = process.env.DATAFORSEO_LOGIN;
     const password = process.env.DATAFORSEO_PASSWORD;
 

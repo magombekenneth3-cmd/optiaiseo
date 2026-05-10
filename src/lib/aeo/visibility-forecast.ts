@@ -38,7 +38,6 @@ export interface VisibilityForecast {
 }
 
 
-// ── Gap 4: Weighted OLS linear regression ────────────────────────────────────
 // Replaces the 3-snapshot average delta with proper OLS slope estimation over
 // up to 24 weeks, weighted by recency (oldest = 0.5, most recent = 1.0).
 // Returns slope (score units/week) and R² as a confidence signal.
@@ -70,7 +69,6 @@ export async function generateVisibilityForecast(siteId: string): Promise<Visibi
     const generatedAt = new Date().toISOString();
 
     try {
-        // ── 1. Fetch all relevant data in parallel ─────────────────────────────
         const [site, aeoSnapshots, shareOfVoice, brandFacts, latestAudit, competitors] =
             await Promise.all([
                 prisma.site.findUnique({
@@ -129,14 +127,12 @@ export async function generateVisibilityForecast(siteId: string): Promise<Visibi
             return buildEmptyForecast("Site not found", generatedAt);
         }
 
-        // ── 2. Compute current citation rate from AiShareOfVoice ──────────────
         const citationRate = shareOfVoice.length > 0
             ? Math.round(
                 (shareOfVoice.filter((r) => r.brandMentioned).length / shareOfVoice.length) * 100
               )
             : aeoSnapshots[0]?.generativeShareOfVoice ?? 0;
 
-        // ── 3. Detect trend via weighted OLS regression ───────────────────────
         // Gap 4: slope > 1.5/week = improving; < -1.5/week = declining.
         // Snapshots are DESC from DB — reverse for chronological order.
         let trend: "improving" | "stable" | "declining" = "stable";
@@ -151,12 +147,10 @@ export async function generateVisibilityForecast(siteId: string): Promise<Visibi
             else if (slope < -1.5) trend = "declining";
         }
 
-        // ── 4. Brand fact completeness ────────────────────────────────────────
         const verifiedFacts = brandFacts.filter((f) => f.verified).length;
         const totalFacts = brandFacts.length;
         const factCompleteness = totalFacts > 0 ? Math.round((verifiedFacts / totalFacts) * 100) : 0;
 
-        // ── 5. Schema score from latest audit ─────────────────────────────────
         let schemaScore: number | null = null;
         if (latestAudit?.categoryScores) {
             try {
@@ -167,7 +161,6 @@ export async function generateVisibilityForecast(siteId: string): Promise<Visibi
             }
         }
 
-        // ── 6. Collect competitor information from share of voice ──────────────
         const competitorMentions: Record<string, number> = {};
         for (const record of shareOfVoice) {
             for (const comp of record.competitorsMentioned) {
@@ -177,7 +170,6 @@ export async function generateVisibilityForecast(siteId: string): Promise<Visibi
         const topCompetitor = Object.entries(competitorMentions)
             .sort(([, a], [, b]) => b - a)[0];
 
-        // ── 7. Build Gemini reasoning prompt ───────────────────────────────────
         // Gap 4: pass all 24 snapshots for richer context
         const snapshotSummary = aeoSnapshots
             .map((s, i) => `Week -${i + 1}: AEO ${s.score}/100, Citation Rate ${s.generativeShareOfVoice}%, Perplexity ${s.perplexityScore}/100`)
@@ -278,7 +270,6 @@ Rules:
     }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function buildEmptyForecast(reason: string, generatedAt: string): VisibilityForecast {
     return {

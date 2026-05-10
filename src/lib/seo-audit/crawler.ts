@@ -28,7 +28,6 @@ import { getUserGscToken } from "@/lib/gsc/token";
 const DEFAULT_LIMIT = 50;
 const FETCH_TIMEOUT_MS = 10_000;
 
-// ── DB-sourced discovery ──────────────────────────────────────────────────────
 
 /**
  * Pull page URLs from the database for a given siteId.
@@ -96,7 +95,6 @@ async function fromDatabase(siteId: string, domain: string): Promise<string[]> {
   return Array.from(urls);
 }
 
-// ── GSC-sourced discovery ─────────────────────────────────────────────────────
 
 /**
  * Pull page URLs from Google Search Console for a given user + domain.
@@ -110,7 +108,6 @@ async function fromDatabase(siteId: string, domain: string): Promise<string[]> {
  * @param domain  Site domain (plain or with scheme).
  * @param origin  Pre-computed origin (https://example.com) for same-origin filtering.
  */
-// ── GSC property auto-detection ───────────────────────────────────────────────
 
 /**
  * Build candidate GSC property URLs for a domain, in priority order.
@@ -164,7 +161,6 @@ async function resolveGscProperty(
   }
 }
 
-// ── GSC-sourced discovery ─────────────────────────────────────────────────────
 
 /**
  * Pull page URLs from Google Search Console for a given user + domain.
@@ -255,7 +251,6 @@ async function fromGsc(
   }
 }
 
-// ── External discovery helpers ────────────────────────────────────────────────
 
 async function safeGet(url: string): Promise<string | null> {
   try {
@@ -342,7 +337,6 @@ async function fromHomepageCrawl(origin: string): Promise<string[]> {
   return Array.from(urls);
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
 
 /**
  * Discover all auditable pages for a domain.
@@ -371,14 +365,12 @@ export async function discoverPages(
   const allUrls = new Set<string>();
   allUrls.add(homepage);
 
-  // ── Step 1: DB-first (fast, no external HTTP) ─────────────────────────────
   if (siteId) {
     const dbUrls = await fromDatabase(siteId, origin);
     for (const u of dbUrls) allUrls.add(u);
     logger.info(`[crawler:db] ${dbUrls.length} URLs from DB for site ${siteId}`);
   }
 
-  // ── Step 2: GSC (real traffic pages, sorted by impressions) ───────────────
   // Runs even when DB already has some pages — GSC may know about pages that
   // haven't been manually indexed or previously audited.
   if (userId) {
@@ -386,7 +378,6 @@ export async function discoverPages(
     for (const u of gscUrls) allUrls.add(u);
   }
 
-  // ── Step 3: External discovery (only if DB+GSC didn't fill the budget) ────
   if (allUrls.size < limit) {
     let external: string[] = [];
 
@@ -417,7 +408,6 @@ export async function discoverPages(
     logger.info(`[crawler:external] ${external.length} URLs from external sources for ${origin}`);
   }
 
-  // ── Finalise: homepage first, capped at limit ─────────────────────────────
   const withoutHomepage = Array.from(allUrls).filter((u) => u !== homepage);
   const result = [homepage, ...withoutHomepage].slice(0, limit);
 

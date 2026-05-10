@@ -61,7 +61,6 @@ export async function PATCH(
 
   const currentTier = ((existing.subscriptionTier ?? "FREE") as Tier);
 
-  // ── Downgrade prevention ────────────────────────────────────────────────────
   if (TIER_RANK[tier] < TIER_RANK[currentTier]) {
     return NextResponse.json(
       {

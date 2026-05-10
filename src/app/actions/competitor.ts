@@ -9,9 +9,7 @@ import { withinLimit, getPlan } from "@/lib/stripe/plans";
 import { requireFeature, guardErrorToResult } from "@/lib/stripe/guards";
 import { fetchCompetitorKeywordGaps } from "@/lib/competitors";
 
-// ─────────────────────────────────────────────────────────────
 // Types
-// ─────────────────────────────────────────────────────────────
 
 type ActionResult<T = undefined> =
     | { success: true; data?: T }
@@ -31,9 +29,7 @@ type KeywordGap = {
     competitorDomain: string;
 };
 
-// ─────────────────────────────────────────────────────────────
 // Auth helper — single DB call, used by every action
-// ─────────────────────────────────────────────────────────────
 
 async function getAuthedUser() {
     const session = await getServerSession(authOptions);
@@ -44,9 +40,7 @@ async function getAuthedUser() {
     });
 }
 
-// ─────────────────────────────────────────────────────────────
 // Domain normalization
-// ─────────────────────────────────────────────────────────────
 
 function normalizeDomain(raw: string): string {
     return raw
@@ -58,9 +52,7 @@ function normalizeDomain(raw: string): string {
         .trim();
 }
 
-// ─────────────────────────────────────────────────────────────
 // Actions
-// ─────────────────────────────────────────────────────────────
 
 export async function getCompetitors(
     siteId: string

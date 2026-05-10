@@ -14,7 +14,6 @@ import { getEffectiveTier } from "@/lib/stripe/guards";
 import { extractBrandIdentity, type BrandIdentity } from "@/lib/aeo/brand-utils";
 import { z } from "zod";
 
-// Prisma uses cuid() for all PKs — validate as a non-empty string ≤ 50 chars
 const uuidSchema = z.string().min(1).max(50);
 
 export type AeoCategory =
@@ -573,7 +572,6 @@ export async function getAllSitesWithMentions(): Promise<{ success: boolean; sit
         return { success: false, sites: [] };
     }
 }
-// ── AEO Score Trend ──────────────────────────────────────────────────────────
 // Returns up to 12 historical AeoReport scores for a site so the UI can
 // render a trend sparkline. No new schema needed — reuses existing AeoReport.
 

@@ -10,7 +10,6 @@ import { renderHtmlToPdf } from "./renderer";
 import { esc, safeUrl, scoreColor, scoreBgColor, scoreBorderColor, svgScoreRing, baseStyles } from "./shared";
 import type { WhiteLabelConfig } from "./shared";
 
-// ── Public types ──────────────────────────────────────────────────────────────
 
 export interface AeoReportPdfData {
     domain: string;
@@ -27,7 +26,6 @@ export interface AeoReportPdfData {
     whiteLabel?: WhiteLabelConfig;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function trendMeta(trend: AeoReportPdfData["trend"]): { icon: string; label: string; color: string } {
     if (trend === "improving") return { icon: "↑", label: "Improving", color: "#34d978" };
@@ -53,7 +51,6 @@ function modelBar(score: number): string {
     </div>`;
 }
 
-// ── HTML builder ──────────────────────────────────────────────────────────────
 
 function buildAeoHtml(data: AeoReportPdfData): string {
     const wl = data.whiteLabel ?? {};
@@ -71,7 +68,6 @@ function buildAeoHtml(data: AeoReportPdfData): string {
         ? `<img src="${esc(logoUrl)}" style="height:28px;display:block" alt="${esc(brand)}">`
         : `<span style="font-size:13px;font-weight:800;color:${primary};letter-spacing:0.06em;text-transform:uppercase">${esc(brand)}</span>`;
 
-    // ── Model rows ──
     const modelRows = data.multiModelResults
         ? Object.entries(data.multiModelResults).map(([model, score]) => `
             <tr>
@@ -87,7 +83,6 @@ function buildAeoHtml(data: AeoReportPdfData): string {
                Model breakdown not yet available
            </td></tr>`;
 
-    // ── Recommendations ──
     const recItems = data.topRecommendations.slice(0, 6).map((r, i) => `
         <div style="display:flex;gap:14px;align-items:flex-start;padding:13px 0;
                     border-bottom:1px solid rgba(255,255,255,0.04)">
@@ -209,7 +204,6 @@ ${data.topRecommendations.length > 0 ? `
 </html>`;
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
 
 export async function generateAeoReportPdf(data: AeoReportPdfData): Promise<Buffer> {
     return renderHtmlToPdf(buildAeoHtml(data), "aeo");

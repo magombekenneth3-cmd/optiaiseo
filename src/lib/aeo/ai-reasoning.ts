@@ -63,7 +63,6 @@ export async function getAiReasoningForGap(
 
   const key = cacheKey(siteId, competitorDomain, keyword);
 
-  // ── Redis read ──────────────────────────────────────────────────────────────
   try {
     const cached = await redis.get<AiReasoningResult>(key);
     if (cached) return cached;
@@ -132,7 +131,6 @@ Rules:
       generatedAt: new Date().toISOString(),
     };
 
-    // ── Redis write ───────────────────────────────────────────────────────────
     try {
       await redis.set(key, result, { ex: CACHE_TTL_S });
     } catch {

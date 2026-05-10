@@ -60,7 +60,6 @@ export async function probeLlmCitation(
 ): Promise<CitationProbeResult> {
     const cacheKey = `llm-probe:${createHash("sha256").update(url).digest("hex").slice(0, 16)}`;
 
-    // ── Cache read ────────────────────────────────────────────────────────
     const r = await getRedis();
     if (r) {
         try {
@@ -73,7 +72,6 @@ export async function probeLlmCitation(
         } catch { /* non-fatal */ }
     }
 
-    // ── Prompt ────────────────────────────────────────────────────────────
     const prompt = `You are simulating how an AI search engine evaluates content for citation.
 
 Given the following webpage content, answer: would you cite this page as a primary source when a user asks "${title}?"
@@ -119,7 +117,6 @@ Score guide: 5=strong citation candidate, 4=likely, 3=possible, 2=unlikely, 1=wo
             cachedAt:       new Date().toISOString(),
         };
 
-        // ── Cache write ───────────────────────────────────────────────────
         if (r) {
             try { await r.setex(cacheKey, PROBE_TTL_S, JSON.stringify(result)); } catch { /* non-fatal */ }
         }

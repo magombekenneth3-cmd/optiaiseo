@@ -63,7 +63,6 @@ export const PerformanceModule: AuditModule = {
         const root = parse(html);
         const items: ChecklistItem[] = [];
 
-        // ── 1. LCP Hero Image Priority ─────────────────────────────────────
         {
             const heroImg = root.querySelector(HERO_SELECTOR) ?? root.querySelector('img');
             const heroLoading = heroImg?.getAttribute('loading') ?? '';
@@ -93,7 +92,6 @@ export const PerformanceModule: AuditModule = {
             });
         }
 
-        // ── 2. Below-Fold Image Lazy Loading ───────────────────────────────
         {
             const allImgs = root.querySelectorAll('img');
             const belowFoldImgs = allImgs.slice(ABOVE_FOLD_IMG_COUNT);
@@ -118,7 +116,6 @@ export const PerformanceModule: AuditModule = {
             });
         }
 
-        // ── 3. Next-Gen Image Formats ──────────────────────────────────────
         {
             const allImgs = root.querySelectorAll('img');
             const legacyImgs = allImgs.filter(img => {
@@ -149,7 +146,6 @@ export const PerformanceModule: AuditModule = {
             });
         }
 
-        // ── 4. Resource Hints ──────────────────────────────────────────────
         {
             const headHtml = root.querySelector('head')?.innerHTML ?? '';
             const hasPreconnect = PRECONNECT_RE.test(headHtml);
@@ -189,7 +185,6 @@ export const PerformanceModule: AuditModule = {
             });
         }
 
-        // ── 5. Render-Blocking Scripts ─────────────────────────────────────
         {
             const headScripts = root.querySelector('head')?.querySelectorAll('script[src]') ?? [];
             const blockingScripts = headScripts.filter(s =>
@@ -217,7 +212,6 @@ export const PerformanceModule: AuditModule = {
             });
         }
 
-        // ── 6. Font Display Strategy ───────────────────────────────────────
         {
             const styleText = root.querySelectorAll('style').map(s => s.textContent ?? '').join(' ');
             const hasWebFont = styleText.includes('@font-face') || html.includes('fonts.googleapis.com');
@@ -242,7 +236,6 @@ export const PerformanceModule: AuditModule = {
             });
         }
 
-        // ── 7. Inline SVG Bloat ────────────────────────────────────────────
         {
             const inlineSvgs = root.querySelectorAll('body svg');
             const largeSvgs = inlineSvgs.filter(s => (s.innerHTML ?? '').length > LARGE_SVG_THRESHOLD_BYTES);

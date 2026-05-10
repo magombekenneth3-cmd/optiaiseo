@@ -14,13 +14,11 @@ import { prisma } from "@/lib/prisma";
 
 type DbUser = NonNullable<Awaited<ReturnType<typeof prisma.user.findUnique>>>;
 
-// ── Result types ──────────────────────────────────────────────────────────────
 
 export type AuthOk = { ok: true; user: DbUser };
 export type AuthFail = { ok: false; response: { success: false; error: string } };
 export type AuthResult = AuthOk | AuthFail;
 
-// ── Helper ────────────────────────────────────────────────────────────────────
 
 /**
  * Resolves the current session and fetches the matching User row.

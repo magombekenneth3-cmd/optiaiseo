@@ -9,9 +9,7 @@ import type { SerperSearchResult } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 8_000;
 
-// ---------------------------------------------------------------------------
 // Query builder
-// ---------------------------------------------------------------------------
 
 /**
  * Builds 6 intent-optimised queries for a service name.
@@ -51,9 +49,7 @@ export function buildSearchQueries(
         .filter((q) => q.length > 3);
 }
 
-// ---------------------------------------------------------------------------
 // Serper runner
-// ---------------------------------------------------------------------------
 
 interface SerperOrganicResult {
     link?:    string;

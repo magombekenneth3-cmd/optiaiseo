@@ -19,7 +19,6 @@ import { BrandEntityModule } from './modules/brand-entity';
 export * from './types';
 export * from './engine';
 
-// ── Phase 1.3: Declarative module registry ────────────────────────────────────
 // Single source of truth for which modules run in each audit profile.
 // Both Inngest functions (audit.ts, free-audit.ts) use getAuditEngine() —
 // no more duplicated module lists in separate files.

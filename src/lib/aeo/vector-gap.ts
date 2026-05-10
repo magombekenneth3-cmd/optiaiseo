@@ -17,7 +17,6 @@ export interface SemanticGapResult {
     setupWarning?: string;
 }
 
-// ── SERP source types ─────────────────────────────────────────────────────────
 
 type SerpSource = "dataforseo" | "serper" | "perplexity" | "none";
 
@@ -29,7 +28,6 @@ interface SerpResult {
     source: SerpSource;
 }
 
-// ── Perplexity sonar-pro fallback ─────────────────────────────────────────────
 //
 // Perplexity sonar-pro returns `citations[]` — URLs of pages it consulted for
 // the answer. These are real, topically relevant pages for the query, far
@@ -93,7 +91,6 @@ async function getTopSerpUrls(
     keyword: string,
     locationCode = DATAFORSEO_LOCATION_CODES.us,
 ): Promise<SerpResult> {
-    // ── 1. DataForSEO primary ─────────────────────────────────────────────────
     if (process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD) {
         try {
             const { urls, features } = await getSerpData(keyword, locationCode, 3);
@@ -105,7 +102,6 @@ async function getTopSerpUrls(
         }
     }
 
-    // ── 2. Serper.dev fallback ────────────────────────────────────────────────
     if (process.env.SERPER_API_KEY) {
         try {
             const res = await fetch("https://google.serper.dev/search", {
@@ -132,7 +128,6 @@ async function getTopSerpUrls(
         }
     }
 
-    // ── 3. Perplexity sonar-pro citation fallback ─────────────────────────────
     const perplexityUrls = await perplexityFallbackUrls(keyword);
     if (perplexityUrls.length > 0) {
         logger.info(`[Vector Gap] Using Perplexity citation fallback for "${keyword}"`, {
@@ -147,7 +142,6 @@ async function getTopSerpUrls(
         };
     }
 
-    // ── 4. All providers absent or failed ────────────────────────────────────
     logger.warn(`[Vector Gap] No SERP source available for "${keyword}" — returning source:none`, {
         setupWarning: true,
     });

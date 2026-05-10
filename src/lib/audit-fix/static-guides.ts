@@ -21,9 +21,7 @@ interface SeoIssue {
     [key: string]: unknown;
 }
 
-// ---------------------------------------------------------------------------
 // Guide registry
-// ---------------------------------------------------------------------------
 
 export const STATIC_FALLBACK_GUIDES: Record<string, ManualFixGuide> = {
     "robots-txt": {
@@ -154,9 +152,7 @@ export const metadata = {
     },
 };
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
 /**
  * Returns the best matching static guide for an issue, or null if none found.

@@ -10,7 +10,6 @@
  * Adding a new issue type: add a record to ISSUE_META below. Done.
  */
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 export type EffortLevel  = "quick_win" | "medium" | "complex";
 export type ImpactTier   = "critical" | "high" | "medium" | "low";
@@ -63,7 +62,6 @@ export interface GeoBrief {
     starterSentence:  string;
 }
 
-// ── Issue metadata catalogue ──────────────────────────────────────────────────
 // Add new check IDs here to enrich them. Unknown IDs fall through to defaults.
 
 interface IssueMeta {
@@ -81,7 +79,6 @@ interface IssueMeta {
 }
 
 const ISSUE_META: Record<string, IssueMeta> = {
-    // ── Schema / AEO ──────────────────────────────────────────────────────────
     schema_faq: {
         title:          "FAQ schema missing",
         why:            "Pages without FAQPage JSON-LD are 3× less likely to be cited by ChatGPT and Perplexity for question-type queries.",
@@ -153,7 +150,6 @@ const ISSUE_META: Record<string, IssueMeta> = {
         },
     },
 
-    // ── Technical SEO ─────────────────────────────────────────────────────────
     tech_canonical: {
         title:          "Canonical tag missing",
         why:            "Without a canonical tag, Google may index duplicate URLs and split your ranking signals.",
@@ -207,7 +203,6 @@ const ISSUE_META: Record<string, IssueMeta> = {
         geoBrief:       null,
     },
 
-    // ── E-E-A-T ───────────────────────────────────────────────────────────────
     eeat_about: {
         title:          "About page missing or thin",
         why:            "AI engines use About page content to verify E-E-A-T (Experience, Expertise, Authority, Trust). Thin About pages reduce citation probability.",
@@ -248,7 +243,6 @@ const ISSUE_META: Record<string, IssueMeta> = {
         geoBrief:       null,
     },
 
-    // ── Content / GEO ─────────────────────────────────────────────────────────
     content_faq_section: {
         title:          "No FAQ section on key pages",
         why:            "Pages with embedded FAQ sections (structured Q&A) are cited 2× more often in AI-generated answers.",
@@ -334,7 +328,6 @@ const ISSUE_META: Record<string, IssueMeta> = {
     },
 };
 
-// ── Priority scoring ──────────────────────────────────────────────────────────
 
 const IMPACT_SCORE: Record<ImpactTier, number>   = { critical: 40, high: 30, medium: 20, low: 10 };
 const EFFORT_SCORE: Record<EffortLevel, number>   = { quick_win: 30, medium: 20, complex: 10 };
@@ -352,7 +345,6 @@ function effortToLabel(effort: EffortLevel): EnrichedRecommendation["difficulty"
     return "Complex";
 }
 
-// ── Default enrichment for unknown issue IDs ──────────────────────────────────
 
 function defaultMeta(raw: Record<string, unknown>): IssueMeta {
     const sev = String(raw.severity ?? raw.type ?? "warning").toLowerCase();
@@ -372,7 +364,6 @@ function defaultMeta(raw: Record<string, unknown>): IssueMeta {
     };
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
 
 export interface RawIssue {
     id?:              string;

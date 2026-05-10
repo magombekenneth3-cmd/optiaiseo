@@ -38,7 +38,6 @@ export function BacklinksPanel({ siteId, item, onUpdate }: Props) {
         contactedAt: undefined,
     });
 
-    // ── Add target ────────────────────────────────────────────────────────────
     const addTarget = () => {
         if (!newTarget.domain) return;
         const target: BacklinkTarget = {
@@ -70,7 +69,6 @@ export function BacklinksPanel({ siteId, item, onUpdate }: Props) {
         });
     };
 
-    // ── Update status ─────────────────────────────────────────────────────────
     const updateStatus = (targetId: string, status: BacklinkTarget["status"]) => {
         const updated = backlinks.map(b => b.id === targetId ? { ...b, status } : b);
         const target  = updated.find(b => b.id === targetId)!;
@@ -80,7 +78,6 @@ export function BacklinksPanel({ siteId, item, onUpdate }: Props) {
         });
     };
 
-    // ── Remove target ─────────────────────────────────────────────────────────
     const removeTarget = (targetId: string) => {
         const updated = backlinks.filter(b => b.id !== targetId);
         startTransition(async () => {

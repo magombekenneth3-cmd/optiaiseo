@@ -15,9 +15,7 @@ import { AI_MODELS } from "@/lib/constants/ai-models";
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
 /**
  * Builds (or returns cached) a BusinessFingerprint for a domain.
@@ -38,7 +36,6 @@ export async function buildFingerprint(
         timeoutMs?:      number;
     }
 ): Promise<BusinessFingerprint> {
-    // ── Cache check (Redis-backed, 24h TTL) ──────────────────────────────────
     const cached = await getFingerprintCache(domain);
     if (cached) return cached;
 
@@ -54,9 +51,7 @@ export async function buildFingerprint(
     return fp;
 }
 
-// ---------------------------------------------------------------------------
 // Homepage signal fetch (title + meta only — ~1–2 KB)
-// ---------------------------------------------------------------------------
 
 interface HomeSignals {
     title:       string;
@@ -83,9 +78,7 @@ async function fetchHomeSignals(domain: string, timeoutMs: number): Promise<Home
     }
 }
 
-// ---------------------------------------------------------------------------
 // Claude classification — uses AI_MODELS registry
-// ---------------------------------------------------------------------------
 
 const INDUSTRIES   = ["saas", "agency", "ecommerce", "local", "media", "finance", "education", "health", "legal", "other"];
 const BIZ_MODELS   = ["b2b-saas", "b2c-saas", "marketplace", "services", "content", "platform", "ecommerce", "other"];
@@ -160,9 +153,7 @@ Rules:
     return genericFingerprint(domain);
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 function isValidFingerprint(v: unknown): v is Omit<BusinessFingerprint, "domain"> {
     if (typeof v !== "object" || v === null) return false;

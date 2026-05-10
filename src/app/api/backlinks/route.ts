@@ -44,7 +44,6 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Site not found" }, { status: 404 });
     }
 
-    // ── Paywall: live DataForSEO modes require Pro or higher ─────────────────
     const isLiveMode = ["summary", "details", "gap"].includes(mode);
     if (isLiveMode) {
         const dbUser = await prisma.user.findUnique({

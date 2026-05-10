@@ -30,7 +30,6 @@ export type PlannerItem = {
     updatedAt: Date;
 };
 
-// ── Validated status enum ─────────────────────────────────────────────────────
 // FIX #10: Reject unknown status values at the boundary — never trust raw strings from the client.
 
 const VALID_STATUSES = ["Todo", "Writing...", "Done"] as const;
@@ -40,7 +39,6 @@ function isValidStatus(s: string): s is PlannerStatus {
     return (VALID_STATUSES as readonly string[]).includes(s);
 }
 
-// ── Auth helper ───────────────────────────────────────────────────────────────
 
 async function resolveUserAndSite(siteId: string) {
     const session = await getServerSession(authOptions);
@@ -61,7 +59,6 @@ async function resolveUserAndSite(siteId: string) {
     return { user, siteId };
 }
 
-// ── Read ──────────────────────────────────────────────────────────────────────
 
 export async function getPlannerState(siteId: string, cursor?: string, take = 100) {
     try {
@@ -84,7 +81,6 @@ export async function getPlannerState(siteId: string, cursor?: string, take = 10
     }
 }
 
-// ── Bulk save (used by the planner UI when it replaces the whole board) ───────
 
 export async function savePlannerState(siteId: string, state: { items?: Record<string, unknown>[] }) {
     try {
@@ -171,7 +167,6 @@ export async function savePlannerState(siteId: string, state: { items?: Record<s
     }
 }
 
-// ── Single-item status update ─────────────────────────────────────────────────
 
 export async function updatePlannerItemStatus(siteId: string, itemId: string, status: string) {
     try {
@@ -201,7 +196,6 @@ export async function updatePlannerItemStatus(siteId: string, itemId: string, st
     }
 }
 
-// ── Batch brief generation ─────────────────────────────────────────────────────
 
 const INNGEST_CHUNK_SIZE = 50;
 
@@ -258,7 +252,6 @@ export async function batchGenerateBriefs(siteId: string, itemIds: string[]) {
     }
 }
 
-// ── Save keywords to planner ───────────────────────────────────────────────────
 
 export interface KeywordPlannerInput {
     keyword: string;
@@ -309,7 +302,6 @@ export async function saveKeywordsToPlanner(siteId: string, keywords: KeywordPla
     }
 }
 
-// ── Reddit data ───────────────────────────────────────────────────────────────
 
 export async function updateRedditData(
     siteId: string,
@@ -340,7 +332,6 @@ export async function updateRedditData(
     }
 }
 
-// ── Backlink target ───────────────────────────────────────────────────────────
 
 export async function upsertBacklinkTarget(siteId: string, itemId: string, target: BacklinkTarget) {
     try {
@@ -366,7 +357,6 @@ export async function upsertBacklinkTarget(siteId: string, itemId: string, targe
     }
 }
 
-// ── Page score ────────────────────────────────────────────────────────────────
 
 export async function updatePageScore(siteId: string, itemId: string, checks: Partial<PageScoreChecks>) {
     try {
@@ -397,7 +387,6 @@ export async function updatePageScore(siteId: string, itemId: string, checks: Pa
     }
 }
 
-// ── Remove backlink target ────────────────────────────────────────────────────
 
 export async function removeBacklinkTarget(siteId: string, itemId: string, targetId: string) {
     try {
@@ -420,7 +409,6 @@ export async function removeBacklinkTarget(siteId: string, itemId: string, targe
         return { success: false, error: "Failed to remove backlink target" };
     }
 }
-// ── GSC Suggestions for Planner ───────────────────────────────────────────────
 // Returns top GSC keyword opportunities (position 11-50, min impressions)
 // that aren't already in the planner, ready to be added with one click.
 

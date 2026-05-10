@@ -21,7 +21,6 @@ export interface FallbackGuide {
 
 type FallbackMap = Partial<Record<Framework, FallbackGuide>>;
 
-// ── Per-issue fallbacks keyed by issueId ─────────────────────────────────────
 const FALLBACKS: Record<string, FallbackMap & { _default: FallbackGuide }> = {
 
     "title-tag": {
@@ -335,7 +334,6 @@ const FALLBACKS: Record<string, FallbackMap & { _default: FallbackGuide }> = {
     },
 };
 
-// ── Generic fallback generator ────────────────────────────────────────────────
 
 function generateGenericFallback(issueId: string, issueLabel: string): FallbackGuide {
     return {

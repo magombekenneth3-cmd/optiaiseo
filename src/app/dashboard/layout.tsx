@@ -79,8 +79,6 @@ export default async function DashboardLayout({
   };
   const userPlan = PLAN_LABELS[effectiveTier] ?? "Free Plan";
 
-  // ── Trial banner logic ────────────────────────────────────────────────────
-  // Moved OUTSIDE <main> — renders flush edge-to-edge between TopHeader and main
   const trialBanner = (() => {
     if (effectiveTier !== "FREE" || !user.trialEndsAt) return null;
     const now = new Date();

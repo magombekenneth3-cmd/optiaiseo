@@ -1,7 +1,6 @@
 import { logger } from "@/lib/logger";
 import * as cheerio from "cheerio";
 
-// ── TYPES ─────────────────────────────────────────────────────────────────────
 
 export interface SerpResult {
   title: string;
@@ -28,7 +27,6 @@ export interface SerpContext {
   formattedContext: string;
 }
 
-// ── TOKEN / CHARACTER BUDGET ───────────────────────────────────────────────────
 
 /** Hard character limits per section to prevent silent context overflows. */
 const BUDGET = {
@@ -44,7 +42,6 @@ function truncate(text: string, maxChars: number): string {
   return text.slice(0, maxChars) + "…";
 }
 
-// ── DOMAINS TO SKIP SCRAPING ───────────────────────────────────────────────────
 
 const UNSCRAPPABLE_DOMAINS = [
   "youtube.com",
@@ -62,7 +59,6 @@ function isUnscrappable(url: string): boolean {
   return UNSCRAPPABLE_DOMAINS.some((d) => url.includes(d));
 }
 
-// ── SERP FETCH ─────────────────────────────────────────────────────────────────
 
 async function fetchWithRetry(
   url: string,
@@ -164,7 +160,6 @@ export async function fetchGoogleSerp(
   }
 }
 
-// ── SCRAPING ───────────────────────────────────────────────────────────────────
 
 /**
  * Scrapes visible body text from a URL, preferring semantic content containers
@@ -179,7 +174,6 @@ export interface ScrapedPage {
   publishedDate: string | null;
 }
 
-// ── SCHEMA & FRESHNESS HELPERS ────────────────────────────────────────────────
 
 /**
  * Extracts @type values from all JSON-LD blocks on the page.
@@ -298,18 +292,15 @@ export async function scrapePageData(
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    // ── Extract headings from DOM BEFORE stripping any elements ──────────────
     const headings: string[] = [];
     $("h2, h3").each((_, el) => {
       const text = $(el).text().replace(/\s+/g, " ").trim();
       if (text.length > 4 && text.length < 150) headings.push(text);
     });
 
-    // ── Extract schema types & published date BEFORE stripping ───────────────
     const schemaTypes = extractJsonLdSchemaTypes($);
     const publishedDate = extractPublishedDate($, lastModifiedHeader);
 
-    // ── Strip noise elements ──────────────────────────────────────────────────
     $(
       "script, style, noscript, header, footer, nav, aside, " +
         "iframe, svg, img, form, [aria-hidden='true'], " +
@@ -317,7 +308,6 @@ export async function scrapePageData(
         "#cookie-consent, .popup, .modal"
     ).remove();
 
-    // ── Prefer semantic content containers; fall back to body ─────────────────
     const semanticText = $(
       "article, main, [role='main'], .content, #content, " +
         ".post-content, .entry-content, .article-body, .post-body"
@@ -346,7 +336,6 @@ export async function scrapePageContent(
   return (await scrapePageData(url, maxChars)).text;
 }
 
-// ── CONTENT GAP EXTRACTION ────────────────────────────────────────────────────
 
 /**
  * Extracts meaningful term frequency from scraped text (crude but effective
@@ -412,7 +401,6 @@ export function computeContentGaps(results: SerpResult[]): ContentGapAnalysis {
   };
 }
 
-// ── MAIN PIPELINE ──────────────────────────────────────────────────────────────
 
 /**
  * Full SERP pipeline: fetch → scrape → gap analysis → format context.
@@ -453,7 +441,6 @@ export async function getSerpContextForKeyword(
 
   const gaps = computeContentGaps(organic);
 
-  // ── Build LLM context string with explicit token budgets ──────────────────
 
   let ctx = `LIVE SEARCH CONTEXT FOR "${keyword}"\n`;
   ctx += "=".repeat(60) + "\n\n";
@@ -523,7 +510,6 @@ export async function getSerpContextForKeyword(
   };
 }
 
-// ── SERP FORMAT CLASSIFICATION ─────────────────────────────────────────────────
 
 export type SerpFormat =
   | "tool"
@@ -612,7 +598,6 @@ export function classifySerpFormat(results: SerpResult[]): SerpFormatSignal {
   };
 }
 
-// ── PROMPT HINT GENERATION ─────────────────────────────────────────────────────
 
 /**
  * Converts a SERP format signal into a concrete prompt instruction block
@@ -674,7 +659,6 @@ Generate a written companion that complements video content:
   return map[signal.format];
 }
 
-// ── COMPETITOR STRUCTURE EXTRACTION ───────────────────────────────────────────
 
 /**
  * Extracts H2/H3 headings from scraped competitor text to understand how they
@@ -773,7 +757,6 @@ export function buildCompetitorBeatStrategy(
     .map(([h]) => h)
     .slice(0, 5);
 
-  // ── Schema analysis: which types appear & which are missing ───────────────
   const allSchemas = profiles.flatMap(p => p.schemaTypes);
   const schemaFreq = new Map<string, number>();
   for (const s of allSchemas) {
@@ -789,7 +772,6 @@ export function buildCompetitorBeatStrategy(
     s => !commonSchemas.includes(s) && !allSchemas.includes(s)
   ).slice(0, 3);
 
-  // ── Freshness analysis ────────────────────────────────────────────────────
   const dates = profiles
     .map(p => p.publishedDate)
     .filter((d): d is string => !!d)

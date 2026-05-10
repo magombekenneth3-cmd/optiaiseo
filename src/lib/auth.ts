@@ -39,7 +39,6 @@ export function jwtCacheKey(email: string): string {
 async function hydrateTokenFromDb(token: JWT, email: string): Promise<JWT> {
     email = email.toLowerCase().trim();
 
-    // ── Cache read ──────────────────────────────────────────────────────────────
     const cacheKey = jwtCacheKey(email);
     try {
         const hit = await redis.get<string>(cacheKey);
@@ -87,7 +86,6 @@ async function hydrateTokenFromDb(token: JWT, email: string): Promise<JWT> {
         token.googleRefreshToken = refreshToken;
     }
 
-    // ── Cache write (non-fatal) ─────────────────────────────────────────────────
     const hydrated = {
         id: token.id,
         role: token.role,
@@ -215,7 +213,6 @@ export const authOptions: NextAuthOptions = {
                         },
                     });
 
-                    // Win 10: Generate a referral code for every new user
                     try {
                         const code = `REF-${crypto.randomUUID().replace(/-/g, "").substring(0, 8).toUpperCase()}`;
                         await prisma.referral.create({
@@ -247,7 +244,6 @@ export const authOptions: NextAuthOptions = {
                     });
                 }
 
-                // Win 10: Credit referrer if aiseo_ref cookie exists on first signup
                 // NextAuth forwards the request as req — cookie is set by middleware
                 const refCode = typeof req?.cookies?.get === "function"
                     ? req.cookies.get("aiseo_ref")?.value

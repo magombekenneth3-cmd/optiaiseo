@@ -4,7 +4,6 @@ import { inngest } from "@/lib/inngest/client";
 import { rateLimit, getClientIp } from "@/lib/rate-limit/check";
 import { logger } from "@/lib/logger";
 
-// ── Validation ────────────────────────────────────────────────────────────────
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -15,7 +14,6 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  */
 const AUDIT_ID_RE = /^[a-z0-9]{20,30}$/;
 
-// ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
@@ -45,7 +43,6 @@ export async function POST(req: NextRequest) {
 
     const normalizedEmail = email.toLowerCase();
 
-    // ── Fetch audit ───────────────────────────────────────────────────────────
 
     const audit = await prisma.freeAudit.findUnique({
         where: { id: auditId },
@@ -74,7 +71,6 @@ export async function POST(req: NextRequest) {
         );
     }
 
-    // ── Persist lead (idempotent) ─────────────────────────────────────────────
     // Single createMany + skipDuplicates is the correct idempotent pattern.
     // The previous double-upsert/createMany combo caused a redundant round-trip
     // and could emit confusing Prisma constraint warnings in logs.
@@ -98,7 +94,6 @@ export async function POST(req: NextRequest) {
             });
         });
 
-    // ── Fire background email job (Inngest) ───────────────────────────────────
     // Sending is intentionally async: the HTTP response returns immediately so
     // the client can render the report. Inngest handles retries, concurrency
     // capping, and delivery observability — replacing the previous silent catch.

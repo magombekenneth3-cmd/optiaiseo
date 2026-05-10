@@ -45,7 +45,6 @@ export const competitorVelocityJob = inngest.createFunction(
   },
   // Every Monday 04:30 UTC
   async ({ step }) => {
-    // ── Step 1: load all sites that have competitors ──────────────────────────
     const sites = await step.run("load-sites", async () => {
       return prisma.site.findMany({
         select: {
@@ -70,7 +69,6 @@ export const competitorVelocityJob = inngest.createFunction(
     for (const site of sites) {
       if (site.competitors.length === 0) continue;
 
-      // ── Step 2: crawl each competitor in parallel (capped) ────────────────
       const diffs = await step.run(`crawl-${site.id}`, async () => {
         const results = await Promise.allSettled(
           site.competitors.map(comp => crawlAndDiff(site.id, comp))
@@ -96,7 +94,6 @@ export const competitorVelocityJob = inngest.createFunction(
         return successfulDiffs;
       });
 
-      // ── Step 3: alert if any competitor had a publishing spike ────────────
       const spikedCompetitors = diffs.filter(
         d => d.newPages.length >= ALERT_NEW_PAGE_THRESHOLD,
       );

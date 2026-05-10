@@ -45,7 +45,6 @@ export interface GeminiResult {
 
 export type IssueId = string;
 
-// ── Session Caches (TTL = 5 minutes) ─────────────────────────────────────────
 // Framework detection and site content scan results are cached to avoid
 // redundant GitHub API / fetch calls within a single request lifecycle.
 // TTL ensures stale data is never served across separate audit sessions.
@@ -68,9 +67,6 @@ function cacheSet<T>(map: Map<string, CacheEntry<T>>, key: string, value: T): vo
     map.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
 }
 
-
-
-// ── Framework Detection ────────────────────────────────────────────────────────
 
 /**
  * Detects the framework from a GitHub repo. Caches the result per repoKey.
@@ -224,7 +220,6 @@ export async function detectFramework(
     }
 }
 
-// ── Site Content Scanner ───────────────────────────────────────────────────────
 
 const PROMPT_INJECTION_PATTERNS = [
     /ignore\s+(?:all\s+)?(?:previous|prior)\s+instructions?/i,
@@ -343,7 +338,6 @@ export async function scanSiteContent(domain: string): Promise<SiteContent> {
     }
 }
 
-// ── Output Validation ──────────────────────────────────────────────────────────
 
 const PLACEHOLDER_PATTERNS = [
     /yourdomain(\.com)?/i,
@@ -453,7 +447,6 @@ export function validateFixOutput(
     return { valid: true, reason: "ok" };
 }
 
-// ── Metadata Content Sanitizer ─────────────────────────────────────────────────
 
 /**
  * Strips invalid `jsonLd:` and `script:` properties from a Next.js metadata
@@ -525,7 +518,6 @@ export function sanitizeMetadataContent(content: string): string {
     return sanitized;
 }
 
-// ── Observability Logging ──────────────────────────────────────────────────────
 
 export function logFix(params: {
     issueId: string;
@@ -544,7 +536,6 @@ export function logFallback(issueId: string, reason: "quota" | "parse_error" | "
     logger.warn(`[Fallback] ${issueId} | reason: ${reason}`);
 }
 
-// ── File Path Resolver ─────────────────────────────────────────────────────────
 
 /** Maps every issue ID to the correct file path for a given framework. */
 export function resolveFilePath(issueId: string, fw: Framework, monorepoRoot?: string): string {
@@ -728,7 +719,6 @@ export function resolveLanguage(issueId: string, fw: Framework): string {
     return "html";
 }
 
-// ── Utilities ─────────────────────────────────────────────────────────────────
 
 export function delay(ms: number): Promise<void> {
     return new Promise((r) => setTimeout(r, ms));

@@ -21,7 +21,6 @@ import { Resend } from "resend";
 import { logger } from "@/lib/logger";
 import { CONCURRENCY } from "../concurrency";
 
-// ── Resend singleton ──────────────────────────────────────────────────────────
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -31,7 +30,6 @@ function getResend(): Resend {
     return _resend;
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface RecommendationRow {
     label: string;
@@ -48,7 +46,6 @@ interface FreeReportEmailPayload {
     auditId: string;
 }
 
-// ── HTML helpers ──────────────────────────────────────────────────────────────
 
 function escapeHtml(str: string): string {
     return String(str)
@@ -72,7 +69,6 @@ function priorityColor(priority: string): { bg: string; fg: string } {
     return { bg: "#10b98120", fg: "#10b981" };
 }
 
-// ── Email builders ────────────────────────────────────────────────────────────
 
 function buildHtml(
     domain: string,
@@ -177,7 +173,6 @@ function buildText(
     return lines.join("\n");
 }
 
-// ── Inngest function ──────────────────────────────────────────────────────────
 
 export const sendFreeReportEmailJob = inngest.createFunction(
     {
@@ -200,7 +195,6 @@ export const sendFreeReportEmailJob = inngest.createFunction(
         const { email, domain, score, recs, auditId } =
             event.data as FreeReportEmailPayload;
 
-        // ── Guard: env vars ─────────────────────────────────────────────────────
         // NonRetriableError = Inngest will NOT retry — these are config problems,
         // not transient network failures.
         if (!process.env.RESEND_API_KEY) {

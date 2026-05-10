@@ -27,12 +27,10 @@ import { logger } from "@/lib/logger";
 import { Resend } from "resend";
 import { signUnsubToken } from "@/lib/unsub-token";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
 
 const POSTAL_ADDRESS = "OptiAISEO Ltd · 20-22 Wenlock Road · London · N1 7GU · UK";
 const BATCH_SIZE = 50; // users processed per step to avoid timeout
 
-// ── Lazy Resend singleton ──────────────────────────────────────────────────────
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -53,7 +51,6 @@ function unsubLink(userId: string): string {
   return `${appUrl()}/api/unsubscribe?token=${signUnsubToken(userId)}`;
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface RankChange {
   keyword: string;
@@ -79,7 +76,6 @@ interface DigestData {
   bestOpportunityImpr: number;  // its impressions
 }
 
-// ── Email template ────────────────────────────────────────────────────────────
 
 function buildEmailHtml(
   displayName: string,
@@ -266,7 +262,6 @@ function buildEmailText(displayName: string, data: DigestData, userId: string): 
   return lines.join("\n");
 }
 
-// ── Inngest function ──────────────────────────────────────────────────────────
 
 export const weeklyDigestJob = inngest.createFunction(
   {
@@ -325,7 +320,6 @@ export const weeklyDigestJob = inngest.createFunction(
           const displayName = user.name?.split(" ")[0] ?? "there";
 
           try {
-            // ── Collect digest data ────────────────────────────────────────
             const [audits, rankSnaps7d, pendingBlogs, newIssues, competitorGapCount, positionDrops, page2Snaps] = await Promise.all([
               // Last 2 audits for score delta
               prisma.audit.findMany({

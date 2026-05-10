@@ -203,7 +203,6 @@ export const OnPageModule: AuditModule = {
 
         const root = parse(html);
 
-        // ── 1. HTML lang ───────────────────────────────────────────────────
         const langAttr = root.querySelector('html')?.getAttribute('lang') ?? '';
         items.push({
             id: 'html-lang',
@@ -218,7 +217,6 @@ export const OnPageModule: AuditModule = {
             details: langAttr ? { lang: langAttr } : undefined,
         });
 
-        // ── 2. Charset ─────────────────────────────────────────────────────
         const charsetEl = root.querySelector('meta[charset]');
         const contentType = root.querySelector('meta[http-equiv="Content-Type"]');
         const hasCharset = !!(charsetEl || contentType);
@@ -234,7 +232,6 @@ export const OnPageModule: AuditModule = {
             aiVisibilityImpact: 25,
         });
 
-        // ── 3. Title Tag ───────────────────────────────────────────────────
         const title = root.querySelector('title')?.textContent.trim().replace(/\s+/g, ' ') ?? null;
 
         let titleStatus: AuditStatus = 'Pass';
@@ -266,7 +263,6 @@ export const OnPageModule: AuditModule = {
             details: title ? { length: title.length, value: title.slice(0, 80) } : undefined,
         });
 
-        // ── 4. Meta Description ────────────────────────────────────────────
         const metaDesc = root.querySelector('meta[name="description"]')?.getAttribute('content')?.trim() ?? null;
 
         let descStatus: AuditStatus = 'Pass';
@@ -298,7 +294,6 @@ export const OnPageModule: AuditModule = {
             details: metaDesc ? { length: metaDesc.length, value: metaDesc.slice(0, 100) } : undefined,
         });
 
-        // ── 5. Canonical ───────────────────────────────────────────────────
         const canonicalEl = root.querySelector('link[rel="canonical"]');
         const canonicalHref = canonicalEl?.getAttribute('href') ?? '';
 
@@ -333,7 +328,6 @@ export const OnPageModule: AuditModule = {
             details: canonicalHref ? { canonicalUrl: canonicalHref } : undefined,
         });
 
-        // ── 6. Robots Meta ─────────────────────────────────────────────────
         const robotsMeta = root.querySelector('meta[name="robots"]');
         const robotsContent = robotsMeta?.getAttribute('content')?.toLowerCase() ?? '';
         const isNoindex = robotsContent.includes('noindex');
@@ -356,7 +350,6 @@ export const OnPageModule: AuditModule = {
             details: robotsContent ? { robotsContent } : undefined,
         });
 
-        // ── 7. Viewport ────────────────────────────────────────────────────
         const viewport = root.querySelector('meta[name="viewport"]');
         const viewportContent = viewport?.getAttribute('content') ?? '';
         items.push({
@@ -373,7 +366,6 @@ export const OnPageModule: AuditModule = {
             aiVisibilityImpact: 90,
         });
 
-        // ── 8. H1 ──────────────────────────────────────────────────────────
         const h1Elements = root.querySelectorAll('h1');
 
         let h1Status: AuditStatus = 'Pass';
@@ -403,7 +395,6 @@ export const OnPageModule: AuditModule = {
             details: { count: h1Elements.length },
         });
 
-        // ── 9. Heading Strategy ────────────────────────────────────────────
         const allHeadings = root.querySelectorAll('h1, h2, h3, h4, h5, h6');
         const hierarchyIssues: string[] = [];
         let prevLevel = 0;
@@ -440,7 +431,6 @@ export const OnPageModule: AuditModule = {
             details: { totalHeadings: allHeadings.length, hierarchyIssues: uniqueHierarchyIssues.length, genericHeadings },
         });
 
-        // ── 10. Image Alt Tags ─────────────────────────────────────────────
         const images = root.querySelectorAll('img');
         const imgsWithoutAlt = images.filter(img => img.getAttribute('alt') === null || img.getAttribute('alt') === undefined);
         const imgsWithEmptyAlt = images.filter(img => img.getAttribute('alt') === '');
@@ -460,7 +450,6 @@ export const OnPageModule: AuditModule = {
             details: { totalImages: images.length, missingAlt: imgsWithoutAlt.length, emptyAlt: imgsWithEmptyAlt.length },
         });
 
-        // ── 11. Internal Links ─────────────────────────────────────────────
         const anchors = root.querySelectorAll('a[href]');
         let internalLinksCount = 0;
         let genericAnchorCount = 0;
@@ -501,7 +490,6 @@ export const OnPageModule: AuditModule = {
             });
         }
 
-        // ── 12. OpenGraph ──────────────────────────────────────────────────
         const ogTitle = root.querySelector('meta[property="og:title"]');
         const ogDesc = root.querySelector('meta[property="og:description"]');
         const ogImage = root.querySelector('meta[property="og:image"]');
@@ -540,7 +528,6 @@ export const OnPageModule: AuditModule = {
             aiVisibilityImpact: 60,
         });
 
-        // ── 13. Word Count ─────────────────────────────────────────────────
         const bodyText = root.querySelector('body')?.textContent ?? '';
         const wordCount = bodyText.trim().split(/\s+/).filter(w => w.length > 0).length;
 
@@ -557,7 +544,6 @@ export const OnPageModule: AuditModule = {
             details: { wordCount },
         });
 
-        // ── 14. URL Structure ──────────────────────────────────────────────
         try {
             const urlObj = new URL(context.url);
             const pathParts = urlObj.pathname.replace(/^\/|\/$/g, '').split('/').filter(Boolean);
@@ -586,7 +572,6 @@ export const OnPageModule: AuditModule = {
             });
         } catch { /* malformed URL — skip check */ }
 
-        // ── 15. Favicon ────────────────────────────────────────────────────
         const favicon = root.querySelector('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]');
         items.push({
             id: 'favicon',
@@ -598,7 +583,6 @@ export const OnPageModule: AuditModule = {
             aiVisibilityImpact: 10,
         });
 
-        // ── 16. H1 ↔ Title Keyword Alignment ──────────────────────────────
         if (h1Elements.length > 0 && title) {
             const h1Text = h1Elements[0].textContent.trim();
             const { score: overlapScore, shared } = jaccardOverlap(tokenize(h1Text), tokenize(title));
@@ -622,7 +606,6 @@ export const OnPageModule: AuditModule = {
             });
         }
 
-        // ── 17. Page Type Detection ────────────────────────────────────────
         const schemaText = root.querySelectorAll('script[type="application/ld+json"]')
             .map(s => (s.textContent ?? '').toLowerCase())
             .join(' ');
@@ -649,7 +632,6 @@ export const OnPageModule: AuditModule = {
             details: { pageType, h1Count: h1Elements.length, h2Count, h3Count },
         });
 
-        // ── 18. Title Term Analysis ────────────────────────────────────────
         if (title) {
             const titleLower = title.toLowerCase();
             const titleWords = titleLower.split(/\s+/);
@@ -698,7 +680,6 @@ export const OnPageModule: AuditModule = {
             });
         }
 
-        // ── 19. Dynamic Links ──────────────────────────────────────────────
         {
             const allLinks = root.querySelectorAll('a');
             let jsHrefCount = 0;
@@ -746,7 +727,6 @@ export const OnPageModule: AuditModule = {
             });
         }
 
-        // ── 20. Unsafe Cross-Origin Links ──────────────────────────────────
         {
             const targetBlankLinks = root.querySelectorAll('a[target="_blank"]');
             const unsafeCount = targetBlankLinks.filter(a => !(a.getAttribute('rel') ?? '').includes('noopener')).length;
@@ -768,7 +748,6 @@ export const OnPageModule: AuditModule = {
             });
         }
 
-        // ── 21. Content Decay & Freshness ──────────────────────────────────
         {
             const dateNodes = root.querySelectorAll('time, .date, .post-date, [class*="date"]');
             const currentYear = new Date().getFullYear().toString();
@@ -795,7 +774,6 @@ export const OnPageModule: AuditModule = {
             });
         }
 
-        // ── 22. Search Intent Mismatch ─────────────────────────────────────
         {
             const titleLower = (title ?? '').toLowerCase();
             let titleIntent: string = 'Mixed';
@@ -830,7 +808,6 @@ export const OnPageModule: AuditModule = {
             });
         }
 
-        // ── 23. JSON-LD Structured Data ────────────────────────────────────
         {
             const jsonLdBlocks = root.querySelectorAll('script[type="application/ld+json"]');
             const jsonLdFlat = jsonLdBlocks.map(s => (s.textContent ?? '').toLowerCase().replace(/\s/g, '')).join(' ');
@@ -871,7 +848,6 @@ export const OnPageModule: AuditModule = {
             });
         }
 
-        // ── 24. Content-to-Code Ratio ──────────────────────────────────────
         {
             const htmlLength = html.length;
             const visibleText = (root.querySelector('body')?.textContent ?? '').replace(/\s+/g, ' ').trim();
@@ -910,7 +886,6 @@ export const OnPageModule: AuditModule = {
             });
         }
 
-        // ── 25. Above-the-Fold Completeness ───────────────────────────────
         {
             const bodyClone = root.querySelector('body')?.toString() ?? '';
             const cloneRoot = parse(bodyClone);
@@ -957,7 +932,6 @@ export const OnPageModule: AuditModule = {
             });
         }
 
-        // ── 26. Broken Internal Links & Orphan Pages ───────────────────────
         try {
             const linkAnalysis = await analyzeInternalLinksForUrl(context.url, html, { maxLinksToCheck: 40, timeout: 6000 });
             const brokenCount = linkAnalysis.brokenLinks.length;
@@ -1015,7 +989,6 @@ export const OnPageModule: AuditModule = {
             });
         }
 
-        // ── Score ──────────────────────────────────────────────────────────
         const { score, passed, failed, warnings } = calculateScore(items);
 
         return {

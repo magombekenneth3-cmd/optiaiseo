@@ -26,7 +26,6 @@ import { RevenueSimulator } from "@/components/dashboard/RevenueSimulator";
 import { KeywordClustersPanel } from "./KeywordClustersPanel";
 import { estimateKeywordRoi } from "@/lib/keywords/roi";
 
-// ── Tab definitions ───────────────────────────────────────────────────────────
 const TABS = [
     { id: "playbook",    label: "Playbook"     },
     { id: "research",    label: "Research"     },
@@ -37,7 +36,6 @@ const TABS = [
 
 type TabId = typeof TABS[number]["id"];
 
-// ── Props (mirrors what page.tsx already computes) ────────────────────────────
 interface Props {
     siteId:              string;
     categorised:         unknown;
@@ -59,7 +57,6 @@ interface Props {
     revenueKeywords:     { id: string; keyword: string; position: number; searchVolume: number; cpc: number }[];
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
 export function KeywordTabPanels({
     siteId,
     categorised,

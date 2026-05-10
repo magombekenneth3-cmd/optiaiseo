@@ -14,17 +14,12 @@ import { extractBrandIdentity, isBrandCited } from "@/lib/aeo/brand-utils";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 
-// ---------------------------------------------------------------------------
 // Schemas
-// ---------------------------------------------------------------------------
 
-// Prisma uses cuid() for all PKs — validate as a non-empty string ≤ 50 chars
 const uuidSchema = z.string().min(1).max(50);
 const querySchema = z.string().min(1).max(500);
 
-// ---------------------------------------------------------------------------
 // Return types — discriminated unions so callers get proper type narrowing
-// ---------------------------------------------------------------------------
 
 type ActionError = { success: false; error: string; code?: string };
 
@@ -69,9 +64,7 @@ type TestAeoQueryResult =
     | { success: true; cited: boolean; responseText: string; shareToken: string; shareUrl: string }
     | { success: false; cited: false; responseText: ""; error: string };
 
-// ---------------------------------------------------------------------------
 // Local types inferred from Prisma to avoid repeated `any` casts
-// ---------------------------------------------------------------------------
 
 type AeoReport = Prisma.AeoReportGetPayload<Record<string, never>>;
 
@@ -86,9 +79,7 @@ type TopBlog = {
     revenue: number;
 };
 
-// ---------------------------------------------------------------------------
 // Shared auth helper — replaces the duplicated session+user lookup in every action
-// ---------------------------------------------------------------------------
 
 async function getAuthenticatedUser() {
     const session = await getServerSession(authOptions);
@@ -96,9 +87,7 @@ async function getAuthenticatedUser() {
     return prisma.user.findUnique({ where: { email: session.user.email } });
 }
 
-// ---------------------------------------------------------------------------
 // runAeoReport
-// ---------------------------------------------------------------------------
 
 export async function runAeoReport(siteId: string): Promise<RunAeoReportResult> {
     const traceId = crypto.randomUUID();
@@ -255,9 +244,7 @@ export async function runAeoReport(siteId: string): Promise<RunAeoReportResult> 
     }
 }
 
-// ---------------------------------------------------------------------------
 // getAeoReportStatus
-// ---------------------------------------------------------------------------
 
 export async function getAeoReportStatus(
     reportId: string
@@ -309,9 +296,7 @@ export async function getAeoReportStatus(
     }
 }
 
-// ---------------------------------------------------------------------------
 // getAeoHistory
-// ---------------------------------------------------------------------------
 
 export async function getAeoHistory(siteId: string): Promise<AeoHistoryResult> {
     try {
@@ -347,9 +332,7 @@ export async function getAeoHistory(siteId: string): Promise<AeoHistoryResult> {
     }
 }
 
-// ---------------------------------------------------------------------------
 // getAeoConversionMetrics
-// ---------------------------------------------------------------------------
 
 export async function getAeoConversionMetrics(
     siteId: string
@@ -444,9 +427,7 @@ export async function getAeoConversionMetrics(
     }
 }
 
-// ---------------------------------------------------------------------------
 // testAeoQuery
-// ---------------------------------------------------------------------------
 
 export async function testAeoQuery(
     siteId: string,

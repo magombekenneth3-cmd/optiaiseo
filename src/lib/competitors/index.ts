@@ -282,7 +282,6 @@ export async function fetchCompetitorIntelligence(
     let siteRecord: { localContext?: string | null; targetKeyword?: string | null } | null = null;
 
     try {
-        // ── Step 1: Resolve country code from site record ──────────────────────
         let glCode = "us";
 
         if (siteId) {
@@ -302,7 +301,6 @@ export async function fetchCompetitorIntelligence(
             }
         }
 
-        // ── Step 2: Build search queries from RankSnapshots ───────────────────
         let queries: string[] = [];
         let usingRealKeywords = false; // true when queries come from RankSnapshot / targetKeyword
 
@@ -353,7 +351,6 @@ export async function fetchCompetitorIntelligence(
             ];
         }
 
-        // ── Step 3: Run Serper queries ─────────────────────────────────────────
         const rawResults: CompetitorKeywordGap[] = [];
         const BATCH_SIZE = 4;
         const queryBatches: string[][] = [];
@@ -456,7 +453,6 @@ export async function fetchCompetitorIntelligence(
     // Sort by estimated monthly visits descending
     gaps.sort((a, b) => b.estimatedMonthlyVisits - a.estimatedMonthlyVisits);
 
-    // ── DataForSEO real volume enrichment (batch, after Serper collection) ───
     // Replace the fake `4000 - i * 350` estimates with real search volumes.
     if (gaps.length > 0 && process.env.DATAFORSEO_LOGIN) {
         try {
@@ -496,7 +492,6 @@ export async function fetchCompetitorIntelligence(
     // FIX #29: Topic cluster detection (async — non-blocking if it fails)
     const topicClusters = await clusterKeywordGaps(gaps, hostDomain).catch(() => [] as TopicCluster[]);
 
-    // ── Real domain metrics (Semrush → DataForSEO) — replaces Gemini guess ──
     let realDomainTraffic: number | null = null;
     try {
         const domainData = await getDomainMetrics(competitorDomain);

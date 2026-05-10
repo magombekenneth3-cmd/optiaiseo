@@ -34,7 +34,6 @@ export interface CitationTemplateResult {
   intent:        "informational" | "commercial" | "comparison" | "local" | "other";
 }
 
-// ── Weight table (must sum to 100) ──────────────────────────────────────────────
 const WEIGHTS = {
   directAnswer:   15,   // Sentence 1 or 2 answers the query directly
   definitionBlock: 12,  // Dedicated definition/what-is block early in article
@@ -46,7 +45,6 @@ const WEIGHTS = {
   structuredData:  16,  // JSON-LD script present (Article, FAQPage, or HowTo)
 } as const;
 
-// ── Helpers ──────────────────────────────────────────────────────────────────────
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -66,7 +64,6 @@ function detectIntent(title: string, keywords: string[]): CitationTemplateResult
   return "other";
 }
 
-// ── Individual criterion checkers ─────────────────────────────────────────────
 
 function checkDirectAnswer(
   html: string,
@@ -276,7 +273,6 @@ function checkStructuredData(
   };
 }
 
-// ── Main scoring function ─────────────────────────────────────────────────────
 
 /**
  * Scores a blog HTML draft against the AI Citation Template rubric.
@@ -399,7 +395,6 @@ ARTICLE HTML:
 ${content.slice(0, 12000)}`;
 }
 
-// ── Validation gate (used by blog Inngest job) ────────────────────────────────
 
 /**
  * Quick gate: run scoring + return whether the blog passes the citation threshold.

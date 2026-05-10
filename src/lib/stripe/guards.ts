@@ -15,8 +15,6 @@ import { resolveEffectiveTier } from "./resolveEffectiveTier";
 import { logger } from "@/lib/logger";
 
 
-// ── Structured error thrown by all guards ────────────────────────────────────
-
 export class TierError extends Error {
     readonly code = "TIER_INSUFFICIENT" as const;
     readonly currentTier: Tier;
@@ -37,7 +35,6 @@ export function guardErrorToResult(err: unknown): { success: false; error: strin
     return { success: false, error: "An unexpected error occurred." };
 }
 
-// ── Internal tier resolution (full subscription validation) ──────────────────
 
 /**
  * Resolves the effective tier for a user, accounting for:
@@ -112,7 +109,6 @@ async function getUserTier(userId: string): Promise<Tier> {
     return resolvedTier;
 }
 
-// ── Public guard API ─────────────────────────────────────────────────────────
 
 /**
  * Asserts the user has a specific plan feature.

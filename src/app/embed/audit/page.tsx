@@ -1,6 +1,5 @@
 import { EmbedWidget } from "@/components/embed/EmbedWidget";
 
-// Win 7 — minimal iframe page, no nav/header/footer
 // Accepts query params: key, brand, color, logo
 // White-label is resolved server-side from user.subscriptionTier
 

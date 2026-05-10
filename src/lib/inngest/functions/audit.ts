@@ -13,7 +13,6 @@ import { detectGscAnomalies, generateGscHealingPlan } from "@/lib/self-healing/g
 import { writeMetricSnapshot } from "@/lib/metrics/metric-snapshot";
 import { redis } from "@/lib/redis";
 
-// ── Manual Audit Job (triggered from dashboard "Run Audit" button) ────────────
 // Handles the non-blocking audit.run.manual event fired by the runAudit server
 // action. The server action creates a PENDING audit record immediately and
 // returns to the UI — this job runs the actual audit in the background.
@@ -107,8 +106,6 @@ export const processManualAuditJob = inngest.createFunction(
         return { auditId, score: auditResult.overallScore };
     }
 );
-
-// ── Weekly Audit Job ──────────────────────────────────────────────────────────
 
 
 export const runWeeklyAuditJob = inngest.createFunction(
@@ -300,7 +297,6 @@ export const runWeeklyAuditJob = inngest.createFunction(
     }
 );
 
-// ── Post-Fix Impact Audit ─────────────────────────────────────────────────────
 
 export const auditPostFixJob = inngest.createFunction(
     {
@@ -343,7 +339,6 @@ export const auditPostFixJob = inngest.createFunction(
     }
 );
 
-// ── Weekly Email Digest ───────────────────────────────────────────────────────
 
 export const sendWeeklyDigestJob = inngest.createFunction(
     {
@@ -424,7 +419,6 @@ export const sendWeeklyDigestJob = inngest.createFunction(
     }
 );
 
-// ── GSoV Monitor & Self-Healing ───────────────────────────────────────────────
 
 export const monitorGsovJob = inngest.createFunction(
     {
@@ -493,7 +487,6 @@ export const processGsovSiteJob = inngest.createFunction(
     }
 );
 
-// ── Daily GSC Anomaly Monitor ─────────────────────────────────────────────────
 
 export const monitorGscAnomaliesJob = inngest.createFunction(
     {

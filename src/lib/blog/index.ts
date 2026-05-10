@@ -554,7 +554,6 @@ export async function generateEvergreenPost(
         logger.error("[Blog Engine] SERP context failed:", { error: (e as Error)?.message });
     }
 
-    // ── 4-Stage Editorial Pipeline ─────────────────────────────────────────────
     const pipeline = await runFullPipeline({ keyword: primaryKeyword, serpContext, ctx, author, tone });
 
     // Build a synthetic GeminiBlogResponse from pipeline output so buildPost

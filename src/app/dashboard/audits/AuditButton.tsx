@@ -95,7 +95,6 @@ function AuditModeSelector({
     );
 }
 
-// ── Portal Modal ─────────────────────────────────────────────────────────────
 // Renders directly into document.body — completely escapes any CSS stacking
 // context (transform, overflow, contain, will-change) from parent elements.
 
@@ -261,7 +260,6 @@ export function AuditButton({
         </div>
     );
 
-    // ── Single-site mode ──────────────────────────────────────────────────────
     if (siteId) {
         return (
             <>
@@ -297,7 +295,6 @@ export function AuditButton({
         );
     }
 
-    // ── Multi-site mode ───────────────────────────────────────────────────────
     return (
         <>
             <button

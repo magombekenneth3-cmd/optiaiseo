@@ -7,7 +7,6 @@
  * Keeping this in a shared module avoids the fragile server-to-self HTTP fetch pattern.
  */
 
-// ── SSRF blocklist ────────────────────────────────────────────────────────────
 const PRIVATE_IP_PATTERNS = [
   /^127\./,
   /^10\./,
@@ -37,7 +36,6 @@ export function assertSafeRedirect(resolvedUrl: string): void {
   }
 }
 
-// ── HTML parsers ──────────────────────────────────────────────────────────────
 export function extractTitle(html: string): string {
   return (
     html
@@ -64,7 +62,6 @@ export function extractMeta(html: string, name: string): string {
   return m?.[1]?.trim() ?? "";
 }
 
-// ── Result type ───────────────────────────────────────────────────────────────
 export interface FreeSeoCheckResult {
   titleScore: number;
   metaScore: number;
@@ -74,7 +71,6 @@ export interface FreeSeoCheckResult {
   lowestKey: string;
 }
 
-// ── Core check logic ──────────────────────────────────────────────────────────
 export async function runFreeSeoCheck(rawDomain: string): Promise<FreeSeoCheckResult> {
   const httpsUrl = `https://${rawDomain}`;
   const timeout = AbortSignal.timeout(7_500);

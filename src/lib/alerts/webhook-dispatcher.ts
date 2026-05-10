@@ -21,7 +21,6 @@ export interface WebhookPayload {
   dashboardUrl?: string;
 }
 
-// ── Slack Block Kit builder ───────────────────────────────────────────────────
 
 const SLACK_COLORS: Record<WebhookEventType, string> = {
   gsov_drop:         "#ef4444",   // red
@@ -82,7 +81,6 @@ function buildSlackBody(payload: WebhookPayload): object {
   };
 }
 
-// ── Main dispatcher ───────────────────────────────────────────────────────────
 
 export async function dispatchWebhooks(
   site: { id: string; domain: string; slackWebhookUrl?: string | null; zapierWebhookUrl?: string | null },
@@ -99,7 +97,6 @@ export async function dispatchWebhooks(
 
   const sends: Promise<void>[] = [];
 
-  // ── Slack ──────────────────────────────────────────────────────────────────
   if (site.slackWebhookUrl) {
     sends.push(
       (async () => {
@@ -125,7 +122,6 @@ export async function dispatchWebhooks(
     );
   }
 
-  // ── Zapier ────────────────────────────────────────────────────────────────
   if (site.zapierWebhookUrl) {
     sends.push(
       (async () => {

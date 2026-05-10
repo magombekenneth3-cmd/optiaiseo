@@ -12,7 +12,6 @@ import type { WhiteLabelConfig } from "./shared";
 
 export type { WhiteLabelConfig };
 
-// ── Public types ──────────────────────────────────────────────────────────────
 
 export interface MonthlyReportData {
     domain: string;
@@ -30,7 +29,6 @@ export interface MonthlyReportData {
     whiteLabel?: WhiteLabelConfig;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function sectionHeader(title: string): string {
     return `<div class="section-header">
@@ -45,7 +43,6 @@ function trendMeta(trend: "up" | "down" | "flat"): { icon: string; label: string
     return { icon: "→", label: "Stable", color: "#6b7280" };
 }
 
-// ── HTML builder ──────────────────────────────────────────────────────────────
 
 function buildMonthlyHtml(data: MonthlyReportData): string {
     const wl = data.whiteLabel ?? {};
@@ -60,7 +57,6 @@ function buildMonthlyHtml(data: MonthlyReportData): string {
            </div>`
         : "";
 
-    // ── Keyword rows ──
     const kwRows = data.topKeywords.length > 0
         ? data.topKeywords.map((k, i) => {
             const up = k.change > 0;
@@ -82,7 +78,6 @@ function buildMonthlyHtml(data: MonthlyReportData): string {
                No keyword data available for this period
            </td></tr>`;
 
-    // ── Competitor rows ──
     const compRows = data.competitorSummary.length > 0
         ? data.competitorSummary.map(c => {
             const t = trendMeta(c.trend);
@@ -224,7 +219,6 @@ ${data.competitorSummary.length > 0 ? `
 </html>`;
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
 
 export async function generateMonthlyReportPdf(data: MonthlyReportData): Promise<Buffer> {
     return renderHtmlToPdf(buildMonthlyHtml(data), "monthly");

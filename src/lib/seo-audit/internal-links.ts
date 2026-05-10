@@ -14,7 +14,6 @@ import { prisma } from "@/lib/prisma";
 import { clusterKeywords, EnrichedKeyword } from "@/lib/keywords";
 import { isSafeUrl } from '@/lib/security/safe-url';
 
-// ── Existing export (preserved for backward compat) ───────────────────────────
 
 export interface LinkingRecommendation {
     sourceUrl: string;
@@ -71,7 +70,6 @@ export async function analyzeInternalLinking(siteId: string): Promise<LinkingRec
     return recommendations.slice(0, 20); // Return top 20 semantic link opportunities
 }
 
-// ── FIX #5: Full Internal Link Analysis ──────────────────────────────────────
 
 export interface BrokenLink {
     url: string;
@@ -121,7 +119,6 @@ export async function analyzeInternalLinksForUrl(
         try { return new URL(pageUrl).origin; } catch { return ''; }
     })();
 
-    // ── Parse in-page internal links ─────────────────────────────────────────
     const root = parse(html);
     const allAnchorTags = root.querySelectorAll('a[href]');
 
@@ -146,7 +143,6 @@ export async function analyzeInternalLinksForUrl(
     const total = rawLinks.length;
     const unique = [...new Set(rawLinks)];
 
-    // ── Broken link detection (HEAD-sampled) ──────────────────────────────────
     const toCheck = unique.slice(0, maxLinksToCheck);
     const brokenLinks: BrokenLink[] = [];
 
@@ -176,7 +172,6 @@ export async function analyzeInternalLinksForUrl(
         })
     );
 
-    // ── Orphan page detection (sitemap cross-reference) ───────────────────────
     let orphanPages: OrphanPage[] = [];
 
     try {

@@ -9,9 +9,7 @@ const MAX_COMBINED_CHARS = 8_000;
 /** Pages probed for service context, in priority order. */
 const SERVICE_PATHS = ["", "/services", "/products", "/solutions", "/about", "/offerings", "/pricing"];
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
 /**
  * Fetches the homepage and up to 2 service-specific sub-pages, returning
@@ -57,9 +55,7 @@ export async function fetchSiteText(
     );
 }
 
-// ---------------------------------------------------------------------------
 // Internal helpers
-// ---------------------------------------------------------------------------
 
 async function fetchPageText(url: string, timeoutMs: number): Promise<string> {
     try {
@@ -83,9 +79,7 @@ async function fetchPageText(url: string, timeoutMs: number): Promise<string> {
     }
 }
 
-// ---------------------------------------------------------------------------
 // HTML signal extractor — no DOM parser dependency
-// ---------------------------------------------------------------------------
 
 function extractSignalText(html: string): string {
     // Strip script/style blocks first

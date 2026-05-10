@@ -8,16 +8,12 @@ import { AI_MODELS } from "@/lib/constants/ai-models";
 import { logger } from "@/lib/logger";
 import { redis } from "@/lib/redis";
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 const SPOT_CHECK_CACHE_TTL_SECONDS = 86_400; // 24h — onboarding data doesn't stale fast
 const SPOT_CHECK_MAX_OUTPUT_TOKENS = 220;     // Fix #2 — down from 400; JSON fits in ~150 tokens
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 export type SpotCheckStatus = "cited" | "not_cited" | "no_activity";
 
@@ -43,9 +39,7 @@ interface BatchedSpotCheckRaw {
     nextStep: string;
 }
 
-// ---------------------------------------------------------------------------
 // Public: markOnboardingDone
-// ---------------------------------------------------------------------------
 
 export async function markOnboardingDone(): Promise<void> {
     const session = await getServerSession(authOptions);
@@ -56,9 +50,7 @@ export async function markOnboardingDone(): Promise<void> {
     });
 }
 
-// ---------------------------------------------------------------------------
 // Public: runOnboardingSpotCheck
-// ---------------------------------------------------------------------------
 
 export async function runOnboardingSpotCheck(domain: string): Promise<SpotCheckResult> {
     const cleanDomain = normaliseDomain(domain);
@@ -92,9 +84,7 @@ export async function runOnboardingSpotCheck(domain: string): Promise<SpotCheckR
     }
 }
 
-// ---------------------------------------------------------------------------
 // Internal: single-pass AI call (Fix #1 — was two separate calls)
-// ---------------------------------------------------------------------------
 
 async function runSinglePassSpotCheck(domain: string): Promise<SpotCheckResult> {
     const domainBase = domain.split(".")[0].replace(/[-_]/g, " ");
@@ -179,9 +169,7 @@ Return ONLY valid JSON — no other text:
     };
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Fix #4 — three plausible query patterns instead of one weak template.

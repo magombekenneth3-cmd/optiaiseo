@@ -23,9 +23,7 @@ import type {
   RecommendationResult,
 } from "@/lib/recommendations/engine";
 
-// ---------------------------------------------------------------------------
 // Display metadata
-// ---------------------------------------------------------------------------
 
 const PRIORITY_META: Record<
   RecommendationPriority,
@@ -81,9 +79,7 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
   "AI Voice":            Lightbulb,
 };
 
-// ---------------------------------------------------------------------------
 // Sub-components
-// ---------------------------------------------------------------------------
 
 function PriorityBadge({ priority }: { priority: RecommendationPriority }) {
   const meta = PRIORITY_META[priority];
@@ -264,9 +260,7 @@ function SummaryBanner({
   );
 }
 
-// ---------------------------------------------------------------------------
 // Main export
-// ---------------------------------------------------------------------------
 
 interface RecommendationsDashboardProps {
   domain: string;

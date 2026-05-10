@@ -16,7 +16,6 @@ const UPTIME_TIMEOUT_MS = 10_000;
 // Singleton — instantiate once at module level, not per-failing-site
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
-// ── Orchestrator: runs every 5 min, fans out one event per site ───────────────
 export const uptimeMonitorJob = inngest.createFunction(
     {
         id: "uptime-monitor",
@@ -48,7 +47,6 @@ export const uptimeMonitorJob = inngest.createFunction(
     },
 );
 
-// ── Child: one per site, fully isolated ──────────────────────────────────────
 export const uptimeSiteCheckerJob = inngest.createFunction(
     {
         id: "uptime-check-site",

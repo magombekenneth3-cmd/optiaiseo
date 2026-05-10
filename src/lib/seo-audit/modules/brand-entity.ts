@@ -6,14 +6,12 @@ import type {
 } from '../types';
 import { parse } from 'node-html-parser';
 
-// ── CONSTANTS ─────────────────────────────────────────────────────────────────
 
 const MAX_HTML_BYTES = 10 * 1024 * 1024;
 
 /** Minimum favicon size (px) that renders crisply at 16×16 SERP favicon slot */
 const MIN_FAVICON_PX = 16;
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
 
 function parseJsonLdBlocks(html: string): Record<string, unknown>[] {
     const results: Record<string, unknown>[] = [];
@@ -41,7 +39,6 @@ function getSchemaType(node: Record<string, unknown>): string {
     return '';
 }
 
-// ── CHECKS ────────────────────────────────────────────────────────────────────
 
 function checkOrganizationSchema(nodes: Record<string, unknown>[]): ChecklistItem {
     const org = nodes.find(n => getSchemaType(n) === 'Organization');
@@ -522,7 +519,6 @@ function checkBrandMentionDensity(html: string, url: string): ChecklistItem {
     };
 }
 
-// ── SCORE CALCULATION ─────────────────────────────────────────────────────────
 
 function calcScore(items: ChecklistItem[]): number {
     if (items.length === 0) return 0;
@@ -548,7 +544,6 @@ function calcScore(items: ChecklistItem[]): number {
     return totalWeight > 0 ? Math.round((earned / totalWeight) * 100) : 0;
 }
 
-// ── MODULE EXPORT ─────────────────────────────────────────────────────────────
 
 export const BrandEntityModule: AuditModule = {
     id: 'brand-entity',

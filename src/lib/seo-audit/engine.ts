@@ -31,7 +31,6 @@ export class AuditEngine {
     }
 
     async runAudit(url: string, opts?: { targetKeyword?: string }): Promise<FullAuditReport> {
-        // ─────────────────────────────────────────────────────────────
         // WARM-UP: Fetch HTML once (with retry) BEFORE running modules.
         //
         // All 8 modules run in parallel below via Promise.all. Without
@@ -42,7 +41,6 @@ export class AuditEngine {
         //
         // FIX: skip the fetch entirely when all registered modules declare
         // requiresHtml: false (e.g. schema-only or API-only audit subsets).
-        // ─────────────────────────────────────────────────────────────
         const needsHtml = this.modules.some((m) => m.requiresHtml !== false);
         let html = "";
 
@@ -59,7 +57,6 @@ export class AuditEngine {
             logger.debug(`[Audit Engine] All modules are HTML-free — skipping pre-fetch. Starting ${this.modules.length} parallel modules…`);
         }
 
-        // Phase 1.2: immutable context — modules cannot mutate url/html,
         // and append to frameworkHints[] instead of overwriting a single string.
         const context: AuditModuleContext = {
             url,
@@ -149,7 +146,6 @@ export class AuditEngine {
             return priorityWeight[b.priority] - priorityWeight[a.priority];
         });
 
-        // Phase 3.1: build telemetry from _durationMs tags attached above
         const moduleTelemetry: ModulePerfEntry[] = categoryResults.map(c => ({
             moduleId:   c.id,
             durationMs: (c as { _durationMs?: number })._durationMs ?? 0,
@@ -158,7 +154,6 @@ export class AuditEngine {
             crashed:    !!(c as { crashed?: boolean }).crashed,
         }));
 
-        // Phase 2.2: compute aeoScore from ai-visibility module checks
         const aioCategory = categoryResults.find(c => c.id === 'ai-visibility');
         let aeoScore: number | undefined;
         let aeoBreakdown: AeoScoreBreakdown | undefined;

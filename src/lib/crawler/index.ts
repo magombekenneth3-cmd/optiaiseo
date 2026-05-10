@@ -201,7 +201,6 @@ export const crawlSite = async (domain: string): Promise<CrawlResult> => {
                     if (href.startsWith("/")) href = `${origin}${href}`
                     if (!href.startsWith("http")) continue
 
-                    // ── SSRF guard on every discovered link ────────────────────
                     if (!isSafeUrl(href)) continue
 
                     if (!href.startsWith(origin)) {
@@ -233,7 +232,6 @@ export const crawlSite = async (domain: string): Promise<CrawlResult> => {
     for (let i = 0; i < externalLinksToCheck.length; i += CHUNK_SIZE) {
         const chunk = externalLinksToCheck.slice(i, i + CHUNK_SIZE);
         await Promise.allSettled(chunk.map(async ({ url: extUrl, from: extFrom }) => {
-            // ── SSRF guard on external links too ──────────────────────────────
             if (!isSafeUrl(extUrl)) return
 
             try {

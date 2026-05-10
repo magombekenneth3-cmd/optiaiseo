@@ -11,7 +11,6 @@ import {
   type QueryCheckResult,
 } from "@/lib/aeo/query-library";
 
-// ── initQueryLibraryJob ───────────────────────────────────────────────────────
 // Triggered once per site when the user enables the query library.
 // Generates queries and saves them; does NOT check models (that's the weekly run).
 
@@ -75,7 +74,6 @@ export const initQueryLibraryJob = inngest.createFunction(
   }
 );
 
-// ── runQueryLibraryWeekly ─────────────────────────────────────────────────────
 // Cron: every Thursday at 07:00 UTC.
 // Fans out one `aeo/query-library.run-site` event per eligible site.
 // Each site's run is isolated — one slow site cannot block others.
@@ -118,7 +116,6 @@ export const runQueryLibraryWeekly = inngest.createFunction(
   }
 );
 
-// ── runQueryLibrarySite ───────────────────────────────────────────────────────
 // Gap 3 fix: instead of a blocking for-loop with await step.sleep() between
 // batches (8–15 min for 50 queries), we fan-out one event per query.
 // Inngest's per-site concurrency limit (10) ensures we don't hammer the AI
@@ -188,7 +185,6 @@ export const runQueryLibrarySite = inngest.createFunction(
   }
 );
 
-// ── checkOneQueryJob ──────────────────────────────────────────────────────────
 // Gap 3 fix: fan-out child — one invocation per tracked query.
 //
 // Concurrency:

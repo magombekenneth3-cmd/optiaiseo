@@ -23,7 +23,6 @@ export async function callGpt4o(prompt: string): Promise<string> {
   return data.choices[0].message.content || "";
 }
 
-// ── Perplexity plain-text helper (backwards-compatible) ──────────────────────
 export async function callPerplexity(prompt: string): Promise<string> {
   const { text } = await callPerplexityWithCitations(prompt);
   return text;

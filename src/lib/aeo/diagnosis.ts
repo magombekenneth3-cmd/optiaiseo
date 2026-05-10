@@ -203,7 +203,6 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
         estimatedImpact: "Medium — strengthens entity confidence across training sources. Cumulative effect over time.",
     });
 
-    // ── GEO action items ─────────────────────────────────────────────────────
     items.push({
         priority: "High",
         category: "GEO",
@@ -221,7 +220,6 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
         estimatedImpact: "High — GEO fixes directly increase your chances of being recommended by AI in commercial queries.",
     });
 
-    // ── AIO action items ─────────────────────────────────────────────────────
     items.push({
         priority: "High",
         category: "AIO",

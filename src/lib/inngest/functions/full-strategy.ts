@@ -94,20 +94,17 @@ export const runFullStrategyJob = inngest.createFunction(
         });
 
 
-        // ── Phase 2a: Load strategy memories (what was previously recommended) ──
         const memories = await step.run("load-strategy-memories", async () => {
             const { loadMemories, formatMemoriesForPrompt } = await import("@/lib/strategy-memory");
             const mems = await loadMemories(userId, siteId, 15);
             return formatMemoriesForPrompt(mems);
         });
 
-        // ── Phase 2b: Build grounded site context from DB ─────────────────────
         const groundedContext = await step.run("build-grounded-context", async () => {
             const { getGroundedContextBlock } = await import("@/lib/prompt-context/build-site-context");
             return getGroundedContextBlock(siteId);
         });
 
-        // ── Phase 2c: Synthesise with Gemini (grounded + memory-aware) ────────
         const strategy = await step.run("synthesise-strategy", async () => {
             const { callGemini } = await import("@/lib/gemini");
 
@@ -148,7 +145,6 @@ Rules:
             return text ?? "Strategy generation failed.";
         });
 
-        // ── Phase 3a: Save strategy to DB ────────────────────────────────────
         await step.run("save-strategy", async () => {
             await prisma.site.update({
                 where: { id: siteId },
@@ -163,7 +159,6 @@ Rules:
             });
         });
 
-        // ── Phase 3b: Save to StrategyMemory (so future runs build on this) ───
         await step.run("save-strategy-memory", async () => {
             const { saveMemory } = await import("@/lib/strategy-memory");
             // Extract top action from first line of strategy

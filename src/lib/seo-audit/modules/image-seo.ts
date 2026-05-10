@@ -72,7 +72,6 @@ export const ImageSeoModule: AuditModule = {
             };
         }
 
-        // ── 1. Alt Text Coverage ───────────────────────────────────────────
         {
             const missingAlt  = images.filter(img => !img.getAttribute("alt") && img.getAttribute("alt") !== "").map(img => img.getAttribute("src") ?? "(unknown)");
             const emptyAlt    = images.filter(img => img.getAttribute("alt") === "");       // intentionally decorative
@@ -101,7 +100,6 @@ export const ImageSeoModule: AuditModule = {
             });
         }
 
-        // ── 2. Alt Text Quality (not too short, not keyword-stuffed) ──────
         {
             const altTexts       = images.map(img => (img.getAttribute("alt") ?? "").trim()).filter(Boolean);
             const tooShort       = altTexts.filter(alt => alt.length > 0 && alt.length < 10);
@@ -135,7 +133,6 @@ export const ImageSeoModule: AuditModule = {
             });
         }
 
-        // ── 3. Descriptive Filenames ──────────────────────────────────────
         {
             const srcs       = images.map(img => img.getAttribute("src") ?? "").filter(Boolean);
             const poorNames  = srcs.filter(isPoorFilename);
@@ -163,7 +160,6 @@ export const ImageSeoModule: AuditModule = {
             });
         }
 
-        // ── 4. Modern Image Formats (WebP / AVIF) ────────────────────────
         {
             const srcs        = images.map(img => img.getAttribute("src") ?? "").filter(s => !s.startsWith("data:"));
             const modernCount = srcs.filter(isModernFormat).length;
@@ -198,7 +194,6 @@ export const ImageSeoModule: AuditModule = {
             });
         }
 
-        // ── 5. Lazy Loading ────────────────────────────────────────────────
         {
             // First image (LCP candidate) should NOT be lazy-loaded
             const firstImg      = images[0];
@@ -235,7 +230,6 @@ export const ImageSeoModule: AuditModule = {
             });
         }
 
-        // ── 6. Keyword in at Least One Alt ────────────────────────────────
         {
             const kw = (context.targetKeyword ?? "").trim().toLowerCase();
             if (kw) {

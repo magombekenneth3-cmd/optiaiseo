@@ -3,13 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { checkRateLimit } from "@/lib/rate-limit/monthly";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
 const MAX_BODY_BYTES = 500_000; // 500 KB — enough for any real page
 const FETCH_TIMEOUT_MS = 10_000;
 const RATE_LIMIT_WINDOW_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const RATE_LIMIT_COUNT = 1; // one free check per IP+device
 
-// ── SSRF blocklist ────────────────────────────────────────────────────────────
 // Rejects requests that would make the server call itself or internal services.
 const PRIVATE_IP_PATTERNS = [
   /^127\./, // loopback
@@ -40,7 +38,6 @@ function assertSafeRedirect(resolvedUrl: string): void {
   }
 }
 
-// ── Device fingerprint ────────────────────────────────────────────────────────
 // Combines User-Agent + Accept-Language into a short hash.
 // Not cryptographically identifying — just friction against trivial bypass.
 function deviceFingerprint(req: NextRequest): string {
@@ -52,7 +49,6 @@ function deviceFingerprint(req: NextRequest): string {
     .slice(0, 16);
 }
 
-// ── IP extraction ─────────────────────────────────────────────────────────────
 function clientIp(req: NextRequest): string {
   // Trust the first value of X-Forwarded-For (set by Vercel/Cloud Run proxy).
   // Slice to avoid header injection: "1.2.3.4, attacker-controlled-value".
@@ -61,7 +57,6 @@ function clientIp(req: NextRequest): string {
   return "unknown";
 }
 
-// ── Safe JSON error helper ────────────────────────────────────────────────────
 function errRes(
   message: string,
   status: number,
@@ -79,7 +74,6 @@ function errRes(
   );
 }
 
-// ── HTML parsers (no external deps) ──────────────────────────────────────────
 function extractMeta(html: string, name: string): string {
   const m =
     html.match(
@@ -163,7 +157,6 @@ function countImages(html: string): { total: number; missingAlt: number } {
   return { total: imgs.length, missingAlt };
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 interface Issue {
   id: string;
   label: string;
@@ -180,13 +173,11 @@ interface CheckResult {
   checkedAt?: string;
 }
 
-// ── Route handler ─────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   const ip = clientIp(req);
   const fingerprint = deviceFingerprint(req);
   const rateLimitKey = `free-seo-check:${ip}:${fingerprint}`;
 
-  // ── 1. Rate limit check ───────────────────────────────────────────────────
   let rlResult;
   try {
     rlResult = await checkRateLimit(
@@ -218,7 +209,6 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // ── 2. Input validation ───────────────────────────────────────────────────
   const rawUrl = req.nextUrl.searchParams.get("url") ?? "";
   if (!rawUrl || rawUrl.length > 2048) {
     return errRes("A valid url parameter is required (max 2048 chars).", 400);
@@ -244,12 +234,10 @@ export async function GET(req: NextRequest) {
     return errRes("URLs with credentials are not supported.", 400);
   }
 
-  // ── 3. SSRF protection ────────────────────────────────────────────────────
   if (isPrivateHost(targetUrl.hostname)) {
     return errRes("That URL is not publicly accessible.", 400);
   }
 
-  // ── 4. Fetch target page ──────────────────────────────────────────────────
   let html = "";
   let finalUrl = targetUrl.href;
 
@@ -313,7 +301,6 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // ── 5. Run SEO checks ─────────────────────────────────────────────────────
   const title = extractTitle(html);
   const metaDesc = extractMeta(html, "description");
   const h1 = extractH1(html);

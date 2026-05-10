@@ -7,7 +7,6 @@ import { logger } from "@/lib/logger";
 
 import { parse } from 'node-html-parser';
 
-// ── TYPES ─────────────────────────────────────────────────────────────────────
 
 export interface SiteContext {
     title: string;
@@ -18,7 +17,6 @@ export interface SiteContext {
     domain: string;
 }
 
-// ── SITE CRAWLER ──────────────────────────────────────────────────────────────
 
 /**
  * Crawls the live site to extract real content context.

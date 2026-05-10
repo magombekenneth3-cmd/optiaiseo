@@ -7,7 +7,6 @@ import { checkRateLimit } from "@/lib/rate-limit/monthly";
 import { scrapePageQuality, type PageQualityResult } from "@/lib/audit/scrapePageQuality";
 import { getDomainOverview } from "@/lib/keywords/dataforseo";
 
-// ── Types ────────────────────────────────────────────────────────────────────
 
 export interface SerpResult {
   position: number;
@@ -64,7 +63,6 @@ type AnalyzeResult =
   | { success: true; data: QueryAnalysisData }
   | { success: false; error?: string; rateLimited?: boolean; resetsAt?: Date };
 
-// ── SERP fetching ─────────────────────────────────────────────────────────────
 
 async function fetchSerpDataForSEO(keyword: string): Promise<SerpResult[] | null> {
   const login = process.env.DATAFORSEO_LOGIN;
@@ -187,7 +185,6 @@ async function fetchSerp(keyword: string): Promise<SerpResult[]> {
   return results;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function extractDomain(url: string): string {
   try {
@@ -242,7 +239,6 @@ Page size: ${pq.pageSizeKb}kb${pq.pageSizeKb > 500 ? " ⚠ LARGE — may indicat
 Last modified: ${pq.lastModifiedHeader ?? "unknown"}`;
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
 
 export async function analyzeQueryRanking(input: {
   keyword: string;
@@ -254,19 +250,16 @@ export async function analyzeQueryRanking(input: {
   siteId: string;
   domain: string;
 }): Promise<AnalyzeResult> {
-  // ── Auth ────────────────────────────────────────────────────────────────
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return { success: false, error: "Unauthorized" };
   const userId = session.user.id;
 
-  // ── Site ownership ──────────────────────────────────────────────────────
   const site = await prisma.site.findFirst({
     where: { id: input.siteId, userId },
     select: { id: true },
   });
   if (!site) return { success: false, error: "Site not found" };
 
-  // ── Rate limit: 20 per day ──────────────────────────────────────────────
   const dayResetAt = new Date();
   dayResetAt.setUTCHours(24, 0, 0, 0);
   const rl = await checkRateLimit(`query-analysis:${userId}`, 20, dayResetAt);
@@ -274,7 +267,6 @@ export async function analyzeQueryRanking(input: {
     return { success: false, rateLimited: true, resetsAt: rl.resetAt };
   }
 
-  // ── Parallel data fetch ─────────────────────────────────────────────────
   let serpResults: SerpResult[];
   try {
     serpResults = await fetchSerp(input.keyword);
@@ -309,7 +301,6 @@ export async function analyzeQueryRanking(input: {
     r.status === "fulfilled" ? r.value : null,
   );
 
-  // ── Build Claude prompt ─────────────────────────────────────────────────
   const serpListText = serpResults
     .map(
       (r) =>
@@ -392,7 +383,6 @@ When comparing content quality, pay attention to these specific signals in order
 
 Do not interpret word count as a proxy for quality. A 3,000 word page with good H2 structure and FAQ schema beats a 5,000 word wall of text. Highlight this distinction explicitly when it applies.`;
 
-  // ── Claude call ─────────────────────────────────────────────────────────
   let analysis: AnalysisResult;
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -424,7 +414,6 @@ Do not interpret word count as a proxy for quality. A 3,000 word page with good 
     return { success: false, error: `Analysis parsing failed: ${(e as Error).message}` };
   }
 
-  // ── Build competitorDetails ─────────────────────────────────────────────
   const competitorDetails = competitorUrls.map((serpRow, i) => {
     const pq = competitorQualities[i];
     return {

@@ -25,7 +25,6 @@ interface Blog {
   citationCriteria?: unknown;
 }
 
-// ── AI Citation Score Panel ───────────────────────────────────────────────────
 
 function CitationScorePanel({
   score,
@@ -142,7 +141,6 @@ function CitationScorePanel({
   );
 }
 
-// ── Main Modal ────────────────────────────────────────────────────────────────
 
 export function ReviewBlogModal({
   blog,

@@ -1722,7 +1722,6 @@ export default async function VsPage({ params }: Props) {
   const competitorScore = OVERALL_SCORES[competitor] ?? 0;
   const optiScore = OVERALL_SCORES["optiaiseo"] ?? 88;
 
-  // ── Structured data ──────────────────────────────────────────────────────────
   const softwareSchema = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",

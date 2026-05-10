@@ -67,7 +67,6 @@ function getScoreLabel(score: number): { headline: string; sub: string } {
 }
 
 
-
 function ProgressBar({
     label,
     score,
@@ -104,7 +103,6 @@ function ProgressBar({
         </div>
     );
 }
-
 
 
 function OutlineBuilder({ suggestions }: { suggestions: OutlineHeading[] }) {
@@ -197,7 +195,6 @@ export function ContentEditor({
     onContentChange?: (content: string) => void;
     onScoreChange?: (score: ContentScoreResult | null) => void;
 }) {
-    // ── all state identical to original ──────────────────────────────────────
     const [content, setContent] = useState(initialContent);
     const [keyword, setKeyword] = useState(initialKeyword);
     const [scoreData, setScoreData] = useState<ContentScoreResult | null>(null);
@@ -216,7 +213,6 @@ export function ContentEditor({
 
     const isDirty = content !== savedContent;
 
-    // ── all effects / handlers identical to original ──────────────────────────
 
     useEffect(() => {
         if (initialContent !== undefined && initialContent !== content) {
@@ -329,7 +325,6 @@ export function ContentEditor({
     const aiColour = scoreData ? getAiColor(scoreData.aiDetectionScore ?? 0) : getAiColor(0);
     const scoreLabel = scoreData ? getScoreLabel(scoreData.score) : getScoreLabel(0);
 
-    // ── render ────────────────────────────────────────────────────────────────
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 h-full min-h-[620px] text-foreground bg-card rounded-xl overflow-hidden border border-border">

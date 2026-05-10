@@ -133,7 +133,6 @@ export const trackedRankCheckerSiteJob = inngest.createFunction(
 
         if (snapshots.length === 0) return { siteId, checked: 0 };
 
-        // ── Write RankSnapshots (with difficulty + intent) ──────────────────────
         await step.run("write-snapshots", () =>
             prisma.rankSnapshot.createMany({
                 data: snapshots.map((s) => ({
@@ -151,7 +150,6 @@ export const trackedRankCheckerSiteJob = inngest.createFunction(
             })
         );
 
-        // ── Upsert SerpFeatures ────────────────────────────────────────────────
         const serpRows = snapshots.filter((s) => s.serpData);
         if (serpRows.length > 0) {
             await step.run("upsert-serp-features", () =>
@@ -184,7 +182,6 @@ export const trackedRankCheckerSiteJob = inngest.createFunction(
             );
         }
 
-        // ── Rank-change webhooks ────────────────────────────────────────────────
         await step.run("dispatch-rank-webhooks", async () => {
             const todayMidnight = new Date();
             todayMidnight.setHours(0, 0, 0, 0);
@@ -232,7 +229,6 @@ export const trackedRankCheckerSiteJob = inngest.createFunction(
             }
         });
 
-        // ── Write daily VisibilitySnapshot ────────────────────────────────────
         await step.run("write-visibility-snapshot", async () => {
             const visible = snapshots
                 .filter((s) => s.position > 0)

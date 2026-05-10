@@ -15,11 +15,9 @@ import { isCronAuthorized } from "@/lib/cron-auth";
 import { sendPriorityDigest } from "@/lib/email";
 import { extractEnrichedRecommendations } from "@/lib/seo/recommendations";
 
-// ── Env ───────────────────────────────────────────────────────────────────────
 const APP_URL    = process.env.NEXTAUTH_URL ?? "https://optiaiseo.online";
 const JWT_SECRET = process.env.NEXTAUTH_SECRET ?? "change-me";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Compute a blended SEO score from categoryScores JSON. */
 function blendedScore(categoryScores: unknown): number {
@@ -42,7 +40,6 @@ async function makeUnsubToken(email: string): Promise<string> {
         .sign(secret);
 }
 
-// ── Route handler ─────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
     if (!isCronAuthorized(req)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

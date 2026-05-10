@@ -21,7 +21,6 @@ export function extractAuditMetrics(audit: AuditRecord): AuditMetrics {
     const scores = audit.categoryScores as Record<string, unknown> | null;
     const issueList = audit.issueList as Record<string, unknown> | null;
 
-    // ── Issue count ──────────────────────────────────────────────────────────
     let issueCount = 0;
     if (Array.isArray(audit.issueList)) {
         issueCount = (audit.issueList as unknown[]).length;
@@ -29,7 +28,6 @@ export function extractAuditMetrics(audit: AuditRecord): AuditMetrics {
         issueCount = (issueList.recommendations as unknown[]).length;
     }
 
-    // ── SEO score ────────────────────────────────────────────────────────────
     // Priority 1: explicit `seo` key in categoryScores
     let seoScore = typeof scores?.seo === "number" ? (scores.seo as number) : null;
 

@@ -11,7 +11,6 @@ export const metadata: Metadata = {
   description: "Prioritised, data-driven recommendations to grow your search and AI visibility.",
 };
 
-// Always fetch fresh — recommendations change as GSC data and site state change.
 export const dynamic = "force-dynamic";
 
 export default async function RecommendationsPage({
@@ -24,11 +23,9 @@ export default async function RecommendationsPage({
 
   const { siteId } = await searchParams;
 
-  // Validate siteId is a safe alphanumeric CUID (Prisma default) — rejects
   // empty strings, path-traversal attempts, and absurdly long inputs.
   const CUID_RE = /^[a-z0-9]{10,40}$/i;
 
-  // Require a siteId — redirect to settings if the user has no sites yet.
   if (!siteId || !CUID_RE.test(siteId)) {
     const firstSite = await prisma.site.findFirst({
       where: { userId: session.user.id },
@@ -41,7 +38,6 @@ export default async function RecommendationsPage({
     redirect("/dashboard/settings");
   }
 
-  // Parallelise site and user lookups — both are independent reads.
   const [site, user] = await Promise.all([
     prisma.site.findFirst({
       where: {

@@ -8,7 +8,6 @@ import {
     X, ExternalLink, Search, Sparkles, Loader2, ChevronRight,
 } from "lucide-react";
 
-// ── Notification types ────────────────────────────────────────────────────────
 interface AppNotification {
     id: string;
     type: "info" | "success" | "warning";
@@ -50,7 +49,6 @@ function useNotifications() {
     return { notifications, loading, refetch: fetch_ };
 }
 
-// ── Credit balance hook ───────────────────────────────────────────────────────
 function useCredits() {
     const [credits, setCredits] = useState<number | null>(null);
     const fetch_ = useCallback(async () => {
@@ -158,7 +156,6 @@ function NotificationsPanel({ notifications, loading, onClose }: {
     );
 }
 
-// ── Win 6: Natural-language query panel ──────────────────────────────────────
 const EXAMPLE_PROMPTS = [
     "Which keywords dropped more than 3 positions last week?",
     "Show pages with no schema markup",
@@ -306,7 +303,6 @@ function QueryPanel({ siteId, onClose }: { siteId: string | null; onClose: () =>
     );
 }
 
-// ── Page title map ────────────────────────────────────────────────────────────
 const PAGE_TITLE_EXACT: Record<string, string> = {
     "/dashboard": "Dashboard Overview",
     "/dashboard/sites": "My Sites",

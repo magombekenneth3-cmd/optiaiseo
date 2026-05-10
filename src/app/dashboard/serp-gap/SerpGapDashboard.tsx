@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { SerpGapDetail } from "./SerpGapDetail";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface AnalysisRow {
     id: string;
@@ -36,7 +35,6 @@ interface Props {
     initialAnalyses: AnalysisRow[];
 }
 
-// ── Status badge ──────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
     const map: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
@@ -54,7 +52,6 @@ function StatusBadge({ status }: { status: string }) {
     );
 }
 
-// ── Gap severity pill ─────────────────────────────────────────────────────────
 
 function GapPill({ count, critical }: { count: number | null; critical: number | null }) {
     if (count === null) return <span className="text-muted-foreground text-xs">—</span>;
@@ -70,7 +67,6 @@ function GapPill({ count, critical }: { count: number | null; critical: number |
     );
 }
 
-// ── Main dashboard ────────────────────────────────────────────────────────────
 
 export function SerpGapDashboard({
     sites,

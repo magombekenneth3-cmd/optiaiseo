@@ -3,9 +3,7 @@
 import { AlertTriangle, TrendingUp, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
-// ---------------------------------------------------------------------------
 // CTR benchmarks (Backlinko / AWR 2024 industry averages)
-// ---------------------------------------------------------------------------
 const CTR_BENCHMARKS: Array<{ maxPos: number; expectedPct: number }> = [
   { maxPos: 1,  expectedPct: 27.6 },
   { maxPos: 2,  expectedPct: 15.8 },
@@ -20,9 +18,7 @@ function benchmarkCtrPct(position: number): number {
   return bucket?.expectedPct ?? 1.0;
 }
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 interface GscKeyword {
   keyword: string;
   position: number;
@@ -42,9 +38,7 @@ interface CtrOffender {
   url: string | undefined;
 }
 
-// ---------------------------------------------------------------------------
 // Core computation
-// ---------------------------------------------------------------------------
 function findCtrOffenders(keywords: GscKeyword[]): CtrOffender[] {
   return keywords
     .filter((kw) => kw.position <= 10 && kw.impressions >= 10)
@@ -59,9 +53,7 @@ function findCtrOffenders(keywords: GscKeyword[]): CtrOffender[] {
     .slice(0, 5);
 }
 
-// ---------------------------------------------------------------------------
 // Component
-// ---------------------------------------------------------------------------
 export function CtrDiagnosisBanner({
   keywords,
   domain,

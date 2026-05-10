@@ -273,7 +273,6 @@ export const generateBlogJob = inngest.createFunction(
         const detectedIntent = detectIntent(keyword ?? "");
         const riskTier = detectRiskTier(keyword ?? "", site.domain, detectedIntent);
 
-        // ── Step: Perplexity research — understand what top results cover ────────────
         // Runs before generation so the writer knows the competitive landscape.
         // Fires for ALL pipeline types: uses the explicit keyword when provided,
         // falls back to the primary site topic/brand for INDUSTRY & SITE_CONTEXT blogs.
@@ -330,7 +329,6 @@ Be specific and concise. This will be used to write a better article.`,
             }
         });
 
-        // ── Step: Build grounded site context from DB ───────────────────────────
         // Pulls brand facts, keyword positions, location and author details
         // so prompts know exactly where/who they're writing for.
         const groundedContext = await step.run("build-blog-context", async () => {
@@ -398,7 +396,6 @@ Be specific and concise. This will be used to write a better article.`,
             let keywords = siteContext?.keywords ?? [];
             finalPipelineType = siteContext ? "SITE_CONTEXT" : "INDUSTRY";
 
-            // ── USER_KEYWORD / SEED_KEYWORD: honour the user's explicit choice ──
             // The user typed (or we selected) a specific keyword in Step 0.
             // It arrives as event.data.keyword. We MUST place it at position [0]
             // so generateEvergreenPost uses it as primaryKeyword for the prompt.
@@ -456,7 +453,6 @@ Be specific and concise. This will be used to write a better article.`,
                 keywords = [keyword, ...gscTerms, ...(siteContext?.keywords ?? []).filter(k => k.toLowerCase() !== keyword.toLowerCase())].slice(0, 15);
             }
 
-            // ── Step: Pre-fetch SERP context once ──────────────────────────────────
             // generateEvergreenPost internally calls getSerpContextForKeyword.
             // By fetching it here as a dedicated step, we:
             //   1. Avoid a duplicate Serper API call inside the generator
@@ -487,7 +483,6 @@ Be specific and concise. This will be used to write a better article.`,
             });
         }
 
-        // ── Step: Claude editorial pass — E-E-A-T, voice, AI-pattern removal ──────
         // Claude Sonnet is significantly better than Gemini at detecting and removing
         // AI writing patterns, adding narrative voice, and enforcing E-E-A-T structure.
         // Degrades gracefully to the existing Gemini humanization if key is absent.
@@ -600,7 +595,6 @@ ${liveBlogPost.content.substring(0, 14000)}`,
             return runSemanticEnrichmentCheck(primaryKeyword, liveBlogPost.content);
         });
 
-        // ── Step: Word count + meta length gate ────────────────────────────────────
         // Google rewards depth. Thin content (<900 words) is auto-demoted to NEEDS_REVIEW.
         // Overly long content (>6000 words) is truncated at the last sentence boundary
         // before the limit — Google's HCU penalises keyword-stuffed bloat.
@@ -610,7 +604,6 @@ ${liveBlogPost.content.substring(0, 14000)}`,
             const plainText = liveBlogPost.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
             let wordCount = plainText.split(" ").filter(Boolean).length;
 
-            // ── Max 6000 words cap ────────────────────────────────────────────────
             // The LLM is instructed not to exceed 6000 words, but as a hard safety
             // net we truncate the HTML at the last sentence boundary before 6000 words.
             const MAX_WORDS = 6000;
@@ -650,7 +643,6 @@ ${liveBlogPost.content.substring(0, 14000)}`,
                 });
             }
 
-            // ── Min word count ────────────────────────────────────────────────────
             if (wordCount < 900) {
                 liveBlogPost.validationWarnings.push(
                     `Content is thin (${wordCount} words). Target 1,500+ for informational queries and 2,500+ for how-to/best-X queries.`
@@ -706,7 +698,6 @@ ${liveBlogPost.content.substring(0, 14000)}`,
             });
         });
 
-        // ── Step: AI Citation Template gate ────────────────────────────────────────
         // Runs after schema markup is generated so JSON-LD is included in the score.
         // Scores 8 criteria: direct answer, definition block, stats, FAQ, comparison
         // table, E-E-A-T attribution, internal links, structured data.
@@ -835,7 +826,6 @@ ${liveBlogPost.content.substring(0, 14000)}`,
             }
         });
 
-        // ── Emit blog.published — activates citation monitor (T+7d, T+14d, T+30d) ──
         // Only for non-failed blogs with at least one target keyword to track.
         if (blogStatus !== "FAILED" && liveBlogPost.targetKeywords.length > 0) {
             await step.sendEvent("trigger-citation-monitor", {

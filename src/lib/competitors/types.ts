@@ -22,7 +22,6 @@ export interface Competitor {
     bestPosition: number;
     /** How many search queries this domain appeared in */
     frequency: number;
-    // ── Similarity layer ───────────────────────────────────────────────────
     /** Raw SERP score before weighting: frequency × 1/√position */
     serpScore?: number;
     /** Similarity engine output (0–1) */
@@ -58,7 +57,6 @@ export interface SerperSearchResult {
     domainSnippets:     Map<string, string>;
 }
 
-// ── Fingerprint types ──────────────────────────────────────────────────────
 
 /**
  * Structured identity of a business.

@@ -28,7 +28,6 @@ export const CONCURRENCY = {
     competitorVelocity: 5, // competitor-velocity-tracker (weekly cron)
 } as const;
 
-// ── Startup budget guard ──────────────────────────────────────────────────────
 // Evaluated once at module import time. Catches over-budget configs before
 // they cause silent queuing failures in production.
 // Default is 200 (generous) — set INNGEST_CONCURRENCY_CAP in your hosting env

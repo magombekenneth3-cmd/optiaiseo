@@ -14,9 +14,7 @@ import { AeoDiagnosisPanel } from "@/components/aeo/AeoDiagnosisPanel";
 import { KeywordSiteSwitcher } from "@/components/dashboard/KeywordSiteSwitcher";
 import { type VisibilityForecast } from "@/lib/aeo/visibility-forecast";
 
-// ─────────────────────────────────────────────────────────────────────────────
 // FORECAST PANEL — Gap 4: surfaces dataSparse + trendConfidence from OLS regression
-// ─────────────────────────────────────────────────────────────────────────────
 
 function ForecastPanel({ siteId }: { siteId: string }) {
     const [forecast, setForecast] = useState<VisibilityForecast | null>(null);
@@ -143,9 +141,7 @@ function ForecastPanel({ siteId }: { siteId: string }) {
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
 
 function exportCSV(metrics: any[]) {
     const rows = [
@@ -179,9 +175,7 @@ function timeAgo(date: string | Date) {
     return `${Math.floor(hrs / 24)}d ago`;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // KPI CARD
-// ─────────────────────────────────────────────────────────────────────────────
 
 function KpiCard({
     label, value, sub, icon, accentClass,
@@ -206,12 +200,10 @@ function KpiCard({
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // PER-KEYWORD PROGRESS
 // Simulates per-keyword progress using elapsed time vs estimated duration.
 // Since the server action is opaque (no streaming), this gives users meaningful
 // feedback instead of a generic spinner for a multi-minute operation.
-// ─────────────────────────────────────────────────────────────────────────────
 
 function CheckProgress({ active, totalKeywords }: { active: boolean; totalKeywords: number }) {
     const [elapsed, setElapsed] = useState(0);
@@ -253,11 +245,9 @@ function CheckProgress({ active, totalKeywords }: { active: boolean; totalKeywor
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // CUSTOM CHART TOOLTIP
 // Exposes brandMentions / totalQueries so "4/7 keywords mentioned" is
 // visible alongside the aggregated score percentage.
-// ─────────────────────────────────────────────────────────────────────────────
 
 function CustomTooltip({ active, payload, label }: any) {
     if (!active || !payload?.length) return null;
@@ -281,11 +271,9 @@ function CustomTooltip({ active, payload, label }: any) {
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // COMPETITOR CHIPS
 // Replaces the truncated `title` tooltip. Shows 2 chips inline; a toggle
 // expands the rest. No data is ever hidden behind an unclickable ellipsis.
-// ─────────────────────────────────────────────────────────────────────────────
 
 function CompetitorChips({ competitors }: { competitors: string[] }) {
     const [expanded, setExpanded] = useState(false);
@@ -311,12 +299,10 @@ function CompetitorChips({ competitors }: { competitors: string[] }) {
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // MODEL BADGE
 // Forward-compatible: once callChatGPT() is added to aeoTrack.ts and
 // aiShareOfVoice rows are stored with model = "chatgpt", this badge lights up
 // automatically. Defaults to "gemini" for all existing rows.
-// ─────────────────────────────────────────────────────────────────────────────
 
 function ModelBadge({ model = "gemini" }: { model?: string }) {
     if (model === "chatgpt")
@@ -332,11 +318,9 @@ function ModelBadge({ model = "gemini" }: { model?: string }) {
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // FLAG BUTTON
 // Gap 2: lets users flag incorrect mention detections. Visible on every row;
 // especially useful for low-confidence rows. POSTs to /api/aeo/mention-flag.
-// ─────────────────────────────────────────────────────────────────────────────
 
 function FlagButton({
     siteId, keyword, model, currentlyMentioned,
@@ -392,11 +376,9 @@ function FlagButton({
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // GUIDED EMPTY STATE
 // Branches on whether seed keywords exist. Links to keyword setup if not,
 // so users can never get stuck on this page with no path forward.
-// ─────────────────────────────────────────────────────────────────────────────
 
 function EmptyState({
     hasSeedKeywords, onRunCheck, loading,
@@ -448,9 +430,7 @@ function EmptyState({
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // STATUS BANNER
-// ─────────────────────────────────────────────────────────────────────────────
 
 function StatusBanner({ message, type }: { message: string; type: "info" | "success" | "error" }) {
     const styles = {
@@ -465,9 +445,7 @@ function StatusBanner({ message, type }: { message: string; type: "info" | "succ
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // NO SITE SELECTED
-// ─────────────────────────────────────────────────────────────────────────────
 
 function NoSiteSelected() {
     return (
@@ -494,9 +472,7 @@ function NoSiteSelected() {
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // MAIN COMPONENT
-// ─────────────────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 8;
 
@@ -572,7 +548,6 @@ export function AeoTrackerClient({
         setTimeout(() => setStatus(""), 7000);
     };
 
-    // ── KPI DERIVATIONS ───────────────────────────────────────────────────────
 
     const totalMentioned = metrics.filter((m) => m.brandMentioned).length;
     const visibilityScore =
@@ -580,7 +555,6 @@ export function AeoTrackerClient({
     const uniqueKeywords = metrics.length;
     const trackedKeywordCount = uniqueKeywords || 5;
 
-    // ── TABLE FILTERING & PAGINATION ──────────────────────────────────────────
 
     const filtered = useMemo(() => {
         let rows = [...metrics];

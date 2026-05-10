@@ -11,7 +11,6 @@ import type {
     ContentCalendarItem,
 } from "@/lib/keywords/seoResearch";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const intentColors: Record<string, string> = {
     informational: "bg-blue-500/10 text-blue-400 border-blue-500/20",
@@ -63,7 +62,6 @@ function SectionHeader({ emoji, title, subtitle }: { emoji: string; title: strin
     );
 }
 
-// ── Loading skeleton ──────────────────────────────────────────────────────────
 
 const PHASES = [
     { label: "Business Analysis", emoji: "🏢" },
@@ -108,7 +106,6 @@ function LoadingSkeleton({ currentPhase }: { currentPhase: number }) {
     );
 }
 
-// ── CSV Export ────────────────────────────────────────────────────────────────
 
 function exportMasterListCsv(masterList: (KeywordRow & { roadmap: string })[]) {
     const headers = ["Rank", "Keyword", "Type", "Volume", "Difficulty", "Intent", "Relevance", "Quick Win", "Content Type", "Roadmap"];
@@ -134,7 +131,6 @@ function exportMasterListCsv(masterList: (KeywordRow & { roadmap: string })[]) {
     URL.revokeObjectURL(url);
 }
 
-// ── Phase Panels ──────────────────────────────────────────────────────────────
 
 function Phase1Panel({ data }: { data: SeoResearchReport["businessAnalysis"] }) {
     return (
@@ -473,7 +469,6 @@ function Phase7Panel({ data }: { data: (KeywordRow & { roadmap: string })[] }) {
     );
 }
 
-// ── Main Component ─────────────────────────────────────────────────────────────
 
 export function SeoResearchPanel({ siteId }: { siteId: string }) {
     const [report, setReport] = useState<SeoResearchReport | null>(null);

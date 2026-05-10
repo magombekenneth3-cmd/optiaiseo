@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer, Tooltip as RTooltip } from "recharts";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 type Snapshot = { month: string; traffic: number; organicKeywords: number | null };
 type KW = { id: string; keyword: string; position: number; searchVolume: number; difficulty: number | null; clicks: number | null; dataSource: string | null };
@@ -25,7 +24,6 @@ type Site = { id: string; domain: string };
 type GapReport = { gap: { referringDomains: number; domainRating: number; totalBacklinks: number; opportunityDomains: string[] }; you: { domainRating: number; referringDomains: number }; competitor: { domainRating: number; referringDomains: number } };
 interface Props { sites: Site[]; activeSiteId: string | null; activeSiteDomain: string | null; competitors: Competitor[]; isPaid: boolean; tier: string }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmt(n: number | null | undefined) {
   if (n == null) return "—";
@@ -49,7 +47,6 @@ function KdBadge({ score }: { score: number | null }) {
   return <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-md ${c}`}>{score}</span>;
 }
 
-// ── Sparkline ────────────────────────────────────────────────────────────────
 
 function Sparkline({ snapshots }: { snapshots: Snapshot[] }) {
   if (snapshots.length < 2) return <span className="text-xs text-muted-foreground italic">No trend yet</span>;
@@ -73,7 +70,6 @@ function Sparkline({ snapshots }: { snapshots: Snapshot[] }) {
   );
 }
 
-// ── Topic clusters ────────────────────────────────────────────────────────────
 
 type Cluster = { topic: string; keywords: KW[]; vol: number };
 
@@ -95,7 +91,6 @@ function buildClusters(keywords: KW[]): Cluster[] {
   return result.sort((a, b) => b.vol - a.vol).slice(0, 8);
 }
 
-// ── Action Status Bar ─────────────────────────────────────────────────────────
 
 type ActionState =
   | { type: "idle" }
@@ -139,7 +134,6 @@ function ActionStatusBar({ state, onDismiss }: { state: ActionState; onDismiss: 
   );
 }
 
-// ── Competitor Card ───────────────────────────────────────────────────────────
 
 type Tab = "keywords" | "topics" | "pages" | "backlinks";
 
@@ -461,7 +455,6 @@ function CompCard({ comp, siteId, isPaid, onDeleted }: { comp: Competitor; siteI
   );
 }
 
-// ── Add form ──────────────────────────────────────────────────────────────────
 
 function AddForm({ siteId, onAdded, existingCount }: { siteId: string; onAdded: (c: Competitor) => void; existingCount: number }) {
   const [domain, setDomain] = useState("");
@@ -493,7 +486,6 @@ function AddForm({ siteId, onAdded, existingCount }: { siteId: string; onAdded: 
   );
 }
 
-// ── Main dashboard ────────────────────────────────────────────────────────────
 
 const DETECT_STEPS = [
   { icon: "🔍", label: "Scraping site pages for services…" },

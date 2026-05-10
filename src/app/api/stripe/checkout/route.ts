@@ -56,7 +56,6 @@ export async function POST(req: NextRequest) {
 
         const isAnnual = billing === "annual";
 
-        // ── Credit pack — one-time payment, separate from subscription flow ──
         if (mode === "payment" && bodyPriceId === "credit_pack") {
             const creditPackPriceId = process.env.STRIPE_CREDIT_PACK_PRICE_ID;
             if (!creditPackPriceId) {
@@ -92,7 +91,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json(result.body, { status: result.status });
         }
 
-        // ── Subscription tier upgrade / downgrade ─────────────────────────────
         if (!tier || !(ALLOWED_TIERS as readonly string[]).includes(tier)) {
             return NextResponse.json({ error: "Invalid tier" }, { status: 400 });
         }

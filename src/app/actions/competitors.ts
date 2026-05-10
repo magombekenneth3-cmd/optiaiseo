@@ -107,7 +107,6 @@ export async function refreshCompetitorKeywords(siteId: string, competitorId: st
             gaps = await fetchCompetitorKeywordGaps(site.domain, comp.domain);
         }
 
-        // ── Enrich with real GSC data ──────────────────────────────────────────
         type GscEntry = { position: number; clicks: number; impressions: number; ctr: number };
         const gscKeywords = new Map<string, GscEntry>();
 
@@ -134,7 +133,6 @@ export async function refreshCompetitorKeywords(siteId: string, competitorId: st
                 error: (gscErr as Error)?.message,
             });
         }
-        // ─────────────────────────────────────────────────────────────────────
 
         // Clear old keywords
         await prisma.competitorKeyword.deleteMany({ where: { competitorId } });
@@ -214,7 +212,6 @@ export async function refreshCompetitorKeywords(siteId: string, competitorId: st
         return { success: false, error: "Failed to refresh keyword gaps" };
     }
 }
-
 
 
 export async function deleteCompetitor(siteId: string, competitorId: string) {
@@ -333,7 +330,6 @@ export async function detectCompetitorsFromSerp(siteId: string): Promise<{
             location: site.localContext,
         });
 
-        // ── Pull real ranking keywords from DB (mirrors blog intelligence pipeline) ──
         let rankingKeywords: string[] = [];
         try {
             const snapshots = await prisma.rankSnapshot.findMany({
@@ -478,7 +474,6 @@ export async function autoDetectAndSaveCompetitors(siteId: string): Promise<{
             subscriptionTier,
         });
 
-        // ── Guard: abort if detection failed or returned nothing ───────────────
         // An empty result means a critical pipeline step failed (SERP quota,
         // AI extraction, or all candidates below threshold). Never save
         // partial / degraded results to the DB.
@@ -554,7 +549,6 @@ export async function clearAndRedetectCompetitors(siteId: string): Promise<{
         if (!process.env.SERPER_API_KEY)    return { success: false, added: [], cleared: 0, error: "SERPER_API_KEY not configured" };
         if (!process.env.ANTHROPIC_API_KEY) return { success: false, added: [], cleared: 0, error: "ANTHROPIC_API_KEY not configured" };
 
-        // ── Step 1: Pull ranking keywords ────────────────────────────────────
         let rankingKeywords: string[] = [];
         try {
             const snapshots = await prisma.rankSnapshot.findMany({
@@ -606,11 +600,9 @@ export async function clearAndRedetectCompetitors(siteId: string): Promise<{
             };
         }
 
-        // ── Step 3: CLEAR — only now that we have good data ───────────────────
         const { count: cleared } = await prisma.competitor.deleteMany({ where: { siteId } });
         logger.info("[clearAndRedetect] Cleared stale competitors", { siteId, cleared });
 
-        // ── Step 4: SAVE new competitors ──────────────────────────────────────
         const newDomains = result.competitors.slice(0, 12).map(c => c.domain.toLowerCase());
         const added: string[] = [];
 

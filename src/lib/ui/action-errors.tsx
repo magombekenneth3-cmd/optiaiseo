@@ -19,7 +19,6 @@
 import { toast } from "sonner";
 import { Zap, CreditCard, AlertTriangle, Clock, ShieldAlert } from "lucide-react";
 
-// ── Canonical error codes returned by server actions ────────────────────────
 
 export type ActionErrorCode =
     | "insufficient_credits"
@@ -34,11 +33,9 @@ interface ActionFailResult {
     code?: ActionErrorCode;
 }
 
-// ── Toast duration constants ─────────────────────────────────────────────────
 const DURATION_NORMAL   = 8_000;
 const DURATION_CRITICAL = 12_000;   // credits / tier — user needs time to read + act
 
-// ── Main handler ─────────────────────────────────────────────────────────────
 
 /**
  * showActionError(result)
@@ -51,7 +48,6 @@ export function showActionError(result: ActionFailResult): void {
     const message = result.error ?? "Something went wrong. Please try again.";
 
     switch (code) {
-        // ── Out of credits ────────────────────────────────────────────────────
         case "insufficient_credits":
             toast.error(
                 <InsufficientCreditsToast message={message} />,
@@ -59,7 +55,6 @@ export function showActionError(result: ActionFailResult): void {
             );
             return;
 
-        // ── Plan gate (requireTiers / requireFeature threw TierError) ─────────
         case "TIER_INSUFFICIENT":
             toast.error(
                 <TierGateToast message={message} />,
@@ -67,7 +62,6 @@ export function showActionError(result: ActionFailResult): void {
             );
             return;
 
-        // ── Rate limit ────────────────────────────────────────────────────────
         case "rate_limit":
             toast.error(
                 <RateLimitToast message={message} />,
@@ -75,7 +69,6 @@ export function showActionError(result: ActionFailResult): void {
             );
             return;
 
-        // ── Unauthenticated ───────────────────────────────────────────────────
         case "unauthorized":
             toast.error(
                 <div className="flex items-start gap-2.5">
@@ -92,7 +85,6 @@ export function showActionError(result: ActionFailResult): void {
             );
             return;
 
-        // ── Generic fallback ─────────────────────────────────────────────────
         default:
             toast.error(
                 <div className="flex items-start gap-2.5">
@@ -107,7 +99,6 @@ export function showActionError(result: ActionFailResult): void {
     }
 }
 
-// ── Sub-components (rendered inside sonner toasts) ───────────────────────────
 
 function InsufficientCreditsToast({ message }: { message: string }) {
     return (

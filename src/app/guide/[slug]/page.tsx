@@ -6,7 +6,6 @@ import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 
-// ── Guide content data ────────────────────────────────────────────────────────
 // Each slug targets a specific low-competition long-tail query.
 
 export const GUIDES: Record<string, {
@@ -208,7 +207,6 @@ export const GUIDES: Record<string, {
     ],
   },
 
-  // ── Trend-exploit pages (Google Trends: +750% robots.txt, SEO services rising) ──
 
   "robots-txt-ai-search": {
     title: "Robots.txt for AI Search: What You Must Change in 2026 | OptiAISEO",

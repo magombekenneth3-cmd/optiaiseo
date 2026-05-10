@@ -13,7 +13,6 @@ import { logger } from "@/lib/logger";
 import { getEmbedding, cosineSimilarity } from "./embeddings";
 import crypto from "crypto";
 
-// ── Upstash Vector client (lazy) ──────────────────────────────────────────────
 
 interface UpsertPayload {
   id: string;
@@ -79,7 +78,6 @@ async function vectorQuery(
   }
 }
 
-// ── Similarity threshold & TTL config ────────────────────────────────────────
 
 const SIMILARITY_THRESHOLD = 0.92; // > 92% cosine similarity → treat as same query
 const TTL_SECONDS = {
@@ -94,7 +92,6 @@ function shortHash(text: string): string {
   return crypto.createHash("sha256").update(text).digest("hex").slice(0, 12);
 }
 
-// ── Core semantic cache helper ────────────────────────────────────────────────
 
 /**
  * Generic semantic cache wrapper.
@@ -118,7 +115,6 @@ export async function withSemanticCache<T>(
     return result as T & { fromSemanticCache?: boolean };
   }
 
-  // ── Embed the incoming query ───────────────────────────────────────────────
   let embedding: number[];
   try {
     embedding = await getEmbedding(queryText);
@@ -133,7 +129,6 @@ export async function withSemanticCache<T>(
     return result as T & { fromSemanticCache?: boolean };
   }
 
-  // ── Query nearest vector ───────────────────────────────────────────────────
   const hits = await vectorQuery(embedding, 1, namespace);
   const best = hits[0];
 
@@ -153,7 +148,6 @@ export async function withSemanticCache<T>(
     }
   }
 
-  // ── Cache miss — run real function ────────────────────────────────────────
   const result = await fn();
 
   // Store asynchronously (don't block the caller)
@@ -172,7 +166,6 @@ export async function withSemanticCache<T>(
   return { ...(result as object), fromSemanticCache: false } as T & { fromSemanticCache?: boolean };
 }
 
-// ── Domain-specific helpers (mirrors response-cache.ts API surface) ───────────
 
 /**
  * Semantic-cache wrapper for multi-model AEO mention checks.
@@ -237,6 +230,5 @@ export async function getSemanticCacheStats(): Promise<{
   }
 }
 
-// ── Semantic similarity utility (also used by citation-gap wiring) ────────────
 
 export { cosineSimilarity, SIMILARITY_THRESHOLD };

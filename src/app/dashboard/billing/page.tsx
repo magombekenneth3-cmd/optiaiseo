@@ -139,10 +139,8 @@ const accentMap: Record<Accent, { ring: string; badge: string; btn: string; icon
     },
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Search-param handler — MUST live in its own component inside <Suspense>
 // because Next.js 14 throws on useSearchParams() called outside Suspense.
-// ─────────────────────────────────────────────────────────────────────────────
 function BillingSearchParamsReader({ onMount }: { onMount: (success: boolean, canceled: boolean) => void }) {
     const searchParams = useSearchParams();
     const firedRef = useRef(false);
@@ -159,7 +157,6 @@ function BillingSearchParamsReader({ onMount }: { onMount: (success: boolean, ca
     return null; // renders nothing — side-effect only
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 export default function BillingPage() {
     const { data: session, status } = useSession();
 
@@ -178,7 +175,6 @@ export default function BillingPage() {
         ?.toUpperCase() || "FREE";
     const sessionLoading = status === "loading" || isFetchingTier;
 
-    // ── Handle Stripe redirect params ────────────────────────────────────────
     // Called once by BillingSearchParamsReader after mount.
     const handleSearchParams = (success: boolean, canceled: boolean) => {
         // Clear any pending checkout flags when returning from Stripe

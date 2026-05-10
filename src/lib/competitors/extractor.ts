@@ -136,7 +136,6 @@ Output format:
         const parsed: unknown = JSON.parse(cleaned);
 
         if (isValidServiceArray(parsed)) {
-            // ── Brand-name sanitization pass ──────────────────────────────────
             // Filter out any service where name or label contains a brand word.
             // This is the safety net if Claude ignores the prompt instruction.
             const sanitized = parsed.filter(s =>
@@ -157,14 +156,11 @@ Output format:
         console.warn("[competitor-detect] AI extraction failed:", (err as Error).message);
     }
 
-    // ── Fallback: use ranking keywords as service descriptors ─────────────────
     // This is vastly better than using the brand name as a SERP query.
     return buildFallback(rankingKeywords, location, maxServices);
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 function isValidServiceArray(value: unknown): value is DetectedService[] {
     return (

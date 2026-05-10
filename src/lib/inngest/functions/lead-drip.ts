@@ -28,11 +28,9 @@ import { Resend } from "resend";
 import { signUnsubToken } from "@/lib/unsub-token";
 import { CONCURRENCY } from "../concurrency";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
 
 const POSTAL_ADDRESS = "OptiAISEO Ltd · 20-22 Wenlock Road · London · N1 7GU · UK";
 
-// ── Resend singleton ──────────────────────────────────────────────────────────
 // Lazy — never instantiated at module load time (safe for Next.js build).
 // Throws NonRetriableError so Inngest doesn't burn retry budget on a config gap.
 
@@ -50,7 +48,6 @@ function getFrom(): string {
   return `Kenneth from OptiAISEO <kenneth@${domain}>`;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function appUrl(): string {
   return (process.env.NEXTAUTH_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
@@ -96,7 +93,6 @@ function emailShell(body: string, userId: string): string {
 </html>`;
 }
 
-// ── Plain-text helpers ────────────────────────────────────────────────────────
 
 function textShell(body: string, userId: string): string {
   return [
@@ -109,7 +105,6 @@ function textShell(body: string, userId: string): string {
   ].join("\n");
 }
 
-// ── Skip predicate ────────────────────────────────────────────────────────────
 
 async function shouldSkip(userId: string): Promise<boolean> {
   const user = await prisma.user.findUnique({
@@ -122,7 +117,6 @@ async function shouldSkip(userId: string): Promise<boolean> {
   return prefs.unsubscribed === true;
 }
 
-// ── Email builders ────────────────────────────────────────────────────────────
 
 function buildDay2Html(name: string, userId: string): string {
   const issues = [
@@ -266,7 +260,6 @@ function buildDay10Text(name: string, userId: string): string {
   );
 }
 
-// ── Inngest function ──────────────────────────────────────────────────────────
 
 export const leadDripSequenceJob = inngest.createFunction(
   {
@@ -295,7 +288,6 @@ export const leadDripSequenceJob = inngest.createFunction(
 
     const displayName = name?.split(" ")[0] ?? email.split("@")[0];
 
-    // ── Deduplication lock ──────────────────────────────────────────────────
     const alreadyStarted = await step.run("check-drip-lock", async () => {
       const existing = await prisma.dripSequence.findUnique({ where: { userId } });
       if (existing) return true;
@@ -304,7 +296,6 @@ export const leadDripSequenceJob = inngest.createFunction(
     });
     if (alreadyStarted) return { skipped: true, reason: "duplicate_trigger" };
 
-    // ── Day 2: Education email ─────────────────────────────────────────────
     await step.sleep("wait-2-days", "2d");
 
     const skip2 = await step.run("check-skip-day2", () => shouldSkip(userId));
@@ -322,7 +313,6 @@ export const leadDripSequenceJob = inngest.createFunction(
       });
     }
 
-    // ── Day 5: Social proof email ──────────────────────────────────────────
     await step.sleep("wait-3-more-days", "3d");
 
     const skip5 = await step.run("check-skip-day5", () => shouldSkip(userId));
@@ -340,7 +330,6 @@ export const leadDripSequenceJob = inngest.createFunction(
       });
     }
 
-    // ── Day 10: Urgency email ──────────────────────────────────────────────
     await step.sleep("wait-5-more-days", "5d");
 
     const skip10 = await step.run("check-skip-day10", () => shouldSkip(userId));
@@ -358,7 +347,6 @@ export const leadDripSequenceJob = inngest.createFunction(
       });
     }
 
-    // ── Day 14: Feature spotlight email ───────────────────────────────────
     await step.sleep("wait-4-more-days", "4d");
 
     const skip14 = await step.run("check-skip-day14", () => shouldSkip(userId));
@@ -376,7 +364,6 @@ export const leadDripSequenceJob = inngest.createFunction(
       });
     }
 
-    // ── Day 21: Personalised competitor email ──────────────────────────────
     await step.sleep("wait-7-more-days", "7d");
 
     const skip21 = await step.run("check-skip-day21", () => shouldSkip(userId));
@@ -406,7 +393,6 @@ export const leadDripSequenceJob = inngest.createFunction(
       });
     }
 
-    // ── Day 30: Final offer ────────────────────────────────────────────────
     await step.sleep("wait-9-more-days", "9d");
 
     const skip30 = await step.run("check-skip-day30", () => shouldSkip(userId));
@@ -428,7 +414,6 @@ export const leadDripSequenceJob = inngest.createFunction(
   },
 );
 
-// ── Day 14 email builders ─────────────────────────────────────────────────────
 
 function buildDay14Html(name: string, userId: string): string {
   const body = `
@@ -470,7 +455,6 @@ function buildDay14Text(name: string, userId: string): string {
   );
 }
 
-// ── Day 21 email builders ─────────────────────────────────────────────────────
 
 function buildDay21Html(
   name: string,
@@ -521,7 +505,6 @@ function buildDay21Text(
   );
 }
 
-// ── Day 30 email builders ─────────────────────────────────────────────────────
 
 function buildDay30Html(name: string, userId: string): string {
   const upgradeUrl = `${appUrl()}/dashboard/billing`;

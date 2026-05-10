@@ -10,7 +10,6 @@ import {
   type QuerySource,
 } from "@/lib/aeo/query-discovery";
 
-// ── Auth helper ───────────────────────────────────────────────────────────────
 // FIX #3: Single query via nested select — eliminates the user→site waterfall.
 
 async function resolveUserAndSite(siteId: string) {
@@ -27,7 +26,6 @@ async function resolveUserAndSite(siteId: string) {
   return { userId: user.id, siteId };
 }
 
-// ── Discovery ─────────────────────────────────────────────────────────────────
 
 export async function discoverQueriesAction(siteId: string): Promise<
   | { success: true; result: DiscoveryResult }
@@ -66,7 +64,6 @@ export async function discoverQueriesAction(siteId: string): Promise<
   }
 }
 
-// ── Untracked discoveries ─────────────────────────────────────────────────────
 
 export interface UntrackedQuery {
   keyword: string;
@@ -124,7 +121,6 @@ export async function getUntrackedDiscoveries(
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function extractCompetitorFromNote(notes: string | null): string | undefined {
   if (!notes) return undefined;

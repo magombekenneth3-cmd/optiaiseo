@@ -21,17 +21,14 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { User } from "@prisma/client";
 
-// ── Shared action error shape ─────────────────────────────────────────────────
 
 export type ActionError = { success: false; error: string; code: string };
 
-// ── Success / failure discriminated union ─────────────────────────────────────
 
 type AuthOk = { ok: true; user: User };
 type AuthFail = { ok: false; error: ActionError };
 type AuthResult = AuthOk | AuthFail;
 
-// ── Core helper ───────────────────────────────────────────────────────────────
 
 /**
  * requireUser()
@@ -69,7 +66,6 @@ export async function requireUser(): Promise<AuthResult> {
     return { ok: true, user };
 }
 
-// ── Site ownership assertion ──────────────────────────────────────────────────
 
 /**
  * assertSiteOwnership(siteId, userId)

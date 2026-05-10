@@ -99,7 +99,6 @@ async function classifyGapReason(
 ): Promise<ClassifiedGap> {
   const cacheKey = gapReasonCacheKey(siteId, keyword);
 
-  // ── Redis read ──────────────────────────────────────────────────────────────
   try {
     const cached = await redis.get<ClassifiedGap>(cacheKey);
     if (cached) return cached;
@@ -107,7 +106,6 @@ async function classifyGapReason(
     // Redis unavailable — continue to Gemini
   }
 
-  // ── Fallback (used if Gemini key missing or call fails) ───────────────────
   const fallback: ClassifiedGap = {
     gapReason: "content_too_thin",
     explanation: `${competitorDomain} is cited for "${keyword}" while your site is not. Run a full citation gap analysis for a detailed diagnosis.`,
@@ -150,7 +148,6 @@ Respond ONLY in this JSON format (no markdown, no preamble):
       fix: parsed.fix ?? fallback.fix,
     };
 
-    // ── Redis write ───────────────────────────────────────────────────────────
     try {
       await redis.set(cacheKey, result, { ex: TTL.MENTION_S }); // 24 h
     } catch {
@@ -311,7 +308,6 @@ export async function runCitationGapAnalysis(
 
   const domain = site.domain;
 
-  // ── Step 1: gather candidate keywords from competitor DB ──────────────────
   const competitorIds = site.competitors.map((c) => c.id);
 
   const competitorKeywords = await prisma.competitorKeyword.findMany({
@@ -340,7 +336,6 @@ export async function runCitationGapAnalysis(
     return buildEmptyReport(siteId, domain);
   }
 
-  // ── Step 2: live Perplexity checks + Gemini diagnosis ────────────────────
   const gaps: CitationGap[] = [];
 
   // Process in batches of 5 to avoid burst rate limits

@@ -7,16 +7,11 @@ import { authOptions } from "@/lib/auth";
 import { getEffectiveTier } from "@/lib/stripe/guards";
 import { string, z } from "zod";
 
-// ---------------------------------------------------------------------------
 // Input schemas
-// ---------------------------------------------------------------------------
 
-// Prisma uses cuid() for all PKs — validate as a non-empty string ≤ 50 chars
 const uuidSchema = z.string().min(1).max(50);
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 type AuditWithSite = NonNullable<Awaited<ReturnType<typeof fetchAudit>>>;
 
@@ -41,9 +36,7 @@ type GetAuditResult =
       }
     | { success: false; error: string };
 
-// ---------------------------------------------------------------------------
 // Query — narrow select avoids pulling full Audit payload unnecessarily
-// ---------------------------------------------------------------------------
 
 function fetchAudit(auditId: string, userId: string) {
     return prisma.audit.findFirst({
@@ -89,9 +82,7 @@ function computeScoreDeltas(
         return [{ category, current: currentScore, previous: prev, delta: currentScore - prev }];
     });
 }
-// ---------------------------------------------------------------------------
 // Action
-// ---------------------------------------------------------------------------
 
 export async function getAuditById(auditId: string): Promise<GetAuditResult> {
     // --- Input validation ---

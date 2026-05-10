@@ -20,7 +20,6 @@ import {
 } from "@/lib/constants/ai-models";
 
 
-
 export interface AeoCheck {
     id: string
     category: "schema" | "eeat" | "content" | "technical" | "citation" | "geo" | "aio"
@@ -342,8 +341,6 @@ const checkPerplexityCitation = async (
 }
 
 
-
-
 const predictCitationLikelihood = (checks: AeoCheck[]): number => {
 
     const likelihoodWeights: Record<string, number> = {
@@ -421,7 +418,6 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
     // The structured ids are used internally by fix-engine.ts for routing.
     const schemaGaps: string[] = detectSchemaGaps(html, url).map(g => g.label)
 
-    // ── SCHEMA CHECKS ────────────────────────────────────────────────────────
 
     const hasFaq = foundSchemaTypes.some(t => t.toLowerCase().includes("faq") || t.toLowerCase().includes("question"))
     checks.push({
@@ -488,7 +484,6 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
             : "Add Organization schema with name, url, logo, sameAs (social profiles), and description. Critical for brand recognition by AI engines.",
     })
 
-    // ── PARALLEL FETCH ────────────────────────────────────────────────────────
     // Fetch all ancillary pages in parallel to cut audit time from ~15s → ~5s
     const [aboutHtml, contactHtml, privacyHtml, privacyPolicyHtml, robotsHtml, sitemapHtml] = await Promise.all([
         fetchPage(`${url}/about`),
@@ -499,7 +494,6 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
         fetchPage(`${url}/sitemap.xml`),
     ]);
 
-    // ── E-E-A-T CHECKS ───────────────────────────────────────────────────────
 
     const hasAuthor = html.toLowerCase().includes("author") &&
         (html.includes('"author"') || html.toLowerCase().includes("written by") || html.toLowerCase().includes("by "))
@@ -554,7 +548,6 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
             : "Add a privacy policy page. Required for GDPR and helps establish site legitimacy.",
     })
 
-    // ── CONTENT FORMAT CHECKS (multi-page — checked across all discovered pages) ──
 
     const hasFaqContent = /(<h[1-6][^>]*>)?\s*(frequently asked|faq|common question)/i.test(allPagesHtml)
         || /<details|<summary/i.test(allPagesHtml)
@@ -637,7 +630,6 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
             : "Provide 1-2 sentence, definitive answers to common queries clearly formatted as 'Short Answer:' or similar.",
     })
 
-    // ── CORE SERVICES ALIGNMENT CHECK ───────────────────────────────────────
 
     if (!lite && coreServices && process.env.GEMINI_API_KEY) {
         try {
@@ -736,7 +728,6 @@ ${cleanText}
         }
     }
 
-    // ── ENTITY-FIRST AEO CHECKS ───────────────────────────────────────────────
     // These three checks test entity clarity — the most important factor for AI
     // citation and generative search inclusion for service businesses.
 
@@ -816,7 +807,6 @@ ${cleanText}
             : "Add Service JSON-LD schema to every service page. Required: name, provider. Recommended: description, serviceType, areaServed. Use the Entity Panel in your dashboard to generate these automatically.",
     });
 
-    // ── TECHNICAL CHECKS ─────────────────────────────────────────────────────
 
     const hasCanonical = /<link[^>]+rel=["']canonical["']/i.test(html)
     checks.push({
@@ -848,9 +838,7 @@ ${cleanText}
             : "Create and submit a sitemap.xml. Perplexity and other crawlers use sitemaps to discover content.",
     })
 
-    // ── GEO CHECKS — be chosen/recommended by AI ─────────────────────────────
 
-    // Fix 3: Parallelise all four GEO page fetches — cuts audit time by ~3-5s
     const [pricingHtml, compareHtml, blogHtmlRaw, resourcesHtml, llmsTxtGeoHtml] = await Promise.all([
         fetchPage(`${url}/pricing`),
         fetchPage(`${url}/compare`),
@@ -941,7 +929,6 @@ ${cleanText}
             : "Build a /blog or /resources hub with cluster content around your core topics. AI rewards the brand mentioned most within a topic.",
     })
 
-    // ── GEO CHECKS (continued) — Ahrefs 75k-brand GEO research signals ───────
 
     // 1. Branded mention signals: third-party mentions are the #1 predictor of
     //    Google AI Overview visibility (stronger than backlinks or domain rating).
@@ -964,7 +951,6 @@ ${cleanText}
 
     // 2. Longtail content clusters: AI assistants fan queries into dozens of
     //    longtail sub-queries. Sites ranking for those sub-queries get included.
-    // Fix 2: Corrected \\b → \b
     const hasLongtailClusters = /\b(complete guide|ultimate guide|everything you need to know|in-depth|deep dive|101 guide|beginners guide|advanced guide|step-by-step guide)\b/i.test(allPagesHtml)
         || (allPagesHtml.match(/<h[23][^>]*>/gi) ?? []).length >= 5
     checks.push({
@@ -983,7 +969,6 @@ ${cleanText}
 
     // 3. Content freshness: AI-cited content is 25.7% fresher than regular
     //    organic results. ChatGPT and Perplexity list citations newest-to-oldest.
-    // Fix 2: Corrected \\b → \b
     const hasDateSignals = /\b(updated|last updated|revised|published|\b20(2[3-9]|[3-9]\d)\b)\b/i.test(html)
         || /<time[^>]*datetime/i.test(html)
         || /datePublished|dateModified/i.test(html)
@@ -1042,7 +1027,6 @@ ${cleanText}
             : `Ahrefs found only 7 of the top 50 cited domains appear on Google AI, ChatGPT, AND Perplexity — each platform prefers different sources. Google AI leans on YouTube, Reddit, Quora. ChatGPT prefers Reuters/AP-style publishers. Perplexity cites niche/regional blogs. Diversify: create YouTube content, participate in Reddit threads, and pursue niche publisher mentions — not just your own site.`,
     })
 
-    // ── AIO CHECKS — get your brand understood by AI ─────────────────────────
 
     const aboutBodyLen = aboutHtml?.length ?? 0
     const aboutRich = aboutBodyLen > 1500 &&
@@ -1122,7 +1106,6 @@ ${cleanText}
             : "Add a sameAs array to your Organization JSON-LD with links to LinkedIn, Twitter/X, Facebook, Crunchbase, and any Wikipedia entry. This is how AI maps your entity.",
     })
 
-    // ── AIO CHECK: Direct Answer / AI Overview Eligibility ───────────────────
     // Google AI Overviews preferentially extract from pages that:
     // (a) have a short direct-answer paragraph (≤150 words) near the top
     // (b) have FAQ schema on page
@@ -1174,7 +1157,6 @@ ${cleanText}
         })
     }
 
-    // ── CITATION CHECK ────────────────────────────────────────────────────────
 
     // Pass actual page HTML so Gemini can generate questions RELEVANT to this site's content.
     // This makes the citation check test meaningful questions, not generic brand queries.
@@ -1244,7 +1226,6 @@ ${cleanText}
         }
     }
 
-    // ── MULTI-MODEL AI TRACKING ──────────────────────────────────────────────
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let multiModelResults = { results: [] as any[], overallScore: 0 };
@@ -1270,7 +1251,6 @@ ${cleanText}
         (multiEngineScore.perplexity + multiEngineScore.chatgpt + multiEngineScore.googleAio + multiEngineScore.claude + multiModelResults.overallScore) / 5
     )
 
-    // ── AI FACT VERIFICATION ───────────────────────────────────────────────
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let factVerification = { checks: [] as any[] };
@@ -1296,11 +1276,9 @@ ${cleanText}
         })
     }
 
-    // ── CITATION LIKELIHOOD ──────────────────────────────────────────────────
 
     const citationLikelihood = predictCitationLikelihood(checks)
 
-    // ── SCORE CALCULATION ────────────────────────────────────────────────────
 
     const weights: Record<AeoCheck["impact"], number> = { high: 15, medium: 8, low: 4 }
     const totalWeight = checks.reduce((sum, c) => sum + weights[c.impact], 0)
@@ -1329,7 +1307,6 @@ ${cleanText}
         aio: computeLayerScore(checks, ["aio"]),
     }
 
-    // ── Fix 4: Build AEO Diagnosis from aiShareOfVoice (real table) ──────────
     // The previous code checked (prisma as any).aeoTracking which is always a
     // truthy object (not the table), so it always tried .findMany() and always
     // threw. The real table is aiShareOfVoice.

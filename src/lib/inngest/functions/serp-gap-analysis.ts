@@ -51,7 +51,6 @@ export const runSerpGapAnalysisJob = inngest.createFunction(
 
         try {
 
-        // ── Step 1: Verify record + deduct credits ────────────────────────────────
         await step.run("verify-and-deduct-credits", async () => {
             const analysis = await prisma.serpGapAnalysis.findUnique({ where: { id: analysisId } });
             if (!analysis) throw new NonRetriableError(`SerpGapAnalysis ${analysisId} not found`);
@@ -71,7 +70,6 @@ export const runSerpGapAnalysisJob = inngest.createFunction(
             });
         });
 
-        // ── Step 2: Run SERP analysis ─────────────────────────────────────────────
         const gapReport = await step.run("analyse-serp-gap", async () => {
             const report = await analyseSerpGap(keyword, clientUrl, clientPosition);
 
@@ -102,7 +100,6 @@ export const runSerpGapAnalysisJob = inngest.createFunction(
             return report;
         });
 
-        // ── Step 3: Generate implementation plan ──────────────────────────────────
         const plan = await step.run("generate-implementation-plan", async () => {
             const implementationPlan = await generateImplementationPlan(gapReport);
 
@@ -119,7 +116,6 @@ export const runSerpGapAnalysisJob = inngest.createFunction(
             return implementationPlan;
         });
 
-        // ── Step 4: Save completed analysis ──────────────────────────────────────
         await step.run("save-completed-analysis", async () => {
             await prisma.serpGapAnalysis.update({
                 where: { id: analysisId },
@@ -143,7 +139,6 @@ export const runSerpGapAnalysisJob = inngest.createFunction(
             });
         });
 
-        // ── Step 5: Fire completion event for real-time UI ────────────────────────
         await step.sendEvent("notify-gap-complete", {
             name: "serp-gap/completed",
             data: { siteId, userId, analysisId, keyword },

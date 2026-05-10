@@ -6,7 +6,6 @@ export interface AuditRecommendation {
     priority: RecommendationPriority;
 }
 
-// ── Priority-scored audit issue ───────────────────────────────────────────────
 // Used by computePriority() and rendered in the "Top 5 Fixes" card.
 export interface AuditIssue {
     id: string
@@ -119,7 +118,6 @@ export interface AuditModule {
     run: (context: AuditModuleContext) => Promise<AuditCategoryResult>;
 }
 
-// ── Universal 5-category auditor severity taxonomy ────────────────────────────
 // Critical  → Fail/Error  (blocks indexing or ranking — fix immediately)
 // Warning   → Warning     (hurts performance — fix this sprint)
 // Notice    → Info/Pass   (good to fix — low urgency)
@@ -132,7 +130,6 @@ export function toSeverity(status: AuditStatus): AuditSeverity {
     return 'Notice';
 }
 
-// ── Universal 5-category registry ────────────────────────────────────────────
 export const AUDIT_CATEGORIES = {
     TECHNICAL: 'technical',
     CONTENT: 'content',

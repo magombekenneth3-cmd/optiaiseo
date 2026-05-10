@@ -43,7 +43,6 @@ export async function GET() {
         }
     }
 
-    // ── DB queries ──────────────────────────────────────────────────────────────
     const dbUser = await prisma.user.findUnique({
         where: { email },
         include: { sites: { select: { id: true, domain: true } } },

@@ -188,7 +188,6 @@ export async function checkCitationForKeywords(
     };
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function buildEmptyResult(reason: string): PerplexityCitationResult {
     return {

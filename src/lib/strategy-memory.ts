@@ -21,7 +21,6 @@ export interface MemoryEntry {
     expiresAt?: Date;
 }
 
-// ── Write a single memory ─────────────────────────────────────────────────────
 export async function saveMemory(
     userId: string,
     siteId: string,
@@ -45,7 +44,6 @@ export async function saveMemory(
     }
 }
 
-// ── Load the last N memories for a user+site (within 30 days) ─────────────────
 export async function loadMemories(
     userId: string,
     siteId: string,
@@ -68,7 +66,6 @@ export async function loadMemories(
     });
 }
 
-// ── Format memories as a system-prompt section ────────────────────────────────
 export function formatMemoriesForPrompt(
     memories: { memoryType: string; content: string; createdAt: Date }[]
 ): string {
@@ -84,7 +81,6 @@ export function formatMemoriesForPrompt(
     return `## What you remember about this user\n\n${lines.join("\n")}\n`;
 }
 
-// ── Summarise a session using Gemini Flash ────────────────────────────────────
 export async function summariseSession(
     transcript: Array<{ role: "user" | "assistant"; text: string }>
 ): Promise<string | null> {

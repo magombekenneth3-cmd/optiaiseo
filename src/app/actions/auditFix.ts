@@ -12,7 +12,6 @@ import {
 import { checkRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 
-// Phase 1.4: extracted sub-modules replace the ~600 lines of in-file logic
 import {
     resolveFrameworkContext,
     buildFrameworkPromptHints,
@@ -37,20 +36,13 @@ import {
 } from "@/lib/audit-fix/prompt-builder";
 
 
-// ---------------------------------------------------------------------------
 // Input schemas
-// ---------------------------------------------------------------------------
 
-// Prisma uses cuid() for all PKs — validate as a non-empty string ≤ 50 chars
 const uuidSchema = z.string().min(1).max(50);
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
 // Types not in sub-modules
-// ---------------------------------------------------------------------------
 
 // Re-export sub-module types so callsites that import from here still work
 export type { ContextField, ManualFixGuide, SeoIssue } from "@/lib/audit-fix/prompt-builder";
@@ -68,9 +60,7 @@ export type FixResult =
     | { success: true; mode: "manual"; guide: ManualFixGuide }
     | { success: false; error: string };
 
-// ---------------------------------------------------------------------------
 // Local helpers unique to the action layer
-// ---------------------------------------------------------------------------
 
 type IssueRoute = "static" | "ai";
 
@@ -103,9 +93,7 @@ async function getOwnedSite(siteId: string, userId: string) {
     });
 }
 
-// ---------------------------------------------------------------------------
 // Action 1: Detect required context fields
-// ---------------------------------------------------------------------------
 
 export async function getFixRequirements(
     domain: string,
@@ -164,9 +152,7 @@ CRITICAL OUTPUT RULES:
     }
 }
 
-// ---------------------------------------------------------------------------
 // Action 2: Generate the fix
-// ---------------------------------------------------------------------------
 
 export async function triggerAutoFix(
     siteId: string,
@@ -414,9 +400,7 @@ Return ONLY a valid JSON object with keys: "steps", "codeSnippet" (optional), "f
     }
 }
 
-// ---------------------------------------------------------------------------
 // Action 3: Push approved fix as a GitHub PR
-// ---------------------------------------------------------------------------
 
 export async function pushAuditFixPR(
     siteId: string,

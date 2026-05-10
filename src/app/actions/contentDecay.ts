@@ -14,9 +14,7 @@ import { GEMINI_3_FLASH } from "@/lib/constants/ai-models";
 import * as cheerio from "cheerio";
 import { classifySerpFormat, computeContentGaps, formatToPromptHint, getSerpContextForKeyword } from "@/lib/blog/serp";
 
-// ─────────────────────────────────────────────────────────────
 // Helpers
-// ─────────────────────────────────────────────────────────────
 
 async function fetchWithRetry(
     url: string,
@@ -77,9 +75,7 @@ function extractStructuredContent(html: string, maxSections = 50): string {
     return lines.join("\n");
 }
 
-// ─────────────────────────────────────────────────────────────
 // Actions
-// ─────────────────────────────────────────────────────────────
 
 export async function getDecayingContent(siteId: string) {
     try {
@@ -120,7 +116,6 @@ export async function refreshDecayingContent(
         const site = await prisma.site.findUnique({ where: { id: siteId, userId: user.id } });
         if (!site) return { success: false, error: "Site not found" };
 
-        // ── 1. Scrape the decaying page ──────────────────────────────────────
 
         const pageRes = await fetchWithRetry(url, {
             headers: { "User-Agent": "SEOTool-Bot/1.0" },
@@ -131,7 +126,6 @@ export async function refreshDecayingContent(
         const html = await pageRes.text();
         const extractedText = extractStructuredContent(html, 50);
 
-        // ── 2. SERP grounding ────────────────────────────────────────────────
 
         const primaryKeyword = keywords[0] ?? "content refresh";
 
@@ -145,17 +139,14 @@ export async function refreshDecayingContent(
             ? formatToPromptHint(formatSignal, primaryKeyword)
             : "";
 
-        // ── 3. Content gap analysis ──────────────────────────────────────────
 
         const gaps = serpContext
             ? computeContentGaps(serpContext.results)
             : { commonTopics: [], gapTopics: [] };
 
-        // ── 4. Intent detection ──────────────────────────────────────────────
 
         const intent = detectIntent(primaryKeyword);
 
-        // ── 5. Build AI context ──────────────────────────────────────────────
 
         const ai = getAiClient();
         if (!ai) return { success: false, error: "Gemini AI is not configured." };
@@ -170,7 +161,6 @@ export async function refreshDecayingContent(
             siteDomain: site.domain,
         });
 
-        // ── 6. Build prompt ──────────────────────────────────────────────────
 
         const gapSection = (gaps.commonTopics.length > 0 || gaps.gapTopics.length > 0)
             ? `CONTENT GAP ANALYSIS:
@@ -220,7 +210,6 @@ STRICT STRUCTURAL REQUIREMENTS:
 
 Generate the fully modernised, refreshed version of this post now.`;
 
-        // ── 7. Generate ──────────────────────────────────────────────────────
 
         const response = await ai.models.generateContent({
             model: GEMINI_3_FLASH,
@@ -241,7 +230,6 @@ Generate the fully modernised, refreshed version of this post now.`;
 
         const draft = await buildPost(parsedResponse, { name: site.domain }, ctx, site.id);
 
-        // ── 8. Persist as DRAFT for human review ─────────────────────────────
 
         const blog = await prisma.blog.create({
             data: {
