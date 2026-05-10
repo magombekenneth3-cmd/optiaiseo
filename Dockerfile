@@ -96,7 +96,10 @@ RUN pnpm run build
 RUN pnpm exec esbuild server.ts \
     --bundle \
     --platform=node \
-    --packages=external \
+    --external:next \
+    --external:next-auth \
+    --external:@prisma/client \
+    --external:.prisma/client \
     --outfile=server.js
 
 # ── agent-bundle: esbuild the LiveKit agent ───────────────────────────────────
