@@ -809,7 +809,7 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
               </div>
               <div className="text-center">
                 <p className="font-bold text-lg tracking-tight">Aria</p>
-                <p className="text-xs text-background/50 mt-0.5">
+                <p className="text-xs text-background/60 mt-0.5">
                   Powered by Gemini 2.5 Flash · LiveKit WebRTC
                 </p>
               </div>
@@ -853,7 +853,7 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
               <div className="flex flex-wrap items-center gap-4 lg:justify-start justify-center">
                 <Link
                   href="/aria"
-                  className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-full bg-brand text-white font-bold text-base hover:opacity-90 transition-all active:scale-95"
+                  className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-full bg-brand text-white font-bold text-base hover:opacity-95 hover:shadow-lg hover:shadow-brand/30 transition-all active:scale-95"
                 >
                   <Mic className="w-4 h-4" />
                   See Aria in action
@@ -861,7 +861,7 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
                 </Link>
                 <Link
                   href="/signup"
-                  className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-full bg-background/10 border border-brand/20 text-white font-bold text-base hover:bg-background/20 transition-all active:scale-95"
+                  className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-full bg-white/10 border border-white/30 text-white font-bold text-base hover:bg-white/20 hover:border-white/50 transition-all active:scale-95"
                 >
                   Start free trial
                 </Link>
@@ -1081,7 +1081,7 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
                   }
                   className={`w-full py-3 rounded-xl font-semibold transition-all block text-center text-sm ${plan.highlight
                     ? "bg-foreground text-background hover:opacity-90"
-                    : "border border-border hover:bg-accent"
+                    : "bg-muted border border-border text-foreground hover:bg-accent hover:border-border/80"
                     }`}
                 >
                   {plan.cta}
@@ -1194,11 +1194,11 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
           <h2 className="text-4xl md:text-5xl font-black tracking-tight mb-5">
             Still on the fence?
           </h2>
-          <p className="text-lg text-background/60 mb-6 max-w-xl mx-auto">
+          <p className="text-lg text-background/70 mb-6 max-w-xl mx-auto">
             No developer needed. Works on WordPress, Ghost, Webflow, or any CMS.
             Your first audit runs in under 2 minutes.
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-background/50 mb-10">
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-background/65 mb-10">
             {["No code required", "Works on any CMS", "Cancel anytime", "Data exported any time"].map((item) => (
               <span key={item} className="flex items-center gap-1.5">
                 <Check className="w-3.5 h-3.5 text-brand" />
