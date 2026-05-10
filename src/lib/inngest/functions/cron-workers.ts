@@ -60,7 +60,7 @@ export const competitorAlertsSiteJob = inngest.createFunction(
 
 export const backlinksSiteJob = inngest.createFunction(
     {
-        id: "backlinks-check-site",
+        id: "backlinks-site-worker",
         name: "Backlink Check — Per Site",
         concurrency: { limit: 5 },
         retries: 2,
