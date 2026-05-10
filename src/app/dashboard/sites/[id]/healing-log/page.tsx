@@ -43,18 +43,20 @@ function ImpactBar({ score }: { score: number | null }) {
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
-export async function generateMetadata({ params }: { params: { id: string } }) {
-  const site = await prisma.site.findUnique({ where: { id: params.id }, select: { domain: true } });
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const site = await prisma.site.findUnique({ where: { id }, select: { domain: true } });
   return { title: site ? `Healing Log — ${site.domain}` : "Healing Log" };
 }
 
-export default async function HealingLogPage({ params }: { params: { id: string } }) {
+export default async function HealingLogPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/auth/signin");
 
   const site = await prisma.site.findFirst({
     where: {
-      id: params.id,
+      id,
       // @ts-expect-error — session user has id
       userId: session.user.id,
     },
