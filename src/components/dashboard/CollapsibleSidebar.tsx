@@ -18,10 +18,15 @@ interface Props {
     user: { name: string; email: string; tier: string };
 }
 
+function getDomainInitial(domain: string): string {
+    return domain.replace(/^www\./, "").charAt(0).toUpperCase();
+}
+
 export function CollapsibleSidebar({ defaultSiteId, sites = [], isSuperAdmin = false, user }: Props) {
-    // Initialise from localStorage (default = expanded)
     const [collapsed, setCollapsed] = useState(false);
     const [mounted, setMounted] = useState(false);
+
+    const activeSite = sites.find(s => s.id === defaultSiteId) ?? sites[0] ?? null;
 
     useEffect(() => {
         setMounted(true);
@@ -50,8 +55,8 @@ export function CollapsibleSidebar({ defaultSiteId, sites = [], isSuperAdmin = f
                 collapsed ? "w-16" : "w-[240px]"
             }`}
         >
-            {/* ── Logo + collapse toggle ─────────────────────────── */}
-            <div className="h-14 flex items-center border-b border-sidebar-border shrink-0 relative px-4">
+            {/* Logo + collapse toggle ─────────────────────────── */}
+            <div className={`h-14 flex border-b border-sidebar-border shrink-0 relative ${collapsed ? "flex-col items-center justify-center gap-1 py-1" : "items-center px-4"}`}>
                 {/* Logo — hidden when collapsed */}
                 {!collapsed && (
                     <Link
@@ -76,20 +81,32 @@ export function CollapsibleSidebar({ defaultSiteId, sites = [], isSuperAdmin = f
                     </Link>
                 )}
 
-                {/* Collapsed: just the logo mark centred */}
+                {/* Collapsed: logo mark + active site avatar stacked */}
                 {collapsed && (
-                    <Link
-                        href="/dashboard"
-                        className="mx-auto"
-                        aria-label="OptiAISEO — AI SEO audit and automation platform"
-                    >
-                        <div className="w-8 h-8 rounded-xl bg-brand flex items-center justify-center shadow-sm shadow-brand/20" title="OptiAISEO">
-                            <span className="font-black text-white text-xs tracking-tighter leading-none" aria-hidden="true">O</span>
-                        </div>
-                    </Link>
+                    <>
+                        <Link
+                            href="/dashboard"
+                            aria-label="OptiAISEO — AI SEO audit and automation platform"
+                        >
+                            <div className="w-7 h-7 rounded-xl bg-brand flex items-center justify-center shadow-sm shadow-brand/20" title="OptiAISEO">
+                                <span className="font-black text-white text-[10px] tracking-tighter leading-none" aria-hidden="true">O</span>
+                            </div>
+                        </Link>
+                        {activeSite && (
+                            <div
+                                className="w-5 h-5 rounded-md bg-brand/15 border border-brand/20 flex items-center justify-center"
+                                title={activeSite.domain}
+                                aria-label={`Active site: ${activeSite.domain}`}
+                            >
+                                <span className="text-[8px] font-black text-brand leading-none">
+                                    {getDomainInitial(activeSite.domain)}
+                                </span>
+                            </div>
+                        )}
+                    </>
                 )}
 
-                {/* Toggle button — pinned right when expanded, hidden when collapsed (toggle is in nav) */}
+                {/* Toggle button — pinned right when expanded */}
                 {!collapsed && (
                     <TooltipProvider>
                         <Tooltip>

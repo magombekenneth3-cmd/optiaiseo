@@ -60,8 +60,8 @@ export function QuickWinCard({ issueLabel, auditId, score, category }: Props) {
                     {category && (
                         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md border ${
                             scorePct < 50
-                                ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                                : "bg-muted/40 text-muted-foreground border-border/50"
+                                ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                                : "bg-muted text-muted-foreground border-border"
                         }`}>
                             {category}
                         </span>
@@ -80,10 +80,10 @@ export function QuickWinCard({ issueLabel, auditId, score, category }: Props) {
                 href={`/dashboard/audits/${auditId}`}
                 className={`shrink-0 self-center flex items-center gap-1.5 text-[12px] font-bold px-3.5 py-2 rounded-xl border transition-all hover:scale-[1.02] active:scale-95 ${
                     scorePct < 50
-                        ? "bg-rose-500/15 text-rose-300 border-rose-500/25 hover:bg-rose-500/25"
+                        ? "bg-rose-500/20 text-rose-600 dark:text-rose-300 border-rose-500/30 hover:bg-rose-500/30"
                         : scorePct < 70
-                        ? "bg-amber-500/15 text-amber-300 border-amber-500/25 hover:bg-amber-500/25"
-                        : "bg-emerald-500/15 text-emerald-300 border-emerald-500/25 hover:bg-emerald-500/25"
+                        ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30 hover:bg-amber-500/30"
+                        : "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30"
                 }`}
             >
                 Fix it <ArrowRight className="w-3.5 h-3.5" />
@@ -107,7 +107,7 @@ export function QuickWinAllClear() {
             </div>
             <Link
                 href="/dashboard/audits"
-                className="ml-auto shrink-0 text-[12px] font-bold px-3.5 py-2 rounded-xl bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 hover:bg-emerald-500/25 transition-all flex items-center gap-1.5"
+                className="ml-auto shrink-0 text-[12px] font-bold px-3.5 py-2 rounded-xl bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition-all flex items-center gap-1.5"
             >
                 Run audit <ArrowRight className="w-3.5 h-3.5" />
             </Link>

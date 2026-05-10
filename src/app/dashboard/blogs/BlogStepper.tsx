@@ -550,7 +550,7 @@ export function GenerateBlogModal({
     // Step 1 → Step 2: fire generation
     const handleGenerate = async () => {
         setIsGenerating(true);
-        setStep(2); // show generating state immediately
+        setStep(2);
         try {
             // onGenerate is the existing handler in GenerateBlogButton.tsx
             // It calls generateBlog() server action — completely unchanged

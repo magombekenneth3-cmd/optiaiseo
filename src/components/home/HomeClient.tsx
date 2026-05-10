@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -204,6 +204,8 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [billingAnnual, setBillingAnnual] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [solutionsOpen, setSolutionsOpen] = useState(false);
+  const solutionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (status === "authenticated" && session?.user) {
@@ -238,6 +240,24 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [mobileNavOpen]);
+
+  useEffect(() => {
+    if (!solutionsOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSolutionsOpen(false);
+    };
+    const onMouse = (e: MouseEvent) => {
+      if (solutionsRef.current && !solutionsRef.current.contains(e.target as Node)) {
+        setSolutionsOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onMouse);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onMouse);
+    };
+  }, [solutionsOpen]);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
@@ -274,26 +294,39 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
               <Mic className="w-3.5 h-3.5" /> Aria Copilot
             </Link>
             {/* Solutions dropdown */}
-            <div className="relative group">
-              <button className="hover:text-foreground transition-colors flex items-center gap-1">
-                Solutions <ChevronDown className="w-3.5 h-3.5" />
+            <div className="relative" ref={solutionsRef}>
+              <button
+                onClick={() => setSolutionsOpen(o => !o)}
+                aria-expanded={solutionsOpen}
+                aria-controls="solutions-dropdown"
+                className="hover:text-foreground transition-colors flex items-center gap-1"
+              >
+                Solutions <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${solutionsOpen ? "rotate-180" : ""}`} />
               </button>
-              <div className="absolute top-full left-0 mt-2 w-52 bg-card border border-border rounded-xl shadow-xl p-2 hidden group-hover:block z-50">
-                {[
-                  { href: "/for-agencies", label: "For Agencies" },
-                  { href: "/for-saas", label: "For SaaS Companies" },
-                  { href: "/for-content", label: "For Content Teams" },
-                  { href: "/for-ecommerce", label: "For E-commerce" },
-                ].map(({ href, label }) => (
-                  <Link
-                    key={href}
-                    href={href}
-                    className="flex items-center px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                  >
-                    {label}
-                  </Link>
-                ))}
-              </div>
+              {solutionsOpen && (
+                <div
+                  id="solutions-dropdown"
+                  role="menu"
+                  className="absolute top-full left-0 mt-2 w-52 bg-card border border-border rounded-xl shadow-xl p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150"
+                >
+                  {[
+                    { href: "/for-agencies", label: "For Agencies" },
+                    { href: "/for-saas", label: "For SaaS Companies" },
+                    { href: "/for-content", label: "For Content Teams" },
+                    { href: "/for-ecommerce", label: "For E-commerce" },
+                  ].map(({ href, label }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      role="menuitem"
+                      onClick={() => setSolutionsOpen(false)}
+                      className="flex items-center px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    >
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
             <a href="#features" className="hover:text-foreground transition-colors">Features</a>
             <a href="#how-it-works" className="hover:text-foreground transition-colors">How it works</a>

@@ -105,7 +105,15 @@ export function MobileBottomNav({
                             </button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto" onClick={() => setMoreOpen(false)}>
+                        <div
+                            className="flex-1 overflow-y-auto"
+                            onClick={(e) => {
+                                const link = (e.target as HTMLElement).closest("a");
+                                if (link && link.href && !link.getAttribute("href")?.startsWith("#")) {
+                                    setMoreOpen(false);
+                                }
+                            }}
+                        >
                             <SidebarNav
                                 defaultSiteId={defaultSiteId}
                                 sites={sites}

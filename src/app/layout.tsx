@@ -98,7 +98,7 @@ export const metadata: Metadata = {
       { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
     ],
     other: [
-      { rel: "mask-icon", url: "/safari-pinned-tab.svg", color: "#7c3aed" },
+      { rel: "mask-icon", url: "/safari-pinned-tab.svg", color: "#10b981" },
     ],
   },
 };
@@ -177,7 +177,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className={`antialiased ${fontVars}`} suppressHydrationWarning>
         <ClientLayout fontVars={fontVars}>{children}</ClientLayout>
         <Script id="theme-init" strategy="afterInteractive" nonce={nonce}>
-          {`try{var t=localStorage.getItem('theme');var a=localStorage.getItem('accent')||'#7c3aed';if(t&&t!=='dark'){document.documentElement.className=t;}document.documentElement.style.setProperty('--brand',a);}catch(_){}`}
+          {`try{var t=localStorage.getItem('theme');if(t&&t!=='dark'){document.documentElement.className=t;}}catch(_){}`}
         </Script>
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-9LL1YRV8XM"

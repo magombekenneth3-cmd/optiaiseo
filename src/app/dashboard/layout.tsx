@@ -203,7 +203,7 @@ export default async function DashboardLayout({
 
 
       {/* Onboarding wizard — shown on first dashboard visit, dismissed after setup */}
-      <OnboardingWizard show={!user.onboardingDone} userName={userName} />
+      <OnboardingWizard show={!user.onboardingDone && userSites.length > 0} userName={userName} />
 
       {/* ⌘K Command palette — global navigation shortcut */}
       <CommandPalette />

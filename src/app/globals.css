@@ -23,8 +23,8 @@
   --accent-foreground: #18181b;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #e4e4e7;
-  --input: #e4e4e7;
+  --border: #d1d1d6;
+  --input: #d1d1d6;
   --ring: #10b981;
   --radius: 0.5rem;
 
@@ -40,7 +40,7 @@
   --sidebar-primary-foreground: #fafafa;
   --sidebar-accent: #f0f0f2;
   --sidebar-accent-foreground: #18181b;
-  --sidebar-border: #e4e4e7;
+  --sidebar-border: #d1d1d6;
   --sidebar-ring: #a1a1aa;
 
   /* Charts */
@@ -230,8 +230,8 @@
 
 .card-surface:hover,
 .card-elevated:hover {
-  border-color: rgba(0, 0, 0, 0.12);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+  border-color: rgba(0, 0, 0, 0.20);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
 }
 .dark .card-surface:hover,
 .dark .card-elevated:hover {
@@ -319,11 +319,12 @@
   color: var(--foreground);
   font-size: 0.875rem;
   font-weight: 500;
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
-.btn-secondary:hover { background: var(--muted); border-color: rgba(255,255,255,0.12); }
+.btn-secondary:hover { background: var(--muted); border-color: rgba(0,0,0,0.20); }
+.dark .btn-secondary:hover { border-color: rgba(255,255,255,0.18); }
 .btn-secondary:active:not(:disabled) { transform: scale(0.97); }
 .btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 
@@ -372,8 +373,7 @@ a[role="button"]:active {
   transition: transform 0.07s ease;
 }
 
-/* ── Legacy compat ─────────────────────────────────────────────────────────── */
-.glass { background: var(--card); border: 1px solid var(--border); }
+
 
 /* ── Brand text ────────────────────────────────────────────────────────────── */
 .text-brand { color: var(--brand); }
@@ -394,7 +394,7 @@ a[role="button"]:active {
 /* ── Section label — replaces text-[10px]/text-[11px] patterns ──────────── */
 /* Use .section-label instead of ad-hoc tiny text                            */
 .section-label {
-  font-size: 0.6875rem;  /* 11px — only in non-body contexts like chart axes */
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;

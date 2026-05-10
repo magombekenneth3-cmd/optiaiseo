@@ -448,7 +448,8 @@ export default async function DashboardPage() {
             { title: "Content published this week", desc: "Analyse your top competitor's content strategy to find your next angle.", cta: "View Keywords →", href: "/dashboard/keywords" },
             { title: "AEO score is solid", desc: "Run a fresh audit to catch any new technical issues before they compound.", cta: "Run Audit →", href: "/dashboard/audits" },
           ];
-          const prompt = growthPrompts[new Date().getDate() % growthPrompts.length];
+          const insightIndex = (parseInt(user.id.replace(/\D/g, "").slice(-4) || "0", 10) + new Date().getDate()) % growthPrompts.length;
+          const prompt = growthPrompts[insightIndex];
           insightTitle = prompt.title;
           insightDesc = prompt.desc;
           insightCta = prompt.cta;
@@ -618,7 +619,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── Free-tier usage bar ────────────────────────────────────── */}
-      {hasSites && auditsThisMonth >= Math.ceil(FREE_AUDIT_LIMIT * 0.5) && (
+      {hasSites && auditsThisMonth >= Math.ceil(FREE_AUDIT_LIMIT * 0.8) && (
         <div className="fade-in-up">
           <Link
             href="/dashboard/billing"

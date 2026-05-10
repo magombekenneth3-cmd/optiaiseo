@@ -117,7 +117,7 @@ export function DashboardStateCard({
                     <Link
                         href="/dashboard/voice"
                         id="state-ask-aria"
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border bg-muted/60 text-sm font-medium text-foreground hover:bg-muted hover:border-border transition-colors"
                     >
                         Ask Aria to fix it
                     </Link>
@@ -192,7 +192,7 @@ export function DashboardStateCard({
                     <Link
                         href="/dashboard/blogs"
                         id="state-generate-content"
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border bg-muted/60 text-sm font-medium text-foreground hover:bg-muted transition-colors"
                     >
                         Generate Content
                     </Link>

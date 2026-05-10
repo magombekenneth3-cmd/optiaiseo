@@ -97,7 +97,7 @@ export function MetricCard({
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider leading-none">
           {label}
         </p>
-        <div className={`shrink-0 w-9 h-9 rounded-xl bg-muted/60 border border-border/60 flex items-center justify-center`}>
+        <div className={`shrink-0 w-9 h-9 rounded-xl bg-muted border border-border flex items-center justify-center`}>
           <Icon className={`w-4 h-4 ${iconColor}`} aria-hidden="true" />
         </div>
       </div>

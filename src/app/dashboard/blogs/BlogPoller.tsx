@@ -13,7 +13,7 @@ const STEPS = [
     { label: "Finalising & saving",          pct: 95 },
 ];
 
-// How many 8s poll cycles each step covers
+// poll cycles each step covers
 const STEP_AT = [0, 3, 7, 11];
 
 export function BlogPoller({ generatingBlogIds }: { generatingBlogIds: string[] }) {
