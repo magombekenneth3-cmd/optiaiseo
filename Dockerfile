@@ -77,19 +77,12 @@ RUN cp -rL node_modules/@prisma/client /tmp/client-real && \
     mv /tmp/client-real node_modules/@prisma/client
 
 RUN pnpm run build
-
-# Compile custom server.ts to server.js
-# next-auth/jwt is imported by server.ts for WebSocket auth — it must be bundled
-# because the runner stage node_modules only contains @prisma/client (explicit copy)
-# and the Next.js standalone minimal set (which does NOT include next-auth).
-# Only 'next' and '@prisma/client' are safe to keep external.
-RUN pnpm exec esbuild server.ts \
-    --bundle \
-    --platform=node \
-    --external:next \
-    --external:@prisma/client \
-    --external:.prisma/client \
-    --outfile=server.js
+# NOTE: We do NOT compile server.ts here. The Next.js standalone output
+# (output: 'standalone') strips webpack from the next package — any code that
+# calls next() triggers loadConfig → loadWebpackHook → crashes at runtime.
+# The standalone's own generated .next/standalone/server.js avoids this path
+# and is the correct entrypoint. It is copied to /app/server.js automatically
+# via the COPY --from=builder /app/.next/standalone ./ step in the runner stage.
 
 # ── agent-bundle: esbuild the LiveKit agent ───────────────────────────────────
 FROM builder AS agent-bundle
@@ -124,7 +117,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 
 COPY --from=deps   --chown=nextjs:nodejs /app/prisma            ./prisma
 
-COPY --from=builder      --chown=nextjs:nodejs /app/server.js        ./server.js
+# server.js is already provided by the standalone output copied above (line 120).
+# Do NOT overwrite it — standalone's server.js is the correct production entrypoint.
+# (Custom server.ts was removed: it triggers loadWebpackHook which standalone strips)
 COPY --from=agent-bundle --chown=nextjs:nodejs /app/livekit-agent.js ./livekit-agent.js
 
 RUN mkdir -p ./node_modules/.prisma ./node_modules/@prisma
