@@ -10,14 +10,7 @@ import { diagnoseAeoData, MentionRecord, AeoDiagnosis } from "./diagnosis";
 import { prisma } from "@/lib/prisma";
 import { cachedQuestions } from "./response-cache";
 import { isSafeUrl } from "@/lib/security/safe-url";
-import {
-    GEMINI_3_FLASH,
-    GEMINI_3_1_PRO,
-    GEMINI_2_5_FLASH,
-    GEMINI_2_5_PRO,
-    GEMINI_2_0_FLASH,
-    GEMINI_2_0_PRO
-} from "@/lib/constants/ai-models";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 
 
 export interface AeoCheck {
@@ -250,7 +243,7 @@ ${cleanText}
 ---`;
 
         const response = await ai.models.generateContent({
-            model: GEMINI_3_1_PRO,
+            model: AI_MODELS.GEMINI_PRO,
             contents: prompt,
             config: { responseMimeType: "application/json", temperature: 0.2 }
         });
@@ -646,7 +639,7 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
             // and checks whether the domain appears in them. This measures what Google's
             // own AI actually surfaces, not what the model knows from training data.
             const groundedResponse = await ai.models.generateContent({
-                model: GEMINI_2_5_FLASH,
+                model: AI_MODELS.GEMINI_FLASH,
                 contents: `What are the best ${coreServices}? Is ${domain} commonly cited or recommended for ${coreServices}?`,
                 // @ts-expect-error — googleSearch is a valid tool in the Gemini API
                 tools: [{ googleSearch: {} }],
@@ -666,7 +659,7 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
 
             // Also run the page content alignment check (plain text, no grounding)
             const alignmentResponse = await ai.models.generateContent({
-                model: GEMINI_2_5_FLASH,
+                model: AI_MODELS.GEMINI_FLASH,
                 contents: `
 You are an SEO analyzer. Evaluate if the following webpage content clearly communicates its core services.
 Core Services: "${coreServices}"

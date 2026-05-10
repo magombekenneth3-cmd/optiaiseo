@@ -216,7 +216,7 @@ export const classifyIntentWithAI = async (
             `;
 
             const response = await ai.models.generateContent({
-                model: AI_MODELS.GEMINI_3_FLASH,
+                model: AI_MODELS.GEMINI_FLASH,
                 contents: prompt,
                 config: { responseMimeType: "application/json" },
             });
@@ -314,7 +314,7 @@ export const clusterKeywords = async (
 
         try {
             const result = await ai.models.generateContent({
-                model: AI_MODELS.GEMINI_3_FLASH,
+                model: AI_MODELS.GEMINI_FLASH,
                 contents: prompt,
                 config: { responseMimeType: "application/json" },
             });

@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import { GEMINI_3_FLASH } from "@/lib/constants/ai-models";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 import { throttledGeminiCall } from "@/lib/gemini/throttle";
 import { prisma } from "@/lib/prisma";
 import { fetchCompetitorPageHtml } from "./page-fetcher";
@@ -123,7 +123,7 @@ Respond ONLY with JSON array:
     try {
         const res = await throttledGeminiCall(() =>
             fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_3_FLASH}:generateContent?key=${apiKey}`,
+                `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.GEMINI_FLASH}:generateContent?key=${apiKey}`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -178,7 +178,7 @@ Respond ONLY with a valid JSON object (no markdown, no explanation) with these e
     try {
         const res = await throttledGeminiCall(() =>
             fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_3_FLASH}:generateContent?key=${apiKey}`,
+                `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.GEMINI_FLASH}:generateContent?key=${apiKey}`,
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -665,7 +665,7 @@ Rules:
 
         const geminiRes = await throttledGeminiCall(() =>
             fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_3_FLASH}:generateContent?key=${apiKey}`,
+                `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.GEMINI_FLASH}:generateContent?key=${apiKey}`,
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },

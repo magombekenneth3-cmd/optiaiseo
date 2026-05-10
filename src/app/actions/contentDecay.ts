@@ -10,7 +10,7 @@ import { buildPromptContext } from "@/lib/blog/prompt-context";
 import { fetchGSCDecayData, normaliseSiteUrl } from "@/lib/gsc";
 import { revalidatePath } from "next/cache";
 import { getUserGscToken } from "@/lib/gsc/token";
-import { GEMINI_3_FLASH } from "@/lib/constants/ai-models";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 import * as cheerio from "cheerio";
 import { classifySerpFormat, computeContentGaps, formatToPromptHint, getSerpContextForKeyword } from "@/lib/blog/serp";
 
@@ -212,7 +212,7 @@ Generate the fully modernised, refreshed version of this post now.`;
 
 
         const response = await ai.models.generateContent({
-            model: GEMINI_3_FLASH,
+            model: AI_MODELS.GEMINI_FLASH,
             contents: prompt,
             config: {
                 responseMimeType: "application/json",

@@ -101,6 +101,25 @@ function GapCard({ gap }: { gap: CitationGap }) {
             <p className="text-sm leading-relaxed">{gap.fix}</p>
           </div>
 
+          {/* Embedding gap signals — missing concepts from semantic analysis */}
+          {gap.embeddingGapSignals && gap.embeddingGapSignals.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Missing concepts (semantic gap)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {gap.embeddingGapSignals.map((signal) => (
+                  <a
+                    key={signal}
+                    href={`/dashboard/blogs/new?addSection=${encodeURIComponent(signal)}&keyword=${encodeURIComponent(gap.keyword)}`}
+                    className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full hover:bg-red-500/20 transition-colors"
+                    title={`Click to open blog editor pre-seeded to add: ${signal}`}
+                  >
+                    {signal}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Top competitor */}
           {topComp && (
             <div>
@@ -194,6 +213,7 @@ export function CitationGapPanel({ siteId, hasCompetitors }: CitationGapPanelPro
               fix: "Run a full analysis to get a specific, actionable fix for this keyword.",
               searchVolume: 0,
               impact: "medium" as const,
+              embeddingGapSignals: [] as string[],
               source: "cached" as const,
             })
           ),

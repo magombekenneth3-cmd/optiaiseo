@@ -141,7 +141,7 @@ const accentMap: Record<Accent, { ring: string; badge: string; btn: string; icon
 
 // Search-param handler — MUST live in its own component inside <Suspense>
 // because Next.js 14 throws on useSearchParams() called outside Suspense.
-function BillingSearchParamsReader({ onMount }: { onMount: (success: boolean, canceled: boolean) => void }) {
+function BillingSearchParamsReader({ onMount }: { onMount: (success: boolean, canceled: boolean, billing: string | null) => void }) {
     const searchParams = useSearchParams();
     const firedRef = useRef(false);
 
@@ -151,6 +151,7 @@ function BillingSearchParamsReader({ onMount }: { onMount: (success: boolean, ca
         onMount(
             searchParams.get("success") === "true",
             searchParams.get("canceled") === "true",
+            searchParams.get("billing"),
         );
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -176,7 +177,9 @@ export default function BillingPage() {
     const sessionLoading = status === "loading" || isFetchingTier;
 
     // Called once by BillingSearchParamsReader after mount.
-    const handleSearchParams = (success: boolean, canceled: boolean) => {
+    const handleSearchParams = (success: boolean, canceled: boolean, billingParam: string | null) => {
+        // Pre-select annual billing toggle if URL param says so
+        if (billingParam === "annual") setBilling("annual");
         // Clear any pending checkout flags when returning from Stripe
         if (success || canceled) {
             ["FREE", "STARTER", "PRO", "AGENCY"].forEach(t => sessionStorage.removeItem(`checkout_pending_${t}`));
@@ -255,7 +258,7 @@ export default function BillingPage() {
             const res = await fetch("/api/stripe/checkout", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "idempotency-key": idempotencyKey },
-                body: JSON.stringify({ tier }),
+                body: JSON.stringify({ tier, billing }),
             });
             if (!res.ok) {
                 const errData = await res.json().catch(() => ({ error: "Failed to start checkout" }));
@@ -333,7 +336,7 @@ export default function BillingPage() {
 
             {/* ── Search-param handler (Suspense required by Next.js 14) ─── */}
             <Suspense fallback={null}>
-                <BillingSearchParamsReader onMount={handleSearchParams} />
+            <BillingSearchParamsReader onMount={handleSearchParams} />
             </Suspense>
 
             {/* ── Downgrade confirmation modal ──────────────────────────────── */}

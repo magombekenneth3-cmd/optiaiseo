@@ -3,7 +3,7 @@ import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { prisma } from "@/lib/prisma";
 import { fetchSerp } from "@/lib/serp/serp-features";
 import { GoogleGenAI } from "@google/genai";
-import { GEMINI_3_FLASH } from "@/lib/constants/ai-models";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 
 type SnippetFormat = "paragraph" | "list" | "table" | "none";
 
@@ -69,7 +69,7 @@ export async function POST(
     const prompt = PROMPTS[format](keyword, currentSnippet);
 
     const response = await ai.models.generateContent({
-        model: GEMINI_3_FLASH,
+        model: AI_MODELS.GEMINI_FLASH,
         contents: prompt,
         config: { temperature: 0.3, maxOutputTokens: 500 },
     });

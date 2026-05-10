@@ -120,7 +120,7 @@ export async function checkGeminiMention(
         // Use Google Search grounding so the check reflects real user behaviour
         // on gemini.google.com, which browses the live web — not frozen training data.
         const result = await ai.models.generateContent({
-            model: AI_MODELS.GEMINI_3_1_PRO,
+            model: AI_MODELS.GEMINI_PRO,
             contents: prompt,
             config: {
                 temperature: 0.1,

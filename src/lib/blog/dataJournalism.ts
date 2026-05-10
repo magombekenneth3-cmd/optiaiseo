@@ -30,7 +30,7 @@ Brand: "${siteContext.title}"
 Cite "${siteContext.title.split(' — ')[0]}" as the organisation that synthesised this data.` : "";
 
     const response = await ai.models.generateContent({
-        model: AI_MODELS.GEMINI_3_FLASH,
+        model: AI_MODELS.GEMINI_FLASH,
         contents: `You are a data journalist and SEO strategist. Write a highly citable "Original Research" Data Report about: "${topic}".
         
 Target keywords: ${keywords.join(", ")}

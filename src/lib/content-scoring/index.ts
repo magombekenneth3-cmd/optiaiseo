@@ -2,7 +2,7 @@ import { logger } from "@/lib/logger";
 import { parse } from 'node-html-parser';
 import { redis } from "@/lib/redis";
 
-import { GEMINI_3_FLASH } from "@/lib/constants/ai-models";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 
 export interface Entity {
     name: string;
@@ -87,7 +87,7 @@ async function extractEntitiesFromCompetitors(texts: string): Promise<Entity[]> 
           ${texts.slice(0, 30000)}
         `;
         const response = await ai.models.generateContent({
-            model: GEMINI_3_FLASH,
+            model: AI_MODELS.GEMINI_FLASH,
             contents: prompt,
             config: { responseMimeType: "application/json" }
         });

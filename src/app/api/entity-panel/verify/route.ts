@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { GoogleGenAI } from "@google/genai";
-import { GEMINI_3_FLASH } from "@/lib/constants/ai-models";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 import { rateLimit, checkRateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 
@@ -95,7 +95,7 @@ Respond ONLY with valid JSON (no markdown, no code fences):
 }`;
 
         const result = await ai.models.generateContent({
-            model: GEMINI_3_FLASH,
+            model: AI_MODELS.GEMINI_FLASH,
             contents: prompt,
             config: { responseMimeType: "application/json" },
         });

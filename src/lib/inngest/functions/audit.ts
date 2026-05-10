@@ -550,3 +550,22 @@ export const processGscSiteJob = inngest.createFunction(
         return { siteId, dropped: detection.dropped, anomalyCount: detection.anomalies.length };
     }
 );
+
+
+export const purgeExpiredSerpAnalysisJob = inngest.createFunction(
+    {
+        id: "purge-expired-serp-analysis",
+        name: "Purge Expired SERP Analysis Cache",
+        triggers: [{ cron: "0 3 * * 0" }], // Weekly, Sunday 03:00 UTC
+    },
+    async ({ step }) => {
+        const result = await step.run("delete-expired-rows", async () => {
+            return prisma.keywordSerpAnalysis.deleteMany({
+                where: { expiresAt: { lt: new Date() } },
+            });
+        });
+
+        logger.info("[Purge] Deleted expired SERP analysis rows", { count: result.count });
+        return { deleted: result.count };
+    }
+);

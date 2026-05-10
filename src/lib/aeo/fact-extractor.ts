@@ -2,14 +2,7 @@ import { logger } from "@/lib/logger";
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { prisma } from "@/lib/prisma";
 import { pingGoogleIndexingApi } from "@/lib/gsc/indexing";
-import {
-    GEMINI_3_FLASH,
-    GEMINI_3_1_PRO,
-    GEMINI_2_5_FLASH,
-    GEMINI_2_5_PRO,
-    GEMINI_2_0_FLASH,
-    GEMINI_2_0_PRO
-} from "@/lib/constants/ai-models";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 
 
 const factSchema: Schema = {
@@ -60,7 +53,7 @@ export async function extractFactsFromContent(siteId: string, content: string, s
         `;
 
         const response = await ai.models.generateContent({
-            model: GEMINI_3_1_PRO, // Using the latest Gemini 3.1 for extraction precision
+            model: AI_MODELS.GEMINI_PRO,
             contents: prompt,
             config: {
                 responseMimeType: "application/json",

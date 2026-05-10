@@ -1,8 +1,6 @@
 import { logger } from "@/lib/logger";
 import { GoogleGenAI } from "@google/genai";
-import {
-    GEMINI_3_FLASH,
-} from "@/lib/constants/ai-models";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 
 
 export interface FactCheck {
@@ -54,7 +52,7 @@ export async function verifyBrandFacts(domain: string, facts: { label: string; v
 
                 try {
                     const result = await ai.models.generateContent({
-                        model: GEMINI_3_FLASH,
+                        model: AI_MODELS.GEMINI_FLASH,
                         contents: prompt,
                         config: { responseMimeType: "application/json" }
                     });

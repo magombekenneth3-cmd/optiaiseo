@@ -10,7 +10,7 @@ import AutopilotSection from "./AutopilotSection";
 import KnowledgeGraphEditor from "@/components/aeo/KnowledgeGraphEditor";
 import { EntityPanel } from "./EntityPanel";
 import { PageDiscoveryPanel } from "./PageDiscoveryPanel";
-import { ArrowLeft, GitBranch, Bot, TrendingUp, ClipboardList, CheckCircle, AlertTriangle } from "lucide-react";
+import { ArrowLeft, GitBranch, Bot, TrendingUp, ClipboardList, CheckCircle, AlertTriangle, Zap } from "lucide-react";
 import { getSiteBenchmarkContext } from "@/app/actions/benchmarks";
 import { BenchmarkPanel, BenchmarkPlaceholder } from "@/components/dashboard/BenchmarkPanel";
 import { CacheStatsWidget } from "@/components/dashboard/CacheStatsWidget";
@@ -203,6 +203,25 @@ export default async function SiteDetailsPage({ params }: { params: Promise<{ id
                             className="inline-flex items-center gap-2 px-3 py-2 bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-lg text-xs font-semibold hover:bg-purple-500/20 transition-all w-full justify-center"
                         >
                             View Audits →
+                        </Link>
+                    </div>
+
+                    {/* Healing Log Card */}
+                    <div className="card-surface p-5">
+                        <div className="flex items-center gap-2 mb-3">
+                            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                                <Zap className="w-4 h-4 text-emerald-400" />
+                            </div>
+                            <h2 className="text-sm font-semibold">Self-Healing Log</h2>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-4">
+                            Full audit trail of every automated fix applied by the AI engine — with before/after score impact.
+                        </p>
+                        <Link
+                            href={`/dashboard/sites/${site.id}/healing-log`}
+                            className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-lg text-xs font-semibold hover:bg-emerald-500/20 transition-all w-full justify-center"
+                        >
+                            View Healing Log →
                         </Link>
                     </div>
 
