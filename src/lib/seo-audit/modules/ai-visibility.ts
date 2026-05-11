@@ -11,6 +11,30 @@ const AI_BOTS = [
     { name: 'Applebot-Extended', pattern: 'applebot-extended' },
 ];
 
+function parseRobotsForBot(robotsText: string, botPattern: string): boolean {
+    const lines = robotsText.split(/\r?\n/).map(l => l.split('#')[0].trim());
+    let inRelevantBlock = false;
+    let isBlocked = false;
+
+    for (const line of lines) {
+        const lower = line.toLowerCase();
+        if (lower.startsWith('user-agent:')) {
+            const agent = lower.replace('user-agent:', '').trim();
+            inRelevantBlock = agent === botPattern || agent === '*';
+        }
+        if (inRelevantBlock && lower.startsWith('disallow:')) {
+            const path = lower.replace('disallow:', '').trim();
+            if (path === '/' || path === '/*') isBlocked = true;
+        }
+        if (inRelevantBlock && lower.startsWith('allow:')) {
+            const path = lower.replace('allow:', '').trim();
+            if (path === '/' || path === '/*') isBlocked = false;
+        }
+    }
+
+    return isBlocked;
+}
+
 export const AiVisibilityModule: AuditModule = {
     id: 'ai-visibility',
     label: 'AI Visibility',
@@ -98,20 +122,11 @@ export const AiVisibilityModule: AuditModule = {
         });
 
         if (robotsResult.exists) {
-            const robotsLower = robotsResult.text.toLowerCase();
             const blockedBots: string[] = [];
             const allowedBots: string[] = [];
 
             for (const bot of AI_BOTS) {
-                const agentIdx = robotsLower.indexOf(`user-agent: ${bot.pattern}`);
-                if (agentIdx === -1) {
-                    allowedBots.push(bot.name);
-                    continue;
-                }
-                const block = robotsLower.slice(agentIdx, agentIdx + 300);
-                const nextAgentIdx = block.indexOf('user-agent:', 12);
-                const relevantBlock = nextAgentIdx > 0 ? block.slice(0, nextAgentIdx) : block;
-                if (relevantBlock.includes('disallow: /\n') || relevantBlock.includes('disallow: /\r')) {
+                if (parseRobotsForBot(robotsResult.text, bot.pattern)) {
                     blockedBots.push(bot.name);
                 } else {
                     allowedBots.push(bot.name);
@@ -146,7 +161,6 @@ export const AiVisibilityModule: AuditModule = {
                 aiVisibilityImpact: 100,
             });
         }
-
 
         if (context.html) {
             const root = parse(context.html);
@@ -265,8 +279,20 @@ export const AiVisibilityModule: AuditModule = {
                 details: { totalHeadings, questionHeadings: questionCount, questionRatioPercent: Math.round(questionRatio * 100) },
             });
 
-            // Only runs when GEMINI_API_KEY is configured (avoids billing in test/free tier)
-            if (process.env.GEMINI_API_KEY) {
+            if (!process.env.GEMINI_API_KEY) {
+                items.push({
+                    id: 'aeo-llm-citation-probe',
+                    label: 'AI Citation Probe (Gemini)',
+                    status: 'Info',
+                    finding: 'AI citation probe is not configured. Add GEMINI_API_KEY to your environment to enable it.',
+                    recommendation: {
+                        text: 'Add GEMINI_API_KEY to your environment variables. This check simulates whether Gemini would cite this page in an AI search answer — it is one of the highest-signal checks in the audit.',
+                        priority: 'Medium',
+                    },
+                    roiImpact: 90,
+                    aiVisibilityImpact: 100,
+                });
+            } else {
                 try {
                     const h1Text = root.querySelector('h1')?.text.trim() ?? '';
                     const metaDesc = root.querySelector('meta[name="description"]')?.getAttribute('content') ?? '';
@@ -313,8 +339,7 @@ export const AiVisibilityModule: AuditModule = {
                             cachedAt:       probe.cachedAt,
                         },
                     });
-                } catch (err) {
-                    // Non-fatal — skip the check rather than crashing the module
+                } catch {
                     items.push({
                         id: 'aeo-llm-citation-probe',
                         label: 'AI Citation Probe (Gemini)',

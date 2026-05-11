@@ -4,42 +4,24 @@ import { logger } from "@/lib/logger";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { callGemini as _callGemini } from "@/lib/gemini";
-import { extractBrandIdentity, isBrandCited } from "@/lib/aeo/brand-utils";
+import { checkPerplexityCitation } from "@/lib/aeo/perplexity-citation-check";
+import { checkChatGptMention } from "@/lib/aeo/openai-check";
+import { checkClaudeMention } from "@/lib/aeo/claude-check";
 import pLimit from "p-limit";
 import { z } from "zod";
 
-// Constants
 
-/** Max keywords to process per tracking run. */
 const MAX_KEYWORDS = 10;
 
-/** How many keywords to bundle into a single Gemini call. */
-const BATCH_SIZE = 4;
+const CHECK_CONCURRENCY = 2;
 
-/** Max concurrent Gemini calls. */
-const GEMINI_CONCURRENCY = 2;
-
-/**
- * Frequency thresholds (in hours) per keyword priority tier.
- * High-priority keywords are re-checked daily; low-priority weekly.
- */
 const FREQUENCY_HOURS: Record<"high" | "medium" | "low", number> = {
     high: 24,
     medium: 72,
     low: 168,
 };
 
-// Input schemas
-
 const uuidSchema = z.string().min(1).max(50);
-
-// Types
-
-interface BatchResult {
-    keyword: string;
-    mentionedBrands: string[];
-}
 
 type ActionError = { success: false; error: string };
 
@@ -69,35 +51,9 @@ type GetAeoShareOfVoiceMetricsResult =
     }
     | ActionError;
 
-// Shared auth helper
-
 async function getAuthenticatedUserId(): Promise<string | null> {
     const session = await getServerSession(authOptions);
     return session?.user?.id ?? null;
-}
-
-// Helpers
-
-async function callGemini(prompt: string): Promise<string> {
-    const text = await _callGemini(prompt, {
-        maxOutputTokens: 1024,
-        temperature: 0.1,
-    });
-    if (!text) throw new Error("Gemini returned empty response");
-    return text;
-}
-
-function parseJson<T>(text: string): T | null {
-    try {
-        const clean = text
-            .replace(/^```(?:json)?\s*/im, "")
-            .replace(/```\s*$/im, "")
-            .trim();
-        const match = clean.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-        return match ? (JSON.parse(match[0]) as T) : null;
-    } catch {
-        return null;
-    }
 }
 
 function frequencyHours(priority: number | null): number {
@@ -106,9 +62,6 @@ function frequencyHours(priority: number | null): number {
     return FREQUENCY_HOURS.low;
 }
 
-/**
- * Returns true if this keyword was already tracked within its cooldown window.
- */
 async function isWithinCooldown(
     siteId: string,
     keyword: string,
@@ -116,58 +69,77 @@ async function isWithinCooldown(
 ): Promise<boolean> {
     const hours = frequencyHours(priority);
     const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
-
     const existing = await prisma.aiShareOfVoice.findFirst({
         where: { siteId, keyword, recordedAt: { gte: cutoff } },
         select: { id: true },
     });
-
     return existing !== null;
 }
 
 /**
- * Calls Gemini once with a batch of keywords and returns brand mentions per keyword.
- * Only extracts brand names — does NOT generate full answers (huge token saving).
+ * Run one keyword against all configured AI models in parallel.
+ * Returns one row per model — each written to AiShareOfVoice with the
+ * correct modelName so charts and filters reflect real data sources.
  */
-async function fetchBrandMentionsBatch(
-    keywords: string[],
-): Promise<BatchResult[]> {
-    const numbered = keywords.map((kw, i) => `${i + 1}. ${kw}`).join("\n");
+async function runMultiModelCheck(
+    keyword: string,
+    domain: string,
+    coreServices: string | null | undefined,
+): Promise<{ modelName: string; brandMentioned: boolean; competitors: string[] }[]> {
+    const [plx, gpt, cld] = await Promise.allSettled([
+        checkPerplexityCitation(keyword, domain),
+        checkChatGptMention(domain, coreServices),
+        checkClaudeMention(domain, coreServices),
+    ]);
 
-    const prompt = `You are a search analyst. For each query below, list the brand names, tools, or service providers that are most commonly recommended or cited for that topic.
+    const rows: { modelName: string; brandMentioned: boolean; competitors: string[] }[] = [];
 
-Do NOT write explanatory text. Return ONLY a JSON object in this exact shape:
-{
-  "results": [
-    { "keyword": "<exact keyword>", "mentionedBrands": ["Brand A", "Brand B"] }
-  ]
+    if (plx.status === "fulfilled") {
+        const r = plx.value;
+        rows.push({
+            modelName: "perplexity",
+            brandMentioned: r.cited || r.textMentionScore > 30,
+            competitors: r.competitorsCited,
+        });
+    }
+    if (gpt.status === "fulfilled") {
+        const r = gpt.value;
+        rows.push({
+            modelName: "chatgpt",
+            brandMentioned: r.mentioned,
+            competitors: [],
+        });
+    }
+    if (cld.status === "fulfilled") {
+        const r = cld.value;
+        rows.push({
+            modelName: "claude",
+            brandMentioned: r.mentioned,
+            competitors: [],
+        });
+    }
+
+    return rows;
 }
-
-Queries:
-${numbered}`;
-
-    const text = await callGemini(prompt);
-    const parsed = parseJson<{ results: BatchResult[] }>(text);
-    return parsed?.results ?? [];
-}
-
-/**
- * Splits an array into chunks of a given size.
- */
-function chunk<T>(arr: T[], size: number): T[][] {
-    const out: T[][] = [];
-    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-    return out;
-}
-
-// Action 1: Run tracking
 
 export async function runAeoShareOfVoiceCheck(
     siteId: string,
 ): Promise<RunAeoShareOfVoiceResult> {
-    // --- Input validation ---
     if (!uuidSchema.safeParse(siteId).success) {
         return { success: false, error: "Invalid site ID." };
+    }
+
+    const enabledModels = [
+        process.env.PERPLEXITY_API_KEY && "Perplexity",
+        process.env.OPENAI_API_KEY     && "ChatGPT",
+        process.env.ANTHROPIC_API_KEY  && "Claude",
+    ].filter(Boolean);
+
+    if (enabledModels.length === 0) {
+        return {
+            success: false,
+            error: "No AI model API keys configured. Add PERPLEXITY_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY to enable real-model tracking.",
+        };
     }
 
     try {
@@ -176,11 +148,10 @@ export async function runAeoShareOfVoiceCheck(
 
         const site = await prisma.site.findFirst({
             where: { id: siteId, userId },
-            select: { id: true, domain: true },
+            select: { id: true, domain: true, coreServices: true },
         });
         if (!site) return { success: false, error: "Site not found" };
 
-        // --- Load seed keywords, auto-discover if none exist ---
         let seedKeywords = await prisma.seedKeyword.findMany({
             where: { siteId: site.id },
             orderBy: { addedAt: "desc" },
@@ -195,34 +166,18 @@ export async function runAeoShareOfVoiceCheck(
             if (!discoveryResult.success) {
                 return {
                     success: false,
-                    error:
-                        "No seed keywords found and auto-discovery failed: " +
-                        discoveryResult.error,
+                    error: "No seed keywords found and auto-discovery failed: " + discoveryResult.error,
                 };
             }
 
-            // Only auto-add commercial / transactional keywords — informational
-            // queries rarely indicate AEO opportunity worth tracking.
             const candidates = (
-                discoveryResult.keywords as Array<{
-                    keyword: string;
-                    intent: string;
-                    priority?: number;
-                }>
+                discoveryResult.keywords as Array<{ keyword: string; intent: string; priority?: number }>
             )
-                .filter(
-                    (k) => ["commercial", "transactional", "informational"].includes(k.intent),
-                )
+                .filter((k) => ["commercial", "transactional", "informational"].includes(k.intent))
                 .slice(0, 5);
 
             for (const kw of candidates) {
-                await addSeedKeyword(
-                    site.id,
-                    kw.keyword,
-                    kw.intent,
-                    1,
-                    "Auto-generated for AEO tracking",
-                );
+                await addSeedKeyword(site.id, kw.keyword, kw.intent, 1, "Auto-generated for AEO tracking");
             }
 
             seedKeywords = await prisma.seedKeyword.findMany({
@@ -232,18 +187,10 @@ export async function runAeoShareOfVoiceCheck(
             });
 
             if (seedKeywords.length === 0) {
-                return {
-                    success: false,
-                    error: "Failed to load auto-generated seed keywords.",
-                };
+                return { success: false, error: "Failed to load auto-generated seed keywords." };
             }
         }
 
-        const brandIdentity = extractBrandIdentity(site.domain);
-
-        // --- Filter to keywords not within their cooldown window ---
-        // Run cooldown checks in parallel — one DB query per keyword but
-        // all fired concurrently, which is fine at MAX_KEYWORDS = 10.
         const cooldownChecks = await Promise.all(
             seedKeywords.map(async (sk) => ({
                 sk,
@@ -256,57 +203,44 @@ export async function runAeoShareOfVoiceCheck(
             return {
                 success: true,
                 trackedCount: 0,
-                message:
-                    "All keywords are within their tracking cooldown. Nothing to run.",
+                message: "All keywords are within their tracking cooldown. Nothing to run.",
             };
         }
 
-        // --- Batch processing with concurrency cap ---
-        const limit = pLimit(GEMINI_CONCURRENCY);
+        const limit = pLimit(CHECK_CONCURRENCY);
         let trackedCount = 0;
 
         await Promise.allSettled(
-            chunk(due, BATCH_SIZE).map((batch) =>
+            due.map((sk) =>
                 limit(async () => {
-                    let results: BatchResult[] = [];
-
+                    let modelRows: { modelName: string; brandMentioned: boolean; competitors: string[] }[];
                     try {
-                        results = await fetchBrandMentionsBatch(
-                            batch.map((sk) => sk.keyword),
-                        );
+                        modelRows = await runMultiModelCheck(sk.keyword, site.domain, site.coreServices);
                     } catch (err: unknown) {
-                        logger.error("[AEO Track] Batch LLM call failed", {
-                            keywords: batch.map((s) => s.keyword),
+                        logger.error("[AEO Track] Multi-model check failed", {
+                            keyword: sk.keyword,
                             error: (err as Error)?.message,
                         });
                         return;
                     }
 
-                    // Persist each result — fire DB writes concurrently within the batch
                     await Promise.allSettled(
-                        results.map(async (result) => {
-                            const mentioned = result.mentionedBrands ?? [];
-                            const mentionedText = mentioned.join(" ");
-                            const isBrandMentioned = isBrandCited(mentionedText, brandIdentity);
-
-                            const competitors = mentioned.filter(
-                                (name) => !isBrandCited(name, brandIdentity),
-                            );
-
+                        modelRows.map(async (row) => {
                             try {
                                 await prisma.aiShareOfVoice.create({
                                     data: {
                                         siteId: site.id,
-                                        keyword: result.keyword,
-                                        modelName: "gemini-2.0-flash",
-                                        brandMentioned: isBrandMentioned,
-                                        competitorsMentioned: competitors,
+                                        keyword: sk.keyword,
+                                        modelName: row.modelName,
+                                        brandMentioned: row.brandMentioned,
+                                        competitorsMentioned: row.competitors,
                                     },
                                 });
                                 trackedCount++;
                             } catch (err: unknown) {
                                 logger.error("[AEO Track] DB write failed", {
-                                    keyword: result.keyword,
+                                    keyword: sk.keyword,
+                                    modelName: row.modelName,
                                     error: (err as Error)?.message,
                                 });
                             }
@@ -319,7 +253,7 @@ export async function runAeoShareOfVoiceCheck(
         return {
             success: true,
             trackedCount,
-            message: `Completed tracking run: ${trackedCount} keyword${trackedCount !== 1 ? "s" : ""} recorded.`,
+            message: `Completed tracking run: ${trackedCount} data point${trackedCount !== 1 ? "s" : ""} recorded across ${enabledModels.join(", ")}.`,
         };
     } catch (error: unknown) {
         logger.error("[AEO Track] Action failed", {
@@ -329,12 +263,9 @@ export async function runAeoShareOfVoiceCheck(
     }
 }
 
-// Action 2: Read metrics
-
 export async function getAeoShareOfVoiceMetrics(
     siteId: string,
 ): Promise<GetAeoShareOfVoiceMetricsResult> {
-    // --- Input validation ---
     if (!uuidSchema.safeParse(siteId).success) {
         return { success: false, error: "Invalid site ID." };
     }
@@ -353,8 +284,6 @@ export async function getAeoShareOfVoiceMetrics(
             where: { siteId: site.id },
             orderBy: { recordedAt: "desc" },
             take: 100,
-            // Only select the columns we actually use — avoid pulling competitorsMentioned
-            // (a JSON array) into memory for every row unless we need it.
             select: {
                 keyword: true,
                 brandMentioned: true,
@@ -363,7 +292,6 @@ export async function getAeoShareOfVoiceMetrics(
             },
         });
 
-        // --- Daily chart data ---
         const dailyMap = new Map<
             string,
             { totalQueries: number; brandMentions: number }
@@ -385,7 +313,6 @@ export async function getAeoShareOfVoiceMetrics(
             }))
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-        // --- Keyword-level breakdown ---
         const kwMap = new Map<
             string,
             {
