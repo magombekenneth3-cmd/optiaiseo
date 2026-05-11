@@ -309,7 +309,34 @@ export const generateBlogJob = inngest.createFunction(
             );
             return result.allowed;
         });
-        if (!allowed) return { skipped: true, reason: "rate_limit" };
+        if (!allowed) {
+            // Blog stub is already in DB with status GENERATING — mark it FAILED
+            // so the user sees the real state and can retry, not a perpetual spinner.
+            const blogId = event.data.blogId as string | undefined;
+            const userId = event.data.userId as string | undefined;
+            if (blogId) {
+                await step.run("mark-rate-limited-blog-failed", async () => {
+                    await prisma.blog
+                        .updateMany({ where: { id: blogId }, data: { status: "FAILED" } })
+                        .catch((e: unknown) =>
+                            logger.warn("[Inngest/Blog] Failed to mark rate-limited blog as FAILED", {
+                                blogId,
+                                error: (e as Error)?.message,
+                            })
+                        );
+                    // Refund the 10 credits that were deducted pre-dispatch
+                    if (userId) {
+                        await prisma.$executeRaw`
+                            UPDATE "User" SET credits = credits + 10 WHERE id = ${userId}
+                        `.catch(() => null);
+                        logger.info("[Inngest/Blog] Rate-limit skip: refunded 10 credits", { userId, blogId });
+                    }
+                });
+            }
+            logger.warn("[Inngest/Blog] Skipped — rate limit reached", { blogId, userId });
+            return { skipped: true, reason: "rate_limit" };
+        }
+
 
         const detectedIntent = detectIntent(keyword ?? "");
         const riskTier = detectRiskTier(keyword ?? "", site.domain, detectedIntent);
