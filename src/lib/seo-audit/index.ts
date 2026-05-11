@@ -19,32 +19,23 @@ import { BrandEntityModule } from './modules/brand-entity';
 export * from './types';
 export * from './engine';
 
-// Single source of truth for which modules run in each audit profile.
-// Both Inngest functions (audit.ts, free-audit.ts) use getAuditEngine() —
-// no more duplicated module lists in separate files.
 
 export type AuditProfile = 'full' | 'free' | 'page';
 
 const FULL_MODULES: AuditModule[] = [
-    // Technical
     BasicsAnalyticsModule,
     TechnicalModule,
-    // Content
     OnPageModule,
     KeywordsModule,
     ContentQualityModule,
     KeywordOptimisationModule,
     ImageSeoModule,
-    // Authority + Brand Entity
     OffPageModule,
     LocalModule,
-    BrandEntityModule,           // ← Brand Entity Score: org schema, logo, favicon, sameAs
-    // AI Visibility
+    BrandEntityModule,
     SchemaModule,
     AiVisibilityModule,
-    // Performance
     PerformanceModule,
-    // Cross-cutting
     SocialModule,
     AccessibilityModule,
 ];
@@ -56,22 +47,15 @@ const FREE_MODULES: AuditModule[] = [
 ];
 
 const PAGE_MODULES: AuditModule[] = [
-    // Per-page HTML analysis — fast, no external calls
     OnPageModule,
-    ContentQualityModule,   // fast HTML-parsing — word count, readability, duplicate signals
-    AccessibilityModule,    // fast — lang attr, ARIA roles, skip-nav, alt text
+    ContentQualityModule,
+    AccessibilityModule,
     KeywordOptimisationModule,
     ImageSeoModule,
-    // Structured data + AI visibility (vary per page)
     SchemaModule,
     AiVisibilityModule,
     BrandEntityModule,
-    // Technical — PSI is cached 24h so cost is amortised
     TechnicalModule,
-    // NOTE: OffPageModule, LocalModule, SocialModule, PerformanceModule,
-    // BasicsAnalyticsModule, KeywordsModule intentionally excluded:
-    // their output is site-level, not page-level, and adding them to
-    // the page profile wastes ~40% of compute on every sub-page audit.
 ];
 
 const PROFILE_MODULES: Record<AuditProfile, AuditModule[]> = {

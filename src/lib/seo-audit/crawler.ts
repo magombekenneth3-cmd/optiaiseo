@@ -24,9 +24,11 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { fetchGSCKeywords, normaliseSiteUrl } from "@/lib/gsc";
 import { getUserGscToken } from "@/lib/gsc/token";
+import { redis } from "@/lib/redis";
 
 const DEFAULT_LIMIT = 50;
 const FETCH_TIMEOUT_MS = 10_000;
+const MAX_SITEMAP_URLS = 500;
 
 
 /**
@@ -138,24 +140,34 @@ async function resolveGscProperty(
   token: string,
   domain: string,
 ): Promise<string | null> {
+  const cacheKey = `gsc:property:${domain}`;
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) return cached as string;
+  } catch { /* non-fatal — fall through to live call */ }
+
   try {
     const { fetchGSCSites } = await import("@/lib/gsc");
     const sites = await fetchGSCSites(token);
     const candidates = gscUrlCandidates(domain);
 
-    // Exact-match first (case-insensitive)
+    let resolved: string | null = null;
     for (const candidate of candidates) {
       if (sites.some((s) => s.toLowerCase() === candidate.toLowerCase())) {
-        return candidate;
+        resolved = candidate;
+        break;
       }
     }
 
-    // Partial-match fallback — domain string appears anywhere in a verified property
-    const bare = domain
-      .replace(/^https?:\/\//, "")
-      .replace(/^www\./, "")
-      .replace(/\/$/, "");
-    return sites.find((s) => s.includes(bare)) ?? null;
+    if (!resolved) {
+      const bare = domain.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+      resolved = sites.find((s) => s.includes(bare)) ?? null;
+    }
+
+    if (resolved) {
+      await redis.set(cacheKey, resolved, { ex: 86_400 }).catch(() => null);
+    }
+    return resolved;
   } catch {
     return null;
   }
@@ -285,7 +297,10 @@ function parseSitemapXml(xml: string): string[] {
   const urls: string[] = [];
   const locRe = /<loc>\s*(https?:\/\/[^<\s]+)\s*<\/loc>/gi;
   let m: RegExpExecArray | null;
-  while ((m = locRe.exec(xml)) !== null) urls.push(m[1].trim());
+  while ((m = locRe.exec(xml)) !== null) {
+    urls.push(m[1].trim());
+    if (urls.length >= MAX_SITEMAP_URLS) break;
+  }
   return urls;
 }
 

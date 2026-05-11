@@ -426,7 +426,9 @@ function checkSameAsLinks(nodes: Record<string, unknown>[]): ChecklistItem {
         };
     }
 
-    const validUrls = sameAs.filter(s => s.startsWith('https://'));
+    const validUrls = sameAs.filter(s => {
+        try { return new URL(s).protocol.startsWith('http'); } catch { return false; }
+    });
     if (validUrls.length < 2) {
         return {
             id: 'brand-same-as',

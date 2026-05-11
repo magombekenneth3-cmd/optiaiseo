@@ -6,8 +6,8 @@ import { getAhrefsDomainOverview, getAhrefsBacklinks } from '@/lib/ahrefs';
 
 const MAX_HTML_BYTES = 10 * 1024 * 1024;
 const MAX_LINKS_TO_CHECK = 20;   // reduced from 50 — checking 50 links serially caused 70s+ hangs
-const FETCH_CHUNK_SIZE = 20;     // check all links in one parallel batch (was 8, causing serial waits)
-const FETCH_TIMEOUT_MS = 5_000;  // reduced from 10s — 5s is enough for a reachability check
+const FETCH_CHUNK_SIZE = 10;
+const FETCH_TIMEOUT_MS = 3_000;
 const MAX_HREF_LENGTH = 2048;
 
 const BROWSER_UA = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';

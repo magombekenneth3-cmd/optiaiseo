@@ -26,7 +26,15 @@ export const processManualAuditJob = inngest.createFunction(
             limit: CONCURRENCY.auditFull,
             key: `event.data.siteId`,
         },
-
+        onFailure: async ({ error, event }) => {
+            const data = event.data?.event?.data as Record<string, unknown> | undefined;
+            const lockKey = data?.lockKey as string | undefined;
+            if (lockKey) {
+                await redis.del(lockKey).catch(() => null);
+                logger.warn("[ManualAudit] Released audit lock after terminal failure", { lockKey });
+            }
+            logger.error("[ManualAudit] Failed after all retries", { error: error.message });
+        },
         triggers: [{ event: "audit.run.manual" }],
     },
     async ({ event, step }) => {
@@ -257,7 +265,7 @@ export const runWeeklyAuditJob = inngest.createFunction(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const prevScore: number = (previousAudit.categoryScores as any)?.seo ?? 0;
             const scoreDelta = prevScore - auditResult.overallScore;
-            const REGRESSION_THRESHOLD = 10;
+            const REGRESSION_THRESHOLD = Number(process.env.AUDIT_REGRESSION_THRESHOLD ?? 5);
 
             if (scoreDelta < REGRESSION_THRESHOLD) return;
 

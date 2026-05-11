@@ -1,5 +1,4 @@
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem, AuditStatus } from "../types"
-import { fetchHtml } from "../utils/fetch-html"
 import { parse } from "node-html-parser"
 
 const STOP_WORDS = new Set([
@@ -43,10 +42,6 @@ export const KeywordsModule: AuditModule = {
     label: "Keyword Optimization",
 
     run: async (context: AuditModuleContext): Promise<AuditCategoryResult> => {
-        if (!context.html) {
-            const html = (await fetchHtml(context.url)) ?? ""
-        }
-
         if (!context.html) {
             return {
                 id: KeywordsModule.id,

@@ -68,6 +68,7 @@ export class AuditEngine {
 
         // Run all modules in parallel, with a 90s hard timeout to prevent infinite hangs
         const MODULE_TIMEOUT_MS = 90_000;
+        const PER_MODULE_TIMEOUT_MS = 45_000;
         const timeoutGuard = new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error(`Audit timed out after ${MODULE_TIMEOUT_MS / 1000}s — the site may be slow or blocking crawlers.`)), MODULE_TIMEOUT_MS)
         );
@@ -77,7 +78,10 @@ export class AuditEngine {
                 this.modules.map(async (module) => {
                     const t0 = performance.now();
                     try {
-                        const result = await module.run(context);
+                        const moduleTimeout = new Promise<never>((_, reject) =>
+                            setTimeout(() => reject(new Error(`Module ${module.id} timed out after ${PER_MODULE_TIMEOUT_MS / 1000}s`)), PER_MODULE_TIMEOUT_MS)
+                        );
+                        const result = await Promise.race([module.run(context), moduleTimeout]);
                         const durationMs = Math.round(performance.now() - t0);
                         logger.debug(`[ModulePerf] ${module.id} ${durationMs}ms score=${result.score}`);
                         return { ...result, _durationMs: durationMs };

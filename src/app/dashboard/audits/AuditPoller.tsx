@@ -32,7 +32,7 @@ export function AuditPoller({ processingAuditIds, initialIntervalMs = 6000 }: Au
     const routerRef = useRef(router);
     useEffect(() => { routerRef.current = router; });
 
-    const MAX_ATTEMPTS = 60;
+    const MAX_ATTEMPTS = 90;
     const MAX_INTERVAL = 30_000;
 
     const attemptRef      = useRef(0);

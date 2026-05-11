@@ -12,8 +12,8 @@ import { inngest } from "@/lib/inngest/client";
 import { requireUser } from "@/lib/auth/require-user";
 import { z } from "zod";
 
-// Prisma uses cuid() (not uuid()) for all PKs — validate as a non-empty string ≤ 50 chars
-const idSchema = z.string().min(1).max(50);
+// Prisma uses cuid() for all PKs — cuid starts with 'c', alphanumeric, 20–30 chars
+const idSchema = z.string().regex(/^c[a-z0-9]{19,29}$/, "Invalid ID format");
 
 type AuditSummary = {
   id: string;
