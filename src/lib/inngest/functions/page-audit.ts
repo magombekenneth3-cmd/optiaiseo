@@ -31,7 +31,7 @@ import { inngest } from "../client";
 import { NonRetriableError } from "inngest";
 import { prisma } from "@/lib/prisma";
 import { CONCURRENCY } from "../concurrency";
-import { getFullAuditEngine } from "@/lib/seo-audit";
+import { getAuditEngine } from "@/lib/seo-audit";
 import { discoverPages } from "@/lib/seo-audit/crawler";
 import { logger } from "@/lib/logger";
 
@@ -166,14 +166,30 @@ export const processPageAuditJob = inngest.createFunction(
     };
 
     const result = await step.run("run-page-audit", async () => {
-      const engine = getFullAuditEngine();
-      return await engine.runAudit(pageUrl);
+      // Sprint 1 fix 1: use 'page' profile (9 modules) not full (15 modules).
+      // Eliminates OffPageModule, LocalModule, SocialModule, PerformanceModule,
+      // BasicsAnalyticsModule, KeywordsModule per-page — ~40% less compute.
+      const engine = getAuditEngine("page");
+
+      // Sprint 1 fix 3: pass targetKeyword so KeywordOptimisationModule and
+      // ImageSeoModule produce accurate per-page findings, not title-extracted fallbacks.
+      const site = await prisma.site.findUnique({
+        where: { id: siteId },
+        select: { targetKeyword: true },
+      });
+
+      return await engine.runAudit(pageUrl, {
+        targetKeyword: site?.targetKeyword ?? undefined,
+      });
     });
 
     await step.run("save-page-audit", async () => {
-      // createMany skipDuplicates: on retry the row already exists — safe to skip
-      await prisma.pageAudit.createMany({
-        data: [{
+      // Sprint 1 fix 4: upsert on compound unique key (auditId + pageUrl) instead
+      // of createMany + skipDuplicates. skipDuplicates silently preserves bad data
+      // on retries if the first attempt partially wrote a corrupted issueList.
+      await prisma.pageAudit.upsert({
+        where: { auditId_pageUrl: { auditId, pageUrl } },
+        create: {
           auditId,
           siteId,
           pageUrl,
@@ -185,10 +201,24 @@ export const processPageAuditJob = inngest.createFunction(
             }),
             {}
           ),
+          // Sprint 1 fix 2: store the full FullAuditReport (includes recommendations[],
+          // aeoScore, aeoBreakdown, moduleTelemetry) — not just categories[].
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          issueList: result.categories as any,
-        }],
-        skipDuplicates: true,
+          issueList: result as any,
+        },
+        update: {
+          overallScore: result.overallScore,
+          categoryScores: result.categories.reduce(
+            (acc: Record<string, number>, c: { id: string; score: number }) => ({
+              ...acc,
+              [c.id]: c.score,
+            }),
+            {}
+          ),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          issueList: result as any,
+          runTimestamp: new Date(),
+        },
       });
     });
 

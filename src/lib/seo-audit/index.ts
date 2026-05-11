@@ -56,13 +56,22 @@ const FREE_MODULES: AuditModule[] = [
 ];
 
 const PAGE_MODULES: AuditModule[] = [
+    // Per-page HTML analysis — fast, no external calls
     OnPageModule,
-    TechnicalModule,
-    SchemaModule,
-    AiVisibilityModule,
+    ContentQualityModule,   // fast HTML-parsing — word count, readability, duplicate signals
+    AccessibilityModule,    // fast — lang attr, ARIA roles, skip-nav, alt text
     KeywordOptimisationModule,
     ImageSeoModule,
+    // Structured data + AI visibility (vary per page)
+    SchemaModule,
+    AiVisibilityModule,
     BrandEntityModule,
+    // Technical — PSI is cached 24h so cost is amortised
+    TechnicalModule,
+    // NOTE: OffPageModule, LocalModule, SocialModule, PerformanceModule,
+    // BasicsAnalyticsModule, KeywordsModule intentionally excluded:
+    // their output is site-level, not page-level, and adding them to
+    // the page profile wastes ~40% of compute on every sub-page audit.
 ];
 
 const PROFILE_MODULES: Record<AuditProfile, AuditModule[]> = {
@@ -74,9 +83,9 @@ const PROFILE_MODULES: Record<AuditProfile, AuditModule[]> = {
 /**
  * Factory — builds an AuditEngine pre-loaded with the correct module set.
  *
- * @param profile 'full'  → all 13 modules (paid dashboard audit)
+ * @param profile 'full'  → 15 modules (paid dashboard homepage audit)
  *                'free'  → 3 modules (unauthenticated trial)
- *                'page'  → 4 modules (per-page sub-audit in Inngest fan-out)
+ *                'page'  → 10 modules (per-page sub-audit in Inngest fan-out)
  */
 export function getAuditEngine(profile: AuditProfile = 'full'): AuditEngine {
     return new AuditEngine(PROFILE_MODULES[profile]);
