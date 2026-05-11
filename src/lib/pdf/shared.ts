@@ -1,10 +1,3 @@
-/**
- * src/lib/pdf/shared.ts
- *
- * Types and pure utility functions shared across every PDF template.
- * No puppeteer imports here — this module is safe to import in any context.
- */
-
 
 export interface WhiteLabelConfig {
     logoUrl?: string;
@@ -96,10 +89,10 @@ export function svgScoreRing(score: number, size = 96): string {
     transform="rotate(-90 ${cx} ${cy})"/>
   <text x="${cx}" y="${cy - 2}" text-anchor="middle" dominant-baseline="middle"
     font-size="${fontSize}" font-weight="800" fill="${col}"
-    font-family="'DM Sans', Helvetica, Arial, sans-serif">${score}</text>
+    font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,Helvetica,Arial,sans-serif">${score}</text>
   <text x="${cx}" y="${cy + fontSize * 0.75}" text-anchor="middle"
     font-size="${labelSize}" fill="rgba(160,160,185,0.7)" letter-spacing="0.1em"
-    font-family="'DM Sans', Helvetica, Arial, sans-serif">SCORE</text>
+    font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,Helvetica,Arial,sans-serif">SCORE</text>
 </svg>`;
 }
 
@@ -116,14 +109,12 @@ export function scoreBar(score: number, width = 120, height = 4): string {
 
 export function baseStyles(primary: string): string {
     return `
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
-
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
     background: #0c0c12;
     color: #e4e4f0;
-    font-family: 'DM Sans', Helvetica, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Helvetica, Arial, sans-serif;
     font-size: 13px;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
@@ -211,7 +202,7 @@ html, body {
     font-size: 28px;
     font-weight: 800;
     line-height: 1;
-    font-family: 'DM Mono', monospace;
+    font-family: 'Courier New', Consolas, 'Liberation Mono', monospace;
 }
 .kpi-meta {
     font-size: 10px;

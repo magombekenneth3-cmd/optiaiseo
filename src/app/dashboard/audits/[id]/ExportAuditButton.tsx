@@ -16,17 +16,34 @@ export function ExportAuditButton({ auditId }: { auditId: string }) {
                     ? `/api/audit/export/${auditId}?format=pdf`
                     : `/api/audit/export/${auditId}`;
 
+            const res = await fetch(url);
+
+            if (!res.ok) {
+                let message = `${format.toUpperCase()} export failed`;
+                try {
+                    const body = await res.json();
+                    if (body?.error) message = body.error;
+                } catch {}
+                toast.error(message);
+                return;
+            }
+
+            const blob = await res.blob();
+            const objectUrl = URL.createObjectURL(blob);
             const link = document.createElement("a");
-            link.href = url;
-            link.download = "";
+            const disposition = res.headers.get("Content-Disposition") ?? "";
+            const nameMatch = disposition.match(/filename="?([^"]+)"?/);
+            link.href = objectUrl;
+            link.download = nameMatch?.[1] ?? (format === "pdf" ? `audit-${auditId}.pdf` : `audit-${auditId}.xlsx`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-
-            setTimeout(() => setIsExporting(null), 3000);
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+            setTimeout(() => setIsExporting(null), 1500);
         } catch {
-            setIsExporting(null);
             toast.error(`${format.toUpperCase()} export failed — please try again.`);
+        } finally {
+            setIsExporting(null);
         }
     };
 

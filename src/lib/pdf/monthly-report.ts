@@ -1,11 +1,3 @@
-/**
- * src/lib/pdf/monthly-report.ts
- *
- * Generates the Monthly SEO Report PDF — premium dark design.
- * HTML templating only — no puppeteer imports here.
- * Browser lifecycle lives in ./renderer.ts.
- */
-
 import { renderHtmlToPdf } from "./renderer";
 import { esc, scoreColor, scoreBgColor, scoreBorderColor, svgScoreRing, scoreBar, baseStyles } from "./shared";
 import type { WhiteLabelConfig } from "./shared";
@@ -64,12 +56,12 @@ function buildMonthlyHtml(data: MonthlyReportData): string {
             const changeColor = up ? "#34d978" : down ? "#ff5757" : "rgba(180,180,210,0.3)";
             const changeStr = k.change === 0 ? "—" : `${up ? "▲" : "▼"} ${Math.abs(k.change)}`;
             return `<tr>
-                <td style="color:rgba(180,180,210,0.4);font-size:11px;font-family:'DM Mono',monospace;width:30px">${i + 1}</td>
+                <td style="color:rgba(180,180,210,0.4);font-size:11px;font-family:'Courier New',Consolas,'Liberation Mono',monospace;width:30px">${i + 1}</td>
                 <td style="font-weight:600;font-size:13px">${esc(k.keyword)}</td>
-                <td style="text-align:center;font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:#e4e4f0">
+                <td style="text-align:center;font-family:'Courier New',Consolas,'Liberation Mono',monospace;font-size:13px;font-weight:700;color:#e4e4f0">
                     #${esc(k.position)}
                 </td>
-                <td style="text-align:center;color:${changeColor};font-weight:700;font-family:'DM Mono',monospace;font-size:12px">
+                <td style="text-align:center;color:${changeColor};font-weight:700;font-family:'Courier New',Consolas,'Liberation Mono',monospace;font-size:12px">
                     ${changeStr}
                 </td>
             </tr>`;
@@ -82,8 +74,8 @@ function buildMonthlyHtml(data: MonthlyReportData): string {
         ? data.competitorSummary.map(c => {
             const t = trendMeta(c.trend);
             return `<tr>
-                <td style="font-weight:600;font-size:13px;font-family:'DM Mono',monospace">${esc(c.domain)}</td>
-                <td style="text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:rgba(180,180,210,0.7)">
+                <td style="font-weight:600;font-size:13px;font-family:'Courier New',Consolas,'Liberation Mono',monospace">${esc(c.domain)}</td>
+                <td style="text-align:right;font-family:'Courier New',Consolas,'Liberation Mono',monospace;font-size:12px;color:rgba(180,180,210,0.7)">
                     ~${c.estimatedVisits.toLocaleString()}/mo
                 </td>
                 <td style="text-align:center">
@@ -157,21 +149,21 @@ ${baseStyles(primary)}
     <div style="flex:1;border-right:1px solid rgba(255,255,255,0.05);padding-right:28px">
         <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;
                     color:rgba(180,180,210,0.35);margin-bottom:4px">Keywords Tracked</div>
-        <div style="font-size:20px;font-weight:800;color:#e4e4f0;font-family:'DM Mono',monospace">
+        <div style="font-size:20px;font-weight:800;color:#e4e4f0;font-family:'Courier New',Consolas,'Liberation Mono',monospace">
             ${esc(data.keywordsTracked)}
         </div>
     </div>
     <div style="flex:1;padding-left:28px;border-right:1px solid rgba(255,255,255,0.05);padding-right:28px">
         <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;
                     color:rgba(180,180,210,0.35);margin-bottom:4px">Improved</div>
-        <div style="font-size:20px;font-weight:800;color:#34d978;font-family:'DM Mono',monospace">
+        <div style="font-size:20px;font-weight:800;color:#34d978;font-family:'Courier New',Consolas,'Liberation Mono',monospace">
             ▲ ${esc(data.keywordsImproved)}
         </div>
     </div>
     <div style="flex:1;padding-left:28px">
         <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;
                     color:rgba(180,180,210,0.35);margin-bottom:4px">Declined</div>
-        <div style="font-size:20px;font-weight:800;color:#ff5757;font-family:'DM Mono',monospace">
+        <div style="font-size:20px;font-weight:800;color:#ff5757;font-family:'Courier New',Consolas,'Liberation Mono',monospace">
             ▼ ${esc(data.keywordsDeclined)}
         </div>
     </div>

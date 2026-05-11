@@ -1,11 +1,3 @@
-/**
- * src/lib/pdf/aeo-report.ts
- *
- * Generates the AEO (Answer Engine Optimisation) Performance PDF — premium dark design.
- * HTML templating only — no puppeteer imports here.
- * Browser lifecycle lives in ./renderer.ts.
- */
-
 import { renderHtmlToPdf } from "./renderer";
 import { esc, safeUrl, scoreColor, scoreBgColor, scoreBorderColor, svgScoreRing, baseStyles } from "./shared";
 import type { WhiteLabelConfig } from "./shared";
@@ -47,14 +39,14 @@ function modelBar(score: number): string {
         <div style="flex:1;height:5px;background:rgba(255,255,255,0.07);border-radius:3px;overflow:hidden">
             <div style="width:${pct}%;height:5px;background:${col};border-radius:3px"></div>
         </div>
-        <span style="font-size:12px;font-weight:700;color:${col};font-family:'DM Mono',monospace;min-width:36px;text-align:right">${score}%</span>
+        <span style="font-size:12px;font-weight:700;color:${col};font-family:'Courier New',Consolas,'Liberation Mono',monospace;min-width:36px;text-align:right">${score}%</span>
     </div>`;
 }
 
 
 function buildAeoHtml(data: AeoReportPdfData): string {
     const wl = data.whiteLabel ?? {};
-    const primary = wl.primaryColor ?? "#a78bfa"; // purple for AEO — distinct from audit green
+    const primary = wl.primaryColor ?? "#a78bfa";
     const brand = wl.companyName ?? "OptiAISEO";
     const client = wl.clientName ?? data.domain;
     const logoUrl = safeUrl(wl.logoUrl);
@@ -155,7 +147,7 @@ ${baseStyles(primary)}
                     border-radius:12px;padding:20px 22px;border-left:3px solid ${primary}">
             <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;
                         color:rgba(180,180,210,0.4);margin-bottom:10px">Projected Citation Rate</div>
-            <div style="font-size:32px;font-weight:800;color:${primary};font-family:'DM Mono',monospace;line-height:1">
+            <div style="font-size:32px;font-weight:800;color:${primary};font-family:'Courier New',Consolas,'Liberation Mono',monospace;line-height:1">
                 ${esc(data.projected90Day)}%
             </div>
             <div style="font-size:11px;color:rgba(180,180,210,0.45);margin-top:5px">in 90 days</div>

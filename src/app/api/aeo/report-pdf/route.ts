@@ -7,7 +7,7 @@ import { logger } from "@/lib/logger";
 import { generateAeoReportPdf } from "@/lib/pdf/aeo-report";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function GET(request: Request): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);

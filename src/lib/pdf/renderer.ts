@@ -1,11 +1,3 @@
-/**
- * src/lib/pdf/renderer.ts
- *
- * Production (Docker): connects to the browserless/chrome container via
- * BROWSERLESS_URL=ws://browserless:3000 — already in docker-compose.yml.
- * Local dev: falls back to launching bundled Chromium via full puppeteer.
- */
-
 import { logger } from "@/lib/logger";
 
 const PDF_OPTIONS = {
@@ -14,47 +6,77 @@ const PDF_OPTIONS = {
     margin: { top: "0", right: "0", bottom: "0", left: "0" },
 } as const;
 
-const LOCAL_LAUNCH_ARGS = [
+const LAUNCH_ARGS = [
     "--no-sandbox",
     "--disable-setuid-sandbox",
     "--disable-dev-shm-usage",
     "--disable-gpu",
     "--single-process",
     "--no-zygote",
+    "--disable-extensions",
 ] as const;
 
-async function launchBrowser() {
+type BrowserHandle = {
+    browser: { newPage: () => Promise<import("puppeteer-core").Page> };
+    isRemote: boolean;
+    close: () => Promise<void>;
+};
+
+async function launchBrowser(): Promise<BrowserHandle> {
     const browserlessUrl = process.env.BROWSERLESS_URL;
 
     if (browserlessUrl) {
-        // Keep protocol, host, and query params (for auth token)
-        // but remove the path (e.g., /playwright/chromium)
         const url = new URL(browserlessUrl);
-        const baseUrl = `${url.protocol}//${url.host}${url.search}`;
-        logger.info(`[PDF] Connecting to browserless at ${baseUrl}`);
+        const wsEndpoint = `${url.protocol}//${url.host}${url.search}`;
+        logger.info(`[PDF] Connecting to browserless: ${wsEndpoint}`);
         const { default: puppeteer } = await import("puppeteer-core");
-        try {
-            return await puppeteer.connect({ browserWSEndpoint: baseUrl });
-        } catch (err) {
-            logger.error(`[PDF] Failed to connect to browserless`, { url: baseUrl, error: (err as Error)?.message });
-            throw err;
-        }
+        const browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
+        return {
+            browser,
+            isRemote: true,
+            close: async () => { try { browser.disconnect(); } catch {} },
+        };
     }
 
-    logger.info("[PDF] No BROWSERLESS_URL — launching local Chromium (dev only)");
+    const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
+    if (isServerless) {
+        logger.info("[PDF] Serverless env — launching @sparticuz/chromium");
+        const [{ default: puppeteer }, chromium] = await Promise.all([
+            import("puppeteer-core"),
+            import("@sparticuz/chromium").then(m => m.default),
+        ]);
+        const executablePath = await chromium.executablePath();
+        const browser = await puppeteer.launch({
+            executablePath,
+            args: [...chromium.args, ...LAUNCH_ARGS],
+            headless: true,
+        });
+        return {
+            browser,
+            isRemote: false,
+            close: async () => { try { await browser.close(); } catch {} },
+        };
+    }
+
+    logger.info("[PDF] Local dev — launching bundled Chromium");
     const { default: puppeteer } = await import("puppeteer");
-    return puppeteer.launch({
+    const browser = await puppeteer.launch({
         headless: true,
-        args: [...LOCAL_LAUNCH_ARGS],
+        args: [...LAUNCH_ARGS],
     });
+    return {
+        browser,
+        isRemote: false,
+        close: async () => { try { await browser.close(); } catch {} },
+    };
 }
 
 export async function renderHtmlToPdf(html: string, label: string): Promise<Buffer> {
-    let browser: Awaited<ReturnType<typeof launchBrowser>> | undefined;
+    const handle = await launchBrowser();
 
     try {
-        browser = await launchBrowser();
-        const page = await browser.newPage();
+        const page = await handle.browser.newPage();
 
         await page.setRequestInterception(true);
         page.on("request", (req) => {
@@ -66,7 +88,7 @@ export async function renderHtmlToPdf(html: string, label: string): Promise<Buff
             }
         });
 
-        await page.setContent(html, { waitUntil: "networkidle0", timeout: 30_000 });
+        await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 45_000 });
         const pdf = await page.pdf(PDF_OPTIONS);
 
         logger.info(`[PDF:${label}] rendered`, { bytes: pdf.length });
@@ -82,7 +104,6 @@ export async function renderHtmlToPdf(html: string, label: string): Promise<Buff
         throw err;
 
     } finally {
-        try { await (browser as any)?.disconnect?.(); } catch { /* remote */ }
-        try { await (browser as any)?.close?.(); } catch { /* local  */ }
+        await handle.close();
     }
 }

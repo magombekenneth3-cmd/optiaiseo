@@ -1,11 +1,3 @@
-/**
- * src/lib/pdf/audit-report.ts
- *
- * Generates the SEO Audit PDF — premium dark design.
- * HTML templating only — no puppeteer imports here.
- * Browser lifecycle lives in ./renderer.ts.
- */
-
 import { renderHtmlToPdf } from "./renderer";
 import {
     esc, safeUrl, scoreColor, scoreBgColor, scoreBorderColor,
@@ -111,7 +103,7 @@ function buildAuditHtml(data: AuditReportData): string {
                     <div style="display:flex;align-items:start;justify-content:space-between;margin-bottom:10px">
                         <span style="font-size:12px;color:rgba(180,180,210,0.4)">${icon}</span>
                     </div>
-                    <div style="font-size:24px;font-weight:800;color:${c};font-family:'DM Mono',monospace;line-height:1">${score}</div>
+                    <div style="font-size:24px;font-weight:800;color:${c};font-family:'Courier New',Consolas,'Liberation Mono',monospace;line-height:1">${score}</div>
                     <div style="margin-top:6px">${scoreBar(score, 80, 3)}</div>
                     <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.08em;
                                 color:rgba(180,180,210,0.4);margin-top:7px;capitalize">${esc(cat.replace(/-/g, " "))}</div>
@@ -130,24 +122,24 @@ function buildAuditHtml(data: AuditReportData): string {
         ${v.lcp != null ? (() => {
             const s = vitalLabel("lcp", v.lcp!); return `
         <div style="display:flex;align-items:baseline;gap:8px">
-            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:rgba(180,180,210,0.4);font-family:'DM Mono',monospace">LCP</span>
-            <span style="font-size:15px;font-weight:800;color:${s.color};font-family:'DM Mono',monospace">${formatVitalValue("lcp", v.lcp!)}</span>
+            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:rgba(180,180,210,0.4);font-family:'Courier New',Consolas,'Liberation Mono',monospace">LCP</span>
+            <span style="font-size:15px;font-weight:800;color:${s.color};font-family:'Courier New',Consolas,'Liberation Mono',monospace">${formatVitalValue("lcp", v.lcp!)}</span>
             <span style="font-size:10px;color:${s.color};opacity:0.65">${s.label}</span>
         </div>`;
         })() : ""}
         ${v.cls != null ? (() => {
             const s = vitalLabel("cls", v.cls!); return `
         <div style="display:flex;align-items:baseline;gap:8px">
-            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:rgba(180,180,210,0.4);font-family:'DM Mono',monospace">CLS</span>
-            <span style="font-size:15px;font-weight:800;color:${s.color};font-family:'DM Mono',monospace">${formatVitalValue("cls", v.cls!)}</span>
+            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:rgba(180,180,210,0.4);font-family:'Courier New',Consolas,'Liberation Mono',monospace">CLS</span>
+            <span style="font-size:15px;font-weight:800;color:${s.color};font-family:'Courier New',Consolas,'Liberation Mono',monospace">${formatVitalValue("cls", v.cls!)}</span>
             <span style="font-size:10px;color:${s.color};opacity:0.65">${s.label}</span>
         </div>`;
         })() : ""}
         ${v.inp != null ? (() => {
             const s = vitalLabel("inp", v.inp!); return `
         <div style="display:flex;align-items:baseline;gap:8px">
-            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:rgba(180,180,210,0.4);font-family:'DM Mono',monospace">INP</span>
-            <span style="font-size:15px;font-weight:800;color:${s.color};font-family:'DM Mono',monospace">${formatVitalValue("inp", v.inp!)}</span>
+            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:rgba(180,180,210,0.4);font-family:'Courier New',Consolas,'Liberation Mono',monospace">INP</span>
+            <span style="font-size:15px;font-weight:800;color:${s.color};font-family:'Courier New',Consolas,'Liberation Mono',monospace">${formatVitalValue("inp", v.inp!)}</span>
             <span style="font-size:10px;color:${s.color};opacity:0.65">${s.label}</span>
         </div>`;
         })() : ""}
@@ -186,19 +178,19 @@ function buildAuditHtml(data: AuditReportData): string {
     <div style="display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.2)">
         <div style="flex:1;padding:20px 24px;border-right:1px solid rgba(255,255,255,0.06)">
             <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:rgba(180,180,210,0.4);margin-bottom:5px">Total Findings</div>
-            <div style="font-size:22px;font-weight:800;color:#e4e4f0;font-family:'DM Mono',monospace">${data.findings.length}</div>
+            <div style="font-size:22px;font-weight:800;color:#e4e4f0;font-family:'Courier New',Consolas,'Liberation Mono',monospace">${data.findings.length}</div>
         </div>
         <div style="flex:1;padding:20px 24px;border-right:1px solid rgba(255,255,255,0.06)">
             <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:rgba(180,180,210,0.4);margin-bottom:5px">Critical</div>
-            <div style="font-size:22px;font-weight:800;color:#ff5757;font-family:'DM Mono',monospace">${criticalCount}</div>
+            <div style="font-size:22px;font-weight:800;color:#ff5757;font-family:'Courier New',Consolas,'Liberation Mono',monospace">${criticalCount}</div>
         </div>
         <div style="flex:1;padding:20px 24px;border-right:1px solid rgba(255,255,255,0.06)">
             <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:rgba(180,180,210,0.4);margin-bottom:5px">Warnings</div>
-            <div style="font-size:22px;font-weight:800;color:#f5a623;font-family:'DM Mono',monospace">${warnCount}</div>
+            <div style="font-size:22px;font-weight:800;color:#f5a623;font-family:'Courier New',Consolas,'Liberation Mono',monospace">${warnCount}</div>
         </div>
         <div style="flex:1;padding:20px 24px">
             <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:rgba(180,180,210,0.4);margin-bottom:5px">Score</div>
-            <div style="font-size:22px;font-weight:800;color:${col};font-family:'DM Mono',monospace">${data.score}<span style="font-size:12px;color:rgba(180,180,210,0.35)">/100</span></div>
+            <div style="font-size:22px;font-weight:800;color:${col};font-family:'Courier New',Consolas,'Liberation Mono',monospace">${data.score}<span style="font-size:12px;color:rgba(180,180,210,0.35)">/100</span></div>
         </div>
     </div>`;
 
@@ -227,7 +219,7 @@ ${baseStyles(primary)}
             <div class="kpi-row">
                 <div class="kpi-card">
                     <div class="kpi-label">Domain</div>
-                    <div style="font-size:13px;font-weight:600;color:#e4e4f0;margin-top:3px;font-family:'DM Mono',monospace">${esc(data.domain)}</div>
+                    <div style="font-size:13px;font-weight:600;color:#e4e4f0;margin-top:3px;font-family:'Courier New',Consolas,'Liberation Mono',monospace">${esc(data.domain)}</div>
                 </div>
                 <div class="kpi-card">
                     <div class="kpi-label">Audit Date</div>

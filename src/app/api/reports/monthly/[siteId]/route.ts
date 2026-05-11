@@ -1,10 +1,3 @@
-/**
- * src/app/api/reports/monthly/[siteId]/route.ts
- *
- * GET /api/reports/monthly/<siteId>
- * Starter tier and above. Returns a Puppeteer-rendered monthly PDF report.
- */
-
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { prisma } from "@/lib/prisma";
@@ -14,10 +7,8 @@ import { logger } from "@/lib/logger";
 import { hasFeature } from "@/lib/stripe/plans";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60; // puppeteer needs headroom on Vercel
+export const maxDuration = 300;
 
-
-/** Derive a 0–100 score from the Audit.categoryScores JSON field. */
 function deriveScore(categoryScores: unknown): number {
     if (!categoryScores || typeof categoryScores !== "object") return 0;
     const vals = Object.values(categoryScores as Record<string, unknown>)
@@ -53,7 +44,7 @@ export async function GET(
         where: { email: user!.email },
         select: { id: true, subscriptionTier: true, whiteLabel: true },
     });
-    if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!dbUser) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     if (!hasFeature(user!.subscriptionTier ?? "FREE", "emailReports")) {
         return NextResponse.json(
@@ -106,8 +97,7 @@ export async function GET(
             change: 0,
         }));
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const wl = (dbUser?.whiteLabel as any) ?? {};
+        const wl = (dbUser?.whiteLabel as Record<string, string | undefined>) ?? {};
 
         const pdf = await generateMonthlyReportPdf({
             domain: site.domain,
