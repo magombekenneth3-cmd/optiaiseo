@@ -200,6 +200,9 @@ export const generateBlogJob = inngest.createFunction(
     {
         id: "generate-blog",
         name: "Generate SEO Blog Post",
+        // Cap at 2 retries: 3 attempts × up to 90s (Claude) = ~270s max, well inside
+        // Railway's 5-min function timeout. More retries cause compounding hangs.
+        retries: 2,
         concurrency: { limit: 5 },
         rateLimit: {
             limit: 10,
@@ -207,16 +210,48 @@ export const generateBlogJob = inngest.createFunction(
             key: "event.data.userId",
         },
         onFailure: async ({ event, error }) => {
-            const originalData = event.data?.event?.data ?? {};
-            const blogId = (originalData as Record<string, unknown>).blogId as string | undefined;
-            const siteId = (originalData as Record<string, unknown>).siteId as string | undefined;
-            const userId = (originalData as Record<string, unknown>).userId as string | undefined;
-            logger.error(`[Inngest/Blog] Failed for site ${siteId}:`, { error: error?.message || error });
-            if (!blogId) {
-                logger.error("[Inngest/Blog] No blogId in onFailure — manual DB check required");
-                return;
+            // Inngest wraps the original event under event.data.event for onFailure.
+            // Defensive multi-path extraction so blogId is never silently lost.
+            const originalData =
+                (event.data?.event?.data as Record<string, unknown> | undefined) ??
+                (event.data as Record<string, unknown> | undefined) ??
+                {};
+
+            const blogId  = originalData.blogId  as string | undefined;
+            const siteId  = originalData.siteId  as string | undefined;
+            const userId  = originalData.userId  as string | undefined;
+
+            logger.error(`[Inngest/Blog] Job failed for site ${siteId ?? "unknown"}:`, {
+                error: error?.message || error,
+                blogId,
+                siteId,
+            });
+
+            // Always sweep GENERATING → FAILED, even when blogId is unknown.
+            // Without this, orphaned GENERATING rows can never be cleared by the UI.
+            if (blogId) {
+                await prisma.blog
+                    .updateMany({ where: { id: blogId }, data: { status: "FAILED" } })
+                    .catch((e: unknown) =>
+                        logger.error("[Inngest/Blog] onFailure DB write failed", { blogId, error: (e as Error)?.message })
+                    );
+            } else if (siteId) {
+                // Fallback: mark the most-recent GENERATING blog for this site FAILED.
+                // This covers the case where fetch-site threw before blogId was captured.
+                const stuck = await prisma.blog
+                    .findFirst({ where: { siteId, status: "GENERATING" }, orderBy: { createdAt: "desc" }, select: { id: true } })
+                    .catch(() => null);
+                if (stuck) {
+                    await prisma.blog
+                        .update({ where: { id: stuck.id }, data: { status: "FAILED" } })
+                        .catch(() => null);
+                    logger.info("[Inngest/Blog] onFailure: recovered orphaned GENERATING blog via siteId", { siteId, recoveredId: stuck.id });
+                }
+            } else {
+                logger.error("[Inngest/Blog] onFailure: no blogId or siteId — cannot auto-recover stuck blog. Manual DB sweep needed.");
             }
-            await prisma.blog.updateMany({ where: { id: blogId }, data: { status: "FAILED" } });
+
+            // Refund 10 credits regardless of how the failure was identified.
             if (userId) {
                 try {
                     await prisma.$executeRaw`
@@ -225,7 +260,11 @@ export const generateBlogJob = inngest.createFunction(
                     `;
                     logger.info("[Inngest/Blog] Refunded 10 credits after job failure", { userId, blogId });
                 } catch (refundErr) {
-                    logger.error("[Inngest/Blog] Failed to refund credits — manual action required", { blogId, userId, error: (refundErr as Error)?.message });
+                    logger.error("[Inngest/Blog] Failed to refund credits — manual action required", {
+                        blogId,
+                        userId,
+                        error: (refundErr as Error)?.message,
+                    });
                 }
             }
         },
@@ -369,14 +408,24 @@ Be specific and concise. This will be used to write a better article.`,
                 }
             });
 
-            liveBlogPost = await step.run("generate-competitor-content", async () => {
-                const res = await generateBlogFromCompetitorGap(
+        // ── Timeout guard: Railway functions time out at ~5 min. Without an
+        // abort boundary the step silently hangs and Inngest never calls onFailure.
+        // We race the generation call against a 4.5-min deadline so Inngest has
+        // time to mark the job failed and trigger onFailure cleanly.
+        const GENERATION_TIMEOUT_MS = 4.5 * 60 * 1000; // 4 min 30 sec
+
+        liveBlogPost = await step.run("generate-competitor-content", async () => {
+            const res = await Promise.race([
+                generateBlogFromCompetitorGap(
                     keyword, competitorDomain, searchVolume, difficulty,
                     author, site.domain, undefined, site.blogTone || undefined, siteId, competitorSerpContext
-                );
-                return { ...res, ogImage: res.heroImage?.url };
-
-            });
+                ),
+                new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error("[Blog] generate-competitor-content timed out after 4.5 min")), GENERATION_TIMEOUT_MS)
+                ),
+            ]);
+            return { ...res, ogImage: res.heroImage?.url };
+        });
         } else {
             const siteContext = await step.run("extract-site-context", async () => {
                 return await extractSiteContext(site.domain);
@@ -477,10 +526,18 @@ Be specific and concise. This will be used to write a better article.`,
             });
 
             liveBlogPost = await step.run("generate-evergreen-post", async () => {
-                const res = await generateEvergreenPost(
-                    category, keywords, author, enrichedSiteContext,
-                    site.blogTone || undefined, siteId, precomputedSerpContext
-                );
+                // Same 4.5-min timeout as competitor path — prevents Railway host
+                // timeouts from leaving blogs orphaned on GENERATING.
+                const GENERATION_TIMEOUT_MS = 4.5 * 60 * 1000;
+                const res = await Promise.race([
+                    generateEvergreenPost(
+                        category, keywords, author, enrichedSiteContext,
+                        site.blogTone || undefined, siteId, precomputedSerpContext
+                    ),
+                    new Promise<never>((_, reject) =>
+                        setTimeout(() => reject(new Error("[Blog] generate-evergreen-post timed out after 4.5 min")), GENERATION_TIMEOUT_MS)
+                    ),
+                ]);
                 return { ...res, ogImage: res.heroImage?.url };
             });
         }

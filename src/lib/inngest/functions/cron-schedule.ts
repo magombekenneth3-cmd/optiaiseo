@@ -284,3 +284,90 @@ export const cronWeeklySerpAnalysis = inngest.createFunction(
         return { queued: expired.length };
     },
 );
+
+
+/**
+ * Stuck-Blog Sweep — runs every 30 minutes.
+ *
+ * Any blog that has been in GENERATING status for more than 20 minutes is
+ * considered stuck (Inngest's onFailure didn't fire, or the job was lost).
+ * The sweep marks them FAILED and refunds 10 credits per blog.
+ *
+ * This is the last-resort safety net — not the primary failure handler.
+ * The primary handler is onFailure inside generateBlogJob.
+ *
+ * 20-min threshold reasoning:
+ *   - Inngest max step duration on Pro plan = 15 min per step.
+ *   - We cap generation at 4.5 min.
+ *   - 20 min = comfortable buffer that covers all retry attempts.
+ */
+export const cronStuckBlogSweep = inngest.createFunction(
+    {
+        id: "cron-stuck-blog-sweep",
+        name: "Cron: Stuck Blog GENERATING Sweep",
+        retries: 1,
+        triggers: [{ cron: "*/30 * * * *" }], // every 30 min
+    },
+    async ({ step }) => {
+        const STUCK_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutes
+        const cutoff = new Date(Date.now() - STUCK_THRESHOLD_MS);
+
+        const stuckBlogs = await step.run("find-stuck-blogs", () =>
+            prisma.blog.findMany({
+                where: {
+                    status: "GENERATING",
+                    createdAt: { lt: cutoff },
+                },
+                select: {
+                    id: true,
+                    siteId: true,
+                    title: true,
+                    createdAt: true,
+                    site: { select: { userId: true } },
+                },
+                take: 50, // safety cap — shouldn't need more
+            })
+        );
+
+        if (stuckBlogs.length === 0) {
+            return { swept: 0 };
+        }
+
+        logger.warn(`[StuckBlogSweep] Found ${stuckBlogs.length} stuck blogs — marking FAILED`, {
+            ids: stuckBlogs.map(b => b.id),
+        });
+
+        await step.run("mark-stuck-blogs-failed", async () => {
+            await prisma.blog.updateMany({
+                where: { id: { in: stuckBlogs.map(b => b.id) } },
+                data: { status: "FAILED" },
+            });
+        });
+
+        // Refund credits for each affected user — group by userId to avoid
+        // multiple increments hitting the DB simultaneously per user.
+        const userCounts = new Map<string, number>();
+        for (const blog of stuckBlogs) {
+            const uid = blog.site?.userId;
+            if (uid) userCounts.set(uid, (userCounts.get(uid) ?? 0) + 1);
+        }
+
+        await step.run("refund-credits-for-stuck-blogs", async () => {
+            for (const [userId, count] of userCounts) {
+                const refund = count * 10;
+                await prisma.user
+                    .update({ where: { id: userId }, data: { credits: { increment: refund } } })
+                    .catch((e: unknown) =>
+                        logger.error("[StuckBlogSweep] Credit refund failed", {
+                            userId,
+                            refund,
+                            error: (e as Error)?.message,
+                        })
+                    );
+                logger.info(`[StuckBlogSweep] Refunded ${refund} credits to user ${userId} (${count} stuck blog${count > 1 ? "s" : ""})`);
+            }
+        });
+
+        return { swept: stuckBlogs.length };
+    },
+);
