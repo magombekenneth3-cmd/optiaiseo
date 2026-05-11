@@ -69,6 +69,12 @@ export interface GapReport {
     clientSignals: PageSignals;
     gaps: ContentGap[];
     topCompetitorAvgWordCount: number;
+    rankingTimelineNote: string | null;
+    competitorTopicMap: {
+        topic: string;
+        competitorUrls: string[];
+        mentionCount: number;
+    }[];
     analysedAt: string;
 }
 
@@ -220,6 +226,33 @@ async function scrapePage(url: string, position: number): Promise<PageSignals> {
 
 // ─── Gap computation ──────────────────────────────────────────────────────────
 
+function buildCompetitorTopicMap(
+    client: PageSignals,
+    competitors: PageSignals[]
+): GapReport["competitorTopicMap"] {
+    const clientH2Set = new Set(
+        client.h2s.map((h) => h.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim())
+    );
+    const topicMap = new Map<string, Set<string>>();
+
+    for (const comp of competitors) {
+        for (const h2 of comp.h2s) {
+            const normalised = h2.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+            if (normalised.length < 5) continue;
+            const alreadyCovered = [...clientH2Set].some(
+                (ch) => ch.includes(normalised) || normalised.includes(ch)
+            );
+            if (alreadyCovered) continue;
+            if (!topicMap.has(h2)) topicMap.set(h2, new Set());
+            topicMap.get(h2)!.add(comp.url);
+        }
+    }
+
+    return [...topicMap.entries()]
+        .map(([topic, urls]) => ({ topic, competitorUrls: [...urls], mentionCount: urls.size }))
+        .sort((a, b) => b.mentionCount - a.mentionCount);
+}
+
 function computeGaps(client: PageSignals, competitors: PageSignals[]): ContentGap[] {
     const ok = competitors.filter((c) => c.fetchedOk);
     if (ok.length === 0) return [];
@@ -285,20 +318,23 @@ function computeGaps(client: PageSignals, competitors: PageSignals[]): ContentGa
         });
     }
 
-    // Heading structure
+    // Heading structure — enriched with per-topic competitor map
     const avgH2s = avg((p) => p.h2s.length);
     if (avgH2s - client.h2s.length >= 4) {
+        const missingTopics = buildCompetitorTopicMap(client, ok).slice(0, 8);
+        const topicList = missingTopics
+            .map((t) => `• "${t.topic}" — covered by ${t.mentionCount} of ${ok.length} competitors`)
+            .join("\n");
         gaps.push({
             dimension: "Heading structure (H2s)",
             clientValue: client.h2s.length,
             topCompetitorAvg: avgH2s,
             gap: "high",
-            impact: `Competitors average ${avgH2s} H2 headings vs. your ${client.h2s.length}. More headings = better topical coverage and clearer content hierarchy for crawlers.`,
-            recommendation: `Add at least ${avgH2s - client.h2s.length} more H2 sections covering subtopics your competitors address. Check their H2 lists in the gaps detail for inspiration.`,
+            impact: `Competitors average ${avgH2s} H2 headings vs. your ${client.h2s.length}. Missing topics that competitors cover:\n${topicList}`,
+            recommendation: `Add these missing H2 sections to match competitor coverage:\n${topicList}\n\nFor each section: write 200–400 words directly answering the implied question, include 1–2 real examples, and link to an authoritative external source.`,
         });
     }
 
-    // Author / E-E-A-T
     const authorPct = pct((p) => p.hasAuthorMention);
     if (authorPct >= 60 && !client.hasAuthorMention) {
         gaps.push({
@@ -307,7 +343,7 @@ function computeGaps(client: PageSignals, competitors: PageSignals[]): ContentGa
             topCompetitorAvg: `${authorPct}% of top results show author`,
             gap: "medium",
             impact: "Google's quality raters are explicitly instructed to check for author identity. Anonymous content is penalised on YMYL queries.",
-            recommendation: "Add a byline with author name, brief bio, and link to their profile page. Add Person schema with the author's credentials.",
+            recommendation: "1. Add a byline: \"By [Name], [Title]\" immediately below the H1.\n2. Create an /author/[name] page with a 150-word bio, credentials, and a headshot.\n3. Add Person schema linking the author to this article via Article JSON-LD.\n4. Link to 1–2 external profiles (LinkedIn, Twitter, industry publication bylines) to build author entity recognition.",
         });
     }
 
@@ -472,6 +508,24 @@ export async function analyseSerpGap(
         )
         : 0;
 
+    const competitorTopicMap = buildCompetitorTopicMap(
+        clientSignals,
+        competitorSignals.filter((c) => c.fetchedOk)
+    );
+
+    const rdGap = gaps.find((g) => g.dimension.toLowerCase().includes("referring domain"));
+    let rankingTimelineNote: string | null = null;
+    if (rdGap) {
+        const rdGapVal = typeof rdGap.clientValue === "number"
+            ? (rdGap.topCompetitorAvg as number) - rdGap.clientValue
+            : null;
+        if (rdGapVal !== null && rdGapVal > 100) {
+            rankingTimelineNote = `The authority gap for this keyword is significant. Content improvements help quality signals, but closing a ${Math.round(rdGapVal)}+ RD gap typically takes 3–6 months of consistent outreach. Set realistic expectations before starting.`;
+        } else if (rdGapVal !== null && rdGapVal > 30) {
+            rankingTimelineNote = `A referring domain gap of ~${Math.round(rdGapVal)} exists. Expect 6–8 weeks of link-building alongside content work to see meaningful ranking movement.`;
+        }
+    }
+
     logger.info("[SerpGap] Analysis complete", {
         keyword,
         clientPosition,
@@ -491,6 +545,8 @@ export async function analyseSerpGap(
         clientSignals,
         gaps,
         topCompetitorAvgWordCount: avgWC,
+        rankingTimelineNote,
+        competitorTopicMap,
         analysedAt: new Date().toISOString(),
     };
 }

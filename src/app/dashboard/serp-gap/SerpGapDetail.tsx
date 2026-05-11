@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import {
     X, Loader2, AlertTriangle, CheckCircle2, Zap, Target,
     ChevronDown, ChevronUp, Clock, BarChart2, Calendar,
-    ArrowUpRight, Bot, User,
+    ArrowUpRight, Bot, User, BookOpen, Link2, ChevronRight,
+    Info, FileText, TrendingUp,
 } from "lucide-react";
-
+import type { ContentSection, AuthorityStep } from "@/lib/serp-gap/plan-generator";
 
 interface PlanTask {
     id: string;
@@ -29,11 +30,14 @@ interface ImplementationPlan {
     formatInsight: string;
     estimatedPositionGain: string;
     estimatedTimeToResult: string;
+    rankingTimelineNote: string | null;
     week1Focus: string;
     week2Focus: string;
     week3Focus: string;
     week4Focus: string;
     tasks: PlanTask[];
+    contentBlueprint: ContentSection[];
+    authorityRoadmap: AuthorityStep[];
 }
 
 interface ContentGap {
@@ -51,7 +55,15 @@ interface FullAnalysis {
     clientUrl: string;
     clientPosition: number;
     status: string;
-    gapReport: { gaps: ContentGap[]; serpFormat: string; serpHasAiOverview: boolean; serpHasFeaturedSnippet: boolean; topCompetitorAvgWordCount: number; clientSignals: { wordCount: number } } | null;
+    gapReport: {
+        gaps: ContentGap[];
+        serpFormat: string;
+        serpHasAiOverview: boolean;
+        serpHasFeaturedSnippet: boolean;
+        topCompetitorAvgWordCount: number;
+        clientSignals: { wordCount: number };
+        rankingTimelineNote: string | null;
+    } | null;
     implementationPlan: ImplementationPlan | null;
     estimatedPositionGain: string | null;
     executiveSummary: string | null;
@@ -135,6 +147,92 @@ function WeekCard({ week, focus, tasks }: { week: number; focus: string; tasks: 
 }
 
 
+function BlueprintCard({ section, idx }: { section: ContentSection; idx: number }) {
+    const [open, setOpen] = useState(idx === 0);
+    return (
+        <div className="rounded-xl border border-border overflow-hidden">
+            <button
+                onClick={() => setOpen(v => !v)}
+                className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-accent/40 transition-colors text-left"
+            >
+                <div className="flex items-center gap-3 min-w-0">
+                    <span className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 text-xs font-bold flex items-center justify-center shrink-0">
+                        {idx + 1}
+                    </span>
+                    <p className="text-sm font-semibold truncate">{section.section}</p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-xs text-muted-foreground">{section.targetWordCount}w target</span>
+                    {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                </div>
+            </button>
+            {open && (
+                <div className="px-5 pb-5 flex flex-col gap-3">
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20 text-xs">
+                        <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                        <p className="text-muted-foreground leading-relaxed">{section.rationale}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-card border border-border">
+                        <p className="text-xs font-semibold text-foreground mb-1.5 flex items-center gap-1.5">
+                            <FileText className="w-3.5 h-3.5 text-purple-400" /> What to write
+                        </p>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{section.guidanceNotes}</p>
+                    </div>
+                    {section.competitorExamples.length > 0 && (
+                        <div>
+                            <p className="text-xs text-muted-foreground mb-1.5 font-medium">Competitor references:</p>
+                            <div className="flex flex-col gap-1">
+                                {section.competitorExamples.map((url, i) => (
+                                    <a
+                                        key={i}
+                                        href={url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors truncate"
+                                    >
+                                        <Link2 className="w-3 h-3 shrink-0" />
+                                        <span className="truncate">{url}</span>
+                                    </a>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+
+function AuthorityRoadmapView({ steps }: { steps: AuthorityStep[] }) {
+    return (
+        <div className="flex flex-col gap-3">
+            {steps.map((step) => (
+                <div key={step.step} className="flex gap-4 p-4 rounded-xl border border-border bg-card/50">
+                    <div className="flex flex-col items-center gap-1 shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold flex items-center justify-center">
+                            {step.step}
+                        </div>
+                        {step.step < steps.length && (
+                            <div className="w-px flex-1 bg-border min-h-[16px]" />
+                        )}
+                    </div>
+                    <div className="min-w-0 pb-1">
+                        <div className="flex items-center gap-2 mb-1">
+                            <p className="text-sm font-semibold">{step.action}</p>
+                            <span className="px-1.5 py-0.5 rounded text-xs bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 shrink-0">
+                                {step.estimatedWeeks}
+                            </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{step.detail}</p>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+
 export function SerpGapDetail({
     analysisId,
     siteId,
@@ -147,7 +245,7 @@ export function SerpGapDetail({
     const [data, setData] = useState<FullAnalysis | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [tab, setTab] = useState<"gaps" | "plan">("plan");
+    const [tab, setTab] = useState<"plan" | "blueprint" | "gaps">("plan");
 
     useEffect(() => {
         (async () => {
@@ -162,10 +260,14 @@ export function SerpGapDetail({
     }, [analysisId, siteId]);
 
     const plan = data?.implementationPlan as ImplementationPlan | null;
-    const gaps = (data?.gapReport as FullAnalysis["gapReport"])?.gaps ?? [];
+    const gaps = (data?.gapReport)?.gaps ?? [];
+    const timelineNote = plan?.rankingTimelineNote ?? data?.gapReport?.rankingTimelineNote ?? null;
 
     const tasksByWeek = (week: 1 | 2 | 3 | 4) => plan?.tasks.filter(t => t.week === week) ?? [];
     const weekFocus = [plan?.week1Focus, plan?.week2Focus, plan?.week3Focus, plan?.week4Focus];
+
+    const hasBlueprint = (plan?.contentBlueprint?.length ?? 0) > 0;
+    const hasAuthority = (plan?.authorityRoadmap?.length ?? 0) > 0;
 
     return (
         <div className="fixed inset-0 z-50 flex items-start justify-end bg-black/50 backdrop-blur-sm" onClick={onClose}>
@@ -205,6 +307,18 @@ export function SerpGapDetail({
 
                 {data && !loading && (
                     <div className="flex flex-col gap-6 p-6">
+
+                        {/* Ranking timeline warning */}
+                        {timelineNote && (
+                            <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/5">
+                                <TrendingUp className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="text-xs font-semibold text-amber-400 mb-1">Ranking Timeline Note</p>
+                                    <p className="text-xs text-muted-foreground leading-relaxed">{timelineNote}</p>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Summary strip */}
                         {plan && (
                             <div className="rounded-xl border border-border bg-card/50 p-5 flex flex-col gap-3">
@@ -251,14 +365,18 @@ export function SerpGapDetail({
                         )}
 
                         {/* Tabs */}
-                        <div className="flex gap-1 p-1 rounded-lg bg-card border border-border w-fit">
-                            {(["plan", "gaps"] as const).map(t => (
+                        <div className="flex gap-1 p-1 rounded-lg bg-card border border-border w-fit flex-wrap">
+                            {([
+                                { id: "plan", label: `4-Week Plan (${plan?.tasks.length ?? 0})`, icon: <Calendar className="w-3.5 h-3.5" /> },
+                                { id: "blueprint", label: `Content Blueprint (${plan?.contentBlueprint?.length ?? 0})`, icon: <BookOpen className="w-3.5 h-3.5" /> },
+                                { id: "gaps", label: `Gaps (${gaps.length})`, icon: <BarChart2 className="w-3.5 h-3.5" /> },
+                            ] as { id: "plan" | "blueprint" | "gaps"; label: string; icon: React.ReactNode }[]).map(t => (
                                 <button
-                                    key={t}
-                                    onClick={() => setTab(t)}
-                                    className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === t ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                                    key={t.id}
+                                    onClick={() => setTab(t.id)}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${tab === t.id ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
                                 >
-                                    {t === "plan" ? `Implementation Plan (${plan?.tasks.length ?? 0})` : `Content Gaps (${gaps.length})`}
+                                    {t.icon}{t.label}
                                 </button>
                             ))}
                         </div>
@@ -274,6 +392,49 @@ export function SerpGapDetail({
                                         tasks={tasksByWeek(w)}
                                     />
                                 ))}
+                            </div>
+                        )}
+
+                        {/* Content Blueprint view */}
+                        {tab === "blueprint" && (
+                            <div className="flex flex-col gap-4">
+                                {hasBlueprint ? (
+                                    <>
+                                        <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20 text-xs">
+                                            <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                                            <p className="text-muted-foreground leading-relaxed">
+                                                These are the exact sections your competitors cover that your page is missing.
+                                                Add each as an H2 section. Write to the target word count for each topic.
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-col gap-3">
+                                            {plan!.contentBlueprint.map((section, i) => (
+                                                <BlueprintCard key={i} section={section} idx={i} />
+                                            ))}
+                                        </div>
+
+                                        {hasAuthority && (
+                                            <>
+                                                <div className="flex items-center gap-2 pt-2">
+                                                    <Link2 className="w-4 h-4 text-emerald-400" />
+                                                    <h3 className="text-sm font-semibold">Authority Building Roadmap</h3>
+                                                </div>
+                                                <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-xs">
+                                                    <Info className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                                                    <p className="text-muted-foreground leading-relaxed">
+                                                        Content alone won&apos;t close a large referring domain gap.
+                                                        Run these link-building steps in parallel with your content work.
+                                                    </p>
+                                                </div>
+                                                <AuthorityRoadmapView steps={plan!.authorityRoadmap} />
+                                            </>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="p-8 text-center text-muted-foreground text-sm">
+                                        No content blueprint available. Run the analysis to generate one.
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -301,11 +462,29 @@ export function SerpGapDetail({
                                                 <p className="font-medium">{String(gap.topCompetitorAvg)}</p>
                                             </div>
                                         </div>
-                                        <p className="text-xs text-muted-foreground leading-relaxed mb-1.5">{gap.impact}</p>
-                                        <div className="flex items-start gap-1.5 text-xs">
-                                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                                            <p className="text-emerald-400 leading-relaxed">{gap.recommendation}</p>
+                                        <p className="text-xs text-muted-foreground leading-relaxed mb-2 whitespace-pre-line">{gap.impact}</p>
+                                        <div className="p-3 rounded-lg bg-card/60 border border-border">
+                                            <div className="flex items-start gap-1.5">
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                                                <p className="text-xs text-emerald-400 leading-relaxed whitespace-pre-line font-medium">How to fix</p>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line mt-1 pl-5">{gap.recommendation}</p>
                                         </div>
+                                        {gap.dimension.toLowerCase().includes("authority") || gap.dimension.toLowerCase().includes("link") ? (
+                                            <button
+                                                onClick={() => setTab("blueprint")}
+                                                className="mt-2 flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                                            >
+                                                <ChevronRight className="w-3 h-3" /> Go to Authority Roadmap →
+                                            </button>
+                                        ) : gap.dimension.toLowerCase().includes("heading") || gap.dimension.toLowerCase().includes("h2") ? (
+                                            <button
+                                                onClick={() => setTab("blueprint")}
+                                                className="mt-2 flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                                            >
+                                                <ChevronRight className="w-3 h-3" /> Go to Content Blueprint →
+                                            </button>
+                                        ) : null}
                                     </div>
                                 ))}
                             </div>

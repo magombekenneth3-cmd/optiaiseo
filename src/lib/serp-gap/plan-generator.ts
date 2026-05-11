@@ -14,6 +14,21 @@ import { callGeminiJson } from "@/lib/gemini/client";
 import { logger } from "@/lib/logger";
 import type { GapReport, ContentGap } from "./analyser";
 
+export interface ContentSection {
+    section: string;
+    rationale: string;
+    guidanceNotes: string;
+    targetWordCount: number;
+    competitorExamples: string[];
+}
+
+export interface AuthorityStep {
+    step: number;
+    action: string;
+    detail: string;
+    estimatedWeeks: string;
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface PlanTask {
@@ -41,15 +56,16 @@ export interface ImplementationPlan {
     estimatedPositionGain: string;
     estimatedTimeToResult: string;
     executiveSummary: string;
-    /** The #1 thing to fix first */
     topPriority: string;
-    /** SERP format insight */
     formatInsight: string;
+    rankingTimelineNote: string | null;
     tasks: PlanTask[];
     week1Focus: string;
     week2Focus: string;
     week3Focus: string;
     week4Focus: string;
+    contentBlueprint: ContentSection[];
+    authorityRoadmap: AuthorityStep[];
     generatedAt: string;
 }
 
@@ -70,6 +86,11 @@ function buildPlanPrompt(report: GapReport): string {
         .map((r) => `${r.url} (${r.wordCount} words): ${r.h2s.slice(0, 6).join(" | ")}`)
         .join("\n");
 
+    const missingTopics = report.competitorTopicMap
+        .slice(0, 10)
+        .map((t) => `- "${t.topic}" (${t.mentionCount}/${report.topResults.filter(r => r.fetchedOk).length} competitors)`)
+        .join("\n");
+
     return `You are a senior SEO strategist creating a precise 4-week content upgrade plan.
 
 CONTEXT:
@@ -80,12 +101,16 @@ CONTEXT:
 - Client word count: ${report.clientSignals.wordCount} | Competitor average: ${report.topCompetitorAvgWordCount}
 - Client has FAQ: ${report.clientSignals.hasFaqSection} | Has FAQ schema: ${report.clientSignals.hasFaqSchema}
 - Client has video: ${report.clientSignals.hasVideo} | Has ToC: ${report.clientSignals.hasTableOfContents}
+${report.rankingTimelineNote ? `- AUTHORITY NOTE: ${report.rankingTimelineNote}` : ""}
 
 CONTENT GAPS (already computed):
 ${gapSummary}
 
 TOP COMPETITOR H2 STRUCTURES:
 ${competitorH2s}
+
+MISSING TOPICS (H2s competitors cover that client doesn't):
+${missingTopics || "None identified"}
 
 Generate a realistic, actionable 4-week implementation plan. Each task must be concrete and specific to this keyword and page — no generic advice.
 
@@ -117,17 +142,34 @@ Return ONLY a valid JSON object with this exact structure:
       "expectedOutcome": "What this fixes and estimated impact",
       "sourceGap": "Content depth (word count)"
     }
+  ],
+  "contentBlueprint": [
+    {
+      "section": "H2 heading to add, e.g. 'How to Choose the Right Tool'",
+      "rationale": "Why this section matters — which competitors have it and what ranking signal it sends",
+      "guidanceNotes": "Exactly what to write in 3-4 sentences: key points to cover, tone, real-world examples to include",
+      "targetWordCount": 300,
+      "competitorExamples": ["https://competitor.com/page"]
+    }
+  ],
+  "authorityRoadmap": [
+    {
+      "step": 1,
+      "action": "Short action label",
+      "detail": "Specific, concrete instructions for this step — who to contact, what to offer, how to pitch",
+      "estimatedWeeks": "Weeks 1-2"
+    }
   ]
 }
 
 Rules:
 - Generate 8-12 tasks total across 4 weeks
+- contentBlueprint: generate one entry per missing topic from the MISSING TOPICS list above (up to 8)
+- authorityRoadmap: generate 4-6 concrete link-building steps relevant to this specific keyword/niche
 - Week 1: Critical and high-priority quick wins
-- Week 2: Content depth and structure improvements  
+- Week 2: Content depth and structure improvements
 - Week 3: E-E-A-T, citations, schema
 - Week 4: Monitoring, internal links, promotion
-- Tasks for ariaCanAutomate=true must have a concrete ariaAction string
-- estimatedTimeMinutes must be realistic (schema = 20min, full content rewrite = 180min)
 - No markdown, no backticks, return raw JSON only`;
 }
 
@@ -164,6 +206,9 @@ export async function generateImplementationPlan(
             keyword: report.keyword,
             clientUrl: report.clientUrl,
             clientCurrentPosition: report.clientPosition,
+            rankingTimelineNote: report.rankingTimelineNote ?? null,
+            contentBlueprint: raw.contentBlueprint ?? buildFallbackBlueprint(report),
+            authorityRoadmap: raw.authorityRoadmap ?? buildFallbackAuthorityRoadmap(report.keyword),
             generatedAt: new Date().toISOString(),
         };
     } catch (err) {
@@ -172,7 +217,26 @@ export async function generateImplementationPlan(
     }
 }
 
-// ─── Fallback plan (if Gemini fails) ─────────────────────────────────────────
+
+function buildFallbackBlueprint(report: GapReport): ContentSection[] {
+    return report.competitorTopicMap.slice(0, 8).map((t) => ({
+        section: t.topic,
+        rationale: `${t.mentionCount} of your top competitors cover this topic. Adding it closes a visible content gap that contributes to their ranking advantage.`,
+        guidanceNotes: `Write 200-400 words that directly address the implied question in "${t.topic}". Open with a one-sentence direct answer, then expand with 2-3 supporting points and a concrete example. Keep sentences under 20 words.`,
+        targetWordCount: 300,
+        competitorExamples: t.competitorUrls.slice(0, 3),
+    }));
+}
+
+function buildFallbackAuthorityRoadmap(keyword: string): AuthorityStep[] {
+    return [
+        { step: 1, action: "Link Intersect Audit", detail: `Use Ahrefs or Moz Link Intersect to find domains linking to 2+ competitors for "${keyword}" but not you. Export the top 20 by DR.`, estimatedWeeks: "Week 1" },
+        { step: 2, action: "Broken Link Outreach", detail: "For each intersect domain, check for broken outbound links using Check My Links. Offer your page as a replacement with a personalised one-line email.", estimatedWeeks: "Weeks 1-2" },
+        { step: 3, action: "Resource Page Pitches", detail: `Search: intitle:"resources" "${keyword}". Find pages listing competitor content and pitch yours as more comprehensive.`, estimatedWeeks: "Weeks 2-3" },
+        { step: 4, action: "Digital PR - Original Data", detail: `Create one data asset relevant to "${keyword}" (survey or aggregated stats). Pitch to 10-15 niche publications. 2-3 DR 40+ pickups will move the needle.`, estimatedWeeks: "Weeks 3-4" },
+        { step: 5, action: "Internal Authority Boost", detail: "Find your 3 highest-authority pages. Add a contextual link from each to this page using partial-match anchor text. Internal PageRank flows immediately.", estimatedWeeks: "Week 1" },
+    ];
+}
 
 function buildFallbackPlan(report: GapReport): ImplementationPlan {
     const tasks: PlanTask[] = report.gaps.slice(0, 8).map((gap: ContentGap, i: number) => ({
@@ -185,11 +249,9 @@ function buildFallbackPlan(report: GapReport): ImplementationPlan {
                     : "technical",
         title: gap.dimension,
         description: gap.impact,
-        manualSteps: [gap.recommendation],
+        manualSteps: gap.recommendation.split("\n").filter(Boolean),
         ariaCanAutomate: gap.dimension.toLowerCase().includes("schema"),
-        ariaAction: gap.dimension.toLowerCase().includes("schema")
-            ? `Add ${gap.dimension} to the page`
-            : undefined,
+        ariaAction: gap.dimension.toLowerCase().includes("schema") ? `Add ${gap.dimension} to the page` : undefined,
         estimatedTimeMinutes: gap.gap === "critical" ? 180 : gap.gap === "high" ? 90 : 45,
         expectedOutcome: `Closes the ${gap.dimension} gap vs. top competitors`,
         sourceGap: gap.dimension,
@@ -200,15 +262,18 @@ function buildFallbackPlan(report: GapReport): ImplementationPlan {
         clientUrl: report.clientUrl,
         clientCurrentPosition: report.clientPosition,
         estimatedPositionGain: `Move from position ${report.clientPosition} into top 10`,
-        estimatedTimeToResult: "4–8 weeks after implementation",
+        estimatedTimeToResult: "4-8 weeks after implementation",
         executiveSummary: `Your page for "${report.keyword}" is ranking at position ${report.clientPosition} with ${report.gaps.length} identified gaps vs. the top-ranking content. The primary issues are: ${report.gaps.slice(0, 3).map((g) => g.dimension).join(", ")}.`,
-        topPriority: report.gaps[0]?.recommendation ?? "Audit and expand page content depth.",
-        formatInsight: `The SERP rewards ${report.serpFormat} format. Make sure your content matches this format.`,
+        topPriority: report.gaps[0]?.recommendation.split("\n")[0] ?? "Audit and expand page content depth.",
+        formatInsight: `The SERP rewards ${report.serpFormat} format. Ensure your content matches this format.`,
+        rankingTimelineNote: report.rankingTimelineNote ?? null,
         week1Focus: "Fix critical structural and schema gaps",
         week2Focus: "Expand content depth and heading structure",
         week3Focus: "Strengthen E-E-A-T signals and citations",
         week4Focus: "Internal linking, monitoring, and promotion",
         tasks,
+        contentBlueprint: buildFallbackBlueprint(report),
+        authorityRoadmap: buildFallbackAuthorityRoadmap(report.keyword),
         generatedAt: new Date().toISOString(),
     };
 }
