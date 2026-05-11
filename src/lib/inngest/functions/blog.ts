@@ -7,7 +7,6 @@ import {
     generateBlogFromCompetitorGap,
     AuthorProfile,
 } from "@/lib/blog";
-import { checkBlogLimit } from "@/lib/rate-limit";
 import { extractSiteContext } from "@/lib/blog/context";
 import { fetchGSCKeywords, findOpportunities, normaliseSiteUrl } from "@/lib/gsc";
 import { callGemini, callGeminiJson } from "@/lib/gemini/client";
@@ -16,6 +15,8 @@ import { detectRiskTier, detectIntent, cleanDomainToDisplayName } from "@/lib/bl
 import { gateCitationScore } from "@/lib/blog/ai-citation-template";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { getSerpContextForKeyword, type SerpContext } from "@/lib/blog/serp";
+import { getEffectiveTier } from "@/lib/stripe/guards";
+import { getPlan } from "@/lib/stripe/plans";
 
 function buildAuthorFromSite(site: {
     id: string;
@@ -303,11 +304,50 @@ export const generateBlogJob = inngest.createFunction(
         const displayName = cleanDomainToDisplayName(site.domain);
 
         const allowed = await step.run("check-blog-rate-limit", async () => {
-            const result = await checkBlogLimit(
-                site.userId,
-                (site.user as { subscriptionTier?: string } | null)?.subscriptionTier ?? "FREE"
-            );
-            return result.allowed;
+            // IMPORTANT: use getEffectiveTier — not raw subscriptionTier from DB.
+            // Raw tier ignores active trials and promo overrides.
+            const effectiveTier = await getEffectiveTier(site.userId);
+            const plan = getPlan(effectiveTier);
+            const limitPerMonth = plan.limits.blogsPerMonth;
+
+            // AGENCY = unlimited
+            if (limitPerMonth === -1) return true;
+
+            // The server action (generateBlog) already called checkBlogLimit() which
+            // incremented the Redis counter via INCR. Calling checkBlogLimit() again
+            // here would INCR a second time — double-counting — causing FREE users
+            // (limit=3) to be blocked after their 2nd blog, STARTER after their 30th.
+            //
+            // Fix: read the current counter value with GET (no INCR) and compare.
+            // Redis key format mirrors the monthly/index.ts pattern: blog:{userId}:{YYYY-MM}
+            const now = new Date();
+            const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+            const redisKey  = `blog:${site.userId}:${monthKey}`;
+
+            try {
+                // Use the shared redis instance — GET is read-only, no INCR
+                const { redis } = await import("@/lib/redis");
+                const currentCount = await redis.get<number>(redisKey);
+                const count = typeof currentCount === "number" ? currentCount : parseInt(String(currentCount ?? "0"), 10) || 0;
+                const isAllowed = count <= limitPerMonth;
+
+                logger.info("[Inngest/Blog] Read-only rate limit check", {
+                    effectiveTier,
+                    limitPerMonth,
+                    currentCount: count,
+                    allowed: isAllowed,
+                    userId: site.userId,
+                });
+
+                return isAllowed;
+            } catch (err: unknown) {
+                // Fail-open: Redis error should never block blog generation
+                logger.warn("[Inngest/Blog] Rate limit read failed — failing open", {
+                    error: (err as Error)?.message,
+                    userId: site.userId,
+                });
+                return true;
+            }
         });
         if (!allowed) {
             // Blog stub is already in DB with status GENERATING — mark it FAILED
