@@ -807,7 +807,9 @@ export function getStructureRules(ctx: PromptContext): string {
 - TITLE-COUNT RULE: if the title contains a number, the content must contain exactly that many H3 items.
 - Intro: 3 sentences — (1) the most useful/surprising fact about "${ctx.keyword}", (2) your unique angle, (3) what the reader gets. No "Welcome to" or "In this article" openers.
 - FAQs MUST align to real People Also Ask queries for "${ctx.keyword}". Every FAQ answer opens with Yes / No / a number / a named tool or time frame.
-- DO NOT use the pattern: What Is X → Why X Matters → How to X → Common Mistakes → FAQ. This is predictable and AI-detectable.`;
+- DO NOT use the pattern: What Is X → Why X Matters → How to X → Common Mistakes → FAQ. This is predictable and AI-detectable.
+- FRESHNESS: at least one section must reference what specifically changed or is different as of ${ctx.year} — not a timeless platitude that was true five years ago.
+- HUMAN VARIATION: sentence length, paragraph length, and transition style must vary visibly across the article. Uniform structure is the clearest AI signal. Mix short punchy sections with longer developed ones, terse single-sentence paragraphs with multi-sentence ones. Imperfect transitions ("Here’s the thing.", "And that’s where it breaks.") are required, not optional.`;
 }
 
 const PROMPT_INJECTION_RE = /(?:ignore\s+(?:previous|all|above)\s+instructions?|system\s*:|<\|im_start\|>|<\|im_end\|>|\[INST\]|<<SYS>>|<\|system\|>|\[SYSTEM\])/gi;
@@ -817,12 +819,17 @@ function sanitizeGrounding(text: string): string {
 }
 
 export function getAuthorGrounding(author: AuthorProfile, ctx: PromptContext): string {
-    if (!ctx.hasAuthorGrounding) return "";
-    const parts: string[] = ["AUTHOR GROUNDING — weave these naturally into the content:"];
-    if (author.realExperience) parts.push(`- Real experience: ${sanitizeGrounding(author.realExperience)}`);
-    if (author.realNumbers)   parts.push(`- Real numbers / results: ${sanitizeGrounding(author.realNumbers)}`);
-    if (author.localContext)  parts.push(`- Local / niche context: ${sanitizeGrounding(author.localContext)}`);
-    return parts.join("\n");
+    if (author.realExperience || author.realNumbers || author.localContext) {
+        const parts: string[] = ["AUTHOR GROUNDING — weave these naturally into the content:"];
+        if (author.realExperience) parts.push(`- Real experience: ${sanitizeGrounding(author.realExperience)}`);
+        if (author.realNumbers)   parts.push(`- Real numbers / results: ${sanitizeGrounding(author.realNumbers)}`);
+        if (author.localContext)  parts.push(`- Local / niche context: ${sanitizeGrounding(author.localContext)}`);
+        return parts.join("\n");
+    }
+    // No grounding data — still require an E-E-A-T signal
+    return `EXPERIENCE SIGNAL: Include at least one "in practice" observation, a named failure mode,
+or a scenario only someone who has actually done this would describe.
+Generic advice without a grounding moment fails Google's E-E-A-T check.`;
 }
 
 export function getHumanizePrompt(content: string, ctx: PromptContext): string {

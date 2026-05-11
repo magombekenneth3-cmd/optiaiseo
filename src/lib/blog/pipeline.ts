@@ -16,6 +16,7 @@ import { AI_MODELS } from "@/lib/constants/ai-models";
 import { logger } from "@/lib/logger";
 import type { PromptContext } from "./prompt-context";
 import type { SerpContext } from "./serp";
+import { classifySerpFormat } from "./serp";
 import type { AuthorProfile } from "./index";
 import { getClaimRules, getToneRules, getScopeRules, getStructureRules } from "./rules";
 
@@ -89,12 +90,136 @@ function wordCountTarget(ctx: PromptContext, serpContext: SerpContext | null): n
 
     if (competitorCounts.length === 0) return intentBase;
 
-    const avgCompetitorWords = Math.round(
-        competitorCounts.reduce((a, b) => a + b, 0) / competitorCounts.length
-    );
-    const serpTarget = Math.round(avgCompetitorWords * 1.1);
+    const avgWords = Math.round(competitorCounts.reduce((a, b) => a + b, 0) / competitorCounts.length);
+    const maxWords = Math.max(...competitorCounts);
 
-    return Math.min(Math.max(intentBase, serpTarget), 4000);
+    // Beat the longest competitor, not just the average
+    const serpTarget = Math.round(Math.max(avgWords * 1.2, maxWords + 300));
+
+    return Math.min(Math.max(intentBase, serpTarget), 5500); // raised from 4000
+}
+
+/** Builds a full competitor depth benchmark string for the Outline Planner. */
+function buildDepthBenchmark(serpContext: SerpContext | null): string {
+    if (!serpContext) return "";
+    const scraped = serpContext.results.filter(r => (r.wordCount ?? 0) > 500);
+    if (scraped.length === 0) return "";
+
+    const wordCounts = scraped.map(r => r.wordCount ?? 0);
+    const avgWords = Math.round(wordCounts.reduce((a, b) => a + b, 0) / wordCounts.length);
+    const maxWords = Math.max(...wordCounts);
+
+    const coverageSummary = scraped.map((r, i) =>
+        `Competitor ${i + 1} (${r.wordCount} words): ${(r.scrapedHeadings ?? []).slice(0, 6).join(" → ")}`
+    ).join("\n");
+
+    const allHeadings = scraped
+        .flatMap((r, i) => (r.scrapedHeadings ?? []).map(h => `[C${i + 1}] ${h}`))
+        .slice(0, 40);
+
+    return `COMPETITOR DEPTH BENCHMARK (${scraped.length} full articles analysed):
+- Average: ${avgWords} words | Longest: ${maxWords} words
+- Your minimum target: ${Math.round(Math.max(avgWords * 1.2, maxWords))} words
+
+SECTION STRUCTURE ACROSS ALL COMPETITORS:
+${coverageSummary}
+
+ALL HEADINGS IN USE (identify gaps — what none of them cover):
+${allHeadings.join("\n")}
+
+DEPTH RULE: Any topic competitors cover in 200 words, cover in 400.
+Do not write a section that could be cut without the reader noticing.`;
+}
+
+/** Finds what competitors wrote on the specific subtopic of this section. */
+function getCompetitorSectionContent(
+    sectionHeading: string,
+    serpContext: SerpContext | null
+): string {
+    if (!serpContext) return "";
+
+    const headingWords = sectionHeading.toLowerCase()
+        .split(/\s+/).filter(w => w.length > 3);
+
+    const relevantExcerpts = serpContext.results
+        .filter(r => r.scrapedContent && (r.wordCount ?? 0) > 500)
+        .map((r, i) => {
+            const paragraphs = r.scrapedContent!.split(/\n{2,}/);
+            const relevant = paragraphs.find(p =>
+                headingWords.some(w => p.toLowerCase().includes(w))
+            );
+            return relevant ? `[Competitor ${i + 1}]: ${relevant.slice(0, 600)}` : null;
+        })
+        .filter(Boolean)
+        .slice(0, 3);
+
+    if (relevantExcerpts.length === 0) return "";
+
+    return `WHAT COMPETITORS WRITE ON THIS TOPIC (do not copy — go deeper):
+${relevantExcerpts.join("\n\n")}
+
+DEPTH RULE: Add something none of the above has — a specific named example,
+a real number, a counterpoint, or a failure mode.`;
+}
+
+/** Fetches real facts from Serper for a section. Runs in parallel before writing starts. */
+async function fetchSectionFacts(
+    sectionHeading: string,
+    keyword: string,
+    evidenceType: OutlineSection["evidenceType"],
+): Promise<string> {
+    const apiKey = process.env.SERPER_API_KEY;
+    if (!apiKey) return "";
+
+    const queryMap: Record<OutlineSection["evidenceType"], string> = {
+        data:       `${sectionHeading} statistics data ${new Date().getFullYear()}`,
+        case_study: `${sectionHeading} case study example results`,
+        comparison: `${sectionHeading} comparison ${keyword}`,
+        how_to:     `${sectionHeading} how to steps ${keyword}`,
+        faq:        `${sectionHeading} ${keyword} common questions`,
+        example:    `${sectionHeading} example ${keyword}`,
+        opinion:    `${sectionHeading} ${keyword} expert opinion`,
+    };
+
+    try {
+        const res = await fetch("https://google.serper.dev/search", {
+            method: "POST",
+            headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
+            body: JSON.stringify({ q: queryMap[evidenceType] ?? `${sectionHeading} ${keyword}`, num: 5 }),
+            signal: AbortSignal.timeout(8_000),
+        });
+        if (!res.ok) return "";
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data: any = await res.json();
+        const facts: string[] = [];
+
+        if (data.answerBox?.answer)  facts.push(`[Direct answer] ${data.answerBox.answer}`);
+        if (data.answerBox?.snippet) facts.push(`[Google snippet] ${data.answerBox.snippet}`);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (data.organic ?? []).slice(0, 4).map((r: any) => r.snippet)
+            .filter((s: string) => s?.length > 60)
+            .forEach((s: string, i: number) => facts.push(`[Source ${i + 1}] ${s}`));
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (data.peopleAlsoAsk ?? []).slice(0, 3).forEach((p: any) => {
+            if (p.snippet) facts.push(`[PAA] Q: ${p.question} → ${p.snippet}`);
+        });
+
+        if (facts.length === 0) return "";
+
+        return `REAL FACTS — use at least 2 of these in the section:
+${facts.join("\n")}
+
+FACT RULES:
+- If a fact contains a number (%, $, days, users), include it verbatim.
+- Attribute naturally: "Research shows...", "According to [source type]..."
+- Do NOT invent statistics not in this list. Write the insight without the number if you don’t have it.
+- "Most teams see significant churn reduction" beats "63% of teams" when 63% is invented.`;
+    } catch {
+        return "";
+    }
 }
 
 // ─── Stage 1: Research Brain ──────────────────────────────────────────────────
@@ -109,9 +234,12 @@ export async function runResearchBrain(
     ctx: PromptContext,
 ): Promise<ResearchBrain> {
     const serpSummary = serpContext
-        ? `TOP SERP RESULTS SUMMARY:\n${serpContext.results.slice(0, 3).map((r, i) =>
+        ? `TOP SERP RESULTS:\n${serpContext.results.slice(0, 3).map((r, i) =>
             `[Rank ${i + 1}] ${r.title}\nSnippet: ${r.snippet}`
-          ).join("\n\n")}\n\nPeople Also Ask:\n${serpContext.peopleAlsoAsk.slice(0, 5).map(p => `- ${p.question}`).join("\n")}`
+          ).join("\n\n")}\n\nPeople Also Ask (with current Google answers):\n${
+            serpContext.peopleAlsoAsk.slice(0, 5).map(p =>
+                `- Q: ${p.question}${p.answer ? `\n  Current answer: ${p.answer}` : ""}`
+            ).join("\n")}`
         : "No SERP data available.";
 
     const prompt = `You are an editorial research analyst. Your job is NOT to write content — it is to produce a structured research brief that a writer will use.
@@ -185,10 +313,25 @@ export async function runOutlinePlanner(
     tone?: string,
 ): Promise<OutlinePlan> {
     const targetWords = wordCountTarget(ctx, serpContext);
+    const depthBenchmark = buildDepthBenchmark(serpContext);
     const serpHeadings = serpContext?.results.slice(0, 3)
         .flatMap(r => r.scrapedHeadings ?? [])
         .slice(0, 10)
         .join(", ") ?? "";
+
+    // Match the SERP format signal so structure aligns with what ranks
+    const formatSignal = serpContext ? classifySerpFormat(serpContext.results) : null;
+    const formatInstruction = formatSignal?.format === "listicle"
+        ? "Structure must use a numbered list as the primary content vehicle — this SERP rewards lists."
+        : formatSignal?.format === "comparison"
+        ? "Include a direct comparison table — this SERP rewards comparative structure."
+        : "";
+
+    const gapSignal = serpContext
+        ? `Table-stakes topics (every competitor covers these — you must too): ${
+            serpContext.results.flatMap(r => r.scrapedHeadings ?? []).slice(0, 8).join(", ")}
+Differentiation opportunities (none of them cover these well): ${brain.contentGaps.slice(0, 4).join(", ")}`
+        : `Content gaps: ${brain.contentGaps.slice(0, 4).join(", ")}`;
 
     const prompt = `You are a content strategist planning an article structure. You do NOT write the article — you plan it.
 
@@ -198,12 +341,16 @@ TONE: ${tone ?? "Authoritative and direct"}
 TOTAL WORD TARGET: ${targetWords}
 YEAR: ${ctx.year}
 
+${depthBenchmark}
+
 RESEARCH BRIEF:
 - Searcher mindset: ${brain.searcherMindset}
 - Key entities to reference: ${brain.entities.slice(0, 6).join(", ")}
-- Content gaps (competitors miss these): ${brain.contentGaps.slice(0, 4).join(", ")}
+- ${gapSignal}
 - Contrarian angles available: ${brain.contrarianAngles.slice(0, 2).join("; ")}
 - Common misconceptions: ${brain.commonMisconceptions.slice(0, 2).join("; ")}
+
+${formatInstruction}
 
 COMPETITOR HEADINGS (DO NOT copy these — they define what to differentiate from):
 ${serpHeadings || "Not available"}
@@ -304,7 +451,16 @@ export async function runSectionWriter(
     brain: ResearchBrain,
     author: AuthorProfile,
     ctx: PromptContext,
+    serpContext: SerpContext | null,
 ): Promise<string> {
+    // Pre-fetch all section facts in parallel before any writing starts
+    logger.debug("[Pipeline] Pre-fetching section facts", { sections: outline.sections.length });
+    const sectionFacts = await Promise.all(
+        outline.sections.map(s =>
+            fetchSectionFacts(s.heading, ctx.keyword, s.evidenceType).catch(() => "")
+        )
+    );
+
     const memory: EditorialMemory = {
         usedEntities: new Set(),
         usedSentenceOpeners: new Set(),
@@ -315,8 +471,10 @@ export async function runSectionWriter(
 
     const sections: string[] = [];
 
-    for (const section of outline.sections) {
-        const sectionText = await writeSingleSection(section, outline, brain, author, ctx, memory);
+    for (let i = 0; i < outline.sections.length; i++) {
+        const section = outline.sections[i];
+        const facts = sectionFacts[i] ?? "";
+        const sectionText = await writeSingleSection(section, outline, brain, author, ctx, memory, serpContext, facts);
 
         const stripped = sectionText.replace(/\*?\*?\[EDITOR:[^\]]*\]\*?\*?\s*/g, "").trim();
 
@@ -325,12 +483,10 @@ export async function runSectionWriter(
             : stripped;
         sections.push(finalText);
 
-        memory.previousSectionSummary = finalText.slice(0, 300) + "…";
-
+        memory.previousSectionSummary = finalText.slice(0, 300) + "\u2026";
         const words = finalText.toLowerCase().match(/\b[a-z]{5,}\b/g) ?? [];
         const topConcepts = [...new Set(words)].slice(0, 5);
         memory.recentConcepts = [...memory.recentConcepts, ...topConcepts].slice(-15);
-
         const openerMatch = finalText.match(/^([A-Z][a-z]+)/m);
         if (openerMatch) memory.usedSentenceOpeners.add(openerMatch[1].toLowerCase());
     }
@@ -339,7 +495,7 @@ export async function runSectionWriter(
     if (failedCount > 0) {
         throw new Error(
             `[Pipeline] ${failedCount}/${sections.length} sections failed. ` +
-            "Rethrowing for Inngest retry — will not save placeholder content to DB."
+            "Rethrowing for Inngest retry \u2014 will not save placeholder content to DB."
         );
     }
 
@@ -353,47 +509,70 @@ async function writeSingleSection(
     author: AuthorProfile,
     ctx: PromptContext,
     memory: EditorialMemory,
+    serpContext: SerpContext | null,
+    facts: string,
 ): Promise<string> {
     const isIntro = section.isIntro ?? false;
     const isFaq = section.evidenceType === "faq";
-    const authorNote = ctx.hasAuthorGrounding && author.realExperience
-        ? `AUTHOR VOICE: Weave in this real experience naturally — "${author.realExperience.slice(0, 200)}"`
-        : "";
+
+    const authorNote = author.realExperience
+        ? `AUTHOR VOICE: Weave in naturally \u2014 "${author.realExperience.slice(0, 200)}"`
+        : `EXPERIENCE SIGNAL: Include at least one "in practice" observation, a named failure mode,
+or a scenario only someone who has actually done this would describe.
+Generic advice without a grounding moment fails Google's E-E-A-T check.`;
 
     const memoryNote = memory.previousSectionSummary
         ? `PREVIOUS SECTION ENDED WITH: "${memory.previousSectionSummary}"
-Do NOT repeat these concepts from earlier sections: ${memory.recentConcepts.slice(-8).join(", ")}
-Do NOT re-introduce these entities as if new: ${[...memory.usedEntities].slice(-6).join(", ")}`
+Do NOT repeat: ${memory.recentConcepts.slice(-8).join(", ")}
+Do NOT re-introduce as new: ${[...memory.usedEntities].slice(-6).join(", ")}`
         : "";
 
     const entityNote = memory.usedEntities.size > 0
-        ? `ALREADY CITED: ${[...memory.usedEntities].slice(0, 5).join(", ")} — vary how you reference these or introduce new entities.`
+        ? `ALREADY CITED: ${[...memory.usedEntities].slice(0, 5).join(", ")} \u2014 vary references or introduce new ones.`
         : `ENTITIES TO INTRODUCE: ${brain.entities.slice(0, 4).join(", ")}`;
 
     const openerNote = memory.usedSentenceOpeners.size > 0
         ? `AVOID STARTING SENTENCES WITH: ${[...memory.usedSentenceOpeners].slice(0, 6).join(", ")}`
         : "";
 
+    // Match PAA questions to this section's specific topic
+    const relevantPAA = serpContext?.peopleAlsoAsk
+        .filter(p => {
+            const qWords = p.question.toLowerCase().split(/\s+/);
+            const hWords = section.heading.toLowerCase().split(/\s+/);
+            return qWords.some(w => hWords.includes(w) && w.length > 3);
+        })
+        .slice(0, 2) ?? [];
+
+    const serpNote = serpContext ? `
+SERP SIGNALS \u2014 write to beat what's ranking:
+Featured snippet to beat: ${serpContext.featuredSnippet ?? "none"}
+${relevantPAA.length > 0 ? `PAA questions to answer in this section:\n${relevantPAA.map(p =>
+    `- ${p.question}\n  Current Google answer: ${p.answer ?? "not provided"}`
+).join("\n")}` : ""}` : "";
+
+    const competitorContext = getCompetitorSectionContent(section.heading, serpContext);
+
     const toneInstructions: Record<OutlineSection["tone"], string> = {
-        analytical: "Break down the topic systematically. Use specific comparisons. State what the data shows, not what you feel.",
-        skeptical: "Question the common approach. What does this technique NOT solve? Be honest about limitations.",
-        instructional: "Tell the reader exactly what to do. Numbered steps where useful. Concrete actions, not principles.",
-        narrative: "Tell a story or walk through a real scenario. Ground abstract points in what actually happened.",
-        direct: "No preamble. State the point immediately. Short sentences where possible.",
-        contrarian: "Take a position that contradicts the consensus. Explain precisely why the popular advice fails and what works instead.",
+        analytical:    "Break down systematically. Use specific comparisons. State what data shows, not what you feel.",
+        skeptical:     "Question the common approach. What does this NOT solve? Be honest about limitations.",
+        instructional: "Tell the reader exactly what to do. Numbered steps where useful. Actions, not principles.",
+        narrative:     "Tell a story or walk through a real scenario. Ground abstract points in what actually happened.",
+        direct:        "No preamble. State the point immediately. Short sentences where possible.",
+        contrarian:    "Take a position that contradicts consensus. Explain precisely why popular advice fails.",
     };
 
     const evidenceInstructions: Record<OutlineSection["evidenceType"], string> = {
-        case_study: "Anchor the section in a real example. If you don't have one, use the pattern: '[Type of company] doing [X] saw [Y] — use [ADD REAL DATA] if exact figures unknown.' Never invent statistics.",
-        data: "Lead with a specific, sourced statistic. If unknown, write the insight without the number — do NOT invent figures.",
-        example: "Use at least one concrete, named example. Generic advice without a named example is not acceptable.",
-        opinion: "Take a clear editorial stance. Use 'In practice…', 'What works better is…', 'Standard advice says X — but Y is what actually happens.'",
-        comparison: "Compare two approaches, tools, or strategies directly. Declare a winner for at least one use case.",
-        how_to: "Number the steps. Be specific — 'do X' not 'consider doing X'. Each step should have a concrete action.",
-        faq: "Write 5-7 Q&A pairs. Each answer MUST open with: Yes / No / a number / a tool name / a time frame. Max 3 sentences per answer. No 'It depends' openers.",
+        case_study: "Anchor in a real example. Pattern: '[Type of company] doing [X] saw [Y]'. Never invent statistics.",
+        data:       "Lead with a specific statistic from the REAL FACTS below. If none fits, write the insight without a number.",
+        example:    "Use at least one concrete, named example. Generic advice without a named example is not acceptable.",
+        opinion:    "Take a clear editorial stance. 'In practice\u2026', 'What works better is\u2026'",
+        comparison: "Compare two approaches or tools directly. Declare a winner for at least one use case.",
+        how_to:     "Number the steps. Be specific \u2014 'do X' not 'consider doing X'.",
+        faq:        "5-7 Q&A pairs. Each answer MUST open with: Yes / No / a number / a tool name / a time frame. Max 3 sentences.",
     };
 
-    const prompt = `You are a senior editor writing one section of an article. Write ONLY this section — do not write the full article.
+    const prompt = `You are a senior editor writing one section of an article. Write ONLY this section.
 
 ARTICLE TITLE: "${outline.title}"
 KEYWORD: "${ctx.keyword}"
@@ -401,46 +580,57 @@ KEYWORD: "${ctx.keyword}"
 THIS SECTION:
 Heading: "${section.heading}"
 Goal: ${section.goal}
-Tone: ${section.tone} — ${toneInstructions[section.tone]}
-Evidence type: ${section.evidenceType} — ${evidenceInstructions[section.evidenceType]}
-Word target: ${section.wordTarget} words (±20%)
-${section.keyEntities.length > 0 ? `Key entities to reference: ${section.keyEntities.join(", ")}` : ""}
+Tone: ${section.tone} \u2014 ${toneInstructions[section.tone]}
+Evidence type: ${section.evidenceType} \u2014 ${evidenceInstructions[section.evidenceType]}
+Word target: ${section.wordTarget} words (\u00b120%)
+${section.keyEntities.length > 0 ? `Key entities: ${section.keyEntities.join(", ")}` : ""}
+${serpNote}
 
-EDITORIAL MEMORY (continuity rules):
+${competitorContext}
+
+${facts}
+
+EDITORIAL MEMORY:
 ${memoryNote}
 ${entityNote}
 ${openerNote}
 ${authorNote}
 
 ${getClaimRules(ctx)}
-
 ${getToneRules(ctx)}
 
-MICRO-IMPERFECTION RULE: Real writing has controlled irregularity. You may:
-- Use a sentence fragment for emphasis. Like this.
-- Write an abrupt transition occasionally.
-- Place a short emphatic standalone line. That's it.
-These feel human. Use sparingly — maximum once per 200 words.
+HUMAN WRITING RULES \u2014 this is what separates real writing from AI output:
+- Vary sentence length deliberately. Short punches. Then a longer one that earns its length. Then short again.
+- Imperfect transitions are fine: "Here's the thing.", "And that's where it breaks.", "Which sounds obvious. It isn't."
+- Fragments work for emphasis. Like this. Use them.
+- Vary paragraph length. Sometimes one sentence alone. Sometimes three or four build together.
+- Avoid parallel sentence structure back to back \u2014 if two sentences open the same way, break the second.
+- One moment of plain directness per section: "Don't do this.", "This is the part most people skip."
+- Uncertainty is honest: "roughly", "in most cases", "typically" when you're not citing a specific number.
 
-FORBIDDEN (any of these = failure):
-- furthermore / moreover / in conclusion / delve into / leverage / robust / comprehensive guide
-- Starting with "In this section" or "Now let's look at" or "Moving on to"
+FRESHNESS: Reference what specifically changed or is different as of ${ctx.year}.
+
+FACT HONESTY: If you don't have a specific number, write the insight without it.
+"Most companies see significant churn reduction" beats "63% of companies" when 63% is invented.
+
+FORBIDDEN:
+- furthermore / moreover / in conclusion / delve into / leverage / robust / comprehensive
+- "In this section" / "Now let's look at" / "Moving on to"
 - Three consecutive sentences of the same length
-- ${isIntro ? 'Opening with "Welcome to" or "In this article" or a question' : 'Re-introducing the keyword with "When it comes to" or "In the realm of"'}
+- ${isIntro ? '"Welcome to" / "In this article" / opening with a question' : '"When it comes to" / "In the realm of"'}
 
-${isIntro ? `INTRO RULE: 3 sentences maximum. (1) The single most surprising/useful fact about "${ctx.keyword}". (2) What conventional wisdom gets wrong. (3) What this article gives the reader. No fluff.` : ""}
+${isIntro ? `INTRO RULE: 3 sentences max. (1) Most surprising/useful fact about "${ctx.keyword}". (2) What conventional wisdom gets wrong. (3) What the reader gets. No fluff.` : ""}
+${isFaq ? `FAQ FORMAT: ## for each question. Answer opens immediately with Yes/No/number/tool/timeframe. No preamble. Max 3 sentences per answer.` : ""}
 
-${isFaq ? `FAQ FORMAT: Use ## for each question. Start each answer immediately with Yes/No/number/tool/timeframe. No preamble before the answer.` : ""}
+Output: ONLY the section in Markdown including the ## heading. No commentary.`;
 
-Output: ONLY the section content in Markdown. Include the ## heading. No preamble, no "Here is the section:", no commentary.`;
-
-    const fallbackText = `## ${section.heading}\n\n[Section generation failed — regenerate this section.]`;
+    const fallbackText = `## ${section.heading}\n\n[Section generation failed \u2014 regenerate this section.]`;
 
     try {
         const text = await callGemini(prompt, {
             model: AI_MODELS.GEMINI_PRO,
             temperature: 0.75,
-            maxOutputTokens: 2048,
+            maxOutputTokens: 3000,
             timeoutMs: 90_000,
             maxRetries: 3,
         });
@@ -604,7 +794,7 @@ export async function runFullPipeline(params: {
     const outline = await runOutlinePlanner(keyword, brain, serpContext, ctx, tone);
 
     logger.debug("[Pipeline] Stage 3 — Section Writer", { keyword, sections: outline.sections.length });
-    const rawDraft = await runSectionWriter(outline, brain, author, ctx);
+    const rawDraft = await runSectionWriter(outline, brain, author, ctx, serpContext);
 
     logger.debug("[Pipeline] Stage 4 — Editorial Rewrite", { keyword, chunks: Math.ceil(rawDraft.length / 18000) });
     const { content: polishedMarkdown, truncated } = await runEditorialRewrite(rawDraft, ctx);

@@ -30,10 +30,10 @@ export interface SerpContext {
 
 /** Hard character limits per section to prevent silent context overflows. */
 const BUDGET = {
-  scrapedContentPerResult: 6000, // ~900 words — enough to see full H2 structure and benchmark depth
+  scrapedContentPerResult: 25_000, // ~3,800 words — enough to see full article structure
   snippetPerResult: 400,
   featuredSnippet: 600,
-  paaTotal: 1200,  // increased to match richer content
+  paaTotal: 2_000,                 // raised to include PAA answers
   relatedSearches: 300,
 } as const;
 
@@ -413,7 +413,7 @@ export async function getSerpContextForKeyword(
   logger.debug(`[SERP] Fetching context for: "${keyword}"…`);
 
   const { organic, peopleAlsoAsk, featuredSnippet, relatedSearches } =
-    await fetchGoogleSerp(keyword, 5); // 5 results → better heading frequency signal
+    await fetchGoogleSerp(keyword, 7); // 7 results → reliably get 5 after unscrappable domains dropped
 
   if (organic.length === 0) return null;
 
@@ -437,6 +437,12 @@ export async function getSerpContextForKeyword(
         })
       );
     }
+
+    // Fix 4: Log how many full articles were actually scraped
+    const fullyScraped = organic.filter(r => (r.wordCount ?? 0) > 800);
+    logger.info(`[SERP] Scraped ${fullyScraped.length}/${organic.length} full articles for "${keyword}"`, {
+      wordCounts: organic.map(r => r.wordCount ?? 0),
+    });
   }
 
   const gaps = computeContentGaps(organic);
@@ -451,12 +457,14 @@ export async function getSerpContextForKeyword(
     ctx += truncate(featuredSnippet, BUDGET.featuredSnippet) + "\n\n";
   }
 
-  // People Also Ask
+  // People Also Ask — include answers so the model knows what to beat
   if (peopleAlsoAsk.length > 0) {
-    ctx += "PEOPLE ALSO ASK (questions your post must answer):\n";
+    ctx += "PEOPLE ALSO ASK (questions your post must answer — beat these answers):\n";
     let paaChars = 0;
     for (const paa of peopleAlsoAsk) {
-      const line = `- ${paa.question}${paa.answer ? ` → ${paa.answer}` : ""}\n`;
+      const line = `- ${paa.question}${paa.answer
+        ? `\n  Current Google answer: ${paa.answer}`
+        : ""}\n`;
       if (paaChars + line.length > BUDGET.paaTotal) break;
       ctx += line;
       paaChars += line.length;

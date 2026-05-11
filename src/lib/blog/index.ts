@@ -486,10 +486,14 @@ export async function generateTrendingPost(
         siteDomain,
     });
 
-    // Trending posts use the same 4-stage pipeline — the research brain stage
-    // automatically focuses on "what's happening now" via SERP context.
-    // No pre-fetched SERP here; the pipeline fetches it internally.
-    const serpContext = null; // Pipeline Stage 1 will handle SERP internally via keyword
+    // Fetch SERP data for trending topic — previously hardcoded to null
+    let serpContext: SerpContext | null = null;
+    try {
+        serpContext = await getSerpContextForKeyword(industry, true);
+        logger.debug("[Blog Engine] Trending post SERP fetched", { industry });
+    } catch (e) {
+        logger.error("[Blog Engine] Trending SERP fetch failed", { error: (e as Error)?.message });
+    }
 
     logger.debug(`[Blog Engine] Trending post pipeline: industry="${industry}" country="${country}"`);
     const pipeline = await runFullPipeline({
