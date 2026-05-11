@@ -12,10 +12,10 @@
  * No credits consumed — forecast uses cached AeoSnapshot history.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
     TrendingUp, TrendingDown, Minus, Loader2,
-    Lock, Sparkles, Target, ChevronDown, ChevronUp,
+    Lock, Sparkles, Target, ChevronDown, ChevronUp, RefreshCw,
 } from "lucide-react";
 
 interface VisibilityForecast {
@@ -76,10 +76,12 @@ export function VisibilityForecastPanel({ siteId }: Props) {
 
     const isGated = userTier !== null && !GATED_TIERS.has(userTier);
 
-    useEffect(() => {
+    const loadForecast = useCallback((refresh = false) => {
         if (userTier === null || isGated) return;
         setLoading(true);
-        fetch(`/api/aeo/forecast?siteId=${siteId}`)
+        setError(null);
+        const url = `/api/aeo/forecast?siteId=${siteId}${refresh ? "&refresh=1" : ""}`;
+        fetch(url)
             .then(r => r.json())
             .then(data => {
                 if (data.error) setError(data.error);
@@ -87,6 +89,11 @@ export function VisibilityForecastPanel({ siteId }: Props) {
             })
             .catch(() => setError("Failed to load forecast."))
             .finally(() => setLoading(false));
+    }, [siteId, isGated, userTier]);
+
+    useEffect(() => {
+        loadForecast();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [siteId, isGated, userTier]);
 
     if (userTier !== null && isGated) {
@@ -128,6 +135,28 @@ export function VisibilityForecastPanel({ siteId }: Props) {
         );
     }
 
+    // First-run onboarding: library is complete but no audit data yet
+    if (forecast.historyWeeksUsed === 0) {
+        return (
+            <div className="rounded-xl border border-dashed border-border/60 bg-muted/10 p-5 flex flex-col gap-3">
+                <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
+                        <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                    </div>
+                    <p className="text-sm font-semibold text-foreground">90-Day AI Visibility Forecast</p>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                    Run your first <strong className="text-foreground">AEO Deep Audit</strong> to generate a
+                    baseline. The forecast engine will project your 90-day AI citation trajectory once at
+                    least one audit snapshot is saved.
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] text-muted-foreground/60">Steps: AEO Scan → Deep Audit → return here</span>
+                </div>
+            </div>
+        );
+    }
+
     const { icon: TrendIcon, color: trendColor, badge: trendBadge, label: trendLabel } =
         TREND_META[forecast.trend];
 
@@ -141,13 +170,22 @@ export function VisibilityForecastPanel({ siteId }: Props) {
                 <div className="w-7 h-7 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
                     <Sparkles className="w-3.5 h-3.5 text-violet-400" />
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-foreground">90-Day AI Visibility Forecast</p>
                     <p className="text-[11px] text-muted-foreground">
                         Based on {forecast.historyWeeksUsed} weeks of AEO history
                         {forecast.dataSparse && " · limited data — confidence low"}
                     </p>
                 </div>
+                {/* Refresh button — busts Redis cache */}
+                <button
+                    onClick={() => loadForecast(true)}
+                    disabled={loading}
+                    title="Regenerate forecast (ignores 15-min cache)"
+                    className="shrink-0 p-1.5 rounded-lg border border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+                >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+                </button>
             </div>
 
             {/* Metric row */}

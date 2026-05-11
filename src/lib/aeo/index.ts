@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { cachedQuestions } from "./response-cache";
 import { isSafeUrl } from "@/lib/security/safe-url";
 import { AI_MODELS } from "@/lib/constants/ai-models";
+import { performVectorGapAnalysis, type SemanticGapResult } from "./vector-gap";
 
 
 export interface AeoCheck {
@@ -36,6 +37,7 @@ export interface AeoResult {
         chatgpt: number
         googleAio: number
         claude?: number
+        grok?: number
     }
     generativeShareOfVoice: number // 0-100
     citationLikelihood: number // 0-100 (Predictive)
@@ -47,8 +49,9 @@ export interface AeoResult {
     scannedAt: Date
     missingIntegrations?: string[]
     layerScores?: { aeo: number; geo: number; aio: number }
-    
     diagnosis: AeoDiagnosis | null
+    /** Gap 2: semantic vector gap results — undefined for lite audits */
+    semanticGaps?: SemanticGapResult[]
 }
 
 // =============================================================================
@@ -1237,11 +1240,26 @@ ${cleanText}
         chatgpt: multiModelResults.results.find(r => r.model === "ChatGPT")?.confidence ?? 0,
         googleAio: googleAioResult.score,
         claude: multiModelResults.results.find(r => r.model === "Claude")?.confidence ?? 0,
-     
+        // Gap 3: Grok is already called in auditMultiModelMentions — read the result here.
+        // Only included when XAI_API_KEY is set (Option B) to avoid score drops for
+        // users who haven't configured xAI yet.
+        grok: process.env.XAI_API_KEY
+            ? (multiModelResults.results.find(r => r.model === "Grok")?.confidence ?? 0)
+            : undefined,
     }
 
+    // Gap 3 (Option B): include Grok in the average only when XAI_API_KEY is configured.
+    // This prevents a silent score drop for existing users who don't have the key.
+    const gsoVEngines = [
+        multiEngineScore.perplexity,
+        multiEngineScore.chatgpt,
+        multiEngineScore.googleAio,
+        multiEngineScore.claude,
+        multiModelResults.overallScore,
+        ...(process.env.XAI_API_KEY ? [multiEngineScore.grok ?? 0] : []),
+    ];
     const generativeShareOfVoice = Math.round(
-        (multiEngineScore.perplexity + multiEngineScore.chatgpt + multiEngineScore.googleAio + multiEngineScore.claude + multiModelResults.overallScore) / 5
+        gsoVEngines.reduce((a, b) => a + b, 0) / gsoVEngines.length
     )
 
 
@@ -1348,6 +1366,53 @@ ${cleanText}
         });
     }
 
+    // ── Gap 2: Semantic Vector Gap Analysis ─────────────────────────────────────
+    // Run ONLY on full audits (not lite/cron) and only when Gemini is available.
+    // Uses the homepage html already fetched above — strips tags to plain text so
+    // the embedding model gets clean prose, not markup.
+    // Each keyword is analysed independently; failures are non-fatal (empty gaps).
+    let semanticGaps: SemanticGapResult[] | undefined = undefined;
+    if (!lite && html && process.env.GEMINI_API_KEY) {
+        try {
+            const userContent = html
+                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
+                .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
+                .replace(/<[^>]+>/g, " ")
+                .replace(/\s+/g, " ")
+                .trim()
+                .substring(0, 8000);
+
+            const keywords = (coreServices ?? domain.split(".")[0])
+                .split(",")
+                .map((s: string) => s.trim())
+                .filter(Boolean)
+                .slice(0, 2); // max 2 keywords — each triggers SERP + embedding calls
+
+            semanticGaps = await Promise.all(
+                keywords.map((kw: string) =>
+                    performVectorGapAnalysis(userContent, kw).catch((e: unknown) => ({
+                        keyword: kw,
+                        userScore: 0,
+                        competitorAvgScore: 0,
+                        missingConcepts: [] as string[],
+                        setupWarning: (e as Error)?.message ?? "Vector gap analysis failed",
+                    }))
+                )
+            );
+
+            logger.info("[AEO] Vector gap analysis completed", {
+                domain,
+                keywords,
+                gaps: semanticGaps.map(g => ({ kw: g.keyword, score: g.userScore, missing: g.missingConcepts.length })),
+            });
+        } catch (err: unknown) {
+            logger.warn("[AEO] Vector gap analysis skipped (non-fatal)", {
+                domain,
+                error: (err as Error)?.message ?? String(err),
+            });
+        }
+    }
+
     const result: AeoResult = {
         url,
         score,
@@ -1366,6 +1431,7 @@ ${cleanText}
         scannedAt: new Date(),
         layerScores,
         diagnosis,
+        semanticGaps,
         missingIntegrations: [
             ...(!process.env.PERPLEXITY_API_KEY ? ['Perplexity (PERPLEXITY_API_KEY)'] : []),
             ...(!process.env.SERPAPI_KEY ? ['SerpAPI/Google AIO (SERPAPI_KEY)'] : []),

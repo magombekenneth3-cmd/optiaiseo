@@ -53,6 +53,8 @@ const ENGINE_COLORS: Record<string, { bg: string; text: string; border: string }
     gemini:    { bg: "bg-blue-500/10",    text: "text-blue-400",    border: "border-blue-500/20" },
     perplexity:{ bg: "bg-purple-500/10",  text: "text-purple-400",  border: "border-purple-500/20" },
     claude:    { bg: "bg-amber-500/10",   text: "text-amber-400",   border: "border-amber-500/20" },
+    grok:      { bg: "bg-sky-500/10",     text: "text-sky-400",     border: "border-sky-500/20" },
+    copilot:   { bg: "bg-indigo-500/10",  text: "text-indigo-400",  border: "border-indigo-500/20" },
     default:   { bg: "bg-zinc-500/10",    text: "text-zinc-400",    border: "border-zinc-500/20" },
 };
 

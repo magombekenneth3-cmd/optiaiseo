@@ -21,6 +21,7 @@ import { CitationGapPanel } from "@/components/aeo/CitationGapPanel";
 import { CitationBreakdownPanel } from "@/components/aeo/CitationBreakdownPanel";
 import { AeoScoreTrendChart } from "@/components/aeo/AeoScoreTrendChart";
 import { VisibilityForecastPanel } from "@/components/aeo/VisibilityForecastPanel";
+import { SemanticGapPanel } from "@/components/aeo/SemanticGapPanel";
 import { GenerativeSOVPanel } from "@/components/dashboard/GenerativeSOVPanel";
 import QueryLibraryPanel from "@/components/aeo/QueryLibraryPanel";
 import { BacklinkPanel } from "@/components/dashboard/BacklinkPanel";
@@ -516,6 +517,13 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                         <div className="border-t border-border/40 pt-6">
                             <VisibilityForecastPanel siteId={siteId} />
                         </div>
+
+                        {/* ── Semantic Gap Analysis ── */}
+                        {result?.semanticGaps && result.semanticGaps.length > 0 && (
+                            <div className="border-t border-border/40 pt-6">
+                                <SemanticGapPanel gaps={result.semanticGaps} />
+                            </div>
+                        )}
 
                         {/* Prompt Simulator */}
                         <PromptSimulator siteId={siteId} domain={domain} />
