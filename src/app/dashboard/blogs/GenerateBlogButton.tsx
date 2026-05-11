@@ -8,6 +8,7 @@ import { generateBlog } from "@/app/actions/blog";
 import { showActionError } from "@/lib/ui/action-errors";
 import { Loader2, Sparkles, ChevronDown, FileText, BarChart } from "lucide-react";
 import { AuthorInput, GenerateBlogModal } from "./BlogStepper";
+import { UpgradeModal } from "@/components/UpgradeModal";
 
 interface GenerateBlogButtonProps {
     siteId: string;
@@ -20,6 +21,7 @@ export function GenerateBlogButton({ siteId, siteDomain, initialKeyword }: Gener
     const [isPending, setIsPending] = useState(false);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
+    const [showUpgrade, setShowUpgrade] = useState(false);
     const [pendingPipelineType, setPendingPipelineType] = useState<string | undefined>(undefined);
     const openModal = (type?: string) => {
         setPendingPipelineType(type);
@@ -54,7 +56,13 @@ export function GenerateBlogButton({ siteId, siteDomain, initialKeyword }: Gener
                     { duration: 8000 }
                 );
             } else {
-                showActionError(res as { success: false; error?: string; code?: string });
+                // Intercept limit errors and show the upgrade modal instead of a toast
+                const code = (res as { success: false; error?: string; code?: string }).code;
+                if (code === "insufficient_credits" || code === "rate_limit") {
+                    setShowUpgrade(true);
+                } else {
+                    showActionError(res as { success: false; error?: string; code?: string });
+                }
             }
         } catch (error: unknown) {
             toast.dismiss(loadingId);
@@ -154,6 +162,15 @@ export function GenerateBlogButton({ siteId, siteDomain, initialKeyword }: Gener
                     onClose={() => setModalOpen(false)}
                     onGenerate={handleGenerate}
                 />
+            )}
+
+            {/* Upgrade modal — shown when monthly blog limit is hit */}
+            {showUpgrade && typeof window !== "undefined" && createPortal(
+                <UpgradeModal
+                    currentTier="FREE"
+                    onClose={() => setShowUpgrade(false)}
+                />,
+                document.body
             )}
         </>
     );
