@@ -465,6 +465,11 @@ model TrendingTopic {
   keywords  String[]
   newsData  Json
   fetchedAt DateTime @default(now())
+  // Rows older than 30 days are stale; purged by the weekly cron job
+  expiresAt DateTime @default(dbgenerated("now() + interval '30 days'"))
+
+  @@index([fetchedAt(sort: Desc)])
+  @@index([expiresAt])              // purge job filter
 }
 
 model MarketCategory {

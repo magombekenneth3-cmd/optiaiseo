@@ -391,7 +391,30 @@ export const generateBlogJob = inngest.createFunction(
         // Degrades gracefully if Perplexity key is missing.
         const researchBrief = await step.run("perplexity-research", async () => {
             if (!process.env.PERPLEXITY_API_KEY) return null;
-            // Use explicit keyword for USER_KEYWORD/SEED_KEYWORD; fall back to site topic
+
+            // Circuit breaker: skip Perplexity when it is known-bad to avoid
+            // blocking every blog job for 30 s on a rate-limit or outage.
+            const CB_KEY = "cb:perplexity:state";
+            const CB_FAIL = "cb:perplexity:failures";
+            const CB_AT   = "cb:perplexity:openedAt";
+            const CB_MAX  = 5;
+            const CB_TTL  = 90_000; // 90 s cool-down
+            let cbOpen = false;
+            try {
+                const { redis } = await import("@/lib/redis");
+                const state    = await redis.get<string>(CB_KEY);
+                const openedAt = await redis.get<number>(CB_AT);
+                if (state === "OPEN" && openedAt && Date.now() - openedAt < CB_TTL) {
+                    cbOpen = true;
+                    logger.warn("[Blog/Research] Perplexity circuit is OPEN — skipping");
+                } else if (state === "OPEN") {
+                    // Cool-down elapsed — allow one probe through
+                    await redis.del(CB_KEY);
+                }
+            } catch { /* Redis unavailable — fail open */ }
+
+            if (cbOpen) return null;
+
             const researchTopic = keyword || site.domain.replace(/^www\./, "").split(".")[0];
             try {
                 const res = await fetch("https://api.perplexity.ai/chat/completions", {
@@ -419,24 +442,46 @@ Be specific and concise. This will be used to write a better article.`,
                         temperature: 0.1,
                         max_tokens: 3500,
                     }),
-                    signal: AbortSignal.timeout(30000),
+                    signal: AbortSignal.timeout(25_000),
                 });
+
                 if (!res.ok) {
                     logger.warn(`[Blog/Research] Perplexity returned ${res.status}`);
+                    // Record failure toward circuit breaker
+                    try {
+                        const { redis } = await import("@/lib/redis");
+                        const f = await redis.incr(CB_FAIL);
+                        await redis.expire(CB_FAIL, 300);
+                        if (f >= CB_MAX) { await redis.set(CB_KEY, "OPEN"); await redis.set(CB_AT, Date.now()); }
+                    } catch { /* non-fatal */ }
                     return null;
                 }
+
+                // Success — reset failure counter
+                try {
+                    const { redis } = await import("@/lib/redis");
+                    await redis.del(CB_KEY, CB_FAIL, CB_AT);
+                } catch { /* non-fatal */ }
+
                 const data = await res.json();
                 const brief = data.choices?.[0]?.message?.content ?? null;
                 const citations: string[] = (data.citations ?? []).map((c: unknown) =>
                     typeof c === "string" ? c : (c as Record<string, string>).url ?? ""
                 ).filter(Boolean);
                 const domainCited = citations.some(url => url.includes(site.domain.replace(/^www\./, "")));
-                logger.info(`[Blog/Research] Research complete for "${researchTopic}" — domain cited in results: ${domainCited}`, { citationCount: citations.length });
+                logger.info(`[Blog/Research] Research complete for "${researchTopic}" — domain cited: ${domainCited}`, { citationCount: citations.length });
                 return brief ? `COMPETITIVE RESEARCH for "${researchTopic}":\n${brief}` : null;
             } catch (err: unknown) {
                 logger.warn("[Blog/Research] Perplexity research failed — continuing without brief", {
                     error: (err as Error)?.message,
                 });
+                // Record failure toward circuit breaker
+                try {
+                    const { redis } = await import("@/lib/redis");
+                    const f = await redis.incr(CB_FAIL);
+                    await redis.expire(CB_FAIL, 300);
+                    if (f >= CB_MAX) { await redis.set(CB_KEY, "OPEN"); await redis.set(CB_AT, Date.now()); }
+                } catch { /* non-fatal */ }
                 return null;
             }
         });

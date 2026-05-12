@@ -289,3 +289,26 @@ export const weeklyAutoReauditJob = inngest.createFunction(
         return { queued: sites.length };
     }
 );
+
+// ─── TrendingTopic purge ──────────────────────────────────────────────────────
+// TrendingTopic rows have a 30-day expiresAt timestamp set at insert time.
+// This weekly cron deletes all expired rows so the table doesn't grow unbounded.
+export const purgeExpiredTrendingTopicsJob = inngest.createFunction(
+    {
+        id: "purge-expired-trending-topics",
+        name: "Purge Expired Trending Topics",
+        retries: 1,
+        triggers: [{ cron: "0 3 * * 0" }], // Sundays at 03:00 UTC
+    },
+    async ({ step }) => {
+        const deleted = await step.run("delete-expired-rows", async () => {
+            const result = await prisma.trendingTopic.deleteMany({
+                where: { expiresAt: { lt: new Date() } },
+            });
+            return result.count;
+        });
+
+        logger.info(`[PurgeTrending] Deleted ${deleted} expired TrendingTopic rows`);
+        return { deleted };
+    }
+);
