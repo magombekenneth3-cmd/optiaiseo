@@ -543,7 +543,7 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
           <div className="flex-1 relative transform-gpu transition-all duration-700 ease-out lg:hover:-translate-y-2 border border-border rounded-2xl shadow-xl p-2 bg-card group">
             <DashboardMockup />
           </div>
-          <div className="flex-1 relative transform-gpu transition-all duration-700 ease-out lg:hover:-translate-y-2 border border-border rounded-2xl shadow-xl p-8 bg-card flex flex-col justify-center items-center group">
+          <div className="flex-1 relative transform-gpu transition-all duration-700 ease-out lg:hover:-translate-y-2 border border-border rounded-2xl shadow-xl p-8 bg-card flex flex-col justify-center items-center group overflow-hidden">
             <div className="text-center mb-8 z-10 relative">
               <h2 className="text-2xl font-bold mb-2 tracking-tight">
                 Compound your AI presence
