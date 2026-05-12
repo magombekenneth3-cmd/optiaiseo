@@ -1,7 +1,6 @@
 const useExperimental = process.env.GEMINI_EXPERIMENTAL_MODELS === "1";
 const GEMINI_PRO_MODEL = useExperimental ? "gemini-2.0-pro-exp" : "gemini-2.5-flash";
 
-
 export const GEMINI_2_5_FLASH = 'gemini-2.5-flash';
 
 export const GEMINI_3_FLASH = 'gemini-2.5-flash';
@@ -25,7 +24,9 @@ export const AI_MODELS = {
     OPENAI_PRIMARY: 'gpt-4o',
     OPENAI_EMBEDDING: 'text-embedding-3-small',
     ANTHROPIC_PRIMARY: 'claude-haiku-4-5-20251001',
-    ANTHROPIC_SONNET: 'claude-sonnet-4-5',
+    // Use the versioned model ID — undated aliases can silently route to a
+    // different snapshot and will 404 when the alias is retired.
+    ANTHROPIC_SONNET: 'claude-sonnet-4-5-20251001',
     ANTHROPIC_OPUS: 'claude-opus-4-20250514',
 } as const;
 

@@ -1733,6 +1733,27 @@ export default defineAgent({
     },
 });
 
+// ─── Graceful shutdown ───────────────────────────────────────────────────────
+// Railway and Cloud Run send SIGTERM before force-killing a container.
+// Without a handler the process exits mid-session; Prisma connection pool
+// leaks, and the LiveKit room stays open until its own 30s timeout fires.
+async function shutdown(signal: string): Promise<void> {
+    log.info({ signal }, "[Aria] Received shutdown signal — draining gracefully");
+    try {
+        // Give in-flight sessions up to 10s to finish their current step
+        await new Promise<void>((resolve) => setTimeout(resolve, 2_000));
+        await prisma.$disconnect();
+        log.info("[Aria] Prisma disconnected — exiting cleanly");
+    } catch (e: any) {
+        log.error({ err: e?.message }, "[Aria] Error during shutdown");
+    } finally {
+        process.exit(0);
+    }
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT",  () => shutdown("SIGINT"));
+
 // ─── Worker ───────────────────────────────────────────────────────────────────
 cli.runApp(
     new WorkerOptions({

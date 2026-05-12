@@ -204,6 +204,10 @@ export const generateBlogJob = inngest.createFunction(
         // Cap at 2 retries: 3 attempts × up to 90s (Claude) = ~270s max, well inside
         // Railway's 5-min function timeout. More retries cause compounding hangs.
         retries: 2,
+        // Idempotency: Inngest deduplicates events with the same blogId within its
+        // dedup window. Prevents double credit burns when users double-click or
+        // the server action fires the event more than once (e.g. after a 504 retry).
+        idempotency: "event.data.blogId",
         concurrency: { limit: 5 },
         rateLimit: {
             limit: 10,

@@ -581,6 +581,7 @@ model AeoSnapshot {
 
   @@unique([siteId, createdAt])
   @@index([siteId])
+  @@index([siteId, createdAt(sort: Desc)]) // AEO trend chart queries
   @@index([createdAt])
 }
 
@@ -1224,5 +1225,6 @@ model KeywordSerpAnalysis {
 
   @@unique([siteId, keyword])
   @@index([siteId])
+  @@index([siteId, status])          // purge job + dashboard status filter
   @@index([expiresAt])
 }

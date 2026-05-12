@@ -22,6 +22,9 @@ export const processManualAuditJob = inngest.createFunction(
         id: "process-manual-audit",
         name: "Process Manual Audit",
         retries: 1,
+        // Deduplicates re-fires for the same auditId (e.g. double-click before
+        // the Redis lock activates, or an upstream 502 that causes a replay).
+        idempotency: "event.data.auditId",
         concurrency: {
             limit: CONCURRENCY.auditFull,
             key: `event.data.siteId`,
@@ -121,6 +124,9 @@ export const runWeeklyAuditJob = inngest.createFunction(
         id: "run-weekly-audit",
         name: "Run Weekly Site Audit",
         retries: 3,
+        // Prevents a second weekly audit running for the same siteId within the
+        // dedup window if the cron fires an extra event (e.g. during a deploy).
+        idempotency: "event.data.siteId",
         concurrency: {
             limit: CONCURRENCY.auditFull,
             // Per-site key: one concurrent audit per site, not a shared global bucket.
