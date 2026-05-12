@@ -778,6 +778,27 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
         </div>
       </section>
 
+      {/* ── Built for your team — solution page links ─────────────────────── */}
+      <section aria-labelledby="solutions-heading" className="py-12 border-t border-border bg-card/40">
+        <div className="max-w-5xl mx-auto px-6 text-center">
+          <p id="solutions-heading" className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-5">Built for every team</p>
+          <div className="flex flex-wrap justify-center gap-3">
+            <Link href="/for-agencies" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
+              🏢 For Agencies
+            </Link>
+            <Link href="/for-saas" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
+              🚀 For SaaS Companies
+            </Link>
+            <Link href="/for-content" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
+              ✍️ For Content Teams
+            </Link>
+            <Link href="/for-ecommerce" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
+              🛒 For E-commerce
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* ── Aria showcase ─────────────────────────────────────────────────── */}
       <section
         id="aria"
@@ -1176,6 +1197,33 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Deepen your knowledge — guide & blog hub links ─────────────────── */}
+      <section aria-labelledby="learn-heading" className="py-12 border-t border-border">
+        <div className="max-w-5xl mx-auto px-6 text-center">
+          <p id="learn-heading" className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-5">Learn more</p>
+          <div className="flex flex-wrap justify-center gap-3">
+            <Link href="/guide" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
+              📚 SEO &amp; AEO Guide Hub
+            </Link>
+            <Link href="/aeo-guide" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
+              🤖 AEO Guide Hub
+            </Link>
+            <Link href="/blog" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
+              📝 SEO Blog
+            </Link>
+            <Link href="/free/gso-checker" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
+              🧠 Free AI Visibility Check
+            </Link>
+            <Link href="/leaderboard" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
+              🏆 AI SEO Leaderboard
+            </Link>
+            <Link href="/methodology" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
+              🔬 How We Measure AEO
+            </Link>
           </div>
         </div>
       </section>
