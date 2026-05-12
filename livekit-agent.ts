@@ -488,6 +488,32 @@ async function prefetchImpl(
     return { sites, primaryAudit, greeting };
 }
 
+// ─── Input sanitisation ──────────────────────────────────────────────────────
+// All string parameters that arrive from LLM tool calls originate in user
+// speech (transcribed text). A bad actor can craft a sentence that injects
+// prompt content or path traversal sequences into downstream API calls.
+//
+// sanitiseInput strips angle-bracket / quote characters used for HTML/JSON
+// injection and truncates to a safe length. It is NOT a full-coverage XSS
+// filter — it is a first-line guard for the voice agent's external API calls.
+function sanitiseInput(raw: string, maxLen = 512): string {
+    return raw
+        .replace(/[<>"'`\\]/g, "")      // strip injection-prone chars
+        .replace(/\.{2,}[\/\\]/g, "")   // strip path traversal (../../)
+        .trim()
+        .slice(0, maxLen);
+}
+
+// URL-specific guard: only allow printable ASCII, reject javascript:/data: schemes
+function sanitiseUrl(raw: string): string {
+    const cleaned = sanitiseInput(raw, 2048);
+    if (/^(javascript|data|vbscript):/i.test(cleaned)) {
+        log.warn({ raw }, "[Aria] Rejected suspicious URL scheme from tool call");
+        return "";
+    }
+    return cleaned;
+}
+
 // ─── Tool factory ─────────────────────────────────────────────────────────────
 // Takes a scoped emit function and returns all tools bound to that session.
 // This eliminates the module-level global and prevents cross-session leaks.
@@ -506,7 +532,7 @@ function buildTools(emit: (data: object) => void, userId?: string, roomName?: st
         }),
         execute: async ({ url }) => {
             return guardTool("siteAudit", sessionId, async () => {
-            const domain = parseDomain(url);
+            const domain = parseDomain(sanitiseUrl(url));
             log.info({ tool: "runSiteAudit", domain }, "Tool invoked");
             emit({ event: "set_domain", domain });
             emit({ event: "tool_start", tool: `Auditing ${domain}...` });
@@ -655,7 +681,7 @@ function buildTools(emit: (data: object) => void, userId?: string, roomName?: st
             url: z.string().describe("Full URL of the page"),
         }),
         execute: async ({ url }) => {
-            const fullUrl = ensureHttps(url);
+            const fullUrl = ensureHttps(sanitiseUrl(url));
             log.info({ tool: "runOnPageAudit", url: fullUrl }, "Tool invoked");
             emit({ event: "tool_start", tool: `Deep on-page analysis: ${fullUrl}` });
             try {
@@ -727,7 +753,7 @@ function buildTools(emit: (data: object) => void, userId?: string, roomName?: st
         }),
         execute: async ({ domain, coreServices }) => {
             return guardTool("aeoAudit", sessionId, async () => {
-            const cleanDomain = parseDomain(domain);
+            const cleanDomain = parseDomain(sanitiseUrl(domain));
             log.info({ tool: "runFullAeoAudit", domain: cleanDomain }, "Tool invoked");
             emit({ event: "tool_start", tool: `Running AEO Audit on ${cleanDomain}...` });
             try {

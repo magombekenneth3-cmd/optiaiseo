@@ -346,6 +346,8 @@ model OnPageReport {
   score     Int
   createdAt DateTime @default(now())
   site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, createdAt(sort: Desc)])
 }
 
 model Audit {
@@ -544,6 +546,8 @@ model CompetitorKeyword {
   dataSource   String?
   fetchedAt    DateTime   @default(now())
   competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  @@index([competitorId])
+  @@index([competitorId, fetchedAt(sort: Desc)])
 }
 
 model CompetitorTrafficSnapshot {

@@ -682,7 +682,7 @@ ${authorContext ? `AUTHOR CONTEXT:\n${authorContext}\n` : ""}${groundedContext ?
 Return ONLY the edited HTML, starting with the first HTML element. No preamble, no explanation, no markdown fences.
 
 ARTICLE TO EDIT:
-${liveBlogPost.content.substring(0, 14000)}`,
+${liveBlogPost.content.substring(0, 80000)}`,
                         }],
                     }),
                     signal: AbortSignal.timeout(90000),
