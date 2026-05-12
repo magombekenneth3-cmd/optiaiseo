@@ -29,7 +29,7 @@ export function AuditSidebar({
     domain, totalIssues, groups, runDate, activeFilter, onFilterChange,
 }: Props) {
     return (
-        <aside className="w-[200px] shrink-0 flex flex-col border-r border-border bg-sidebar overflow-y-auto">
+        <aside className="w-[220px] shrink-0 flex flex-col border-r border-border bg-sidebar overflow-y-auto">
 
             <div className="px-4 py-3 border-b border-border">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-[0.1em] mb-2">

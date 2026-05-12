@@ -1,15 +1,21 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { createContext, useContext, useState, useMemo } from "react";
 import { AuditSidebar, type SeverityFilter, type AuditSidebarGroup } from "./AuditSidebar";
 import type { NormalisedIssue } from "@/lib/seo-audit/parse-audit-result";
 import type { ReactNode } from "react";
+
+const FilterContext = createContext<SeverityFilter>("all");
+
+export function useAuditFilter() {
+    return useContext(FilterContext);
+}
 
 interface Props {
     domain: string;
     issues: NormalisedIssue[];
     runDate: string;
-    children: (filter: SeverityFilter) => ReactNode;
+    children: ReactNode;
 }
 
 export function AuditDetailClient({ domain, issues, runDate, children }: Props) {
@@ -41,20 +47,22 @@ export function AuditDetailClient({ domain, issues, runDate, children }: Props) 
     }, [issues]);
 
     return (
-        <div className="flex -mx-4 md:-mx-8 -mt-4 md:-mt-8 min-h-[calc(100vh-52px)]">
-            <AuditSidebar
-                domain={domain}
-                totalIssues={issues.length}
-                groups={groups}
-                runDate={runDate}
-                activeFilter={activeFilter}
-                onFilterChange={setActiveFilter}
-            />
-            <div className="flex-1 min-w-0 overflow-y-auto">
-                <div className="max-w-5xl mx-auto px-6 pb-20">
-                    {children(activeFilter)}
+        <FilterContext.Provider value={activeFilter}>
+            <div className="flex -mx-4 md:-mx-8 -mt-4 md:-mt-8 min-h-[calc(100vh-52px)]">
+                <AuditSidebar
+                    domain={domain}
+                    totalIssues={issues.length}
+                    groups={groups}
+                    runDate={runDate}
+                    activeFilter={activeFilter}
+                    onFilterChange={setActiveFilter}
+                />
+                <div className="flex-1 min-w-0 overflow-y-auto">
+                    <div className="max-w-5xl mx-auto px-6 pb-20">
+                        {children}
+                    </div>
                 </div>
             </div>
-        </div>
+        </FilterContext.Provider>
     );
 }

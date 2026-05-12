@@ -16,6 +16,7 @@ import AuditDiffSection from "./AuditDiffSection";
 import { computeAuditDiff } from "@/lib/audit/diff";
 import { AuditDetailClient } from "@/components/dashboard/AuditDetailClient";
 import { FilteredFindings } from "@/components/dashboard/FilteredFindings";
+import { AuditScoreBar } from "./AuditScoreBar";
 
 const CATEGORY_ORDER = [
     "basics", "on-page", "onpage", "technical", "off-page", "offpage",
@@ -67,21 +68,7 @@ function scoreColor(s: number) {
     return { text: "text-red-400", hex: "#ff5757", bar: "bg-red-500", ring: "#ff5757" };
 }
 
-function vitalStatus(metric: "lcp" | "cls" | "inp", value: number) {
-    if (metric === "lcp") {
-        if (value <= 2.5) return { label: "Good", cls: "text-emerald-400" };
-        if (value <= 4.0) return { label: "Needs work", cls: "text-amber-400" };
-        return { label: "Poor", cls: "text-red-400" };
-    }
-    if (metric === "cls") {
-        if (value <= 0.1) return { label: "Good", cls: "text-emerald-400" };
-        if (value <= 0.25) return { label: "Needs work", cls: "text-amber-400" };
-        return { label: "Poor", cls: "text-red-400" };
-    }
-    if (value <= 200) return { label: "Good", cls: "text-emerald-400" };
-    if (value <= 500) return { label: "Needs work", cls: "text-amber-400" };
-    return { label: "Poor", cls: "text-red-400" };
-}
+
 
 function difficultyLabel(d: number) {
     if (d <= 3) return { label: "Easy fix", cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" };
@@ -131,13 +118,10 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
     const overallScore = scoreValues.length
         ? Math.round(scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length) : 0;
 
-    const oc = scoreColor(overallScore);
     const criticalCount = issues.filter(i => i.severity === "critical").length;
     const runDate = new Date(typedAudit.runTimestamp ?? typedAudit.createdAt ?? Date.now());
 
-    const R = 35;
-    const CIRC = 2 * Math.PI * R;
-    const dashOffset = CIRC - (overallScore / 100) * CIRC;
+
 
     const sortedScores = Object.entries(scores).sort(([a], [b]) => {
         const ia = CATEGORY_ORDER.indexOf(a as (typeof CATEGORY_ORDER)[number]);
@@ -152,11 +136,10 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
 
 
 
-    const hasVitals = typedAudit.lcp != null || typedAudit.cls != null || typedAudit.inp != null;
-
     const formattedRunDate = runDate.toLocaleString("en-GB", {
         day: "numeric", month: "short", year: "numeric",
     });
+    const categoryCount = Object.keys(scores).length;
 
     return (
         <AuditDetailClient
@@ -166,111 +149,48 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
         >
         <div className="flex flex-col gap-0 pt-5">
 
-            {/* Breadcrumb */}
-            <div className="pb-5">
-                <Link
-                    href="/dashboard/audits"
-                    className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors group"
-                >
-                    <svg className="w-3 h-3 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 12 12" stroke="currentColor">
-                        <path d="M8 2L4 6l4 4" strokeWidth={1.5} strokeLinecap="round" />
-                    </svg>
-                    All audits
-                </Link>
-            </div>
-
-            {/* ── Hero Header ── */}
-            <header className="rounded-2xl border border-white/[0.08] bg-[#111116] overflow-hidden mb-5 shadow-xl shadow-black/30">
-                <div className="h-[2px] w-full" style={{ background: `linear-gradient(90deg, ${oc.hex}, transparent)` }} />
-                <div className="p-6">
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
-                        <div className="flex items-start gap-5">
-                            <div className="shrink-0">
-                                <svg width="80" height="80" viewBox="0 0 80 80" aria-label={`Overall score: ${overallScore}`}>
-                                    <circle cx="40" cy="40" r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
-                                    <circle
-                                        cx="40" cy="40" r={R} fill="none"
-                                        stroke={oc.hex} strokeWidth="5" strokeLinecap="round"
-                                        strokeDasharray={CIRC} strokeDashoffset={dashOffset}
-                                        transform="rotate(-90 40 40)"
-                                    />
-                                    <text x="40" y="36" textAnchor="middle" fontSize="18" fontWeight="600" fill={oc.hex} fontFamily="monospace">
-                                        {overallScore}
-                                    </text>
-                                    <text x="40" y="50" textAnchor="middle" fontSize="9" fill="rgba(160,160,180,0.6)" letterSpacing="0.08em">
-                                        SCORE
-                                    </text>
-                                </svg>
-                            </div>
-                            <div>
-                                <p className="font-mono text-[11px] text-zinc-500 mb-1 tracking-wider">{typedAudit.site?.domain}</p>
-                                <h1 className="text-xl font-semibold tracking-tight mb-3">SEO Audit Report</h1>
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                                    <MetaTag dot="emerald">
-                                        Scanned {runDate.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                                    </MetaTag>
-                                    {criticalCount > 0 && (
-                                        <MetaTag dot="red">{criticalCount} critical {criticalCount === 1 ? "issue" : "issues"}</MetaTag>
-                                    )}
-                                    <MetaTag dot="zinc">{issues.length} total findings</MetaTag>
-                                    {previousAuditTimestamp && (
-                                        <span className="text-[11px] text-zinc-600">
-                                            vs {new Date(previousAuditTimestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 shrink-0">
-                            <RequestIndexingButton
-                                url={(typedAudit.issueList as Record<string, string> | null)?.url ?? `https://${typedAudit.site?.domain}`}
-                                siteId={typedAudit.site?.id}
-                            />
-                            <ExportAuditButton auditId={typedAudit.id} />
-                            <ShareAuditButton auditId={typedAudit.id} />
-                            <FixStatusBadge status={typedAudit.fixStatus ?? "PENDING"} />
-                        </div>
+            {/* Page Header */}
+            <div className="mb-5">
+                <div className="text-[12px] text-[#6e7681] mb-2 flex items-center gap-[6px]">
+                    <Link href="/dashboard" className="hover:text-[#8b949e] transition-colors">Sites</Link>
+                    <span>/</span>
+                    <span className="text-[#8b949e]">{typedAudit.site?.domain}</span>
+                    <span>/</span>
+                    <span className="text-[#e6edf3]">Audit Report</span>
+                </div>
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h1 className="text-[20px] font-semibold tracking-[-0.4px]">
+                            {typedAudit.site?.domain} — SEO Audit Report
+                        </h1>
+                        <p className="text-[13px] text-[#8b949e] mt-1">
+                            {issues.length} findings{criticalCount > 0 && <> · <span className="text-[#f85149]">{criticalCount} critical</span></>} · Scanned {runDate.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            {previousAuditTimestamp && (
+                                <> · vs {new Date(previousAuditTimestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</>
+                            )}
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <RequestIndexingButton
+                            url={(typedAudit.issueList as Record<string, string> | null)?.url ?? `https://${typedAudit.site?.domain}`}
+                            siteId={typedAudit.site?.id}
+                        />
+                        <ExportAuditButton auditId={typedAudit.id} />
+                        <ShareAuditButton auditId={typedAudit.id} />
+                        <FixStatusBadge status={typedAudit.fixStatus ?? "PENDING"} />
                     </div>
                 </div>
+            </div>
 
-                {hasVitals && (
-                    <div className="border-t border-white/[0.06] bg-[#0d0d14] px-6 py-3 flex flex-wrap items-center gap-6">
-                        <p className="text-[9px] font-semibold text-zinc-600 uppercase tracking-[0.12em] self-center mr-1">
-                            Core Web Vitals
-                        </p>
-                        {typedAudit.lcp != null && (() => {
-                            const s = vitalStatus("lcp", typedAudit.lcp!);
-                            return (
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-[10px] font-mono text-zinc-600 uppercase">LCP</span>
-                                    <span className={`font-semibold tabular-nums text-sm font-mono ${s.cls}`}>{typedAudit.lcp.toFixed(1)}s</span>
-                                    <span className={`text-[10px] ${s.cls} opacity-60`}>{s.label}</span>
-                                </div>
-                            );
-                        })()}
-                        {typedAudit.cls != null && (() => {
-                            const s = vitalStatus("cls", typedAudit.cls!);
-                            return (
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-[10px] font-mono text-zinc-600 uppercase">CLS</span>
-                                    <span className={`font-semibold tabular-nums text-sm font-mono ${s.cls}`}>{typedAudit.cls.toFixed(3)}</span>
-                                    <span className={`text-[10px] ${s.cls} opacity-60`}>{s.label}</span>
-                                </div>
-                            );
-                        })()}
-                        {typedAudit.inp != null && (() => {
-                            const s = vitalStatus("inp", typedAudit.inp!);
-                            return (
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-[10px] font-mono text-zinc-600 uppercase">INP</span>
-                                    <span className={`font-semibold tabular-nums text-sm font-mono ${s.cls}`}>{Math.round(typedAudit.inp!)}ms</span>
-                                    <span className={`text-[10px] ${s.cls} opacity-60`}>{s.label}</span>
-                                </div>
-                            );
-                        })()}
-                    </div>
-                )}
-            </header>
+            {/* ── Score Bar ── */}
+            <AuditScoreBar
+                overallScore={overallScore}
+                issues={issues}
+                categoryCount={categoryCount}
+                lcp={typedAudit.lcp}
+                cls={typedAudit.cls}
+                inp={typedAudit.inp}
+            />
 
             {/* ── Category Score Grid ── */}
             <div id="section-scores">
@@ -404,15 +324,7 @@ function SectionLabel({ children }: { children: ReactNode }) {
     );
 }
 
-function MetaTag({ dot, children }: { dot: "emerald" | "red" | "zinc"; children: ReactNode }) {
-    const dotCls = { emerald: "bg-emerald-400", red: "bg-red-400", zinc: "bg-zinc-600" }[dot];
-    return (
-        <span className="flex items-center gap-1.5 text-[11px] text-zinc-400">
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotCls}`} />
-            {children}
-        </span>
-    );
-}
+
 
 function DeltaBadge({ delta }: { delta: number }) {
     if (delta === 0) return null;
