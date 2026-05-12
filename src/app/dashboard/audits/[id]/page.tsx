@@ -452,7 +452,6 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
             <div id="section-pages" className="mt-4">
                 <PageAuditSection auditId={typedAudit.id} isPaidUser={isPaidUser} />
             </div>
-            </div>
         </div>
             )}
         </AuditDetailClient>
