@@ -14,7 +14,8 @@ import KeywordInsightsSection from "./KeywordInsightsSection";
 import { parseAuditResult, toNormalisedIssues, type NormalisedIssue } from "@/lib/seo-audit/parse-audit-result";
 import AuditDiffSection from "./AuditDiffSection";
 import { computeAuditDiff } from "@/lib/audit/diff";
-import { AuditPageNav } from "@/components/dashboard/AuditPageNav";
+import { AuditDetailClient } from "@/components/dashboard/AuditDetailClient";
+import type { SeverityFilter } from "@/components/dashboard/AuditSidebar";
 
 const CATEGORY_ORDER = [
     "basics", "on-page", "onpage", "technical", "off-page", "offpage",
@@ -164,15 +165,21 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
 
     const hasVitals = typedAudit.lcp != null || typedAudit.cls != null || typedAudit.inp != null;
 
+    const formattedRunDate = runDate.toLocaleString("en-GB", {
+        day: "numeric", month: "short", year: "numeric",
+    });
+
     return (
-        <div className="flex gap-8 max-w-6xl mx-auto pb-20 px-1">
-
-            <AuditPageNav />
-
-            <div className="flex flex-col gap-0 flex-1 min-w-0">
+        <AuditDetailClient
+            domain={typedAudit.site?.domain ?? "Unknown"}
+            issues={issues}
+            runDate={formattedRunDate}
+        >
+            {(filter: SeverityFilter) => (
+        <div className="flex flex-col gap-0 pt-5">
 
             {/* Breadcrumb */}
-            <div className="pt-2 pb-5">
+            <div className="pb-5">
                 <Link
                     href="/dashboard/audits"
                     className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors group"
@@ -379,12 +386,18 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
             <div id="section-findings" className="flex flex-col gap-0">
             <div className="flex items-center gap-3 mb-3 mt-1">
                 <SectionLabel>All findings</SectionLabel>
-                <span className="text-[11px] text-zinc-600 shrink-0">{issues.length} total</span>
+                <span className="text-[11px] text-zinc-600 shrink-0">
+                    {filter === "all" ? issues.length : issues.filter(i => i.severity === filter).length} total
+                </span>
             </div>
             <div className="flex flex-col gap-2">
                 {sortedCats.map((cat) => {
-                    const catIssues = grouped[cat];
-                    const criticals = catIssues.filter(i => i.severity === "critical").length;
+                    const allCatIssues = grouped[cat];
+                    const catIssues = filter === "all"
+                        ? allCatIssues
+                        : allCatIssues.filter(i => i.severity === filter);
+                    if (catIssues.length === 0) return null;
+                    const criticals = allCatIssues.filter(i => i.severity === "critical").length;
                     const icon = CATEGORY_ICONS[cat] ?? "◈";
                     return (
                         <details
@@ -441,6 +454,8 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
             </div>
             </div>
         </div>
+            )}
+        </AuditDetailClient>
     );
 }
 
