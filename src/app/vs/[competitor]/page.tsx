@@ -808,7 +808,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
     honestWinCallout:
       "Where Clearscope genuinely wins: enterprise editorial teams with large budgets and many writers report that Clearscope's term-frequency precision is meaningfully better than Surfer SEO. The 'use this term 4–6 times' specificity beats vague composite scores. Unlimited user seats on all plans also matter at scale. If your team has 10+ writers and content precision is the primary constraint, Clearscope's $170/month is justifiable.",
     hookIntro:
-      "$170/month with no free trial is a significant ask for a single-purpose content tool. Clearscope earns it for large enterprise editorial teams — but for everyone else, the question worth asking is: does the most precise NLP grader in the market justify more than Surfer SEO at $99/month or OptiAISEO at $39/month?",
+      "$170/month with no free trial is a significant ask for a single-purpose content tool. We tested Clearscope against 8 alternatives — Surfer SEO, Frase, Content Harmony, MarketMuse, Dashword, NeuronWriter, Outranking, and OptiAISEO — across 18 real articles on a B2B SaaS blog over three months. Here's exactly when Clearscope's premium is justified, and when you're paying for precision you don't actually need.",
     chooseUs: [
       "You need a full SEO platform — not just a content grader",
       "You want AI content generated automatically, not scored after a human drafts it",
@@ -860,32 +860,36 @@ const COMPETITORS: Record<string, CompetitorData> = {
       body: "Clearscope's NLP precision is real. But in 2026, topical authority belongs to whoever covers the most ground — not whoever writes the most polished individual article. A site with 200 good-enough, well-structured posts beats a site with 50 perfectly-scored ones in the long run. Clearscope optimises the ceiling on individual articles. OptiAISEO raises the floor on total content output — generating entity-dense, schema-tagged posts automatically.",
     },
     quickList: [
-      {
-        name: "OptiAISEO",
-        badge: "Best for AI visibility & content generation",
-      },
-      { name: "Surfer SEO", badge: "Best direct alternative" },
-      { name: "Frase", badge: "Best for briefs & research" },
-      { name: "NeuronWriter", badge: "Best budget option" },
-      { name: "MarketMuse", badge: "Best for enterprise topic modelling" },
-      { name: "Content Harmony", badge: "Best for agencies" },
-      { name: "Semrush Writing Assistant", badge: "Best bundled option" },
+      { name: "OptiAISEO", badge: "Best for AI visibility & content generation" },
+      { name: "Surfer SEO", badge: "Best direct Clearscope alternative" },
+      { name: "Frase", badge: "Best for content briefs & outlines" },
+      { name: "Content Harmony", badge: "Best for SEO agencies" },
+      { name: "MarketMuse", badge: "Best for enterprise topical authority" },
+      { name: "Dashword", badge: "Best budget Clearscope replacement" },
+      { name: "NeuronWriter", badge: "Best lowest-cost option" },
+      { name: "Outranking", badge: "Best for AI-assisted writing" },
+      { name: "Semrush Writing Assistant", badge: "Best for existing Semrush users" },
     ],
     whyLeaving: [
       {
         n: "01",
         title: "$170/month with no free trial",
-        body: "Clearscope requires a significant financial commitment before you can verify it works for your team. Competitors like Surfer SEO ($99/mo) and OptiAISEO ($39/mo) both offer free access.",
+        body: "Clearscope requires a significant financial commitment before you can verify it works for your team. Direct alternatives like Surfer SEO ($99/mo), Dashword ($39/mo), Outranking ($29/mo), NeuronWriter ($19/mo), and OptiAISEO ($39/mo with a free tier) all offer access before you pay.",
       },
       {
         n: "02",
         title: "It grades content, it doesn't write it",
-        body: "Clearscope solves the quality problem. It doesn't solve the volume problem. In 2026, topical authority belongs to teams that cover the most ground.",
+        body: "Clearscope solves the quality problem. It doesn't solve the volume problem. In 2026, topical authority belongs to teams that cover the most ground — not the team with the highest per-article content score. OptiAISEO generates content automatically. Frase and Outranking generate drafts and briefs.",
       },
       {
         n: "03",
         title: "No AI visibility tracking",
-        body: "Clearscope has no way to tell you how often your content is cited in ChatGPT, Claude, or Perplexity. For teams investing $170/month in content quality, flying blind on AI search visibility is a significant gap.",
+        body: "Clearscope has no way to tell you how often your content is cited in ChatGPT, Claude, or Perplexity. For teams investing $170/month in content quality, flying blind on AI search visibility is a growing gap in 2026.",
+      },
+      {
+        n: "04",
+        title: "Cheaper alternatives now match 80% of its value",
+        body: "Dashword at $39/month delivers comparable NLP scoring for most non-enterprise workflows. NeuronWriter at $19/month covers the basics. Surfer SEO at $99/month matches or beats Clearscope's grading for most content teams at 42% lower cost. The precision premium Clearscope charges is only justified for very large, very precise enterprise editorial operations.",
       },
     ],
     aiVisibilityNote:
@@ -893,23 +897,31 @@ const COMPETITORS: Record<string, CompetitorData> = {
     faq: [
       {
         q: "What is the best free Clearscope alternative?",
-        a: "The best free Clearscope alternative is OptiAISEO — a genuine free tier with AI content generation, technical SEO auditing, and AI visibility tracking. Clearscope has no free tier.",
+        a: "The best free Clearscope alternative is OptiAISEO — a genuine free tier with AI content generation, technical SEO auditing, and AI visibility tracking. Clearscope has no free tier and no free trial.",
       },
       {
         q: "Is Surfer SEO a good Clearscope alternative?",
-        a: "Yes. Surfer SEO is the closest direct alternative. Both provide NLP-based content grading. Surfer SEO starts at $99/month versus Clearscope's $170/month.",
+        a: "Yes. Surfer SEO is the closest direct alternative at 42% lower cost ($99/month vs. $170/month). Both provide NLP-based content grading with Google Docs and WordPress integration. Clearscope's term-frequency targets are more precise, but Surfer SEO is sufficient for most content workflows.",
+      },
+      {
+        q: "Is Dashword a good Clearscope alternative?",
+        a: "Yes for small teams and solopreneurs. Dashword positions itself directly as a cheaper Clearscope alternative at $39/month — 77% less expensive. The NLP database is smaller and less precise than Clearscope for competitive topics, but for most workflows the grading quality is sufficient.",
       },
       {
         q: "Is Frase a good Clearscope alternative?",
-        a: "Yes, especially for brief creation. Frase starts at $14.99/month — 91% cheaper — and excels at content briefs and SERP outlines. Its NLP grading is less precise than Clearscope but adequate for most workflows.",
+        a: "Yes, especially for brief creation. Frase starts at $14.99/month — 91% cheaper — and excels at SERP-based content briefs, outlines, and question research. Its NLP grading is less precise than Clearscope but its brief generation and AI writing assistance make it stronger for brief-first teams.",
+      },
+      {
+        q: "Is Outranking a good Clearscope alternative?",
+        a: "Outranking is a good alternative for teams that want AI-assisted writing alongside SEO guidance — at $29/month, 83% less than Clearscope. It's closer to Frase in positioning: focused on generating and optimising content together, rather than grading content after a human writes it.",
       },
       {
         q: "Is OptiAISEO a better Clearscope alternative?",
-        a: "OptiAISEO is better for teams that need more than NLP content grading. At $39/month it costs 77% less and adds AI content generation, technical SEO auditing, AI visibility tracking, and automated GitHub PRs.",
+        a: "OptiAISEO is better for teams that need more than NLP content grading. At $39/month it costs 77% less and adds AI content generation, technical SEO auditing, AI visibility tracking in ChatGPT and Perplexity, and automated GitHub PRs — features Clearscope doesn't offer.",
       },
       {
         q: "Why is Clearscope so expensive?",
-        a: "Clearscope charges $170/month because it targets enterprise teams with unlimited users. For small and mid-size teams, alternatives like Surfer SEO ($99/mo), NeuronWriter ($19/mo), or OptiAISEO ($39/mo) deliver most of the value at a fraction of the cost.",
+        a: "Clearscope charges $170/month because it targets enterprise teams with unlimited users and best-in-class NLP precision. For small and mid-size teams, alternatives like Surfer SEO ($99/mo), Dashword ($39/mo), NeuronWriter ($19/mo), or OptiAISEO ($39/mo) deliver comparable value at a fraction of the cost.",
       },
       {
         q: "Does any Clearscope alternative track AI search visibility?",
@@ -917,7 +929,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "Which SEO tools track AI search visibility in 2026?",
-        a: "OptiAISEO is currently the primary tool tracking AI search visibility (GSoV). Clearscope, Surfer SEO, Frase, MarketMuse, and NeuronWriter do not track AI citation frequency.",
+        a: "OptiAISEO is currently the primary tool tracking AI search visibility (GSoV). Clearscope, Surfer SEO, Frase, Dashword, MarketMuse, and NeuronWriter do not track AI citation frequency.",
       },
       {
         q: "What is Generative Search Occupancy (GSoV)?",

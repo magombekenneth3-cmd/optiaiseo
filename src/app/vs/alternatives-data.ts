@@ -186,6 +186,146 @@ export const ALTERNATIVES: Record<string, AltSection> = {
     ],
   },
 
+  clearscope: {
+    heading: "9 Best Clearscope Alternatives in 2026 (Cheaper & Free)",
+    intro:
+      "Clearscope starts at $170/month with no free trial — one of the highest entry prices in content optimisation. Here are the best Clearscope alternatives ranked by NLP quality, price-to-value, and workflow fit. All tested against real content projects.",
+    items: [
+      {
+        ...OPT,
+        verdict:
+          "The only Clearscope alternative that generates content automatically instead of grading it. Adds technical SEO auditing, AI visibility tracking in ChatGPT and Perplexity, and automated GitHub fixes — at $39/month with a free tier.",
+        cons: ["No per-keyword NLP term-frequency grader like Clearscope's grade system"],
+        best: "Teams who want content generated automatically alongside full SEO — not just scored after writing.",
+      },
+      {
+        rank: "02",
+        name: "Surfer SEO",
+        badge: "Best direct Clearscope alternative",
+        price: "From $99/mo",
+        verdict:
+          "The closest direct Clearscope alternative at 42% lower cost. Real-time NLP content scoring inside a live editor. Less precise term-frequency targeting than Clearscope but sufficient for most workflows.",
+        pros: [
+          "42% cheaper than Clearscope at $99/mo",
+          "Real-time NLP scoring in a live editor",
+          "Google Docs and WordPress integration",
+          "SERP Analyser for benchmarking against top-ranking pages",
+        ],
+        cons: ["Less precise term frequency targets than Clearscope", "No technical SEO or AI visibility tracking"],
+        best: "Content teams who want Clearscope-style scoring with a live editing environment at a lower price.",
+      },
+      {
+        rank: "03",
+        name: "Frase",
+        badge: "Best for brief creation",
+        price: "From $14.99/mo",
+        verdict:
+          "91% cheaper than Clearscope. Excels at SERP-based content briefs and outlines. Includes AI writing assistance built in. NLP grading less precise than Clearscope but strong for brief-first workflows.",
+        pros: [
+          "91% cheaper at $14.99/mo",
+          "Excellent SERP-based content brief generation",
+          "Built-in AI draft writing",
+          "Good question research for FAQ sections",
+        ],
+        cons: ["Less precise NLP grading than Clearscope", "No technical SEO or AI visibility"],
+        best: "Teams where content brief creation is the bottleneck before writing.",
+      },
+      {
+        rank: "04",
+        name: "Content Harmony",
+        badge: "Best for SEO agencies",
+        price: "From $99/mo",
+        verdict:
+          "Matches Surfer's price but focused on pre-writing research and intent-first content briefs. Highly regarded by SEO agencies for brief quality and search intent accuracy — a direct Clearscope alternative for brief-driven teams.",
+        pros: [
+          "Excellent search intent classification",
+          "Well-structured content briefs agencies can hand off to writers",
+          "Strong SERP analysis before writing begins",
+        ],
+        cons: ["No live real-time NLP scoring like Clearscope", "No AI visibility tracking"],
+        best: "SEO agencies producing briefs for multiple writers who need better intent analysis than Clearscope provides.",
+      },
+      {
+        rank: "05",
+        name: "MarketMuse",
+        badge: "Best for enterprise topical authority",
+        price: "From $149/mo",
+        verdict:
+          "More expensive than Clearscope but fundamentally different — MarketMuse analyses your entire site's topical coverage rather than individual articles. Better for long-term content strategy than page-by-page scoring.",
+        pros: [
+          "Site-wide topical authority gap analysis",
+          "Content clustering and pillar page strategy",
+          "Competitive topic modelling at the domain level",
+        ],
+        cons: ["More expensive than Clearscope at $149/mo+", "Overkill for per-article optimisation", "No AI visibility tracking"],
+        best: "Enterprise content teams building long-term topical authority across large content libraries.",
+      },
+      {
+        rank: "06",
+        name: "Dashword",
+        badge: "Best budget Clearscope replacement",
+        price: "From $39/mo",
+        verdict:
+          "Dashword positions itself directly as a cheaper Clearscope alternative. At $39/month, it delivers NLP-based content scoring with a clean interface and content monitoring. 77% cheaper than Clearscope for comparable core functionality.",
+        pros: [
+          "77% cheaper than Clearscope at $39/mo",
+          "NLP content scoring with clean, simple UX",
+          "Content monitoring to track optimisation over time",
+          "No per-seat pricing — flat rate",
+        ],
+        cons: ["Smaller term database than Clearscope", "Less accurate NLP than Clearscope for competitive topics", "No AI visibility or tech SEO"],
+        best: "Small teams and solopreneurs who need Clearscope-style NLP grading at a fraction of the price.",
+      },
+      {
+        rank: "07",
+        name: "NeuronWriter",
+        badge: "Best lowest-cost pick",
+        price: "From $19/mo",
+        verdict:
+          "At $19/month, NeuronWriter is the cheapest viable Clearscope alternative. Solid NLP term recommendations, SERP-based outlines, and an AI writing assistant — 89% cheaper than Clearscope for teams on a tight budget.",
+        pros: [
+          "Cheapest viable alternative at $19/mo",
+          "NLP term recommendations and content scoring",
+          "SERP outline generation built in",
+          "AI writing assistant included",
+        ],
+        cons: ["Less polished UX than Clearscope or Surfer", "Smaller term database for very competitive niches", "No AI visibility tracking"],
+        best: "Freelancers and bootstrapped blogs who need content grading on the smallest possible budget.",
+      },
+      {
+        rank: "08",
+        name: "Outranking",
+        badge: "Best for AI-assisted writing",
+        price: "From $29/mo",
+        verdict:
+          "Outranking combines NLP content scoring with AI-assisted writing workflows — closer to Frase in positioning than Clearscope. Better for teams where writing speed is the bottleneck, not grading precision.",
+        pros: [
+          "AI writing assistant with SEO context baked in",
+          "NLP content scoring alongside generation",
+          "Cheaper than Clearscope at $29/mo",
+          "Internal linking suggestions built in",
+        ],
+        cons: ["Less precise NLP than Clearscope", "Interface has a steeper learning curve", "No AI engine visibility tracking"],
+        best: "Content teams who want AI-assisted writing with built-in SEO guidance — not just a grader.",
+      },
+      {
+        rank: "09",
+        name: "Semrush Writing Assistant",
+        badge: "Best for existing Semrush users",
+        price: "Included in Semrush from $139.95/mo",
+        verdict:
+          "If you already pay for Semrush, the Writing Assistant is a no-cost Clearscope alternative. Real-time SEO scoring, tone of voice, and readability checks inside Google Docs and WordPress. Less precise than Clearscope but free if you're already in the Semrush ecosystem.",
+        pros: [
+          "Free if you already pay for Semrush",
+          "Google Docs and WordPress integration",
+          "Real-time SEO scoring and readability checks",
+        ],
+        cons: ["Requires Semrush subscription ($139.95/mo)", "Less precise NLP than Clearscope", "No AI visibility tracking"],
+        best: "Existing Semrush users who want content grading without paying separately for Clearscope.",
+      },
+    ],
+  },
+
   moz: {
     heading: "7 Best Moz Alternatives in 2026 (Free & Cheaper)",
     intro:
