@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
+
 import { Metadata } from "next";
 import Image from "next/image";
 import { prisma } from "@/lib/prisma";
@@ -188,24 +190,24 @@ export default async function PublicBlogPage({ params }: Props) {
                 <nav aria-label="Related resources" className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-800">
                     <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">Related resources</p>
                     <div className="flex flex-wrap gap-2">
-                        <a href="/vs" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-green-500 hover:text-green-600 transition-colors">
+                        <Link href="/vs" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-green-500 hover:text-green-600 transition-colors">
                             📊 SEO Tool Comparisons
-                        </a>
-                        <a href="/guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-green-500 hover:text-green-600 transition-colors">
+                        </Link>
+                        <Link href="/guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-green-500 hover:text-green-600 transition-colors">
                             📚 SEO &amp; AEO Guide Hub
-                        </a>
-                        <a href="/aeo-guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-green-500 hover:text-green-600 transition-colors">
+                        </Link>
+                        <Link href="/aeo-guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-green-500 hover:text-green-600 transition-colors">
                             🤖 AEO Guide Hub
-                        </a>
-                        <a href="/free/seo-checker" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-green-500 hover:text-green-600 transition-colors">
+                        </Link>
+                        <Link href="/free/seo-checker" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-green-500 hover:text-green-600 transition-colors">
                             🔍 Free SEO Audit
-                        </a>
-                        <a href="/free/gso-checker" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-green-500 hover:text-green-600 transition-colors">
+                        </Link>
+                        <Link href="/free/gso-checker" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-green-500 hover:text-green-600 transition-colors">
                             🧠 Free AI Visibility Check
-                        </a>
-                        <a href="/blog" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-green-500 hover:text-green-600 transition-colors">
+                        </Link>
+                        <Link href="/blog" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-green-500 hover:text-green-600 transition-colors">
                             ← All posts
-                        </a>
+                        </Link>
                     </div>
                 </nav>
             </main>
