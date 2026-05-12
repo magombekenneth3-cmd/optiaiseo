@@ -14,6 +14,7 @@ import KeywordInsightsSection from "./KeywordInsightsSection";
 import { parseAuditResult, toNormalisedIssues, type NormalisedIssue } from "@/lib/seo-audit/parse-audit-result";
 import AuditDiffSection from "./AuditDiffSection";
 import { computeAuditDiff } from "@/lib/audit/diff";
+import { AuditPageNav } from "@/components/dashboard/AuditPageNav";
 
 const CATEGORY_ORDER = [
     "basics", "on-page", "onpage", "technical", "off-page", "offpage",
@@ -164,7 +165,11 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
     const hasVitals = typedAudit.lcp != null || typedAudit.cls != null || typedAudit.inp != null;
 
     return (
-        <div className="flex flex-col gap-0 max-w-5xl mx-auto pb-20 px-1">
+        <div className="flex gap-8 max-w-6xl mx-auto pb-20 px-1">
+
+            <AuditPageNav />
+
+            <div className="flex flex-col gap-0 flex-1 min-w-0">
 
             {/* Breadcrumb */}
             <div className="pt-2 pb-5">
@@ -273,6 +278,7 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
             </header>
 
             {/* ── Category Score Grid ── */}
+            <div id="section-scores">
             <SectionLabel>Category scores</SectionLabel>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3 mb-5">
                 {sortedScores.map(([cat, score]) => {
@@ -309,13 +315,14 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
                     {new Date(previousAuditTimestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                 </p>
             )}
+            </div>
 
             {/* ── Audit Diff ── */}
             {diffData && <div className="mb-5"><AuditDiffSection diff={diffData} /></div>}
 
             {/* ── High Priority Fixes ── */}
             {topFixes.length > 0 && (
-                <>
+                <div id="section-fixes">
                     <SectionLabel>High priority fixes</SectionLabel>
                     <div className="mt-3 mb-5 rounded-2xl border border-white/[0.07] bg-[#111116] overflow-hidden shadow-xl shadow-black/20">
                         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
@@ -365,10 +372,11 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
                             })}
                         </div>
                     </div>
-                </>
+                </div>
             )}
 
             {/* ── All Findings ── */}
+            <div id="section-findings" className="flex flex-col gap-0">
             <div className="flex items-center gap-3 mb-3 mt-1">
                 <SectionLabel>All findings</SectionLabel>
                 <span className="text-[11px] text-zinc-600 shrink-0">{issues.length} total</span>
@@ -422,13 +430,15 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
                     );
                 })}
             </div>
+            </div>
 
             {/* ── Additional sections ── */}
-            <div className="mt-6">
+            <div id="section-keywords" className="mt-6">
                 <KeywordInsightsSection siteId={typedAudit.site?.id ?? ""} domain={typedAudit.site?.domain ?? ""} />
             </div>
-            <div className="mt-4">
+            <div id="section-pages" className="mt-4">
                 <PageAuditSection auditId={typedAudit.id} isPaidUser={isPaidUser} />
+            </div>
             </div>
         </div>
     );
