@@ -1,25 +1,4 @@
-/**
- * Magic First Audit — Inngest Job
- * ─────────────────────────────────────────────────────────────────────────────
- * Triggered when a new user registers (event: "user.registered").
- *
- * What it does in under 60s:
- *  1. Waits up to 10 minutes for the user to add a site (event: "site.created")
- *     If they haven't added a site themselves yet, the job ends — no spam.
- *  2. Runs a fast 5-point AEO health check on that site
- *  3. Sends a personalised activation email: "Here are X issues we found on
- *     <domain> — here's your first fix"
- *  4. Emits "audit.run" to queue the full weekly audit for the new site
- *  5. Tracks an AeoEvent for activation analytics
- *
- * Design decisions:
- *  - Uses step.waitForEvent so the job doesn't block a thread while waiting
- *  - Health check is lightweight (title, meta, HTTPS, speed proxy, AEO score)
- *    — same check as /api/free-seo-check to avoid extra LLM costs
- *  - Email is sent via Resend directly (matches existing email infra)
- *  - If the health check fails, we still send a welcome email without scores
- *    so the user always gets activation contact
- */
+
 
 import { inngest } from "../client";
 import { prisma } from "@/lib/prisma";
@@ -27,7 +6,6 @@ import { logger } from "@/lib/logger";
 import { Resend } from "resend";
 import { signUnsubToken } from "@/lib/unsub-token";
 import { CONCURRENCY } from "../concurrency";
-import { getAuditEngine } from "@/lib/seo-audit";
 
 // Lazy getter — never constructed at module load time (safe for next build)
 function getResend() {
@@ -36,6 +14,28 @@ function getResend() {
   return new Resend(key);
 }
 
+const SEVERITY_MAP: Record<string, { label: string; fix: string }> = {
+  titleScore: {
+    label: "Page title needs work",
+    fix: "Add a descriptive, keyword-rich title tag to your homepage (60 chars max).",
+  },
+  metaScore: {
+    label: "Meta description missing or weak",
+    fix: "Write a 140–160 character meta description that includes your primary keyword.",
+  },
+  speedScore: {
+    label: "Page speed is slow",
+    fix: "Compress images, defer non-critical JS, and enable browser caching.",
+  },
+  httpsOk: {
+    label: "Site is not HTTPS",
+    fix: "Install an SSL certificate — most hosts provide this free via Let's Encrypt.",
+  },
+  aeoScore: {
+    label: "Low AI answer visibility",
+    fix: "Add FAQ schema and a concise definition section so AI engines can cite your page.",
+  },
+};
 
 
 export const magicFirstAuditJob = inngest.createFunction(
@@ -45,8 +45,8 @@ export const magicFirstAuditJob = inngest.createFunction(
     retries: 2,
     concurrency: { limit: CONCURRENCY.magicFirstAudit, key: "global-magic-first-audit" },
     timeouts: { finish: "15m" },
-  
-      triggers: [{ event: "user.registered" }],
+
+    triggers: [{ event: "user.registered" }],
   },
   async ({ event, step }) => {
     const { userId, email, name } = event.data as {
@@ -79,11 +79,10 @@ export const magicFirstAuditJob = inngest.createFunction(
 
     const { siteId, domain } = siteEvent.data as { siteId: string; domain: string };
 
-    const auditResult = await step.run("run-health-check", async () => {
+    const healthResult = await step.run("run-health-check", async () => {
       try {
-        const url = domain.startsWith("http") ? domain : `https://${domain}`;
-        const engine = getAuditEngine("free");
-        return await engine.runAudit(url);
+        const { runFreeSeoCheck } = await import("@/lib/seo/free-check");
+        return await runFreeSeoCheck(domain);
       } catch (err) {
         logger.warn("[MagicFirstAudit] Health check failed", { domain, error: (err as Error)?.message });
         return null;
@@ -91,28 +90,24 @@ export const magicFirstAuditJob = inngest.createFunction(
     });
 
     const issues: { label: string; fix: string }[] = [];
-    if (auditResult) {
-      for (const cat of auditResult.categories) {
-        for (const item of cat.items) {
-          if ((item.status === "Fail" || item.status === "Warning") && item.recommendation) {
-            issues.push({ label: item.label ?? item.id, fix: item.recommendation.text });
-          }
-        }
-      }
+    if (healthResult) {
+      if (healthResult.titleScore < 60) issues.push(SEVERITY_MAP.titleScore);
+      if (healthResult.metaScore < 60) issues.push(SEVERITY_MAP.metaScore);
+      if (healthResult.speedScore < 60) issues.push(SEVERITY_MAP.speedScore);
+      if (!healthResult.httpsOk) issues.push(SEVERITY_MAP.httpsOk);
+      if (healthResult.aeoScore < 60) issues.push(SEVERITY_MAP.aeoScore);
     }
 
-    const aeoScore = auditResult?.aeoScore ?? auditResult?.overallScore ?? 0;
-
     await step.run("send-activation-email", async () => {
-      const html = auditResult
+      const html = healthResult
         ? buildActivationEmail({
           name: name ?? email.split("@")[0],
           domain,
           siteId,
           userId,
-          issues: issues.slice(0, 3),
-          aeoScore,
-          lowestKey: auditResult.recommendations[0]?.itemId ?? "",
+          issues,
+          aeoScore: healthResult.aeoScore,
+          lowestKey: healthResult.lowestKey,
         })
         : buildFallbackEmail({
           name: name ?? email.split("@")[0],
@@ -124,7 +119,7 @@ export const magicFirstAuditJob = inngest.createFunction(
       await getResend().emails.send({
         from: "OptiAISEO <support@optiaiseo.online>",
         to: email,
-        subject: auditResult
+        subject: healthResult
           ? `We scanned ${domain} — ${issues.length} issue${issues.length === 1 ? "" : "s"} found`
           : `Welcome to AISEO — your site is queued for analysis`,
         html,
@@ -144,8 +139,8 @@ export const magicFirstAuditJob = inngest.createFunction(
           intent: "onboarding",
           metadata: {
             issueCount: issues.length,
-            aeoScore,
-            lowestKey: auditResult?.recommendations[0]?.itemId ?? null,
+            aeoScore: healthResult?.aeoScore ?? null,
+            lowestKey: healthResult?.lowestKey ?? null,
           },
         },
       });
