@@ -59,6 +59,18 @@ interface CompetitorData {
   aiVisibilityNote: string;
 }
 
+// ─── Tool → /vs slug map (tools that have their own comparison page) ──────────
+const TOOL_SLUG_MAP: Record<string, string> = {
+  "Semrush": "semrush",
+  "Ahrefs": "ahrefs",
+  "Surfer SEO": "surfer-seo",
+  "Moz": "moz",
+  "Clearscope": "clearscope",
+  "Mangools": "mangools",
+  "Screaming Frog": "screaming-frog",
+  "Yoast SEO": "yoast",
+};
+
 // ─── AI-Era Scoring ───────────────────────────────────────────────────────────
 
 interface DimensionScore {
@@ -1930,16 +1942,25 @@ export default async function VsPage({ params }: Props) {
             className="text-left max-w-lg mx-auto mb-8 space-y-2"
             aria-label={`Top ${c.name} alternatives`}
           >
-            {c.quickList.map((item, i) => (
-              <li key={item.name} className="flex items-center gap-3 text-sm">
-                <span className="shrink-0 w-6 h-6 rounded-full bg-brand/10 border border-brand/20 flex items-center justify-center text-xs font-bold text-brand">
-                  {i + 1}
-                </span>
-                <span className="font-semibold">{item.name}</span>
-                <span className="text-muted-foreground">—</span>
-                <span className="text-muted-foreground">{item.badge}</span>
-              </li>
-            ))}
+            {c.quickList.map((item, i) => {
+              const vsSlug = TOOL_SLUG_MAP[item.name];
+              return (
+                <li key={item.name} className="flex items-center gap-3 text-sm">
+                  <span className="shrink-0 w-6 h-6 rounded-full bg-brand/10 border border-brand/20 flex items-center justify-center text-xs font-bold text-brand">
+                    {i + 1}
+                  </span>
+                  {vsSlug && vsSlug !== c.slug ? (
+                    <Link href={`/vs/${vsSlug}`} className="font-semibold hover:text-brand hover:underline underline-offset-2 transition-colors">
+                      {item.name}
+                    </Link>
+                  ) : (
+                    <span className="font-semibold">{item.name}</span>
+                  )}
+                  <span className="text-muted-foreground">—</span>
+                  <span className="text-muted-foreground">{item.badge}</span>
+                </li>
+              );
+            })}
           </ol>
 
           <div className="max-w-lg mx-auto mb-8 rounded-2xl border border-amber-400/30 bg-amber-50/5 p-5 text-left">
@@ -1947,15 +1968,24 @@ export default async function VsPage({ params }: Props) {
               Quick answer — best {c.name} alternatives
             </p>
             <dl className="space-y-2">
-              {c.quickList.slice(0, 3).map((item) => (
-                <div
-                  key={item.name}
-                  className="flex items-baseline gap-2 text-sm"
-                >
-                  <dt className="font-bold shrink-0">{item.name}</dt>
-                  <dd className="text-muted-foreground">— {item.badge}</dd>
-                </div>
-              ))}
+              {c.quickList.slice(0, 3).map((item) => {
+                const vsSlug = TOOL_SLUG_MAP[item.name];
+                return (
+                  <div
+                    key={item.name}
+                    className="flex items-baseline gap-2 text-sm"
+                  >
+                    <dt className="font-bold shrink-0">
+                      {vsSlug && vsSlug !== c.slug ? (
+                        <Link href={`/vs/${vsSlug}`} className="hover:text-brand hover:underline underline-offset-2 transition-colors">
+                          {item.name}
+                        </Link>
+                      ) : item.name}
+                    </dt>
+                    <dd className="text-muted-foreground">— {item.badge}</dd>
+                  </div>
+                );
+              })}
             </dl>
             <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
               Full breakdown with pricing, real test results, and honest pros/cons below.
@@ -2714,6 +2744,12 @@ export default async function VsPage({ params }: Props) {
               Related guides
             </h3>
             <div className="flex flex-wrap justify-center gap-3">
+              <Link href="/guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                SEO &amp; AEO Guide Hub
+              </Link>
+              <Link href="/aeo-guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                AEO Guide Hub
+              </Link>
               <Link href="/blog/generative-search-occupancy-guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
                 How AI search visibility is measured
               </Link>
@@ -2728,6 +2764,30 @@ export default async function VsPage({ params }: Props) {
               </Link>
               <Link href="/blog/entity-seo-2026" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
                 Entity SEO in 2026
+              </Link>
+            </div>
+            {/* Context-aware solution + methodology links */}
+            <div className="mt-4 flex flex-wrap justify-center gap-3">
+              {(c.slug === "clearscope" || c.slug === "surfer-seo") && (
+                <Link href="/for-content" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors">
+                  OptiAISEO for Content Teams →
+                </Link>
+              )}
+              {(c.slug === "semrush" || c.slug === "ahrefs" || c.slug === "moz") && (
+                <Link href="/for-agencies" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors">
+                  OptiAISEO for Agencies →
+                </Link>
+              )}
+              {(c.slug !== "semrush" && c.slug !== "ahrefs" && c.slug !== "moz" && c.slug !== "clearscope" && c.slug !== "surfer-seo") && (
+                <Link href="/for-saas" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors">
+                  OptiAISEO for SaaS →
+                </Link>
+              )}
+              <Link href="/methodology" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                How we score &amp; test tools
+              </Link>
+              <Link href="/case-studies" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                Case studies
               </Link>
             </div>
           </div>

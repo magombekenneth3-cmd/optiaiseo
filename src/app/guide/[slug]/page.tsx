@@ -501,6 +501,31 @@ export default async function GuidePage({
             ))}
           </div>
         </section>
+
+        {/* Cross-hub nav — pushes PageRank to comparison cluster, free tools, and blog */}
+        <nav aria-label="More resources" className="mt-8 pt-6 border-t border-border">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">More resources</p>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/vs" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-[#10b981] hover:text-[#10b981] transition-colors">
+              📊 SEO Tool Comparisons
+            </Link>
+            <Link href="/blog" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-[#10b981] hover:text-[#10b981] transition-colors">
+              📝 SEO Blog
+            </Link>
+            <Link href="/aeo-guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-[#10b981] hover:text-[#10b981] transition-colors">
+              🤖 AEO Guide Hub
+            </Link>
+            <Link href="/free/seo-checker" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-[#10b981] hover:text-[#10b981] transition-colors">
+              🔍 Free SEO Audit
+            </Link>
+            <Link href="/free/gso-checker" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-[#10b981] hover:text-[#10b981] transition-colors">
+              🧠 Free AI Visibility Check
+            </Link>
+            <Link href="/case-studies" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-[#10b981] hover:text-[#10b981] transition-colors">
+              📈 Case Studies
+            </Link>
+          </div>
+        </nav>
       </main>
 
       <SiteFooter />

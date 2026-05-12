@@ -178,6 +178,23 @@ export default function FreeGsoCheckerPage() {
                     <p className="text-xs text-muted-foreground mt-3">No credit card · Full Pro access for 7 days · Cancel anytime</p>
                 </div>
             </div>
+            <div className="border-t border-border pt-8 mt-4 text-center px-6 pb-8">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">Also free — no account required</p>
+              <div className="flex flex-wrap justify-center gap-3">
+                <Link href="/free/seo-checker" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                  🔍 Free SEO Audit Tool
+                </Link>
+                <Link href="/free/reddit-seo" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                  🔴 Reddit SEO Opportunity Finder
+                </Link>
+                <Link href="/guide/what-is-generative-share-of-voice" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                  📖 What is gSOV?
+                </Link>
+                <Link href="/vs" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                  📊 SEO Tool Comparisons
+                </Link>
+              </div>
+            </div>
         </div>
     );
 }

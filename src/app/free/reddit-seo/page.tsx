@@ -200,6 +200,23 @@ export default function RedditSeoFinderPage() {
                     <p><strong>Can I link to my site from Reddit?</strong> Only when genuinely relevant. Self-promotion without value is downvoted and flagged by moderators. The goal is building brand mentions and referrals, not direct link building.</p>
                     <p><strong>Does Reddit help AEO (AI search)?</strong> Yes. AI engines like ChatGPT and Perplexity pull brand mentions from Reddit threads when answering questions about your category. Consistent positive Reddit presence improves your AEO citation rate.</p>
                 </div>
+                <div className="border-t border-border pt-8 text-center">
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">Also free — no account required</p>
+                  <div className="flex flex-wrap justify-center gap-3">
+                    <Link href="/free/seo-checker" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                      🔍 Free SEO Audit Tool
+                    </Link>
+                    <Link href="/free/gso-checker" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                      🤖 AI Visibility Checker (GSoV)
+                    </Link>
+                    <Link href="/guide" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                      📚 SEO &amp; AEO Guides
+                    </Link>
+                    <Link href="/vs" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                      📊 SEO Tool Comparisons
+                    </Link>
+                  </div>
+                </div>
             </div>
             <RedditSeoContent />
         </div>

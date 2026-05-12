@@ -301,6 +301,23 @@ export default function FreeSeoCheckerPage() {
                 </div>
             </main>
             <SeoCheckerContent />
+            <div className="border-t border-border pt-8 mt-4 text-center">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">Also free — no account required</p>
+              <div className="flex flex-wrap justify-center gap-3">
+                <Link href="/free/gso-checker" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                  🤖 AI Visibility Checker (GSoV)
+                </Link>
+                <Link href="/free/reddit-seo" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                  🔴 Reddit SEO Opportunity Finder
+                </Link>
+                <Link href="/vs" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                  📊 SEO Tool Comparisons
+                </Link>
+                <Link href="/guide" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                  📚 SEO &amp; AEO Guides
+                </Link>
+              </div>
+            </div>
             <SiteFooter />
         </div>
     );
