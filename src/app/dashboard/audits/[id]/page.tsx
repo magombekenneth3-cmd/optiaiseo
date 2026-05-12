@@ -4,7 +4,7 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { IssueRow } from "./IssueRow";
+
 import { RequestIndexingButton } from "./RequestIndexingButton";
 import { ExportAuditButton } from "./ExportAuditButton";
 import { ShareAuditButton } from "./ShareAuditButton";
@@ -15,7 +15,7 @@ import { parseAuditResult, toNormalisedIssues, type NormalisedIssue } from "@/li
 import AuditDiffSection from "./AuditDiffSection";
 import { computeAuditDiff } from "@/lib/audit/diff";
 import { AuditDetailClient } from "@/components/dashboard/AuditDetailClient";
-import type { SeverityFilter } from "@/components/dashboard/AuditSidebar";
+import { FilteredFindings } from "@/components/dashboard/FilteredFindings";
 
 const CATEGORY_ORDER = [
     "basics", "on-page", "onpage", "technical", "off-page", "offpage",
@@ -150,18 +150,7 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
         .sort((a, b) => b.priorityScore - a.priorityScore)
         .slice(0, 5) as PrioritisedIssue[];
 
-    const grouped = issues.reduce<Record<string, NormalisedIssue[]>>((acc, issue) => {
-        const cat = (issue.category ?? "general").toLowerCase().replace(/\s+/g, "-");
-        if (!acc[cat]) acc[cat] = [];
-        acc[cat].push(issue);
-        return acc;
-    }, {});
 
-    const sortedCats = Object.keys(grouped).sort((a, b) => {
-        const ia = CATEGORY_ORDER.indexOf(a as (typeof CATEGORY_ORDER)[number]);
-        const ib = CATEGORY_ORDER.indexOf(b as (typeof CATEGORY_ORDER)[number]);
-        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-    });
 
     const hasVitals = typedAudit.lcp != null || typedAudit.cls != null || typedAudit.inp != null;
 
@@ -175,7 +164,6 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
             issues={issues}
             runDate={formattedRunDate}
         >
-            {(filter: SeverityFilter) => (
         <div className="flex flex-col gap-0 pt-5">
 
             {/* Breadcrumb */}
@@ -382,68 +370,14 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
                 </div>
             )}
 
-            {/* ── All Findings ── */}
-            <div id="section-findings" className="flex flex-col gap-0">
-            <div className="flex items-center gap-3 mb-3 mt-1">
-                <SectionLabel>All findings</SectionLabel>
-                <span className="text-[11px] text-zinc-600 shrink-0">
-                    {filter === "all" ? issues.length : issues.filter(i => i.severity === filter).length} total
-                </span>
-            </div>
-            <div className="flex flex-col gap-2">
-                {sortedCats.map((cat) => {
-                    const allCatIssues = grouped[cat];
-                    const catIssues = filter === "all"
-                        ? allCatIssues
-                        : allCatIssues.filter(i => i.severity === filter);
-                    if (catIssues.length === 0) return null;
-                    const criticals = allCatIssues.filter(i => i.severity === "critical").length;
-                    const icon = CATEGORY_ICONS[cat] ?? "◈";
-                    return (
-                        <details
-                            key={cat}
-                            open={catIssues.some(i => i.severity === "critical")}
-                            className="rounded-xl border border-white/[0.07] bg-[#111116] overflow-hidden group hover:border-white/[0.10] transition-colors"
-                        >
-                            <summary className="flex items-center justify-between px-5 py-3.5 cursor-pointer list-none hover:bg-white/[0.02] transition-colors">
-                                <div className="flex items-center gap-2.5">
-                                    <span className="text-[12px] text-zinc-600">{icon}</span>
-                                    <span className="font-medium text-[13px] capitalize">{cat.replace(/-/g, " ")}</span>
-                                    {criticals > 0 && (
-                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 tracking-wide">
-                                            {criticals} critical
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="flex items-center gap-2.5">
-                                    <span className="text-[11px] text-zinc-600">
-                                        {catIssues.length} {catIssues.length === 1 ? "issue" : "issues"}
-                                    </span>
-                                    <svg
-                                        className="w-3.5 h-3.5 text-zinc-600 transition-transform group-open:rotate-180"
-                                        fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                                    >
-                                        <path d="M19 9l-7 7-7-7" strokeWidth={1.5} strokeLinecap="round" />
-                                    </svg>
-                                </div>
-                            </summary>
-                            <div className="border-t border-white/[0.05] divide-y divide-white/[0.03]">
-                                {catIssues.map((issue, i) => (
-                                    <IssueRow
-                                        key={issue.id || i}
-                                        issue={issue}
-                                        siteId={typedAudit.site?.id ?? ""}
-                                        domain={typedAudit.site?.domain ?? ""}
-                                        hasGithub={!!typedAudit.site?.githubRepoUrl}
-                                        fixStatus={typedAudit.fixStatus}
-                                    />
-                                ))}
-                            </div>
-                        </details>
-                    );
-                })}
-            </div>
-            </div>
+            {/* ── All Findings (client-filtered) ── */}
+            <FilteredFindings
+                issues={issues}
+                siteId={typedAudit.site?.id ?? ""}
+                domain={typedAudit.site?.domain ?? ""}
+                hasGithub={!!typedAudit.site?.githubRepoUrl}
+                fixStatus={typedAudit.fixStatus}
+            />
 
             {/* ── Additional sections ── */}
             <div id="section-keywords" className="mt-6">
@@ -453,7 +387,6 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
                 <PageAuditSection auditId={typedAudit.id} isPaidUser={isPaidUser} />
             </div>
         </div>
-            )}
         </AuditDetailClient>
     );
 }
