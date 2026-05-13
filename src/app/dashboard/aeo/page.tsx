@@ -299,6 +299,7 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
     const [pendingReportId, setPendingReportId] = useState<string | null>(null);
     const [result, setResult] = useState<any>(latest);
     const [expanded, setExpanded] = useState(false);
+    const [innerTab, setInnerTab] = useState<"trend" | "insights" | "raw">("trend");
 
     useEffect(() => { setResult(latest); }, [latest]);
 
@@ -371,7 +372,7 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
             : "Details";
 
     return (
-        <div className="card-surface overflow-hidden transition-all duration-200 hover:border-border/80">
+        <div className="rounded-2xl border border-[#30363d] bg-[#0d1117] overflow-hidden transition-all duration-200 hover:border-[#484f58]">
 
             {/* ── Header row ── */}
             <div className="p-5 flex items-center justify-between gap-4 flex-wrap">
@@ -505,60 +506,40 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                 </div>
             )}
 
-            {/* ── Expanded detail panel ── */}
+            {/* ── Expanded detail panel (3-tab inner view) ── */}
             {expanded && (
-                <div className="border-t border-border">
+                <div className="border-t border-[#21262d]">
+
+                    {/* Inner tab bar */}
+                    <div className="flex items-center gap-1 px-5 py-2.5 border-b border-[#21262d] bg-[#0a0d11] overflow-x-auto scrollbar-none">
+                        {(["trend", "insights", "raw"] as const).map((t) => {
+                            const labels = { trend: "Trend & Forecast", insights: "Insights", raw: "Raw Data" };
+                            return (
+                                <button
+                                    key={t}
+                                    onClick={() => setInnerTab(t)}
+                                    className={`shrink-0 px-3.5 py-1.5 rounded-lg text-[12px] font-semibold transition-colors ${
+                                        innerTab === t
+                                            ? "bg-[#21262d] text-[#e6edf3]"
+                                            : "text-[#6e7681] hover:text-[#c9d1d9]"
+                                    }`}
+                                >
+                                    {labels[t]}
+                                </button>
+                            );
+                        })}
+                    </div>
+
                     <div className="p-6 flex flex-col gap-8">
 
-                        {/* ── Score Trend Sparkline ── */}
+                        {/* ── TAB 1: Trend & Forecast ── */}
+                        {innerTab === "trend" && (<>
                         <AeoScoreTrendChart siteId={siteId} domain={domain} />
-
-                        {/* ── 90-Day AI Visibility Forecast ── */}
-                        <div className="border-t border-border/40 pt-6">
+                        <div className="border-t border-[#21262d] pt-6">
                             <VisibilityForecastPanel siteId={siteId} />
                         </div>
 
-                        {/* ── Semantic Gap Analysis ── */}
-                        {result?.semanticGaps && result.semanticGaps.length > 0 && (
-                            <div className="border-t border-border/40 pt-6">
-                                <SemanticGapPanel gaps={result.semanticGaps} />
-                            </div>
-                        )}
-
-                        {/* Prompt Simulator */}
-                        <PromptSimulator siteId={siteId} domain={domain} />
-
-                        {/* Multi-model citation comparison */}
-                        {result?.multiModelResults?.models && (
-                            <section>
-                                <SectionLabel icon={BarChart2} label="Model Citation Comparison" />
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-                                    {result.multiModelResults.models.map((m: any) => (
-                                        <div key={m.modelName} className="p-4 rounded-xl bg-muted/30 border border-border/60">
-                                            <div className="flex items-center justify-between mb-3">
-                                                <p className="font-semibold capitalize text-sm">{m.modelName}</p>
-                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${m.citationRate >= 50 ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
-                                                    }`}>
-                                                    {m.citationRate}%
-                                                </span>
-                                            </div>
-                                            <div className="h-1.5 bg-black/30 rounded-full overflow-hidden mb-2">
-                                                <div
-                                                    className={`h-full rounded-full transition-all duration-700 ${m.citationRate >= 50 ? "bg-emerald-500" : "bg-rose-500"}`}
-                                                    style={{ width: `${m.citationRate}%` }}
-                                                />
-                                            </div>
-                                            <p className="text-[10px] text-muted-foreground">{m.citationCount}/{m.queriesRun} queries</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </section>
-                        )}
-
-                        {/* GSI Metrics */}
-                        {hasGsiData && <GsiMetrics result={result as AeoResult} />}
-
-                        {/* Category scores */}
+                        {/* Category scores — end of Tab 1 */}
                         {categoryScores.length > 0 && (
                             <section>
                                 <SectionLabel icon={TrendingUp} label="AEO Category Scores" />
@@ -567,6 +548,18 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                                 </div>
                             </section>
                         )}
+                        </>)}
+
+                        {/* ── TAB 2: Insights ── */}
+                        {innerTab === "insights" && (<>
+
+                        {/* Semantic Gap */}
+                        {result?.semanticGaps && result.semanticGaps.length > 0 && (
+                            <SemanticGapPanel gaps={result.semanticGaps} />
+                        )}
+
+                        {/* Prompt Simulator */}
+                        <PromptSimulator siteId={siteId} domain={domain} />
 
                         {/* Recommendations */}
                         {recommendations.length > 0 && (
@@ -581,12 +574,12 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                                         const uniqueCompetitors = [...new Set(competitorDomains)].slice(0, 3);
                                         const catKeys = ["brand_authority", "industry", "services", "geography", "legitimacy"];
                                         return (
-                                            <div key={i} className="rounded-xl border border-border/60 bg-muted/20 p-4">
+                                            <div key={i} className="rounded-xl border border-[#30363d] bg-[#161b22] p-4">
                                                 <div className="flex items-start gap-3">
                                                     <span className="w-6 h-6 rounded-full bg-amber-500/15 border border-amber-500/25 text-amber-400 text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">
                                                         {i + 1}
                                                     </span>
-                                                    <p className="text-sm text-foreground/85 leading-relaxed flex-1">{rec}</p>
+                                                    <p className="text-sm text-[#c9d1d9] leading-relaxed flex-1">{rec}</p>
                                                     <RecommendationFixPanel
                                                         siteId={siteId}
                                                         recommendation={rec}
@@ -606,16 +599,15 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                             <section>
                                 <SectionLabel icon={Users} label="What AI Knows About Your Brand" accent="amber" />
                                 <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 flex flex-col gap-4">
-                                    <p className="text-sm text-foreground/90 leading-relaxed italic">&ldquo;{checks.aiExcerpt}&rdquo;</p>
+                                    <p className="text-sm text-[#c9d1d9] leading-relaxed italic">&ldquo;{checks.aiExcerpt}&rdquo;</p>
                                     {Array.isArray(checks.benchmarkChecks) && checks.benchmarkChecks.length > 0 && (
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                             {checks.benchmarkChecks.map((bc: any) => (
-                                                <div key={bc.id} className={`flex items-start gap-2.5 px-3 py-2.5 rounded-xl border text-xs ${bc.passed ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-300" : "bg-rose-500/5 border-rose-500/20 text-rose-300"
-                                                    }`}>
+                                                <div key={bc.id} className={`flex items-start gap-2.5 px-3 py-2.5 rounded-xl border text-xs ${bc.passed ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-300" : "bg-rose-500/5 border-rose-500/20 text-rose-300"}`}>
                                                     <span className="mt-0.5">{bc.passed ? "✅" : "❌"}</span>
                                                     <div>
                                                         <p className="font-semibold">{bc.label}</p>
-                                                        <p className="text-[10px] text-muted-foreground mt-0.5">{bc.detail}</p>
+                                                        <p className="text-[10px] text-[#6e7681] mt-0.5">{bc.detail}</p>
                                                     </div>
                                                 </div>
                                             ))}
@@ -624,6 +616,51 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                                 </div>
                             </section>
                         )}
+
+                        {/* Schema Gaps */}
+                        {result?.schemaGaps?.length > 0 && (
+                            <section>
+                                <SectionLabel icon={AlertCircle} label="Missing Schema" accent="amber" />
+                                <div className="flex flex-col gap-2 mt-4">
+                                    {result.schemaGaps.map((gap: string, i: number) => (
+                                        <div key={i} className="flex items-start gap-2.5 text-sm p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl">
+                                            <span className="text-amber-400 text-base mt-0.5">⚠</span>
+                                            <span className="text-[#c9d1d9]">{gap}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+                        </>)}
+
+                        {/* ── TAB 3: Raw Data ── */}
+                        {innerTab === "raw" && (<>
+
+                        {/* Multi-model citation comparison */}
+                        {result?.multiModelResults?.models && (
+                            <section>
+                                <SectionLabel icon={BarChart2} label="Model Citation Comparison" />
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                                    {result.multiModelResults.models.map((m: any) => (
+                                        <div key={m.modelName} className="p-4 rounded-xl bg-[#161b22] border border-[#30363d]">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <p className="font-semibold capitalize text-sm text-[#e6edf3]">{m.modelName}</p>
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${m.citationRate >= 50 ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"}`}>
+                                                    {m.citationRate}%
+                                                </span>
+                                            </div>
+                                            <div className="h-1.5 bg-[#21262d] rounded-full overflow-hidden mb-2">
+                                                <div className={`h-full rounded-full transition-all duration-700 ${m.citationRate >= 50 ? "bg-emerald-500" : "bg-rose-500"}`} style={{ width: `${m.citationRate}%` }} />
+                                            </div>
+                                            <p className="text-[10px] text-[#6e7681]">{m.citationCount}/{m.queriesRun} queries</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        {/* GSI Metrics */}
+                        {hasGsiData && <GsiMetrics result={result as AeoResult} />}
 
                         {/* Query responses */}
                         {responses.length > 0 && (
@@ -640,23 +677,21 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                                         const categoryLabel = r.category ? (categoryLabels[r.category] ?? r.category.replace(/_/g, " ")) : null;
                                         const queryLabel = r.query && r.query !== `AEO batch analysis for ${r.category}` ? r.query : null;
                                         return (
-                                            <div key={i} className={`p-3.5 rounded-xl text-xs border ${r.cited ? "bg-emerald-500/5 border-emerald-500/15" : "bg-card border-border/60"
-                                                }`}>
+                                            <div key={i} className={`p-3.5 rounded-xl text-xs border ${r.cited ? "bg-emerald-500/5 border-emerald-500/15" : "bg-[#161b22] border-[#30363d]"}`}>
                                                 <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                                    <span className={`font-bold px-2 py-0.5 rounded-lg border text-[11px] ${r.cited ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                                                        }`}>
+                                                    <span className={`font-bold px-2 py-0.5 rounded-lg border text-[11px] ${r.cited ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border-rose-500/20"}`}>
                                                         {r.cited ? "✅ Cited" : "❌ Not cited"}
                                                     </span>
                                                     {categoryLabel && (
-                                                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-muted border border-border text-muted-foreground">
+                                                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#21262d] border border-[#30363d] text-[#6e7681]">
                                                             {categoryLabel}
                                                         </span>
                                                     )}
                                                 </div>
-                                                {queryLabel && <p className="font-semibold text-foreground mb-1.5">&ldquo;{queryLabel}&rdquo;</p>}
+                                                {queryLabel && <p className="font-semibold text-[#e6edf3] mb-1.5">&ldquo;{queryLabel}&rdquo;</p>}
                                                 {r.excerpt
-                                                    ? <p className="text-muted-foreground leading-relaxed">{r.excerpt}</p>
-                                                    : <p className="text-muted-foreground/40 italic">No excerpt available.</p>
+                                                    ? <p className="text-[#8b949e] leading-relaxed">{r.excerpt}</p>
+                                                    : <p className="text-[#6e7681] italic">No excerpt available.</p>
                                                 }
                                             </div>
                                         );
@@ -665,14 +700,10 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                             </section>
                         )}
 
-                        {/* Citation Breakdown — per-category + per-engine analysis */}
+                        {/* Citation Breakdown */}
                         {responses.length > 0 && (
                             <section>
-                                <CitationBreakdownPanel
-                                    responses={responses}
-                                    domain={domain}
-                                    multiModel={result?.multiModelResults?.models}
-                                />
+                                <CitationBreakdownPanel responses={responses} domain={domain} multiModel={result?.multiModelResults?.models} />
                             </section>
                         )}
 
@@ -694,31 +725,22 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                                                 <div className={`flex items-center gap-2 mb-4 ${color}`}>
                                                     <LIcon className="w-4 h-4" />
                                                     <span className="text-xs font-bold uppercase tracking-wider">{label}</span>
-                                                    <span className="text-muted-foreground font-normal normal-case tracking-normal text-xs">
-                                                        — {passed}/{groupChecks.length} passed
-                                                    </span>
+                                                    <span className="text-[#6e7681] font-normal normal-case tracking-normal text-xs">— {passed}/{groupChecks.length} passed</span>
                                                 </div>
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                     {groupChecks.map((c: any) => (
-                                                        <div key={c.id} className={`p-4 rounded-xl border flex flex-col gap-2 ${c.passed ? "bg-emerald-500/5 border-emerald-500/20" : "bg-rose-500/5 border-rose-500/20"
-                                                            }`}>
+                                                        <div key={c.id} className={`p-4 rounded-xl border flex flex-col gap-2 ${c.passed ? "bg-emerald-500/5 border-emerald-500/20" : "bg-rose-500/5 border-rose-500/20"}`}>
                                                             <div className="flex items-start justify-between gap-2">
-                                                                <p className="font-semibold text-sm text-foreground">
-                                                                    {c.passed ? "✅" : "❌"} {c.label}
-                                                                </p>
-                                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase shrink-0 ${c.impact === "high" ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                                                                    : c.impact === "medium" ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                                                                        : "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                                                                    }`}>{c.impact}</span>
+                                                                <p className="font-semibold text-sm text-[#e6edf3]">{c.passed ? "✅" : "❌"} {c.label}</p>
+                                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase shrink-0 ${c.impact === "high" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" : c.impact === "medium" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" : "bg-blue-500/10 text-blue-400 border-blue-500/20"}`}>{c.impact}</span>
                                                             </div>
-                                                            <p className="text-xs text-muted-foreground leading-relaxed flex-grow">{c.detail}</p>
+                                                            <p className="text-xs text-[#8b949e] leading-relaxed flex-grow">{c.detail}</p>
                                                             {!c.passed && c.recommendation && (
-                                                                <div className="mt-1 p-3 bg-muted/60 rounded-xl border border-border/60">
-                                                                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                                                                        <Lightbulb className="w-3 h-3 text-amber-400" />
-                                                                        How to fix
+                                                                <div className="mt-1 p-3 bg-[#161b22] rounded-xl border border-[#30363d]">
+                                                                    <p className="text-[10px] font-bold text-[#6e7681] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                                                        <Lightbulb className="w-3 h-3 text-amber-400" /> How to fix
                                                                     </p>
-                                                                    <p className="text-xs text-muted-foreground leading-relaxed">{c.recommendation}</p>
+                                                                    <p className="text-xs text-[#8b949e] leading-relaxed">{c.recommendation}</p>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -730,28 +752,15 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                                 </div>
                             );
                         })()}
+                        </>)}
 
-                        {/* Schema Gaps */}
-                        {result?.schemaGaps?.length > 0 && (
-                            <section>
-                                <SectionLabel icon={AlertCircle} label="Missing Schema" accent="amber" />
-                                <div className="flex flex-col gap-2 mt-4">
-                                    {result.schemaGaps.map((gap: string, i: number) => (
-                                        <div key={i} className="flex items-start gap-2.5 text-sm p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl">
-                                            <span className="text-amber-400 text-base mt-0.5">⚠</span>
-                                            <span className="text-foreground/80">{gap}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </section>
-                        )}
                     </div>
                 </div>
             )}
+
         </div>
     );
 }
-
 // ─── Section Label ────────────────────────────────────────────────────────────
 
 function SectionLabel({
@@ -974,14 +983,13 @@ function SummaryHero({ sites, scannedSites, avgRate, topGrade }: {
                 </div>
             </div>
 
-            {/* Three-layer explainer strip */}
-            {/*
-                PATCH: AEO/GEO/AIO strip now shows live layerScores when available,
-                falling back to descriptive labels when no scan exists.
-                Each item is now a link to the relevant docs/section.
-            */}
-            <div className="border-t border-border grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border">
-                {[
+            {/* Score by layer strip */}
+            <div className="border-t border-[#21262d] bg-[#0a0d11]">
+                <div className="flex items-center gap-2 px-4 pt-3 pb-1 col-span-full sm:col-span-3">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6e7681]">Score by layer</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[#21262d]">
+                    {[
                     { step: "AEO", color: "text-blue-400", bg: "bg-blue-500/10", icon: Search, desc: "Get cited in AI answers", scoreKey: "aeo" },
                     { step: "GEO", color: "text-purple-400", bg: "bg-purple-500/10", icon: Target, desc: "Get recommended as the best", scoreKey: "geo" },
                     { step: "AIO", color: "text-amber-400", bg: "bg-amber-500/10", icon: Users, desc: "Get understood by AI", scoreKey: "aio" },
@@ -1007,6 +1015,7 @@ function SummaryHero({ sites, scannedSites, avgRate, topGrade }: {
                         </div>
                     );
                 })}
+                </div>
             </div>
         </div>
     );
