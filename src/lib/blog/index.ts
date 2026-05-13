@@ -152,6 +152,10 @@ function assembleHtml(params: {
         .replace(/^\s*[-*] (.+)$/gm, "<li>$1</li>")
         .replace(/(<li>.*<\/li>\n?)+/g, "<ul>$&</ul>")
         .replace(/^\d+\. (.+)$/gm, "<li>$1</li>")
+        .replace(/(<li>.*<\/li>\n?)+/g, (match) => {
+            if (match.includes('<ul>')) return match;
+            return `<ol>${match}</ol>`;
+        })
         .replace(/^(?!<[hul]|<\/[hul]|\|)(.+)$/gm, "<p>$1</p>")
         .replace(/<p>\s*<\/p>/g, "")
         .replace(/<p>(<h[1-6]>)/g, "$1")

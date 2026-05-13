@@ -333,9 +333,9 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                     setResult(status.report); router.refresh();
                     setTimeout(() => setPollingStatus("idle"), 3000);
                     return;
-                } else if (status.done && (status as any).failed) {
+                } else if (status.done && !status.report) {
                     setPollingStatus("timeout");
-                    setScanError("Deep audit failed — please try again.");
+                    setScanError("Audit failed — please try again.");
                     setPendingReportId(null); router.refresh(); return;
                 } else if (attempts >= 60) {
                     setPollingStatus("timeout");
@@ -1074,7 +1074,9 @@ function AeoRankPageInner() {
             const res = await checkLlmMentions(siteId);
             if (res.success && res.reportId) return { reportId: res.reportId };
             if (!res.success) return { error: (res as any).error ?? "Scan failed" };
-        } catch { /* ignore */ }
+        } catch (e: unknown) {
+            return { error: (e as Error)?.message ?? "Network error — please try again." };
+        }
         return null;
     };
 
@@ -1083,7 +1085,9 @@ function AeoRankPageInner() {
             const res = await runAeoReport(siteId);
             if (res.success && res.reportId) return { reportId: res.reportId };
             if (!res.success) return { error: (res as any).error ?? "Deep audit failed" };
-        } catch { /* ignore */ }
+        } catch (e: unknown) {
+            return { error: (e as Error)?.message ?? "Network error — please try again." };
+        }
         return null;
     };
 

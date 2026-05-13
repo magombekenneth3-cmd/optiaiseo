@@ -111,7 +111,7 @@ export function AuditPoller({ processingAuditIds, initialIntervalMs = 6000 }: Au
                 const base       = AUDIT_STEPS[stepIdx].pct;
                 const next       = AUDIT_STEPS[Math.min(stepIdx + 1, AUDIT_STEPS.length - 1)].pct;
                 const stepRange  = next - base;
-                const stepsInBand = (STEP_AT[Math.min(stepIdx + 1, STEP_AT.length - 1)] ?? 60) - STEP_AT[stepIdx];
+                const stepsInBand = Math.max((STEP_AT[Math.min(stepIdx + 1, STEP_AT.length - 1)] ?? 60) - STEP_AT[stepIdx], 1);
                 const progress = Math.min(
                     base + stepRange * ((attemptRef.current - STEP_AT[stepIdx]) / stepsInBand),
                     93

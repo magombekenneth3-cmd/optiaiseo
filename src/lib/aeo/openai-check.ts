@@ -4,15 +4,18 @@ import { TIMEOUTS } from "@/lib/constants/timeouts";
 
 export async function checkChatGptMention(
     domain: string,
-    coreServices?: string | null
+    coreServices?: string | null,
+    keyword?: string | null
 ): Promise<MentionResult> {
     if (!process.env.OPENAI_API_KEY) {
         return { model: "ChatGPT", mentioned: false, confidence: 0, details: "No API key" };
     }
 
-    const question = coreServices
-        ? `What are the best tools for ${coreServices}? List top options with descriptions.`
-        : `What is ${domain} and what do they offer?`;
+    const question = keyword
+        ? `${keyword} — what are the best options?`
+        : coreServices
+            ? `What are the best tools for ${coreServices}? List top options with descriptions.`
+            : `What is ${domain} and what do they offer?`;
 
     try {
         const res = await fetch("https://api.openai.com/v1/chat/completions", {

@@ -59,8 +59,6 @@ export async function injectInternalLinks(
                     const regex = new RegExp(`\\b(${escapedKw})\\b`, 'i');
 
                     if (regex.test(text)) {
-                        // Use absolute URL when domain is known — links must be canonical
-                        // and work correctly when content is syndicated or embedded.
                         const cleanDomain = siteDomain
                             ? siteDomain.replace(/^https?:\/\//, "").replace(/\/$/, "")
                             : null;
@@ -68,9 +66,13 @@ export async function injectInternalLinks(
                             ? `https://${cleanDomain}/blog/${blog.slug}`
                             : `/blog/${blog.slug}`;
 
+                        const escHref = href.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
                         const newHtml = passage.innerHTML.replace(
                             regex,
-                            `<a href="${href}" class="text-primary hover:underline font-medium" title="$1">$1</a>`
+                            (match) => {
+                                const escMatch = match.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                                return `<a href="${escHref}" class="text-primary hover:underline font-medium" title="${escMatch}">${escMatch}</a>`;
+                            }
                         );
                         passage.set_content(newHtml);
                         linksAdded++;

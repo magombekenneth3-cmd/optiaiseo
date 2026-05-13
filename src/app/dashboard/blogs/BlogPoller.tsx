@@ -92,7 +92,7 @@ export function BlogPoller({ generatingBlogIds }: { generatingBlogIds: string[] 
                 const base    = STEPS[stepIdx].pct;
                 const next    = STEPS[Math.min(stepIdx + 1, STEPS.length - 1)].pct;
                 const stepRange = next - base;
-                const stepsInBand = (STEP_AT[Math.min(stepIdx + 1, STEP_AT.length - 1)] ?? 75) - STEP_AT[stepIdx];
+                const stepsInBand = Math.max((STEP_AT[Math.min(stepIdx + 1, STEP_AT.length - 1)] ?? 75) - STEP_AT[stepIdx], 1);
                 const progress = Math.min(
                     base + (stepRange * ((attemptRef.current - STEP_AT[stepIdx]) / stepsInBand)),
                     93

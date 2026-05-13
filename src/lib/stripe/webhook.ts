@@ -229,28 +229,19 @@ export async function handleSubscriptionDeleted(subscription: Stripe.Subscriptio
 export async function handlePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
     const customerId = invoice.customer as string
 
-    // Mark subscription past_due in a single write.
     await prisma.subscription.updateMany({
         where: { stripeCustomerId: customerId },
         data: { status: "past_due" },
     })
 
-    // Resolve the owning user so we can downgrade their tier and invalidate
-    // their session. guards.ts checks sub.status === "canceled" to gate access,
-    // but "past_due" is not "canceled" — so without an explicit tier downgrade
-    // here the user would retain paid-feature access despite a failed payment.
     const sub = await prisma.subscription.findFirst({
         where: { stripeCustomerId: customerId },
         select: { userId: true },
     })
 
     if (sub?.userId) {
-        await prisma.user.update({
-            where: { id: sub.userId },
-            data: { subscriptionTier: "FREE" },
-        })
         await bumpSessionVersion(sub.userId)
-        logger.warn("[Webhook] Payment failed — downgraded to FREE and session invalidated", {
+        logger.warn("[Webhook] Payment failed — marked past_due, session invalidated", {
             customerId,
             userId: sub.userId,
         })

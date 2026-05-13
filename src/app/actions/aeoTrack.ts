@@ -88,8 +88,8 @@ async function runMultiModelCheck(
 ): Promise<{ modelName: string; brandMentioned: boolean; competitors: string[] }[]> {
     const [plx, gpt, cld] = await Promise.allSettled([
         checkPerplexityCitation(keyword, domain),
-        checkChatGptMention(domain, coreServices),
-        checkClaudeMention(domain, coreServices),
+        checkChatGptMention(domain, coreServices, keyword),
+        checkClaudeMention(domain, coreServices, keyword),
     ]);
 
     const rows: { modelName: string; brandMentioned: boolean; competitors: string[] }[] = [];

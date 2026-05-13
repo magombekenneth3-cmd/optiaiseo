@@ -291,8 +291,6 @@ export const weeklyAutoReauditJob = inngest.createFunction(
 );
 
 // ─── TrendingTopic purge ──────────────────────────────────────────────────────
-// TrendingTopic rows have a 30-day expiresAt timestamp set at insert time.
-// This weekly cron deletes all expired rows so the table doesn't grow unbounded.
 export const purgeExpiredTrendingTopicsJob = inngest.createFunction(
     {
         id: "purge-expired-trending-topics",

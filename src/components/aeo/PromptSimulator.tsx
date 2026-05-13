@@ -90,12 +90,7 @@ export function PromptSimulator({
   };
 
   // Deduplicated chips: history first, then suggested, max 5
-  const chips = [
-    ...history.map(h => h.query),
-    ...(suggestedQueries ?? []),
-  ]
-    .filter((q, i, a) => a.indexOf(q) === i)
-    .slice(0, 5);
+  const chips = [...new Set([...history.map(h => h.query), ...(suggestedQueries ?? [])])].slice(0, 5);
 
   return (
     <div className="p-4 rounded-xl border border-border bg-muted/10 space-y-3 mt-6">

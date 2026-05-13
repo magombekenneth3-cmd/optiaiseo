@@ -513,16 +513,15 @@ export async function analyseSerpGap(
         competitorSignals.filter((c) => c.fetchedOk)
     );
 
-    const rdGap = gaps.find((g) => g.dimension.toLowerCase().includes("referring domain"));
+    const okComps = competitorSignals.filter((c) => c.fetchedOk);
     let rankingTimelineNote: string | null = null;
-    if (rdGap) {
-        const rdGapVal = typeof rdGap.clientValue === "number"
-            ? (rdGap.topCompetitorAvg as number) - rdGap.clientValue
-            : null;
-        if (rdGapVal !== null && rdGapVal > 100) {
-            rankingTimelineNote = `The authority gap for this keyword is significant. Content improvements help quality signals, but closing a ${Math.round(rdGapVal)}+ RD gap typically takes 3–6 months of consistent outreach. Set realistic expectations before starting.`;
-        } else if (rdGapVal !== null && rdGapVal > 30) {
-            rankingTimelineNote = `A referring domain gap of ~${Math.round(rdGapVal)} exists. Expect 6–8 weeks of link-building alongside content work to see meaningful ranking movement.`;
+    if (okComps.length > 0) {
+        const avgExtLinks = Math.round(okComps.reduce((s, c) => s + c.externalLinkCount, 0) / okComps.length);
+        const linkGap = avgExtLinks - clientSignals.externalLinkCount;
+        if (linkGap > 20) {
+            rankingTimelineNote = `The authority gap for this keyword is significant. Content improvements help quality signals, but closing a ${linkGap}+ external citation gap typically takes 3–6 months of consistent outreach. Set realistic expectations before starting.`;
+        } else if (linkGap > 8) {
+            rankingTimelineNote = `An external citation gap of ~${linkGap} exists. Expect 6–8 weeks of link-building alongside content work to see meaningful ranking movement.`;
         }
     }
 

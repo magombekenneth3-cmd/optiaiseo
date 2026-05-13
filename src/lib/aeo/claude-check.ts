@@ -4,15 +4,18 @@ import { TIMEOUTS } from "@/lib/constants/timeouts";
 
 export async function checkClaudeMention(
     domain: string,
-    coreServices?: string | null
+    coreServices?: string | null,
+    keyword?: string | null
 ): Promise<MentionResult> {
     if (!process.env.ANTHROPIC_API_KEY) {
         return { model: "Claude", mentioned: false, confidence: 0, details: "No API key" };
     }
 
-    const question = coreServices
-        ? `What are the leading platforms for ${coreServices}?`
-        : `Tell me about ${domain} — what do they do?`;
+    const question = keyword
+        ? `${keyword} — what are the leading platforms?`
+        : coreServices
+            ? `What are the leading platforms for ${coreServices}?`
+            : `Tell me about ${domain} — what do they do?`;
 
     try {
         const res = await fetch("https://api.anthropic.com/v1/messages", {
