@@ -22,6 +22,12 @@ import {
     type CategorisedKeywords,
     type RankingSummary,
     type CannibalizationIssue,
+    fetchGSCKeywordsByDevice,
+    splitByDevice,
+    aggregateDeviceMetrics,
+    buildKeywordDeviceBreakdown,
+    type DeviceMetrics,
+    type KeywordDeviceBreakdown,
 } from "@/lib/gsc";
 import { clusterKeywords, type EnrichedKeyword, type KeywordCluster } from "@/lib/keywords";
 import { getUserGscToken } from "@/lib/gsc/token";
@@ -622,5 +628,41 @@ export async function getKeywordsWithBrandSplit(siteId: string): Promise<{
     } catch (error: unknown) {
         logger.error("[Keywords] getKeywordsWithBrandSplit failed:", { error: (error as Error)?.message || String(error) });
         return { success: false, error: "Failed to generate brand split." };
+    }
+}
+
+export async function getDeviceBreakdown(siteId: string): Promise<{
+    success: boolean;
+    error?: string;
+    deviceMetrics?: DeviceMetrics[];
+    gapKeywords?: KeywordDeviceBreakdown[];
+    totalKeywords?: number;
+}> {
+    try {
+        const session = await getServerSession(authOptions);
+        if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+        const userId = session.user.id;
+
+        const site = await prisma.site.findFirst({
+            where: { id: siteId, userId },
+        });
+        if (!site) return { success: false, error: "Site not found" };
+
+        const token = await getUserGscToken(userId);
+        const primaryUrl = normaliseSiteUrl(site.domain);
+        const rows = await fetchGSCKeywordsByDevice(token, primaryUrl, 90);
+        const deviceMetrics = aggregateDeviceMetrics(rows);
+        const breakdown = buildKeywordDeviceBreakdown(rows);
+        const gapKeywords = breakdown.filter(k => k.hasMobileCtrGap);
+
+        return {
+            success: true,
+            deviceMetrics,
+            gapKeywords: gapKeywords.slice(0, 30),
+            totalKeywords: breakdown.length,
+        };
+    } catch (error: unknown) {
+        logger.error("[Keywords] getDeviceBreakdown failed:", { error: (error as Error)?.message || String(error) });
+        return { success: false, error: "Failed to fetch device breakdown." };
     }
 }

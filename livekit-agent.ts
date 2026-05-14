@@ -77,9 +77,20 @@ process.on('uncaughtException', (err) => {
 
 
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 const parseDomain = (input: string) =>
     input.replace(/^(https?:\/\/)?(www\.)?/, "").split("/")[0];
+
+function sanitisePromptInput(input: string): string {
+    return input
+        .replace(/ignore\s+all\s+previous\s+(instructions?|context)/gi, "")
+        .replace(/system\s+(prompt|message|instruction)/gi, "")
+        .replace(/forget\s+(everything|all|previous)/gi, "")
+        .replace(/you\s+are\s+now/gi, "")
+        .replace(/\bDAN\b/g, "")
+        .replace(/jailbreak/gi, "")
+        .trim()
+        .slice(0, 300);
+}
 
 const ensureHttps = (url: string) =>
     url.startsWith("http") ? url : `https://${url}`;
@@ -1133,7 +1144,8 @@ function buildTools(emit: (data: object) => void, userId?: string, roomName?: st
             userId: z.string(),
             country: z.string().optional(),
         }),
-        execute: async ({ mode, topic, userId, country }) => {
+        execute: async ({ mode, topic: rawTopic, userId, country }) => {
+            const topic = sanitisePromptInput(rawTopic);
             log.info({ tool: "generateBlogPost", mode, topic }, "Tool invoked");
             emit({ event: "tool_start", tool: `Generating blog post about ${topic}...` });
             try {

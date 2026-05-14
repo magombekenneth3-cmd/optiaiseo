@@ -23,11 +23,9 @@ export const AI_MODELS = {
     GEMINI_3_1_PRO: GEMINI_PRO_MODEL,
     OPENAI_PRIMARY: 'gpt-4o',
     OPENAI_EMBEDDING: 'text-embedding-3-small',
-    ANTHROPIC_PRIMARY: 'claude-haiku-4-5-20251001',
-    // Use the versioned model ID — undated aliases can silently route to a
-    // different snapshot and will 404 when the alias is retired.
-    ANTHROPIC_SONNET: 'claude-sonnet-4-5-20251001',
-    ANTHROPIC_OPUS: 'claude-opus-4-20250514',
+    ANTHROPIC_PRIMARY: 'claude-haiku-4-5',
+    ANTHROPIC_SONNET: 'claude-sonnet-4-5',
+    ANTHROPIC_OPUS: 'claude-opus-4',
 } as const;
 
 export type GeminiModel = typeof AI_MODELS.GEMINI_FLASH | typeof AI_MODELS.GEMINI_FLASH_LITE | typeof AI_MODELS.GEMINI_LIVE | string;

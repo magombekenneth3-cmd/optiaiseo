@@ -79,11 +79,12 @@ async function vectorQuery(
 }
 
 
-const SIMILARITY_THRESHOLD = 0.92; // > 92% cosine similarity → treat as same query
+const SIMILARITY_THRESHOLD = 0.92;
+const MAX_VECTORS = 10_000;
 const TTL_SECONDS = {
-  mention:    60 * 60 * 24,      // 24 h — multi-model brand mentions
-  perplexity: 60 * 60 * 6,       // 6 h  — Perplexity citation checks
-  questions:  60 * 60 * 48,      // 48 h — generated question lists
+  mention:    60 * 60 * 24,
+  perplexity: 60 * 60 * 6,
+  questions:  60 * 60 * 48,
 };
 
 type CacheNamespace = keyof typeof TTL_SECONDS;
@@ -92,6 +93,23 @@ function shortHash(text: string): string {
   return crypto.createHash("sha256").update(text).digest("hex").slice(0, 12);
 }
 
+async function trimVectorCacheIfNeeded(): Promise<void> {
+  const url = getVectorBaseUrl();
+  const token = getVectorToken();
+  if (!url || !token) return;
+  try {
+    const res = await fetch(`${url}/info`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return;
+    const info = await res.json();
+    const count = info.result?.vectorCount ?? info.vectorCount ?? 0;
+    if (count > MAX_VECTORS) {
+      logger.warn("[VectorCache] Over budget", { current: count, max: MAX_VECTORS });
+    }
+  } catch { /* non-fatal */ }
+}
 
 /**
  * Generic semantic cache wrapper.
@@ -139,14 +157,22 @@ export async function withSemanticCache<T>(
     const isExpired = Date.now() / 1000 - storedAt > ttl;
 
     if (!isExpired && meta.payload) {
-      logger.debug("[VectorCache] Semantic cache hit", {
+      logger.info("[VectorCache]", {
+        event: "HIT",
+        similarity: best.score.toFixed(3),
         namespace,
-        score: best.score.toFixed(3),
-        queryText: queryText.slice(0, 60),
+        query: queryText.slice(0, 50),
       });
       return { ...(meta.payload as T), fromSemanticCache: true };
     }
   }
+
+  logger.info("[VectorCache]", {
+    event: "MISS",
+    similarity: best?.score?.toFixed(3) ?? "none",
+    namespace,
+    query: queryText.slice(0, 50),
+  });
 
   const result = await fn();
 
@@ -161,7 +187,9 @@ export async function withSemanticCache<T>(
       storedAt: Math.floor(Date.now() / 1000),
       payload:  result,
     },
-  }).catch(() => undefined);
+  })
+    .then(() => trimVectorCacheIfNeeded())
+    .catch(() => undefined);
 
   return { ...(result as object), fromSemanticCache: false } as T & { fromSemanticCache?: boolean };
 }

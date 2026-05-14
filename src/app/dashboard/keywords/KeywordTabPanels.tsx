@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { KeywordPlaybookPanel } from "@/components/dashboard/KeywordPlaybookPanel";
 import { CannibalizationPanel } from "./CannibalizationPanel";
+import { DeviceCtrGapPanel } from "@/components/dashboard/DeviceCtrGapPanel";
 import { SeoResearchPanel } from "./SeoResearchPanel";
 import { KeywordDiscovery } from "./KeywordDiscovery";
 import { CompetitorManager } from "./CompetitorManager";
@@ -99,6 +100,7 @@ export function KeywordTabPanels({
                         <div className="flex flex-col gap-4 p-5">
                             <KeywordPlaybookPanel categorised={categorised as never} opportunities={opportunities as never} summary={summary as never} domain={domain} siteId={siteId} />
                             <CannibalizationPanel siteId={siteId} />
+                            <DeviceCtrGapPanel siteId={siteId} />
                         </div>
                     </PanelErrorBoundary>
                 )}
