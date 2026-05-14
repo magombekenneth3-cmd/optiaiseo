@@ -39,6 +39,8 @@ import {
 } from "@/lib/inngest/functions/query-library";
 import { runSerpGapAnalysisJob } from "@/lib/inngest/functions/serp-gap-analysis";
 import { runKeywordSerpAnalysisJob } from "@/lib/inngest/functions/keyword-serp-analysis";
+import { purgeExpiredSerpCache } from "@/lib/inngest/functions/serp-cache-purge";
+import { weeklyGscAlerts } from "@/lib/inngest/functions/gsc-alerts";
 
 // These were exported but never registered → their schedules never fired.
 import {
@@ -57,6 +59,7 @@ import {
     indexingSiteJob,
     weeklyAutoReauditJob,
     backlinksSiteJob,
+    purgeExpiredTrendingTopicsJob,
 } from "@/lib/inngest/functions/cron-workers";
 
 import { rankTrackerSiteJob } from "@/lib/inngest/functions/rank-tracker";
@@ -150,6 +153,7 @@ export const { GET, POST, PUT } = serve({
 
         monitorGscAnomaliesJob,
         processGscSiteJob,
+        weeklyGscAlerts,            // weekly Mon 08:00 UTC — proactive impression-drop emails
 
         sendWeeklyDigestJob,
         weeklyDigestJob,            // cron Mon 07:00 UTC
@@ -196,6 +200,9 @@ export const { GET, POST, PUT } = serve({
         cronWeeklySerpAnalysis,         // weekly re-run cron (Sat 08:00 UTC)
 
         githubAutofixSiteJob,       // event: github.autofix.site
+
+        purgeExpiredSerpCache,          // weekly Sun 03:00 — clean expired SERP cache rows
+        purgeExpiredTrendingTopicsJob,  // weekly Sun 03:00 — clean expired trending topics
 
         detectCategoryJob,          // event: intelligence/detect.category
         discoverMarketJob,          // event: intelligence/discover.market

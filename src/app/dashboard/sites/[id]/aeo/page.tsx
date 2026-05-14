@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { runAeoReport, getAeoHistory, getAeoConversionMetrics } from "@/app/actions/aeo";
 import { generateAeoFix, generateAllFixes, pushFixToGitHub } from "@/app/actions/aeoFix";
 import { PrReviewModal, type PrReviewPayload } from "@/components/PrReviewModal";
+import { VisibilityForecastCard } from "@/components/aeo/VisibilityForecastCard";
 import type { AeoResult, AeoCheck } from "@/lib/aeo";
 
 // ... (skipping unchanged gradeMeta, categoryMeta, impactBadge, ScoreRing, CheckCard)
@@ -393,6 +394,8 @@ export default function AeoPage() {
                     {error}
                 </div>
             )}
+            {/* 90-Day Visibility Forecast — hero metric */}
+            <VisibilityForecastCard siteId={siteId} />
 
             {/* No data state */}
             {!result && !loading && (

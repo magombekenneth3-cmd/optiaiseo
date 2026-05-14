@@ -162,9 +162,39 @@ export function ContentDecayPanel({ siteId }: { siteId: string }) {
                                     💡 {item.recommendation}
                                 </p>
 
-                                {/* When detected */}
-                                <div style={{ marginTop: 6, fontSize: 11, color: "#6b7280" }}>
-                                    Detected: {new Date(item.detectedAt).toLocaleDateString()}
+                                {/* Re-optimise action */}
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
+                                    {/* When detected */}
+                                    <span style={{ fontSize: 11, color: "#6b7280" }}>
+                                        Detected: {new Date(item.detectedAt).toLocaleDateString()}
+                                    </span>
+                                    <button
+                                        onClick={() => {
+                                            const prompt = encodeURIComponent(
+                                                `Refresh and improve the "${item.category}" aspects of my website. ` +
+                                                `The ${item.category} score dropped ${item.drop} points (from ${item.previousScore} to ${item.currentScore}). ` +
+                                                `Recommendation: ${item.recommendation}. ` +
+                                                `Generate content that specifically addresses this gap and recovers the lost performance.`
+                                            );
+                                            window.location.href = `/dashboard/blog/new?prompt=${prompt}&keyword=${encodeURIComponent(item.category)}`;
+                                        }}
+                                        style={{
+                                            flexShrink: 0,
+                                            fontSize: 12,
+                                            fontWeight: 600,
+                                            padding: "5px 14px",
+                                            borderRadius: 8,
+                                            background: "rgba(16,185,129,0.12)",
+                                            color: "#34d399",
+                                            border: "1px solid rgba(16,185,129,0.25)",
+                                            cursor: "pointer",
+                                            transition: "background 0.15s",
+                                        }}
+                                        onMouseOver={(e) => (e.currentTarget.style.background = "rgba(16,185,129,0.22)")}
+                                        onMouseOut={(e) => (e.currentTarget.style.background = "rgba(16,185,129,0.12)")}
+                                    >
+                                        Re-optimise →
+                                    </button>
                                 </div>
                             </div>
                         );

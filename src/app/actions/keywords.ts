@@ -7,13 +7,17 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import {
     fetchGSCKeywords,
+    fetchGSCKeywordsByDateRange,
     fetchGSCSites,
     categoriseKeywords,
     findOpportunities,
     buildRankingSummary,
     normaliseSiteUrl,
     detectCannibalization,
+    aggregateKeywords,
+    splitBrandKeywords,
     type KeywordRow,
+    type AggregatedKeyword,
     type KeywordOpportunity,
     type CategorisedKeywords,
     type RankingSummary,
@@ -487,5 +491,136 @@ export async function getShareOfVoice(siteId: string): Promise<{
     } catch (error: unknown) {
         logger.error("[Keywords] getShareOfVoice failed:", { error: (error as Error)?.message || String(error) });
         return { success: false, error: "Server error" };
+    }
+}
+
+export async function getKeywordsComparison(
+    siteId: string,
+    periodDays: 28 | 90 | 365 = 90,
+): Promise<{
+    success: boolean;
+    deltas?: {
+        keyword: string;
+        clicks: number;
+        impressions: number;
+        avgPosition: number;
+        prevClicks: number;
+        prevPosition: number | null;
+        positionDelta: number | null;
+        clicksDelta: number;
+    }[];
+    periodDays?: number;
+    error?: string;
+}> {
+    try {
+        const userId = await getSessionUserId();
+        if (!userId) return { success: false, error: "Unauthorized" };
+
+        const site = await prisma.site.findFirst({
+            where: { id: siteId, userId },
+            select: SITE_SELECT,
+        });
+        if (!site) return { success: false, error: "Site not found" };
+
+        const tokenResult = await resolveGscToken(userId);
+        if ("error" in tokenResult) return { success: false, error: tokenResult.error };
+
+        const primaryUrl = normaliseSiteUrl(site.domain);
+        const today = new Date();
+
+        const currEnd = new Date(today);
+        currEnd.setDate(today.getDate() - 3);
+        const currStart = new Date(today);
+        currStart.setDate(today.getDate() - (periodDays + 3));
+
+        const prevEnd = new Date(currStart);
+        prevEnd.setDate(prevEnd.getDate() - 1);
+        const prevStart = new Date(prevEnd);
+        prevStart.setDate(prevEnd.getDate() - periodDays);
+
+        const [current, previous] = await Promise.all([
+            fetchGSCKeywordsByDateRange(tokenResult.token, primaryUrl, currStart, currEnd),
+            fetchGSCKeywordsByDateRange(tokenResult.token, primaryUrl, prevStart, prevEnd),
+        ]);
+
+        const prevMap = new Map(
+            aggregateKeywords(previous).map(k => [k.keyword, k])
+        );
+
+        const deltas = aggregateKeywords(current).map(kw => {
+            const prev = prevMap.get(kw.keyword);
+            return {
+                keyword: kw.keyword,
+                clicks: kw.clicks,
+                impressions: kw.impressions,
+                avgPosition: kw.avgPosition,
+                prevClicks: prev?.clicks ?? 0,
+                prevPosition: prev?.avgPosition ?? null,
+                positionDelta: prev ? kw.avgPosition - prev.avgPosition : null,
+                clicksDelta: prev ? kw.clicks - prev.clicks : kw.clicks,
+            };
+        });
+
+        deltas.sort((a, b) => b.impressions - a.impressions);
+
+        return { success: true, deltas: deltas.slice(0, 200), periodDays };
+    } catch (error: unknown) {
+        logger.error("[Keywords] getKeywordsComparison failed:", { error: (error as Error)?.message || String(error) });
+        return { success: false, error: "Failed to fetch comparison data." };
+    }
+}
+
+export async function getKeywordsWithBrandSplit(siteId: string): Promise<{
+    success: boolean;
+    branded?: { keyword: string; clicks: number; impressions: number; avgPosition: number }[];
+    nonBranded?: { keyword: string; clicks: number; impressions: number; avgPosition: number }[];
+    brandedClicks?: number;
+    nonBrandedClicks?: number;
+    error?: string;
+}> {
+    try {
+        const userId = await getSessionUserId();
+        if (!userId) return { success: false, error: "Unauthorized" };
+
+        const site = await prisma.site.findFirst({
+            where: { id: siteId, userId },
+            select: SITE_SELECT,
+        });
+        if (!site) return { success: false, error: "Site not found" };
+
+        let keywords: KeywordRow[];
+        try {
+            keywords = await getCachedGscKeywords(userId, site.id, site.domain);
+        } catch (e: unknown) {
+            return { success: false, error: (e as Error)?.message || "Failed to connect to GSC." };
+        }
+
+        const agg = aggregateKeywords(keywords);
+
+        const bare = site.domain
+            .replace(/^https?:\/\//, "")
+            .replace(/^www\./, "")
+            .split(".")[0];
+        const brandTerms = [bare, site.domain.replace(/^https?:\/\//, "").replace(/^www\./, "")];
+
+        const split = splitBrandKeywords(agg, brandTerms);
+
+        const toSlim = (k: AggregatedKeyword) => ({
+            keyword: k.keyword,
+            clicks: k.clicks,
+            impressions: k.impressions,
+            avgPosition: k.avgPosition,
+        });
+
+        return {
+            success: true,
+            branded: split.brand.map(toSlim),
+            nonBranded: split.nonBrand.map(toSlim),
+            brandedClicks: split.brand.reduce((s, k) => s + k.clicks, 0),
+            nonBrandedClicks: split.nonBrand.reduce((s, k) => s + k.clicks, 0),
+        };
+    } catch (error: unknown) {
+        logger.error("[Keywords] getKeywordsWithBrandSplit failed:", { error: (error as Error)?.message || String(error) });
+        return { success: false, error: "Failed to generate brand split." };
     }
 }

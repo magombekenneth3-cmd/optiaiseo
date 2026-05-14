@@ -1,10 +1,4 @@
-/**
- * Inngest function: free-audit/run
- *
- * Runs a lightweight 3-module audit (OnPage + Technical + ContentQuality —
- * no AEO, no competitors) via the shared getAuditEngine('free') factory.
- * Updates progress in DB so the SSE route can stream it to the client.
- */
+
 
 import { inngest } from '../client';
 import { NonRetriableError } from 'inngest';
@@ -38,9 +32,6 @@ export const runFreeAuditJob = inngest.createFunction(
 
         if (!auditId || !url) throw new NonRetriableError('Missing auditId or url');
 
-        // getAuditEngine('free') runs the same 3 modules (OnPage + Technical +
-        // ContentQuality) that were previously wired by hand, but via the single
-        // PROFILE_MODULES registry — no more duplicate module configuration.
         const report = await step.run('run-audit-engine', async () => {
             await updateProgress(auditId, 10, 'Fetching page...');
             const engine = getAuditEngine('free');
@@ -56,7 +47,7 @@ export const runFreeAuditJob = inngest.createFunction(
             const categoryScores = Object.fromEntries(
                 report.categories.map(c => [c.id, c.score])
             );
-            const topRecs: NormalizedRecommendation[] = report.recommendations.slice(0, 5);
+            const topRecs: NormalizedRecommendation[] = report.recommendations.slice(0, 8);
 
             await prisma.freeAudit.update({
                 where: { id: auditId },

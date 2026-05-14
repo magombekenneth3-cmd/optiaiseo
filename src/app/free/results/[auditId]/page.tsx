@@ -1,11 +1,4 @@
-/**
- * /free/results/[auditId]
- *
- * Publicly accessible result page (no login required).
- * Shows: score card, category bars, top 3 recs free, rest gated behind email.
- * Full OG meta tags for rich social preview.
- * Mobile-optimised: 120px score circle, stacked bars, Web Share API.
- */
+
 
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
@@ -14,6 +7,15 @@ import FreeResultClient from './FreeResultClient';
 
 interface Props {
     params: Promise<{ auditId: string }>;
+}
+
+interface Rec {
+    label: string;
+    recommendation: string;
+    priority: 'High' | 'Medium' | 'Low';
+    categoryId: string;
+    finding: string;
+    priorityScore: number;
 }
 
 function scoreGrade(score: number): string {
@@ -104,6 +106,20 @@ export default async function FreeResultPage({ params }: Props) {
         );
     }
 
+    const allRecs = Array.isArray(audit.allRecs) ? (audit.allRecs as unknown as Rec[]) : [];
+    const totalRecCount = allRecs.length;
+
+    const issueStats = {
+        total:    totalRecCount,
+        errors:   allRecs.filter(r => r.priority === 'High').length,
+        warnings: allRecs.filter(r => r.priority === 'Medium').length,
+        notices:  allRecs.filter(r => r.priority === 'Low').length,
+    };
+
+    const quickWins = [...allRecs]
+        .sort((a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0))
+        .slice(0, 3);
+
     return (
         <FreeResultClient
             auditId={audit.id}
@@ -114,9 +130,11 @@ export default async function FreeResultPage({ params }: Props) {
             categoryScores={(audit.categoryScores as any) ?? {}}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             topRecs={(audit.topRecs as any[]) ?? []}
-            totalRecCount={Array.isArray(audit.allRecs) ? audit.allRecs.length : 0}
+            totalRecCount={totalRecCount}
             grade={scoreGrade(audit.overallScore ?? 0)}
             createdAt={audit.createdAt.toISOString()}
+            issueStats={issueStats}
+            quickWins={quickWins}
         />
     );
 }
