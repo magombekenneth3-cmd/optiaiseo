@@ -97,10 +97,16 @@ export const runAeoAuditJob = inngest.createFunction(
             });
         });
 
-        // 2.2: Sync entity Knowledge Graph — extract entities into BrandFact table
         await step.run("sync-entity-kg", async () => {
             const { syncEntityKnowledgeGraph } = await import("@/lib/aeo/entity-kg-sync");
             await syncEntityKnowledgeGraph(siteId, site.domain, result);
+        });
+
+        await step.run("refresh-visibility-forecast", async () => {
+            const { generateVisibilityForecast } = await import("@/lib/aeo/visibility-forecast");
+            const { redis } = await import("@/lib/redis");
+            const forecast = await generateVisibilityForecast(siteId);
+            await redis.set(`forecast:${siteId}`, JSON.stringify(forecast), { ex: 60 * 60 * 24 * 7 });
         });
 
         return { success: true };
@@ -225,6 +231,13 @@ export const processAeoSiteJob = inngest.createFunction(
         await step.run("sync-entity-kg", async () => {
             const { syncEntityKnowledgeGraph } = await import("@/lib/aeo/entity-kg-sync");
             await syncEntityKnowledgeGraph(siteId, domain, result);
+        });
+
+        await step.run("refresh-visibility-forecast", async () => {
+            const { generateVisibilityForecast } = await import("@/lib/aeo/visibility-forecast");
+            const { redis } = await import("@/lib/redis");
+            const forecast = await generateVisibilityForecast(siteId);
+            await redis.set(`forecast:${siteId}`, JSON.stringify(forecast), { ex: 60 * 60 * 24 * 7 });
         });
 
         if (previous && result.score < previous.score - 5) {

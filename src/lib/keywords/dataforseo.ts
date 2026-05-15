@@ -75,6 +75,50 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
     return chunks;
 }
 
+class CircuitBreaker {
+    private failures = 0;
+    private lastFailure = 0;
+    private openUntil = 0;
+
+    constructor(
+        private readonly threshold: number,
+        private readonly windowMs: number,
+        private readonly cooldownMs: number,
+        private readonly name: string,
+    ) {}
+
+    isOpen(): boolean {
+        if (Date.now() < this.openUntil) return true;
+        if (this.openUntil > 0 && Date.now() >= this.openUntil) {
+            this.reset();
+        }
+        return false;
+    }
+
+    recordFailure(): void {
+        const now = Date.now();
+        if (now - this.lastFailure > this.windowMs) this.failures = 0;
+        this.failures++;
+        this.lastFailure = now;
+        if (this.failures >= this.threshold) {
+            this.openUntil = now + this.cooldownMs;
+            logger.warn(`[${this.name}] Circuit OPEN — ${this.failures} failures in ${this.windowMs}ms window, cooling down ${this.cooldownMs}ms`);
+        }
+    }
+
+    recordSuccess(): void {
+        this.failures = Math.max(0, this.failures - 1);
+    }
+
+    private reset(): void {
+        this.failures = 0;
+        this.openUntil = 0;
+        logger.info(`[${this.name}] Circuit CLOSED — resuming normal operation`);
+    }
+}
+
+const dataForSeoBreaker = new CircuitBreaker(5, 60_000, 30_000, "dataforseo");
+
 async function fetchWithTimeout(
     url: string,
     options: RequestInit,
@@ -88,6 +132,30 @@ async function fetchWithTimeout(
         clearTimeout(timeout);
     }
 }
+
+async function fetchDataForSeo(
+    url: string,
+    options: RequestInit,
+    timeoutMs: number,
+): Promise<Response | null> {
+    if (dataForSeoBreaker.isOpen()) {
+        logger.warn("[dataforseo] Circuit open — returning degraded response");
+        return null;
+    }
+    try {
+        const res = await fetchWithTimeout(url, options, timeoutMs);
+        if (res.ok) {
+            dataForSeoBreaker.recordSuccess();
+        } else if (res.status >= 500 || res.status === 429) {
+            dataForSeoBreaker.recordFailure();
+        }
+        return res;
+    } catch (err: unknown) {
+        dataForSeoBreaker.recordFailure();
+        throw err;
+    }
+}
+
 
 export async function getKeywordMetricsBatch(
     keywords: string[],
@@ -104,7 +172,7 @@ export async function getKeywordMetricsBatch(
 
     for (const chunk of chunks) {
         try {
-            const res = await fetchWithTimeout(
+            const res = await fetchDataForSeo(
                 "https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/live",
                 {
                     method: "POST",
@@ -118,8 +186,8 @@ export async function getKeywordMetricsBatch(
                 30_000
             );
 
-            if (!res.ok) {
-                logger.warn("[dataforseo] search_volume response not ok", { status: res.status });
+            if (!res || !res.ok) {
+                if (res) logger.warn("[dataforseo] search_volume response not ok", { status: res.status });
                 continue;
             }
 
@@ -174,7 +242,7 @@ export async function getSerpData(
     }
 
     try {
-        const res = await fetchWithTimeout(
+        const res = await fetchDataForSeo(
             "https://api.dataforseo.com/v3/serp/google/organic/live/advanced",
             {
                 method: "POST",
@@ -190,8 +258,8 @@ export async function getSerpData(
             20_000
         );
 
-        if (!res.ok) {
-            logger.warn("[dataforseo] SERP response not ok", { keyword, status: res.status });
+        if (!res || !res.ok) {
+            if (res) logger.warn("[dataforseo] SERP response not ok", { keyword, status: res.status });
             return { urls: [], features: emptyFeatures };
         }
 
@@ -270,7 +338,7 @@ export async function getDomainMetrics(domain: string): Promise<DomainMetrics | 
     }
 
     try {
-        const res = await fetchWithTimeout(
+        const res = await fetchDataForSeo(
             "https://api.dataforseo.com/v3/dataforseo_labs/google/domain_rank_overview/live",
             {
                 method: "POST",
@@ -284,7 +352,7 @@ export async function getDomainMetrics(domain: string): Promise<DomainMetrics | 
             15_000
         );
 
-        if (res.ok) {
+        if (res?.ok) {
             const data = await res.json();
             const r = data?.tasks?.[0]?.result?.[0]?.items?.[0];
             if (r) {
@@ -321,7 +389,7 @@ export async function getDomainOverview(
     if (!auth) return null;
 
     try {
-        const res = await fetchWithTimeout(
+        const res = await fetchDataForSeo(
             "https://api.dataforseo.com/v3/dataforseo_labs/google/domain_overview/live",
             {
                 method: "POST",
@@ -331,7 +399,7 @@ export async function getDomainOverview(
             15_000,
         );
 
-        if (!res.ok) return null;
+        if (!res || !res.ok) return null;
         const data = await res.json();
         const item = data?.tasks?.[0]?.result?.[0]?.items?.[0];
         if (!item) return null;
@@ -368,7 +436,7 @@ export async function getCompetitorTopPages(
     if (!auth) return [];
 
     try {
-        const res = await fetchWithTimeout(
+        const res = await fetchDataForSeo(
             "https://api.dataforseo.com/v3/dataforseo_labs/google/ranked_keywords/live",
             {
                 method: "POST",
@@ -384,7 +452,7 @@ export async function getCompetitorTopPages(
             15_000,
         );
 
-        if (!res.ok) return [];
+        if (!res || !res.ok) return [];
         const data = await res.json();
         const items: Array<{
             ranked_serp_element?: { serp_item?: { relative_url?: string } };
