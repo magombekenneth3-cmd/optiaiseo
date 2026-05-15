@@ -16,6 +16,7 @@ import { hasFeature } from "@/lib/stripe/plans";
 import { CtrDiagnosisBanner } from "@/components/dashboard/CtrDiagnosisBanner";
 import { AllKeywordsTable } from "./AllKeywordsTable";
 import { KeywordTabPanels } from "./KeywordTabPanels";
+import { UnifiedAnalyticsPanel } from "@/components/dashboard/UnifiedAnalyticsPanel";
 
 export const metadata: Metadata = {
     title: "Keywords | OptiAISEO",
@@ -275,6 +276,13 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
 
             {/* ── Unified overview strip ── */}
             <OverviewStrip summary={summary} visibilityScore={visibilityScore} />
+
+            {/* ── GSC + GA4 Unified Analytics ── */}
+            {activeSiteId && (
+                <PanelErrorBoundary fallbackTitle="Unified Analytics">
+                    <UnifiedAnalyticsPanel siteId={activeSiteId} />
+                </PanelErrorBoundary>
+            )}
 
             {/* ── Opportunities ── */}
             <div className="rounded-2xl border border-[#30363d] bg-[#0d1117] overflow-hidden">
