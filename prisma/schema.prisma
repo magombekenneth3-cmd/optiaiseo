@@ -273,6 +273,7 @@ model RankSnapshot {
   @@index([siteId, keyword])
   @@index([recordedAt])
   @@index([siteId, keyword, recordedAt(sort: Desc)])
+  @@index([trackedId, recordedAt(sort: Desc)])
 }
 
 model TrackedKeyword {
@@ -458,6 +459,7 @@ model Blog {
   @@index([siteId])
   @@index([siteId, status, createdAt])
   @@index([siteId, pipelineType, createdAt])
+  @@index([siteId, status, publishedAt])
 }
 
 model TrendingTopic {

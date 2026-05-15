@@ -1854,6 +1854,17 @@ async function shutdown(signal: string): Promise<void> {
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT",  () => shutdown("SIGINT"));
 
+// ─── Health check ─────────────────────────────────────────────────────────────
+import http from "http";
+const HEALTH_PORT = parseInt(process.env.ARIA_HEALTH_PORT ?? "8081", 10);
+const healthServer = http.createServer((_, res) => {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("ok");
+});
+healthServer.listen(HEALTH_PORT, () => {
+    log.info({ port: HEALTH_PORT }, "[Aria] Health check server listening");
+});
+
 // ─── Worker ───────────────────────────────────────────────────────────────────
 cli.runApp(
     new WorkerOptions({

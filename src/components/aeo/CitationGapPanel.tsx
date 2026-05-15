@@ -201,19 +201,31 @@ export function CitationGapPanel({ siteId, hasCompetitors }: CitationGapPanelPro
           domain: data.domain ?? "",
           gapCount: data.gapCount ?? 0,
           gaps: (data.gaps ?? []).map(
-            (g: { keyword: string; competitor: string; models: string[] }) => ({
+            (g: {
+              keyword: string;
+              competitor?: string;
+              models?: string[];
+              topCompetitorCiting?: { domain: string; citationPosition: number; citedUrl: string } | null;
+              affectedModels?: string[];
+              gapReason?: string;
+              explanation?: string;
+              fix?: string;
+              searchVolume?: number;
+              impact?: string;
+              embeddingGapSignals?: string[];
+            }) => ({
               keyword: g.keyword,
               yourPosition: null,
-              topCompetitorCiting: g.competitor
+              topCompetitorCiting: g.topCompetitorCiting ?? (g.competitor
                 ? { domain: g.competitor, citationPosition: null, citedUrl: `https://${g.competitor}` }
-                : null,
-              affectedModels: g.models ?? [],
-              gapReason: "missing_faq_schema" as GapReason,
-              explanation: "Run a full analysis to get detailed gap reasoning and a specific fix.",
-              fix: "Run a full analysis to get a specific, actionable fix for this keyword.",
-              searchVolume: 0,
-              impact: "medium" as const,
-              embeddingGapSignals: [] as string[],
+                : null),
+              affectedModels: g.affectedModels ?? g.models ?? [],
+              gapReason: (g.gapReason ?? "missing_faq_schema") as GapReason,
+              explanation: g.explanation ?? "Run a full analysis to get detailed gap reasoning.",
+              fix: g.fix ?? "Run a full analysis to get a specific, actionable fix for this keyword.",
+              searchVolume: g.searchVolume ?? 0,
+              impact: (g.impact ?? "medium") as "high" | "medium" | "low",
+              embeddingGapSignals: g.embeddingGapSignals ?? [],
               source: "cached" as const,
             })
           ),
