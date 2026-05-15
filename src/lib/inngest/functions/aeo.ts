@@ -13,6 +13,7 @@ export const runAeoAuditJob = inngest.createFunction(
         id: "run-aeo-audit",
         name: "Run Deep AEO Audit",
         concurrency: { limit: CONCURRENCY.aeo, key: "global-aeo-audit" },
+        idempotency: "event.data.reportId",
         throttle: {
             limit: 30,
             period: "1m",
@@ -183,7 +184,7 @@ export const weeklyAeoTracker = inngest.createFunction(
 );
 
 export const processAeoSiteJob = inngest.createFunction(
-    { id: "process-aeo-tracker-site", name: "Process Weekly AEO Site", concurrency: { limit: 5 }, retries: 2,
+    { id: "process-aeo-tracker-site", name: "Process Weekly AEO Site", concurrency: { limit: 5 }, retries: 2, idempotency: "event.data.siteId",
         triggers: [{ event: "aeo.tracker.check.site" }],
     },
     async ({ event, step }) => {

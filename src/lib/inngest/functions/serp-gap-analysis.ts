@@ -33,6 +33,7 @@ export const runSerpGapAnalysisJob = inngest.createFunction(
             limit: 3,
             key: "event.data.siteId",
         },
+        idempotency: "event.data.analysisId",
         triggers: [{ event: "serp-gap/requested" }],
     },
     async ({ event, step }) => {

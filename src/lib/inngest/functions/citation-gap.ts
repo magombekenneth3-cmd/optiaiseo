@@ -13,6 +13,7 @@ export const runCitationGapOnDemand = inngest.createFunction(
         retries: 2,
         // Don't run more than 2 concurrent analyses (API rate limit protection)
         concurrency: { limit: 2, key: "event.data.siteId" },
+        idempotency: "event.data.siteId",
         triggers: [{ event: "aeo/citation-gap.requested" }],
     },
     async ({ event, step }) => {

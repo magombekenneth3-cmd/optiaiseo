@@ -332,7 +332,14 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
                                     <div className="hidden sm:flex items-center gap-4 shrink-0 text-[11px] text-[#6e7681]">
                                         <span>{fmt(opp.impressions)} impr</span>
                                         <span>{opp.ctr}% CTR</span>
-                                        <span className="font-bold text-[#d29922]">Score {opp.opportunityScore}</span>
+                                        <span className="relative group cursor-help">
+                                            <span className="font-bold text-[#d29922]">Score {opp.opportunityScore}</span>
+                                            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-lg border border-[#30363d] bg-[#161b22] px-3 py-2 text-[10px] text-[#c9d1d9] opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
+                                                <span className="block font-semibold text-[#e6edf3] mb-1">Opportunity score formula</span>
+                                                <span className="block font-mono">{opp.impressions.toLocaleString()} × (1 − {(opp.ctr / 100).toFixed(3)}) = {opp.opportunityScore.toLocaleString()}</span>
+                                                <span className="block text-[#6e7681] mt-1">Higher = more traffic to recover by improving CTR or ranking.</span>
+                                            </span>
+                                        </span>
                                     </div>
 
                                     {/* CTA */}

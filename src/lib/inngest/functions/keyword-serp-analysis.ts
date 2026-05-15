@@ -32,6 +32,7 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
             limit: 2,
             key: "event.data.siteId",
         },
+        idempotency: "event.data.analysisId",
         triggers: [{ event: "serp-analysis/requested" as const }],
     },
     async ({ event, step }) => {
