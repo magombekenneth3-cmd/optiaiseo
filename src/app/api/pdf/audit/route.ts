@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
 
     const filename = `seo-audit-${audit.site.domain.replace(/[^a-z0-9]/gi, "-")}-${audit.runTimestamp.toISOString().slice(0, 10)}.pdf`;
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(new Uint8Array(pdfBuffer), {
         headers: {
             "Content-Type": "application/pdf",
             "Content-Disposition": `attachment; filename="${filename}"`,

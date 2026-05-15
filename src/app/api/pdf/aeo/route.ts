@@ -46,7 +46,8 @@ export async function GET(req: NextRequest) {
         .slice(0, 8);
 
     const multiModelResults: Record<string, number> = {};
-    const rawModels = report.modelScores as Record<string, number> | null;
+    const rawReport = report as typeof report & { modelScores?: Record<string, number> };
+    const rawModels = rawReport.modelScores ?? null;
     if (rawModels) {
         for (const [model, score] of Object.entries(rawModels)) {
             if (typeof score === "number") multiModelResults[model] = score;
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
     const pdfBuffer = await generateAeoReportPdf(reportData);
     const filename = `aeo-report-${report.site.domain.replace(/[^a-z0-9]/gi, "-")}-${report.createdAt.toISOString().slice(0, 10)}.pdf`;
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(new Uint8Array(pdfBuffer), {
         headers: {
             "Content-Type": "application/pdf",
             "Content-Disposition": `attachment; filename="${filename}"`,

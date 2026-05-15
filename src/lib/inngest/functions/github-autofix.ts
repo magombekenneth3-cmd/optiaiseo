@@ -51,9 +51,11 @@ export const githubAutofixSiteJob = inngest.createFunction(
         name: "GitHub Auto-Fix — Per Site",
         concurrency: { limit: 3 },
         retries: 1,
+        idempotency: "event.data.siteId",
     
         triggers: [{ event: "github.autofix.site" }],
     },
+
     async ({ event, step }) => {
         const { siteId, domain } = event.data as { siteId: string; domain: string };
 
