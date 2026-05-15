@@ -26,6 +26,7 @@ import { GenerativeSOVPanel } from "@/components/dashboard/GenerativeSOVPanel";
 import QueryLibraryPanel from "@/components/aeo/QueryLibraryPanel";
 import { BacklinkPanel } from "@/components/dashboard/BacklinkPanel";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
+import { PdfDownloadButton } from "@/components/PdfDownloadButton";
 
 // ─── Score utilities ──────────────────────────────────────────────────────────
 
@@ -486,6 +487,16 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                                     : pollingStatus === "done" ? "✅ Done"
                                         : <><Sparkles className="w-3 h-3" /> Deep Audit</>}
                         </button>
+
+                        {/* PDF Export — only when a report exists */}
+                        {rate !== null && result?.id && (
+                            <PdfDownloadButton
+                                endpoint="/api/pdf/aeo"
+                                params={{ reportId: result.id }}
+                                label="PDF"
+                                filename={`aeo-report-${domain}.pdf`}
+                            />
+                        )}
                     </div>
                 </div>
             </div>
