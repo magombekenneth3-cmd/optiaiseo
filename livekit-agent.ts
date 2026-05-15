@@ -218,11 +218,9 @@ async function pushPrForUser(params: {
     }
     prCooldowns.set(params.userId, Date.now());
 
-    const account = await prisma.account.findFirst({
-        where: { userId: params.userId, provider: "github" },
-        select: { access_token: true },
-    });
-    if (!account?.access_token) {
+    const { getGitHubToken } = await import("./src/lib/github/token");
+    const ghToken = await getGitHubToken(params.userId);
+    if (!ghToken) {
         return {
             success: false,
             error: "GitHub not connected. Tell the user to connect GitHub in Settings.",
@@ -234,7 +232,7 @@ async function pushPrForUser(params: {
     const [, owner, repo] = match;
 
     const h: HeadersInit = {
-        Authorization: `Bearer ${account.access_token}`,
+        Authorization: `Bearer ${ghToken}`,
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         "Content-Type": "application/json",

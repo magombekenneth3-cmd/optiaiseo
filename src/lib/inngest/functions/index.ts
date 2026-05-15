@@ -27,4 +27,5 @@ export * from "./weekly-digest";
 export * from "./competitor-refresh-cron";
 export * from "./intelligence-jobs";
 export * from "./serp-gap-analysis";
+export * from "./serp-feature-tracker";
 export * from "./cron-schedule";

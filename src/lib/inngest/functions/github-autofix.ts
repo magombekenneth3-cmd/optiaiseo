@@ -71,15 +71,12 @@ export const githubAutofixSiteJob = inngest.createFunction(
         });
 
         const token = await step.run("resolve-github-token", async () => {
-            const account = await prisma.account.findFirst({
-                where: { userId: site.userId, provider: "github" },
-                select: { access_token: true },
-            });
-            if (!account?.access_token) {
+            const { getGitHubToken } = await import("@/lib/github/token");
+            const ghToken = await getGitHubToken(site.userId);
+            if (!ghToken) {
                 logger.info(`[Inngest/GithubAutofix] Skipping ${domain}: user has no GitHub OAuth token connected`);
-                return null;
             }
-            return account.access_token;
+            return ghToken;
         });
 
         if (!token) return { skipped: true, reason: "no_github_oauth" };
