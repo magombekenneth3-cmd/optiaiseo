@@ -1350,6 +1350,65 @@ function buildTools(emit: (data: object) => void, userId?: string, roomName?: st
         }
     });
 
+    const getGscInsightsTool = llm.tool({
+        description:
+            "Deep GSC diagnostics: device CTR gaps (mobile vs desktop), traffic anomalies, and top losing keywords. Use when the user asks about mobile performance, traffic drops, or device-specific issues.",
+        parameters: z.object({
+            userId: z.string(),
+            domain: z.string().optional(),
+        }),
+        execute: async ({ userId, domain }) => {
+            log.info({ tool: "getGscInsights", userId }, "Tool invoked");
+            emit({ event: "tool_start", tool: "Analysing GSC device and anomaly data..." });
+            try {
+                let accessToken: string;
+                try {
+                    accessToken = await getUserGscToken(userId);
+                } catch (e: any) {
+                    if (e.message === "GSC_NOT_CONNECTED") {
+                        return JSON.stringify({ error: "GSC not connected", status: "Tell the user to connect Google Search Console from Settings." });
+                    }
+                    throw e;
+                }
+
+                const site = await getUserSite(userId, domain);
+                if (!site) return JSON.stringify({ error: "No site found" });
+
+                const siteUrl = normaliseSiteUrl(site.domain);
+                const { fetchGSCKeywordsByDevice, aggregateDeviceMetrics, buildKeywordDeviceBreakdown } = await import("./src/lib/gsc");
+                const rows = await fetchGSCKeywordsByDevice(accessToken, siteUrl, 90);
+                const deviceMetrics = aggregateDeviceMetrics(rows);
+                const breakdown = buildKeywordDeviceBreakdown(rows);
+                const gapKeywords = breakdown.filter(k => k.hasMobileCtrGap).slice(0, 5);
+
+                const desktop = deviceMetrics.find(m => m.device === "DESKTOP");
+                const mobile = deviceMetrics.find(m => m.device === "MOBILE");
+
+                const spokenGaps = gapKeywords.map(k =>
+                    `"${k.keyword}" — desktop CTR ${k.desktop?.ctr.toFixed(1)}% vs mobile ${k.mobile?.ctr.toFixed(1)}%`
+                );
+
+                emit({ event: "tool_log", message: `> Device analysis: ${gapKeywords.length} mobile CTR gaps found` });
+
+                return JSON.stringify({
+                    domain: site.domain,
+                    desktopCtr: desktop?.ctr.toFixed(1) ?? "N/A",
+                    mobileCtr: mobile?.ctr.toFixed(1) ?? "N/A",
+                    desktopClicks: desktop?.clicks ?? 0,
+                    mobileClicks: mobile?.clicks ?? 0,
+                    mobileCtrGapCount: gapKeywords.length,
+                    topGaps: spokenGaps,
+                    status: mobile && desktop
+                        ? `Say: "Your desktop CTR is ${desktop.ctr.toFixed(1)}% and mobile is ${mobile.ctr.toFixed(1)}%. I found ${gapKeywords.length} keywords where mobile significantly underperforms." Then describe the top gap.`
+                        : "Say: I couldn't find enough device data. This usually means GSC needs more time to collect impressions.",
+                });
+            } catch (e: any) {
+                log.error({ tool: "getGscInsights", err: e.message }, "Tool failed");
+                return JSON.stringify({ error: `GSC insights failed: ${e.message}` });
+            }
+        },
+    });
+
     return {
         runSiteAudit: runSiteAuditTool,
         runOnPageAudit: runOnPageAuditTool,
@@ -1357,6 +1416,7 @@ function buildTools(emit: (data: object) => void, userId?: string, roomName?: st
         checkCompetitor: checkCompetitorTool,
         fetchCompetitorIntel: fetchCompetitorIntelTool,
         getKeywordRankings: getKeywordRankingsTool,
+        getGscInsights: getGscInsightsTool,
         runSeoResearch: runSeoResearchTool,
         scoreContent: scoreContentTool,
         generateBlogPost: generateBlogPostTool,
@@ -1412,6 +1472,7 @@ ${noSitesInstructions}
 - checkCompetitor: head-to-head Generative Share of Voice comparison
 - fetchCompetitorIntel: competitor traffic, keyword gaps, content pillars
 - getKeywordRankings: live Google Search Console rankings, page-2 opportunities
+- getGscInsights: deep device CTR gap analysis (mobile vs desktop), traffic anomalies
 - runSeoResearch: 7-phase content strategy + keyword roadmap
 - scoreContent: NLP quality scoring of pasted text
 - generateBlogPost: write a 2000-word AEO-optimised post with FAQ schema
