@@ -60,15 +60,15 @@ const ACCOUNT_ITEMS = [
 ];
 
 const SECONDARY_ITEMS = [
-    { name: "Recommendations", href: "/dashboard/recommendations", icon: Lightbulb,    contextSiteId: false },
-    { name: "SERP Gap Analysis",href: "/dashboard/serp-gap",       icon: BarChart3,    contextSiteId: true  },
-    { name: "Content Planner", href: "/dashboard/planner",         icon: Calendar,     contextSiteId: true  },
-    { name: "Content Refresh", href: "/dashboard/refresh",         icon: ClipboardList,contextSiteId: true  },
-    { name: "Backlinks",       href: "/dashboard/backlinks",       icon: Link2,        contextSiteId: true  },
-    { name: "Auto Indexer",    href: "/dashboard/indexing",        icon: Zap,          contextSiteId: false },
-    { name: "Content Decay",   href: "/dashboard/content-decay",   icon: TrendingDown, contextSiteId: true  },
-    { name: "Healing Log",     href: "/dashboard/healing",         icon: Zap,          contextSiteId: true  },
-    { name: "Team",            href: "/dashboard/team",            icon: Users,        contextSiteId: false },
+    { name: "Recommendations", href: "/dashboard/recommendations", icon: Lightbulb,    contextSiteId: false, group: "strategy" },
+    { name: "SERP Gap Analysis",href: "/dashboard/serp-gap",       icon: BarChart3,    contextSiteId: true,  group: "strategy" },
+    { name: "Content Planner", href: "/dashboard/planner",         icon: Calendar,     contextSiteId: true,  group: "content" },
+    { name: "Re-Optimize",     href: "/dashboard/refresh",         icon: ClipboardList,contextSiteId: true,  group: "content" },
+    { name: "Content Decay",   href: "/dashboard/content-decay",   icon: TrendingDown, contextSiteId: true,  group: "content" },
+    { name: "Backlinks",       href: "/dashboard/backlinks",       icon: Link2,        contextSiteId: true,  group: "technical" },
+    { name: "Auto Indexer",    href: "/dashboard/indexing",        icon: Zap,          contextSiteId: false, group: "technical" },
+    { name: "Auto-Heal Log",   href: "/dashboard/healing",         icon: Zap,          contextSiteId: true,  group: "technical" },
+    { name: "Team",            href: "/dashboard/team",            icon: Users,        contextSiteId: false, group: "strategy" },
 ];
 
 interface Site { id: string; domain: string; grade?: string | null; }
@@ -427,31 +427,28 @@ function SidebarNavInner({
 
                     {moreOpen && (
                         <div id="more-tools-list" className="space-y-0.5 mt-0.5 pl-2">
-                            {SECONDARY_ITEMS.map((item) => {
-                                const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
-                                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                                const missingContext = item.contextSiteId && !siteId;
-
-                                const linkEl = (
-                                    <NavLink
-                                        key={item.name}
-                                        item={item}
-                                        href={href}
-                                        isActive={isActive}
-                                        missingContext={!!missingContext}
-                                    />
+                            {(["strategy", "content", "technical"] as const).map(group => {
+                                const groupItems = SECONDARY_ITEMS.filter(i => i.group === group);
+                                const groupLabel = group === "strategy" ? "Strategy" : group === "content" ? "Content" : "Technical";
+                                return (
+                                    <div key={group}>
+                                        <p className="px-3 pt-2.5 pb-0.5 text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest select-none">{groupLabel}</p>
+                                        {groupItems.map((item) => {
+                                            const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
+                                            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                                            const missingContext = item.contextSiteId && !siteId;
+                                            return (
+                                                <NavLink
+                                                    key={item.name}
+                                                    item={item}
+                                                    href={href}
+                                                    isActive={isActive}
+                                                    missingContext={!!missingContext}
+                                                />
+                                            );
+                                        })}
+                                    </div>
                                 );
-
-                                return missingContext ? (
-                                    <TooltipProvider delay={200} key={item.name}>
-                                        <Tooltip>
-                                            <TooltipTrigger>{linkEl}</TooltipTrigger>
-                                            <TooltipContent side="right" className="text-xs">
-                                                Select a site first
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                ) : linkEl;
                             })}
                         </div>
                     )}

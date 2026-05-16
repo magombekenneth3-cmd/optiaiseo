@@ -41,6 +41,7 @@ export default async function DashboardLayout({
       onboardingDone: true,
       trialEndsAt: true,
       role: true,
+      credits: true,
       sites: {
         orderBy: { createdAt: "desc" },
         select: {
@@ -150,7 +151,7 @@ export default async function DashboardLayout({
         defaultSiteId={defaultSiteId}
         sites={userSites}
         isSuperAdmin={user.role === "SUPER_ADMIN"}
-        user={{ name: userName, email: user.email || "", tier: userPlan }}
+        user={{ name: userName, email: user.email || "", tier: userPlan, credits: user.credits ?? 0 }}
       />
 
       {/* ── Main Content ─────────────────────────────────────────────────── */}

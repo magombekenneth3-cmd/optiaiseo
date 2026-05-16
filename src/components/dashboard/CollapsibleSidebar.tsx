@@ -15,7 +15,7 @@ interface Props {
     defaultSiteId?: string | null;
     sites?: Site[];
     isSuperAdmin?: boolean;
-    user: { name: string; email: string; tier: string };
+    user: { name: string; email: string; tier: string; credits: number };
 }
 
 function getDomainInitial(domain: string): string {
@@ -134,8 +134,37 @@ export function CollapsibleSidebar({ defaultSiteId, sites = [], isSuperAdmin = f
                 />
             </div>
 
-            {/* ── User dropdown ─────────────────────────────────── */}
+            {/* ── Credit balance + User dropdown ───────────────── */}
             <div className={`border-t border-sidebar-border mt-auto ${collapsed ? "p-2" : "p-3"}`}>
+                {!collapsed && (
+                    <a
+                        href="/dashboard/billing?tab=credits"
+                        className="flex items-center gap-2 px-2.5 py-1.5 mb-2 rounded-lg bg-muted/40 border border-border hover:bg-muted transition-colors group"
+                    >
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${user.credits > 20 ? "bg-emerald-500" : user.credits > 5 ? "bg-amber-500" : "bg-rose-500 animate-pulse"}`} />
+                        <span className="text-xs font-semibold text-foreground">{user.credits}</span>
+                        <span className="text-xs text-muted-foreground">credits</span>
+                        {user.credits <= 10 && (
+                            <span className="ml-auto text-[10px] font-bold text-amber-400 group-hover:text-amber-300">Top up →</span>
+                        )}
+                    </a>
+                )}
+                {collapsed && (
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <a
+                                    href="/dashboard/billing?tab=credits"
+                                    className="flex justify-center items-center w-10 h-7 mx-auto mb-1.5 rounded-lg bg-muted/40 border border-border hover:bg-muted transition-colors"
+                                >
+                                    <span className={`w-1.5 h-1.5 rounded-full mr-1 ${user.credits > 20 ? "bg-emerald-500" : user.credits > 5 ? "bg-amber-500" : "bg-rose-500 animate-pulse"}`} />
+                                    <span className="text-[10px] font-bold text-foreground">{user.credits}</span>
+                                </a>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="text-xs">{user.credits} credits remaining</TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                )}
                 <UserDropdown
                     user={user}
                     collapsed={collapsed}
