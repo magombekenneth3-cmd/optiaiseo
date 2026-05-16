@@ -142,7 +142,7 @@ export async function handleCheckoutCompleted(session: Stripe.Checkout.Session):
 
     await prisma.user.update({
         where: { id: userId },
-        data: { subscriptionTier: tier, trialEndsAt: null },
+        data: { subscriptionTier: tier, trialEndsAt: null, creditsLockedAt: null },
     })
 
     await bumpSessionVersion(userId)
@@ -191,7 +191,7 @@ export async function handleSubscriptionUpdated(subscription: Stripe.Subscriptio
 
     await prisma.user.update({
         where: { id: userId },
-        data: { subscriptionTier: tier, trialEndsAt: null },
+        data: { subscriptionTier: tier, trialEndsAt: null, creditsLockedAt: null },
     })
 
     await bumpSessionVersion(userId)
@@ -280,8 +280,13 @@ export async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> 
         const { addCreditPackCredits } = await import("@/lib/credits")
         const { CREDIT_PACK } = await import("@/lib/stripe/plans")
         await addCreditPackCredits(subscription.userId, CREDIT_PACK.credits)
+        // Unlock credits so old balance + new pack = total usable
+        await prisma.user.update({
+            where: { id: subscription.userId },
+            data: { creditsLockedAt: null },
+        }).catch(() => {})
         await bumpSessionVersion(subscription.userId)
-        logger.debug("[Webhook] Credit pack purchased", { userId: subscription.userId })
+        logger.debug("[Webhook] Credit pack purchased — credits unlocked", { userId: subscription.userId })
         return
     }
 

@@ -89,15 +89,17 @@ async function getUserTier(userId: string): Promise<Tier> {
             return resolvedTier;
         }
 
-        // Grace expired — downgrade to FREE and wipe credits (lazy enforcement)
-        logger.info("[Auth/Tier] Grace period expired — downgrading to FREE and wiping credits", {
+        // Grace expired — downgrade to FREE and LOCK credits (read-only).
+        // Credits stay visible but unusable. The finalizer cron wipes them
+        // after 2 more days if the user doesn't top-up or resubscribe.
+        logger.info("[Auth/Tier] Grace period expired — locking credits", {
             userId,
             cancelledAt: sub.cancelledAt.toISOString(),
-            creditsWiped: user?.credits ?? 0,
+            creditsLocked: user?.credits ?? 0,
         });
         await prisma.user.update({
             where: { id: userId },
-            data: { subscriptionTier: "FREE", credits: 0 },
+            data: { subscriptionTier: "FREE", creditsLockedAt: new Date() },
         }).catch(() => {});
         return "FREE";
     }

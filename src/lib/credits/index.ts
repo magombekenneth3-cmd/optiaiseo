@@ -52,12 +52,31 @@ export async function consumeCredits(
         return { allowed: true, remaining: user?.credits ?? 0, cost: 0 };
     }
 
+    // Check if credits are locked (subscription expired, read-only window)
+    const lockCheck = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { creditsLockedAt: true, credits: true },
+    });
+    if (lockCheck?.creditsLockedAt) {
+        logger.warn(`[Credits] Credits locked — cannot consume for ${action}`, {
+            userId, cost, remaining: lockCheck.credits,
+            lockedAt: lockCheck.creditsLockedAt.toISOString(),
+        });
+        return {
+            allowed: false,
+            remaining: lockCheck.credits,
+            cost,
+            reason: "credits_locked",
+        };
+    }
+
     // Atomic deduct: only updates if credits >= cost
     const result = await prisma.$executeRaw`
         UPDATE "User"
         SET credits = credits - ${cost}
         WHERE id = ${userId}
         AND credits >= ${cost}
+        AND "creditsLockedAt" IS NULL
     `;
 
     if (result === 0) {

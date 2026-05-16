@@ -378,7 +378,7 @@ export const cronStuckBlogSweep = inngest.createFunction(
  * After a subscription is cancelled, the user keeps their tier + credits for
  * 2 days (grace period). This cron catches users whose grace has expired and:
  *   1. Downgrades them to FREE
- *   2. Wipes their remaining credit balance to 0
+ *   2. LOCKS their credits (sets creditsLockedAt) — credits become read-only
  *
  * The in-request guard (guards.ts getUserTier) also does lazy enforcement,
  * but this cron catches users who never log in after cancellation.
@@ -411,23 +411,24 @@ export const cronGracePeriodEnforcer = inngest.createFunction(
 
         if (expiredSubs.length === 0) {
             logger.info("[GracePeriodEnforcer] No expired grace periods found");
-            return { downgraded: 0 };
+            return { locked: 0 };
         }
 
-        await step.run("downgrade-expired-users", async () => {
+        const now = new Date();
+        await step.run("lock-expired-users", async () => {
             for (const sub of expiredSubs) {
-                logger.info("[GracePeriodEnforcer] Downgrading user — grace expired", {
+                logger.info("[GracePeriodEnforcer] Locking credits — grace expired", {
                     userId: sub.userId,
                     cancelledAt: sub.cancelledAt?.toISOString(),
-                    creditsWiped: sub.user.credits,
+                    creditsLocked: sub.user.credits,
                     previousTier: sub.user.subscriptionTier,
                 });
 
                 await prisma.user.update({
                     where: { id: sub.userId },
-                    data: { subscriptionTier: "FREE", credits: 0 },
+                    data: { subscriptionTier: "FREE", creditsLockedAt: now },
                 }).catch((e: unknown) =>
-                    logger.error("[GracePeriodEnforcer] Failed to downgrade user", {
+                    logger.error("[GracePeriodEnforcer] Failed to lock user", {
                         userId: sub.userId,
                         error: (e as Error)?.message,
                     })
@@ -435,7 +436,71 @@ export const cronGracePeriodEnforcer = inngest.createFunction(
             }
         });
 
-        logger.info(`[GracePeriodEnforcer] Downgraded ${expiredSubs.length} users`);
-        return { downgraded: expiredSubs.length };
+        logger.info(`[GracePeriodEnforcer] Locked ${expiredSubs.length} users`);
+        return { locked: expiredSubs.length };
     },
 );
+
+/**
+ * Credit Wipe Finalizer — runs daily at 02:00 UTC.
+ *
+ * After credits are locked (creditsLockedAt is set), the user has 2 more days
+ * to top-up or resubscribe and reclaim them. If they don't act within that
+ * window, this cron wipes the balance to 0 permanently.
+ *
+ * Timeline:
+ *   Day 0: Subscription cancelled → credits still fully usable
+ *   Day 2: Grace expires → credits locked (read-only, visible but unusable)
+ *   Day 4: Finalizer runs → locked credits wiped to 0
+ */
+export const cronCreditWipeFinalizer = inngest.createFunction(
+    {
+        id: "cron-credit-wipe-finalizer",
+        name: "Cron: Credit Wipe Finalizer",
+        retries: 2,
+        triggers: [{ cron: "0 2 * * *" }],
+    },
+    async ({ step }) => {
+        const TWO_DAYS_AGO = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+
+        const lockedUsers = await step.run("find-wipe-candidates", () =>
+            prisma.user.findMany({
+                where: {
+                    creditsLockedAt: { lt: TWO_DAYS_AGO, not: null },
+                    credits: { gt: 0 },
+                },
+                select: { id: true, credits: true, creditsLockedAt: true },
+                take: 200,
+            })
+        );
+
+        if (lockedUsers.length === 0) {
+            logger.info("[CreditWipeFinalizer] No locked credits to wipe");
+            return { wiped: 0 };
+        }
+
+        await step.run("wipe-locked-credits", async () => {
+            for (const u of lockedUsers) {
+                logger.info("[CreditWipeFinalizer] Wiping locked credits", {
+                    userId: u.id,
+                    creditsWiped: u.credits,
+                    lockedAt: u.creditsLockedAt?.toISOString(),
+                });
+
+                await prisma.user.update({
+                    where: { id: u.id },
+                    data: { credits: 0, creditsLockedAt: null },
+                }).catch((e: unknown) =>
+                    logger.error("[CreditWipeFinalizer] Failed to wipe credits", {
+                        userId: u.id,
+                        error: (e as Error)?.message,
+                    })
+                );
+            }
+        });
+
+        logger.info(`[CreditWipeFinalizer] Wiped credits for ${lockedUsers.length} users`);
+        return { wiped: lockedUsers.length };
+    },
+);
+
