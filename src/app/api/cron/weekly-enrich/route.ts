@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isCronAuthorized } from "@/lib/cron-auth";
 import { fetchTrendingTopics } from "@/lib/trending/fetch-trending";
 import { runDecayCheck } from "@/lib/content/decay-check";
+import { runFullEvictionSweep } from "@/lib/cache/eviction";
 import { logger } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
@@ -46,8 +47,10 @@ export async function GET(req: NextRequest) {
             trendingFetched += batch.filter((s) => s.niche).length;
         }
 
-        logger.info("[Cron/WeeklyEnrich] Done", { trendingFetched, decayFlagged });
-        return NextResponse.json({ success: true, trendingFetched, decayFlagged });
+        const eviction = await runFullEvictionSweep();
+
+        logger.info("[Cron/WeeklyEnrich] Done", { trendingFetched, decayFlagged, eviction });
+        return NextResponse.json({ success: true, trendingFetched, decayFlagged, cacheEvicted: eviction.totalEvicted });
     } catch (error: unknown) {
         logger.error("[Cron/WeeklyEnrich] Fatal:", { error: (error as Error)?.message || String(error) });
         return NextResponse.json({ error: "Cron job failed" }, { status: 500 });

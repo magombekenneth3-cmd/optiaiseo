@@ -4,6 +4,7 @@ import crypto from "crypto";
 import type { MentionResult } from "./multi-model";
 import type { PerplexityCitationResult } from "./perplexity-citation-check";
 import { TTL } from "@/lib/constants/ttl";
+import { evictPrefixIfOverBudget } from "@/lib/cache/eviction";
 
 function hash(value: string): string {
     return crypto.createHash("sha256").update(value).digest("hex").slice(0, 8);
@@ -45,6 +46,15 @@ async function redisSet(key: string, value: unknown, ttl: number): Promise<void>
     }
 }
 
+let _writeCounter = 0;
+const EVICTION_CHECK_INTERVAL = 100;
+
+function maybeEvictAsync(prefix: string): void {
+    _writeCounter++;
+    if (_writeCounter % EVICTION_CHECK_INTERVAL !== 0) return;
+    evictPrefixIfOverBudget(prefix).catch(() => undefined);
+}
+
 export async function cachedMentionCheck(
     model: string,
     domain: string,
@@ -59,6 +69,7 @@ export async function cachedMentionCheck(
     }
     const result = await fn(domain, coreServices);
     await redisSet(key, result, TTL.MENTION_S);
+    maybeEvictAsync("aeo:mention:");
     return { ...result, fromCache: false };
 }
 
@@ -75,6 +86,7 @@ export async function cachedPerplexityCheck(
     }
     const result = await fn(query, domain);
     await redisSet(key, result, TTL.PERPLEXITY_S);
+    maybeEvictAsync("aeo:perplexity:");
     return result;
 }
 
@@ -106,6 +118,7 @@ export async function cachedEmbedding(
     }
     const result = await fn(text);
     if (result.length > 0) await redisSet(key, result, TTL.EMBEDDING_S);
+    maybeEvictAsync("aeo:embedding:");
     return result;
 }
 

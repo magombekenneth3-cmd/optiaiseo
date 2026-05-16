@@ -105,9 +105,54 @@ async function trimVectorCacheIfNeeded(): Promise<void> {
     if (!res.ok) return;
     const info = await res.json();
     const count = info.result?.vectorCount ?? info.vectorCount ?? 0;
-    if (count > MAX_VECTORS) {
-      logger.warn("[VectorCache] Over budget", { current: count, max: MAX_VECTORS });
+    if (count <= MAX_VECTORS) return;
+
+    const overage = count - MAX_VECTORS;
+    const headroom = Math.ceil(MAX_VECTORS * 0.1);
+    const deleteTarget = overage + headroom;
+
+    logger.warn("[VectorCache] Over budget — evicting", {
+      current: count,
+      max: MAX_VECTORS,
+      deleteTarget,
+    });
+
+    const rangeRes = await fetch(`${url}/range`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ cursor: "0", limit: deleteTarget, includeMetadata: true }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!rangeRes.ok) return;
+    const rangeData = await rangeRes.json();
+    const vectors = rangeData.result?.vectors ?? rangeData.vectors ?? [];
+
+    const sortedById = [...vectors].sort((a: { metadata?: { storedAt?: number } }, b: { metadata?: { storedAt?: number } }) => {
+      const aTime = a.metadata?.storedAt ?? 0;
+      const bTime = b.metadata?.storedAt ?? 0;
+      return aTime - bTime;
+    });
+
+    const idsToDelete = sortedById.slice(0, deleteTarget).map((v: { id: string }) => v.id);
+
+    if (idsToDelete.length === 0) return;
+
+    const batchSize = 100;
+    for (let i = 0; i < idsToDelete.length; i += batchSize) {
+      const batch = idsToDelete.slice(i, i + batchSize);
+      await fetch(`${url}/delete`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(batch),
+        signal: AbortSignal.timeout(5000),
+      }).catch(() => undefined);
     }
+
+    logger.info("[VectorCache] Evicted oldest vectors", {
+      deleted: idsToDelete.length,
+      remaining: count - idsToDelete.length,
+    });
   } catch { /* non-fatal */ }
 }
 
