@@ -52,6 +52,8 @@ import {
     cronDailyBlog,
     cronWeeklyCompetitorAlerts,
     cronWeeklySerpAnalysis,
+    cronGracePeriodEnforcer,
+    cronCreditWipeFinalizer,
 } from "@/lib/inngest/functions/cron-schedule";
 
 import {
@@ -206,5 +208,9 @@ export const { GET, POST, PUT } = serve({
 
         detectCategoryJob,          // event: intelligence/detect.category
         discoverMarketJob,          // event: intelligence/discover.market
+
+        // Subscription grace-period lifecycle (daily crons)
+        cronGracePeriodEnforcer,     // 01:00 UTC — locks credits after 2-day grace
+        cronCreditWipeFinalizer,     // 02:00 UTC — wipes locked credits after 2 more days
     ],
 });
