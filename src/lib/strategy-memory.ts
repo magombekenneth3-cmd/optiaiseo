@@ -12,7 +12,11 @@ export type MemoryType =
     | "user_goal"
     | "session_summary"
     | "tracked_metric"
-    | "completed_action";
+    | "completed_action"
+    | "audit_result"
+    | "aeo_result"
+    | "competitor_insight"
+    | "keyword_snapshot";
 
 export interface MemoryEntry {
     memoryType: MemoryType;
@@ -66,25 +70,45 @@ export async function loadMemories(
     });
 }
 
+export async function cleanExpiredMemories(userId: string, siteId: string): Promise<number> {
+    try {
+        const result = await prisma.strategyMemory.deleteMany({
+            where: {
+                userId,
+                siteId,
+                expiresAt: { lt: new Date() },
+            },
+        });
+        return result.count;
+    } catch {
+        return 0;
+    }
+}
+
 export function formatMemoriesForPrompt(
     memories: { memoryType: string; content: string; createdAt: Date }[]
 ): string {
     if (memories.length === 0) return "";
 
-    const lines = memories
-        .reverse() // chronological order
-        .map(m => {
-            const date = m.createdAt.toISOString().split("T")[0];
-            return `[${m.memoryType.toUpperCase().replace(/_/g, " ")} - ${date}] ${m.content}`;
-        });
+    const groups: Record<string, string[]> = {};
+    for (const m of [...memories].reverse()) {
+        const date = m.createdAt.toISOString().split("T")[0];
+        const key = m.memoryType.toUpperCase().replace(/_/g, " ");
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(`[${date}] ${m.content}`);
+    }
 
-    return `## What you remember about this user\n\n${lines.join("\n")}\n`;
+    const sections = Object.entries(groups)
+        .map(([type, entries]) => `### ${type}\n${entries.join("\n")}`)
+        .join("\n\n");
+
+    return `## What you remember about this user\n\nUse these memories to personalise your responses. Reference past conversations, track progress on goals, and avoid repeating advice already given.\n\n${sections}\n`;
 }
 
 export async function summariseSession(
     transcript: Array<{ role: "user" | "assistant"; text: string }>
 ): Promise<string | null> {
-    if (transcript.length < 4) return null; // too short to summarise
+    if (transcript.length < 4) return null;
 
     try {
         const { callGemini } = await import("@/lib/gemini");
@@ -108,4 +132,63 @@ Summary (2-3 sentences only, no bullet points):`;
     } catch {
         return null;
     }
+}
+
+export async function saveToolResult(
+    userId: string,
+    siteId: string,
+    toolName: string,
+    result: Record<string, unknown>
+): Promise<void> {
+    const typeMap: Record<string, MemoryType> = {
+        runSiteAudit: "audit_result",
+        runOnPageAudit: "audit_result",
+        runFullAeoAudit: "aeo_result",
+        checkCompetitor: "competitor_insight",
+        getKeywordRankings: "keyword_snapshot",
+        triggerAutoFix: "completed_action",
+        detectAndHeal: "completed_action",
+    };
+
+    const memoryType = typeMap[toolName];
+    if (!memoryType) return;
+
+    let content = "";
+    const domain = (result.domain as string) ?? "";
+
+    switch (toolName) {
+        case "runSiteAudit":
+        case "runOnPageAudit":
+            content = `Audited ${domain}: score ${result.overallScore ?? result.score}/100. ${result.criticalIssueCount ?? 0} critical issues.`;
+            break;
+        case "runFullAeoAudit":
+            content = `AEO audit ${domain}: grade ${result.grade}, score ${result.score}/100. ${result.highImpactFailCount ?? 0} high-impact failures.`;
+            break;
+        case "checkCompetitor":
+            content = `Compared ${result.myDomain} (score ${result.myScore}) vs ${result.competitorDomain} (score ${result.competitorScore}). Winner: ${result.winner}.`;
+            break;
+        case "getKeywordRankings":
+            content = `Keyword snapshot for ${domain}: ${result.totalKeywords ?? 0} keywords, ${result.page1Count ?? 0} on page 1.`;
+            break;
+        case "triggerAutoFix":
+            content = `Auto-fix PR created for ${domain}: ${result.filePath ?? "unknown file"}. PR: ${result.prUrl ?? "pending"}.`;
+            break;
+        case "detectAndHeal":
+            content = `Healing triggered for ${domain}: ${result.actionsExecuted ?? 0} actions executed.`;
+            break;
+        default:
+            return;
+    }
+
+    if (!content) return;
+
+    const thirtyDays = new Date();
+    thirtyDays.setDate(thirtyDays.getDate() + 30);
+
+    await saveMemory(userId, siteId, {
+        memoryType,
+        content,
+        metadata: { toolName, ...result },
+        expiresAt: thirtyDays,
+    });
 }

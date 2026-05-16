@@ -1407,6 +1407,37 @@ function buildTools(emit: (data: object) => void, userId?: string, roomName?: st
         },
     });
 
+    const saveUserGoalTool = llm.tool({
+        description:
+            "Saves a user's stated SEO goal or priority to long-term memory. Call this when the user says things like 'My goal is to rank #1 for X', 'I want to focus on Y', 'My priority this quarter is Z'. This helps Aria remember goals across sessions.",
+        parameters: z.object({
+            goal: z.string().describe("The user's stated goal or priority"),
+            siteId: z.string().describe("The site ID this goal relates to"),
+        }),
+        execute: async ({ goal, siteId }) => {
+            log.info({ tool: "saveUserGoal", userId, goal: goal.slice(0, 80) }, "Tool invoked");
+            try {
+                const { saveMemory } = await import("./src/lib/strategy-memory");
+                if (!userId) return JSON.stringify({ error: "No user session found" });
+                const ninetyDays = new Date();
+                ninetyDays.setDate(ninetyDays.getDate() + 90);
+                await saveMemory(userId, siteId, {
+                    memoryType: "user_goal",
+                    content: sanitiseInput(goal, 500),
+                    expiresAt: ninetyDays,
+                });
+                emit({ event: "tool_log", message: `> Goal saved: ${goal.slice(0, 60)}` });
+                return JSON.stringify({
+                    success: true,
+                    status: "Goal saved. Tell the user: 'Got it — I'll remember that goal and track your progress towards it in future sessions.'",
+                });
+            } catch (e: any) {
+                log.error({ tool: "saveUserGoal", err: e.message }, "Tool failed");
+                return JSON.stringify({ error: `Failed to save goal: ${e.message}` });
+            }
+        },
+    });
+
     return {
         runSiteAudit: runSiteAuditTool,
         runOnPageAudit: runOnPageAuditTool,
@@ -1422,6 +1453,7 @@ function buildTools(emit: (data: object) => void, userId?: string, roomName?: st
         triggerAutoFix: triggerAutoFixTool,
         analyzeScreenshot: analyzeScreenshotTool,
         analyzeWebsiteDesign: analyzeWebsiteDesignTool,
+        saveUserGoal: saveUserGoalTool,
     };
 }
 
@@ -1478,6 +1510,15 @@ ${noSitesInstructions}
 - triggerAutoFix: stage a GitHub Pull Request to fix a specific SEO issue
 - analyzeScreenshot: vision analysis of an uploaded screenshot (GSC graph, analytics)
 - analyzeWebsiteDesign: Playwright live screenshot + Gemini Vision UX critique
+- saveUserGoal: save a user's stated SEO goal or priority to long-term memory
+
+━━━ STRATEGY MEMORY ━━━
+You have persistent memory across sessions. If the "What you remember" section above contains memories:
+- REFERENCE past audit scores when reporting new ones: "Last time your score was 62, now it is 78 — great progress."
+- TRACK goals: If the user set a goal, check progress and mention it proactively.
+- AVOID repeating advice: If you already recommended something in a past session, acknowledge it: "Last time I suggested adding FAQ schema — did you get to that?"
+- SAVE goals: When the user states an SEO goal or priority, call saveUserGoal to persist it.
+- BE NATURAL: Weave memory references into conversation naturally — don't read the memory log verbatim.
 
 ━━━ TOOL CALLING PROTOCOL ━━━
 - Before calling any tool, announce what you are about to do: e.g., "Let me pull that up now — one second."
@@ -1621,9 +1662,13 @@ export default defineAgent({
         const primarySiteId = sites.length > 0 ? sites[0].id : null;
         if (primarySiteId) {
             try {
-                const { loadMemories, formatMemoriesForPrompt } = await import("./src/lib/strategy-memory");
+                const { loadMemories, formatMemoriesForPrompt, cleanExpiredMemories } = await import("./src/lib/strategy-memory");
+                await cleanExpiredMemories(userId, primarySiteId);
                 const memories = await loadMemories(userId, primarySiteId, 25);
                 memorySection = formatMemoriesForPrompt(memories);
+                if (memories.length > 0) {
+                    log.info({ userId, memoryCount: memories.length }, "Loaded strategy memories");
+                }
             } catch {
                 // Non-fatal — proceed without memories
             }
