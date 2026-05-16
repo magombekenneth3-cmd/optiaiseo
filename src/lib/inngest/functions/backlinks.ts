@@ -77,6 +77,57 @@ export const backlinkCheckSite = inngest.createFunction(
             detectBacklinkAlerts(siteId, domain)
         );
 
+        if (gained > 0 || lost > 0) {
+            await step.run("deliver-alerts", async () => {
+                const { prisma } = await import("@/lib/prisma");
+                const site = await prisma.site.findUnique({
+                    where: { id: siteId },
+                    select: { userId: true, domain: true, user: { select: { email: true, name: true } } },
+                });
+                if (!site?.user?.email) return;
+
+                const alerts = await prisma.backlinkAlert.findMany({
+                    where: { siteId, detectedAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
+                    select: { type: true, domain: true, dr: true },
+                    orderBy: { dr: "desc" },
+                    take: 20,
+                });
+
+                const gainedList = alerts.filter(a => a.type === "gained").map(a => ({ domain: a.domain, dr: a.dr }));
+                const lostList = alerts.filter(a => a.type === "lost").map(a => ({ domain: a.domain, dr: a.dr }));
+
+                const { sendBacklinkAlertEmail } = await import("@/lib/email/backlink-alert");
+                await sendBacklinkAlertEmail(site.user.email, {
+                    userName: site.user.name ?? site.user.email.split("@")[0],
+                    domain: site.domain,
+                    gained: gainedList,
+                    lost: lostList,
+                    siteId,
+                });
+
+                const title = gainedList.length > 0 && lostList.length > 0
+                    ? `+${gainedList.length} new, −${lostList.length} lost backlinks`
+                    : gainedList.length > 0
+                        ? `+${gainedList.length} new backlink${gainedList.length !== 1 ? "s" : ""} detected`
+                        : `${lostList.length} backlink${lostList.length !== 1 ? "s" : ""} lost`;
+
+                const topDomain = gainedList[0]?.domain ?? lostList[0]?.domain ?? "";
+
+                await prisma.notification.create({
+                    data: {
+                        userId: site.userId,
+                        type: "backlink_change",
+                        title,
+                        body: topDomain
+                            ? `${topDomain}${gainedList.length + lostList.length > 1 ? ` and ${gainedList.length + lostList.length - 1} more` : ""}`
+                            : `Backlink changes detected for ${site.domain}`,
+                        href: `/dashboard/backlinks?siteId=${siteId}`,
+                        metadata: { gained: gainedList.length, lost: lostList.length },
+                    },
+                });
+            });
+        }
+
         logger.info("[Inngest/Backlinks] Site check complete", {
             siteId, domain, gained, lost,
         });

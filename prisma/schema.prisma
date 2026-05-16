@@ -127,6 +127,7 @@ model User {
   apiKeys                ApiKey[]
   dripSequence           DripSequence?
   creditHistory          CreditHistory[]
+  notifications          Notification[]
 
   @@index([wpApiKey])
 }
@@ -339,6 +340,22 @@ model BacklinkAlert {
 
   @@unique([siteId, domain, type])
   @@index([siteId, detectedAt(sort: Desc)])
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String
+  type       String
+  title      String
+  body       String
+  href       String?
+  read       Boolean  @default(false)
+  dismissed  Boolean  @default(false)
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt(sort: Desc)])
 }
 
 model OnPageReport {

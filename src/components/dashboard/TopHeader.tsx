@@ -10,21 +10,19 @@ import {
 
 interface AppNotification {
     id: string;
-    type: "info" | "success" | "warning";
+    type: string;
     title: string;
     body: string;
     href?: string;
+    read?: boolean;
     createdAt: string;
 }
 
-const notifIcon = {
-    info: <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />,
-    success: <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />,
-    warning: <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />,
-};
+
 
 function useNotifications() {
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
+    const [unreadCount, setUnreadCount] = useState(0);
     const [loading, setLoading] = useState(true);
 
     const fetch_ = useCallback(async () => {
@@ -33,11 +31,37 @@ function useNotifications() {
             if (!res.ok) return;
             const data = await res.json();
             setNotifications(data.notifications ?? []);
+            setUnreadCount(data.unreadCount ?? 0);
         } catch {
-            // Silently fail
         } finally {
             setLoading(false);
         }
+    }, []);
+
+    const markAllRead = useCallback(async () => {
+        try {
+            await fetch("/api/notifications", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ action: "read-all" }),
+            });
+            setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+            setUnreadCount(0);
+        } catch { /* silent */ }
+    }, []);
+
+    const markRead = useCallback(async (id: string) => {
+        try {
+            await fetch("/api/notifications", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ action: "read", id }),
+            });
+            setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+            setUnreadCount(prev => Math.max(0, prev - 1));
+        } catch { /* silent */ }
     }, []);
 
     useEffect(() => {
@@ -46,7 +70,7 @@ function useNotifications() {
         return () => clearInterval(interval);
     }, [fetch_]);
 
-    return { notifications, loading, refetch: fetch_ };
+    return { notifications, unreadCount, loading, refetch: fetch_, markAllRead, markRead };
 }
 
 function useCredits() {
@@ -81,10 +105,13 @@ function CreditPill({ credits }: { credits: number | null }) {
     );
 }
 
-function NotificationsPanel({ notifications, loading, onClose }: {
+function NotificationsPanel({ notifications, loading, unreadCount, onClose, onMarkAllRead, onMarkRead }: {
     notifications: AppNotification[];
     loading: boolean;
+    unreadCount: number;
     onClose: () => void;
+    onMarkAllRead: () => void;
+    onMarkRead: (id: string) => void;
 }) {
     const formatTime = (iso: string) => {
         const diff = Date.now() - new Date(iso).getTime();
@@ -96,13 +123,30 @@ function NotificationsPanel({ notifications, loading, onClose }: {
         return `${Math.floor(hrs / 24)}d ago`;
     };
 
+    const typeIcon = (type: string) => {
+        if (type === "success") return <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />;
+        if (type === "warning") return <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />;
+        if (type === "backlink_change") return <Zap className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />;
+        return <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />;
+    };
+
     return (
         <div className="absolute top-full right-0 mt-2 w-80 max-w-[calc(100vw-1rem)] card-elevated z-50 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <span className="text-sm font-semibold">Notifications</span>
-                <button onClick={onClose} className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors" aria-label="Close notifications">
-                    <X className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-2">
+                    {unreadCount > 0 && (
+                        <button
+                            onClick={onMarkAllRead}
+                            className="text-[10px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors uppercase tracking-wide"
+                        >
+                            Mark all read
+                        </button>
+                    )}
+                    <button onClick={onClose} className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors" aria-label="Close notifications">
+                        <X className="w-3.5 h-3.5" />
+                    </button>
+                </div>
             </div>
             <div className="max-h-72 overflow-y-auto">
                 {loading ? (
@@ -125,13 +169,17 @@ function NotificationsPanel({ notifications, loading, onClose }: {
                     </div>
                 ) : (
                     notifications.map(n => (
-                        <div key={n.id} className="group border-b border-border last:border-0">
+                        <div key={n.id} className={`group border-b border-border last:border-0 ${!n.read ? "bg-accent/30" : ""}`}>
                             {n.href ? (
-                                <Link href={n.href} onClick={onClose} className="flex items-start gap-3 px-4 py-3 hover:bg-accent transition-colors">
-                                    {notifIcon[n.type]}
+                                <Link
+                                    href={n.href}
+                                    onClick={() => { if (!n.read) onMarkRead(n.id); onClose(); }}
+                                    className="flex items-start gap-3 px-4 py-3 hover:bg-accent transition-colors"
+                                >
+                                    {typeIcon(n.type)}
                                     <div className="min-w-0 flex-1">
                                         <div className="flex items-start justify-between gap-2">
-                                            <p className="text-xs font-semibold leading-snug">{n.title}</p>
+                                            <p className={`text-xs leading-snug ${!n.read ? "font-bold" : "font-semibold text-muted-foreground"}`}>{n.title}</p>
                                             <ExternalLink className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0 mt-0.5" />
                                         </div>
                                         <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{n.body}</p>
@@ -140,9 +188,9 @@ function NotificationsPanel({ notifications, loading, onClose }: {
                                 </Link>
                             ) : (
                                 <div className="flex items-start gap-3 px-4 py-3">
-                                    {notifIcon[n.type]}
+                                    {typeIcon(n.type)}
                                     <div className="min-w-0">
-                                        <p className="text-xs font-semibold">{n.title}</p>
+                                        <p className={`text-xs ${!n.read ? "font-bold" : "font-semibold"}`}>{n.title}</p>
                                         <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{n.body}</p>
                                         <p className="text-[10px] text-muted-foreground/50 mt-1">{formatTime(n.createdAt)}</p>
                                     </div>
@@ -340,7 +388,7 @@ export function TopHeader({ mobileSidebar }: { mobileSidebar?: ReactNode }) {
     const [notifOpen, setNotifOpen] = useState(false);
     const [queryOpen, setQueryOpen] = useState(false);
     const notifRef = useRef<HTMLDivElement>(null);
-    const { notifications, loading } = useNotifications();
+    const { notifications, unreadCount, loading, markAllRead, markRead } = useNotifications();
     const credits = useCredits();
     const siteId = getSiteIdFromPath(pathname);
 
@@ -361,7 +409,7 @@ export function TopHeader({ mobileSidebar }: { mobileSidebar?: ReactNode }) {
         return () => document.removeEventListener("keydown", handler);
     }, []);
 
-    const hasUnread = !loading && notifications.length > 0;
+    const hasUnread = !loading && unreadCount > 0;
 
     const contextCta = (() => {
         if (pathname.startsWith("/dashboard/audits")) {
@@ -426,15 +474,26 @@ export function TopHeader({ mobileSidebar }: { mobileSidebar?: ReactNode }) {
                         <button
                             onClick={() => setNotifOpen(o => !o)}
                             className="relative min-w-[44px] min-h-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-accent"
-                            aria-label={`Notifications${hasUnread ? ` — ${notifications.length} new` : ""}`}
+                            aria-label={`Notifications${hasUnread ? ` — ${unreadCount} new` : ""}`}
                             aria-expanded={notifOpen}
                             aria-haspopup="true"
                         >
                             <Bell className="w-4 h-4" />
-                            {hasUnread && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden="true" />}
+                            {hasUnread && (
+                                <span className="absolute top-1 right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-emerald-500 text-[9px] font-bold text-black px-1" aria-hidden="true">
+                                    {unreadCount > 9 ? "9+" : unreadCount}
+                                </span>
+                            )}
                         </button>
                         {notifOpen && (
-                            <NotificationsPanel notifications={notifications} loading={loading} onClose={() => setNotifOpen(false)} />
+                            <NotificationsPanel
+                                notifications={notifications}
+                                loading={loading}
+                                unreadCount={unreadCount}
+                                onClose={() => setNotifOpen(false)}
+                                onMarkAllRead={markAllRead}
+                                onMarkRead={markRead}
+                            />
                         )}
                     </div>
 
