@@ -178,12 +178,14 @@ export async function handleSubscriptionUpdated(subscription: Stripe.Subscriptio
             status: subscription.status,
             currentPeriodEnd: toPeriodEnd(item?.current_period_end),
             cancelAtPeriodEnd: subscription.cancel_at_period_end,
+            cancelledAt: null,
         },
         update: {
             status: subscription.status,
             stripePriceId: priceId,
             currentPeriodEnd: toPeriodEnd(item?.current_period_end),
             cancelAtPeriodEnd: subscription.cancel_at_period_end,
+            cancelledAt: null,
         },
     })
 
@@ -204,10 +206,12 @@ export async function handleSubscriptionDeleted(subscription: Stripe.Subscriptio
     )
     if (!userId) return
 
+    const now = new Date()
+
     try {
         await prisma.subscription.update({
             where: { stripeSubscriptionId: subscription.id },
-            data: { status: "canceled" },
+            data: { status: "canceled", cancelledAt: now },
         })
     } catch (err: unknown) {
         if ((err as { code?: string })?.code !== "P2025") throw err
@@ -216,14 +220,22 @@ export async function handleSubscriptionDeleted(subscription: Stripe.Subscriptio
         })
     }
 
-    await prisma.user.update({
-        where: { id: userId },
-        data: { subscriptionTier: "FREE" },
-    })
+    // Grace period: keep tier for 2 days so credits remain usable.
+    // Set a Redis key that the daily cron checks to finalise downgrade.
+    const graceKey = `sub-grace:${userId}`
+    const graceExpiresAt = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000)
+    await redis.set(graceKey, JSON.stringify({
+        userId,
+        cancelledAt: now.toISOString(),
+        graceExpiresAt: graceExpiresAt.toISOString(),
+    }), { ex: 3 * 24 * 60 * 60 }) // Redis TTL = 3 days (grace + buffer)
 
     await bumpSessionVersion(userId)
 
-    logger.debug("[Webhook] Subscription canceled — downgraded to FREE", { userId })
+    logger.info("[Webhook] Subscription canceled — 2-day grace period started", {
+        userId,
+        graceExpiresAt: graceExpiresAt.toISOString(),
+    })
 }
 
 export async function handlePaymentFailed(invoice: Stripe.Invoice): Promise<void> {

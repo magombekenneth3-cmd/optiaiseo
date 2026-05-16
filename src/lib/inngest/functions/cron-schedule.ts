@@ -371,3 +371,71 @@ export const cronStuckBlogSweep = inngest.createFunction(
         return { swept: stuckBlogs.length };
     },
 );
+
+/**
+ * Subscription Grace Period Enforcer — runs daily at 01:00 UTC.
+ *
+ * After a subscription is cancelled, the user keeps their tier + credits for
+ * 2 days (grace period). This cron catches users whose grace has expired and:
+ *   1. Downgrades them to FREE
+ *   2. Wipes their remaining credit balance to 0
+ *
+ * The in-request guard (guards.ts getUserTier) also does lazy enforcement,
+ * but this cron catches users who never log in after cancellation.
+ */
+export const cronGracePeriodEnforcer = inngest.createFunction(
+    {
+        id: "cron-grace-period-enforcer",
+        name: "Cron: Subscription Grace Period Enforcer",
+        retries: 2,
+        triggers: [{ cron: "0 1 * * *" }],
+    },
+    async ({ step }) => {
+        const TWO_DAYS_AGO = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+
+        const expiredSubs = await step.run("find-expired-grace-subs", () =>
+            prisma.subscription.findMany({
+                where: {
+                    status: "canceled",
+                    cancelledAt: { lt: TWO_DAYS_AGO, not: null },
+                    user: { subscriptionTier: { not: "FREE" } },
+                },
+                select: {
+                    userId: true,
+                    cancelledAt: true,
+                    user: { select: { credits: true, subscriptionTier: true } },
+                },
+                take: 200,
+            })
+        );
+
+        if (expiredSubs.length === 0) {
+            logger.info("[GracePeriodEnforcer] No expired grace periods found");
+            return { downgraded: 0 };
+        }
+
+        await step.run("downgrade-expired-users", async () => {
+            for (const sub of expiredSubs) {
+                logger.info("[GracePeriodEnforcer] Downgrading user — grace expired", {
+                    userId: sub.userId,
+                    cancelledAt: sub.cancelledAt?.toISOString(),
+                    creditsWiped: sub.user.credits,
+                    previousTier: sub.user.subscriptionTier,
+                });
+
+                await prisma.user.update({
+                    where: { id: sub.userId },
+                    data: { subscriptionTier: "FREE", credits: 0 },
+                }).catch((e: unknown) =>
+                    logger.error("[GracePeriodEnforcer] Failed to downgrade user", {
+                        userId: sub.userId,
+                        error: (e as Error)?.message,
+                    })
+                );
+            }
+        });
+
+        logger.info(`[GracePeriodEnforcer] Downgraded ${expiredSubs.length} users`);
+        return { downgraded: expiredSubs.length };
+    },
+);

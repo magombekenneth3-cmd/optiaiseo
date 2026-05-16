@@ -49,48 +49,22 @@ async function getUserTier(userId: string): Promise<Tier> {
         where: { id: userId },
         select: {
             subscriptionTier: true,
+            credits: true,
             subscription: {
-                select: { status: true, currentPeriodEnd: true, stripeCustomerId: true },
+                select: { status: true, currentPeriodEnd: true, stripeCustomerId: true, cancelledAt: true },
             },
         },
     });
 
     const rawTier = (user?.subscriptionTier ?? "FREE") as Tier;
 
-    // Always run resolveEffectiveTier — it handles trials, promo codes, and
-    // any programmatic tier overrides regardless of the stored plan level.
     const resolvedTier = (await resolveEffectiveTier(userId, rawTier)) as Tier;
 
-    // FREE (or resolved-to-FREE) users need no further subscription checks.
     if (resolvedTier === "FREE") return "FREE";
 
     const sub = user?.subscription;
 
     if (!sub) {
-        // No subscription row found. Two valid reasons:
-        //   1. Admin-granted tier (no Stripe involved) — trust the column.
-        //   2. Stripe webhook missed subscription deletion — stale column.
-        //
-        // Heuristic: if the Subscription table has a stripeCustomerId, Stripe
-        // was involved at some point. A missing row after that implies the webhook
-        // was dropped and the subscription was deleted on Stripe's side.
-        // In that case, downgrade to FREE for security.
-        //
-        // If there was NEVER a Subscription row, it's an admin grant — keep rawTier.
-        //
-        // We distinguish by querying for a soft-deleted or historically present sub.
-        // Since Prisma hard-deletes, we fall back to: if stripeCustomerId exists
-        // on the user object at all (via any past subscription), it was Stripe-managed.
-        // For safety, we check the Subscription table directly for a deleted record.
-        // If rawTier !== FREE and no sub row exists, treat as admin grant only if
-        // the Subscription relation has never existed (no stripeCustomerId anywhere).
-        //
-        // Simpler safe default: trust admin grants by checking if any Subscription
-        // row was ever connected. Since Prisma deletes cascade, a missing row when
-        // rawTier is paid is ambiguous. The defence-in-depth answer is: require the
-        // Stripe subscription cron (run separately) to keep the column in sync.
-        // For the in-request guard, trust the column for non-FREE tiers with no sub
-        // row (admin grants are rare and intentional), but log a warning.
         logger.warn("[Auth/Tier] Non-FREE tier with no subscription row", {
             userId,
             rawTier,
@@ -100,10 +74,36 @@ async function getUserTier(userId: string): Promise<Tier> {
         return resolvedTier;
     }
 
-    // Active subscription: check it hasn't expired or lapsed.
-    // These checks are defence-in-depth for races where the Stripe webhook
-    // (customer.subscription.deleted / invoice.payment_failed) hasn't fired yet.
-    if (sub.status === "canceled" || sub.status === "past_due") return "FREE";
+    // Grace period: cancelled subs get 2 days to resubscribe before losing credits.
+    if (sub.status === "canceled" && sub.cancelledAt) {
+        const graceDeadline = new Date(sub.cancelledAt.getTime() + 2 * 24 * 60 * 60 * 1000);
+        const now = new Date();
+
+        if (now < graceDeadline) {
+            // Within grace window — keep tier, let them use remaining credits
+            logger.debug("[Auth/Tier] Cancelled but within 2-day grace period", {
+                userId,
+                cancelledAt: sub.cancelledAt.toISOString(),
+                graceDeadline: graceDeadline.toISOString(),
+            });
+            return resolvedTier;
+        }
+
+        // Grace expired — downgrade to FREE and wipe credits (lazy enforcement)
+        logger.info("[Auth/Tier] Grace period expired — downgrading to FREE and wiping credits", {
+            userId,
+            cancelledAt: sub.cancelledAt.toISOString(),
+            creditsWiped: user?.credits ?? 0,
+        });
+        await prisma.user.update({
+            where: { id: userId },
+            data: { subscriptionTier: "FREE", credits: 0 },
+        }).catch(() => {});
+        return "FREE";
+    }
+
+    if (sub.status === "canceled") return "FREE";
+    if (sub.status === "past_due") return "FREE";
     if (sub.currentPeriodEnd && sub.currentPeriodEnd < new Date()) return "FREE";
 
     return resolvedTier;
