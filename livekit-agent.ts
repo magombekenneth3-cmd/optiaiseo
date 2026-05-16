@@ -664,7 +664,7 @@ function buildTools(emit: (data: object) => void, userId?: string, roomName?: st
                 const scoreLabel =
                     result.score >= 80 ? "strong" : result.score >= 60 ? "average" : "below average";
 
-                return JSON.stringify({
+                const resultPayload = {
                     domain,
                     overallScore: result.score,
                     scoreLabel,
@@ -677,7 +677,13 @@ function buildTools(emit: (data: object) => void, userId?: string, roomName?: st
                     spokenIssueResponses: spokenIssues,
                     savedToDashboard: !!site,
                     status: `Audit saved to dashboard. Score is ${result.score} out of 100 — that is ${scoreLabel}. Speak the score first, then deliver each issue as: "Issue X: [title]. To fix it: [fixSuggestion]." After each issue, pause and ask "Want me to auto-fix that one?" before moving to the next.`,
-                });
+                };
+
+                if (userId && site) {
+                    import("./src/lib/strategy-memory").then(m => m.saveToolResult(userId, site!.id, "runSiteAudit", resultPayload)).catch(() => {});
+                }
+
+                return JSON.stringify(resultPayload);
             } catch (e: any) {
                 log.error({ tool: "runSiteAudit", domain, err: e.message }, "Tool failed");
                 return JSON.stringify({ error: `Audit failed: ${e.message}` });
@@ -802,7 +808,7 @@ function buildTools(emit: (data: object) => void, userId?: string, roomName?: st
                     .slice(0, 3)
                     .map((c: any) => `Issue: ${c.label}. Fix: ${c.recommendation}`);
 
-                return JSON.stringify({
+                const aeoPayload = {
                     domain: cleanDomain,
                     score: result.score,
                     grade: result.grade,
@@ -812,7 +818,13 @@ function buildTools(emit: (data: object) => void, userId?: string, roomName?: st
                     spokenFixResponses: spokenFixes,
                     savedToDashboard: !!site,
                     status: `AEO report saved. Start with: "Your AEO grade is ${result.grade}, score ${result.score} out of 100." Then say the model visibility: "${modelSummary}." Then deliver each fix as: "Fix needed: [label]. Here is what to do: [recommendation]." After all fixes ask "Want me to implement any of these automatically?"`,
-                });
+                };
+
+                if (userId && site) {
+                    import("./src/lib/strategy-memory").then(m => m.saveToolResult(userId, site!.id, "runFullAeoAudit", aeoPayload)).catch(() => {});
+                }
+
+                return JSON.stringify(aeoPayload);
             } catch (e: any) {
                 log.error({ tool: "runFullAeoAudit", domain: cleanDomain, err: e.message }, "Tool failed");
                 return JSON.stringify({ error: `AEO audit failed: ${e.message}` });
@@ -878,12 +890,18 @@ function buildTools(emit: (data: object) => void, userId?: string, roomName?: st
                 const gapLabel =
                     gap <= 5 ? "neck and neck" : gap <= 20 ? "a moderate gap" : "a significant gap";
 
-                return JSON.stringify({
+                const compPayload = {
                     myDomain: my, myScore: myAeo.overallScore,
                     competitorDomain: comp, competitorScore: compAeo.overallScore,
                     winner, gap, gapLabel, savedToDashboard: !!mySite,
                     status: `Say: "${winner} is winning AI search visibility with a score of ${Math.max(myAeo.overallScore, compAeo.overallScore)}. There is ${gapLabel} of ${gap} points." Then give 2 specific actions to close the gap.`,
-                });
+                };
+
+                if (userId && mySite) {
+                    import("./src/lib/strategy-memory").then(m => m.saveToolResult(userId, mySite!.id, "checkCompetitor", compPayload)).catch(() => {});
+                }
+
+                return JSON.stringify(compPayload);
             } catch (e: any) {
                 log.error({ tool: "checkCompetitor", err: e.message }, "Tool failed");
                 return JSON.stringify({ error: `Competitor check failed: ${e.message}` });
@@ -1270,12 +1288,21 @@ function buildTools(emit: (data: object) => void, userId?: string, roomName?: st
                 });
 
                 if (!prResult.success) return JSON.stringify({ status: "pr_failed", message: `PR failed: ${prResult.error}. Say: "The pull request failed. You may need to reconnect GitHub in Settings."` });
-                return JSON.stringify({
+
+                const fixPayload = {
                     status: "success",
+                    domain: cleanDomain,
                     label: check.label,
                     prUrl: prResult.url,
+                    filePath: fixResult.filePath,
                     message: `Say: "Done. I've created a pull request to fix the ${check.label} issue. It is waiting for your review in GitHub." Then ask: "Want me to fix the next issue now?"`,
-                });
+                };
+
+                if (site) {
+                    import("./src/lib/strategy-memory").then(m => m.saveToolResult(userId, site.id, "triggerAutoFix", fixPayload)).catch(() => {});
+                }
+
+                return JSON.stringify(fixPayload);
             } catch (e: any) {
                 log.error({ tool: "triggerAutoFix", err: e.message }, "Tool failed");
                 return JSON.stringify({ error: `AutoFix failed: ${e.message}` });
