@@ -66,7 +66,7 @@ export function ContentDecayClient({
   userTier,
 }: {
   siteId: string;
-  userTier: "FREE" | "PRO" | "AGENCY";
+  userTier: "FREE" | "STARTER" | "PRO" | "AGENCY";
 }) {
   const [rows, setRows] = useState<DecayRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +75,7 @@ export function ContentDecayClient({
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [refreshingUrl, setRefreshingUrl] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
-  const isPro = userTier === "PRO" || userTier === "AGENCY";
+  const isPro = userTier === "STARTER" || userTier === "PRO" || userTier === "AGENCY";
 
   useEffect(() => {
     setLoading(true);

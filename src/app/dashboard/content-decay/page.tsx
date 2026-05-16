@@ -23,7 +23,7 @@ export default async function ContentDecayPage({
   const resolvedParams = await searchParams;
 
   let siteId = resolvedParams.siteId ?? "";
-  let userTier: "FREE" | "PRO" | "AGENCY" = "FREE";
+  let userTier: "FREE" | "STARTER" | "PRO" | "AGENCY" = "FREE";
 
   if (session?.user?.email) {
     const user = await prisma.user.findUnique({
@@ -32,7 +32,7 @@ export default async function ContentDecayPage({
     });
 
     if (user) {
-      userTier = user.subscriptionTier as "FREE" | "PRO" | "AGENCY";
+      userTier = user.subscriptionTier as "FREE" | "STARTER" | "PRO" | "AGENCY";
       const userSites = await prisma.site.findMany({
         where: { userId: user.id },
         orderBy: { createdAt: "desc" },

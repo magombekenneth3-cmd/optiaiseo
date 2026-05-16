@@ -1,206 +1,197 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import Link from "next/link";
+import {
+  TrendingDown,
+  RefreshCcw,
+  Loader2,
+  ExternalLink,
+  Flame,
+  AlertTriangle,
+  CheckCircle2,
+  ArrowRight,
+} from "lucide-react";
+import { getDecayingContent, refreshDecayingContent } from "@/app/actions/contentDecay";
 
-interface DecayItem {
-    category: string;
-    currentScore: number;
-    previousScore: number;
-    drop: number;
-    urgency: "critical" | "high" | "medium" | "low";
-    detectedAt: string;
-    recommendation: string;
+interface DecayRow {
+  url: string;
+  currentClicks: number;
+  previousClicks: number;
+  dropPercentage: number;
 }
 
-interface DecayResponse {
-    decayItems: DecayItem[];
-    auditCount?: number;
-    latestAuditAt?: string;
-    site?: string;
-    message?: string;
+function severity(drop: number): "critical" | "warning" | "mild" {
+  if (drop >= 50) return "critical";
+  if (drop >= 30) return "warning";
+  return "mild";
 }
 
-const URGENCY_CONFIG = {
-    critical: { color: "#ef4444", bg: "rgba(239,68,68,0.12)", label: "Critical", emoji: "🔴" },
-    high:     { color: "#f97316", bg: "rgba(249,115,22,0.12)", label: "High",     emoji: "🟠" },
-    medium:   { color: "#eab308", bg: "rgba(234,179,8,0.12)",  label: "Medium",   emoji: "🟡" },
-    low:      { color: "#22c55e", bg: "rgba(34,197,94,0.12)",  label: "Low",      emoji: "🟢" },
-};
-
-function ScoreBar({ score, prev }: { score: number; prev: number }) {
-    const isDecay = score < prev;
-    const color = isDecay ? "#ef4444" : "#22c55e";
-    return (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 140 }}>
-            <div style={{
-                flex: 1, height: 6, borderRadius: 3, background: "rgba(255,255,255,0.1)",
-                overflow: "hidden", position: "relative"
-            }}>
-                <div style={{
-                    position: "absolute", left: 0, top: 0, bottom: 0,
-                    width: `${score}%`, background: color, borderRadius: 3,
-                    transition: "width 0.6s ease",
-                }} />
-            </div>
-            <span style={{ color, fontWeight: 700, fontSize: 13, minWidth: 26 }}>{score}</span>
-            <span style={{ color: "#6b7280", fontSize: 11 }}>
-                {isDecay ? `▼ ${prev - score}` : `▲ ${score - prev}`}
-            </span>
-        </div>
-    );
-}
+const SEV_MAP = {
+  critical: { cls: "bg-rose-500/10 text-rose-400 border-rose-500/20", icon: Flame, label: "Critical" },
+  warning: { cls: "bg-amber-500/10 text-amber-400 border-amber-500/20", icon: AlertTriangle, label: "Warning" },
+  mild: { cls: "bg-blue-500/10 text-blue-400 border-blue-500/20", icon: TrendingDown, label: "Mild" },
+} as const;
 
 export function ContentDecayPanel({ siteId }: { siteId: string }) {
-    const [data, setData] = useState<DecayResponse | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+  const [rows, setRows] = useState<DecayRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshingUrl, setRefreshingUrl] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (!siteId) return;
-        setLoading(true);
-        fetch(`/api/content-score/decay?siteId=${siteId}`)
-            .then(r => r.json())
-            .then(d => { setData(d); setLoading(false); })
-            .catch(() => { setError("Failed to load decay data"); setLoading(false); });
-    }, [siteId]);
+  useEffect(() => {
+    if (!siteId) return;
+    setLoading(true);
+    getDecayingContent(siteId)
+      .then((res) => {
+        if (res.success && res.data) setRows((res.data as DecayRow[]).slice(0, 5));
+        else setError(res.error ?? "Failed to load");
+      })
+      .catch(() => setError("Failed to load"))
+      .finally(() => setLoading(false));
+  }, [siteId]);
 
-    const containerStyle: React.CSSProperties = {
-        background: "rgba(255,255,255,0.04)",
-        border: "1px solid rgba(255,255,255,0.1)",
-        borderRadius: 16,
-        padding: 24,
-        fontFamily: "'Inter', sans-serif",
-        color: "#e5e7eb",
-    };
+  async function handleRefresh(url: string) {
+    if (refreshingUrl) return;
+    setRefreshingUrl(url);
+    try {
+      const res = await refreshDecayingContent(siteId, url);
+      if (res.success) {
+        toast.success("AI draft created — check your Blogs section.", { duration: 5000 });
+      } else {
+        toast.error(res.error ?? "Refresh failed.");
+      }
+    } catch {
+      toast.error("Refresh failed — please try again.");
+    } finally {
+      setRefreshingUrl(null);
+    }
+  }
 
-    if (loading) return (
-        <div style={containerStyle}>
-            <div style={{ color: "#6b7280", textAlign: "center", padding: 40 }}>
-                Loading decay analysis…
-            </div>
-        </div>
-    );
-
-    if (error) return (
-        <div style={containerStyle}>
-            <div style={{ color: "#ef4444", textAlign: "center", padding: 40 }}>{error}</div>
-        </div>
-    );
-
-    const items = data?.decayItems ?? [];
-
+  if (loading) {
     return (
-        <div style={containerStyle}>
-            {/* Header */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                <div>
-                    <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#f9fafb" }}>
-                        📉 Content Decay
-                    </h3>
-                    <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9ca3af" }}>
-                        {items.length > 0
-                            ? `${items.length} categor${items.length === 1 ? "y" : "ies"} declining — based on ${data?.auditCount ?? 0} audits`
-                            : "No significant score drops detected"}
-                    </p>
-                </div>
-                {data?.latestAuditAt && (
-                    <span style={{
-                        fontSize: 11, color: "#6b7280", background: "rgba(255,255,255,0.06)",
-                        padding: "4px 10px", borderRadius: 20, border: "1px solid rgba(255,255,255,0.08)"
-                    }}>
-                        Last audit: {new Date(data.latestAuditAt).toLocaleDateString()}
-                    </span>
-                )}
-            </div>
-
-            {items.length === 0 ? (
-                <div style={{
-                    textAlign: "center", padding: "40px 20px",
-                    background: "rgba(34,197,94,0.06)", borderRadius: 12,
-                    border: "1px solid rgba(34,197,94,0.2)"
-                }}>
-                    <div style={{ fontSize: 36, marginBottom: 8 }}>✅</div>
-                    <div style={{ color: "#22c55e", fontWeight: 600 }}>All categories stable</div>
-                    <div style={{ color: "#6b7280", fontSize: 13, marginTop: 4 }}>
-                        {data?.message || "No score drops ≥ 5 points detected in recent audits."}
-                    </div>
-                </div>
-            ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {items.map((item) => {
-                        const cfg = URGENCY_CONFIG[item.urgency];
-                        return (
-                            <div key={item.category} style={{
-                                background: cfg.bg,
-                                border: `1px solid ${cfg.color}33`,
-                                borderLeft: `4px solid ${cfg.color}`,
-                                borderRadius: 10,
-                                padding: "14px 16px",
-                            }}>
-                                <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-                                    {/* Urgency badge */}
-                                    <span style={{
-                                        background: cfg.bg, color: cfg.color,
-                                        border: `1px solid ${cfg.color}55`, borderRadius: 20,
-                                        padding: "2px 10px", fontSize: 11, fontWeight: 700,
-                                        whiteSpace: "nowrap", flexShrink: 0,
-                                    }}>
-                                        {cfg.emoji} {cfg.label}
-                                    </span>
-
-                                    {/* Category name */}
-                                    <span style={{ fontWeight: 600, fontSize: 14, color: "#f3f4f6", flex: 1 }}>
-                                        {item.category}
-                                    </span>
-
-                                    {/* Score bar */}
-                                    <ScoreBar score={item.currentScore} prev={item.previousScore} />
-                                </div>
-
-                                {/* Recommendation */}
-                                <p style={{ margin: "10px 0 0", fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
-                                    💡 {item.recommendation}
-                                </p>
-
-                                {/* Re-optimise action */}
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
-                                    {/* When detected */}
-                                    <span style={{ fontSize: 11, color: "#6b7280" }}>
-                                        Detected: {new Date(item.detectedAt).toLocaleDateString()}
-                                    </span>
-                                    <button
-                                        onClick={() => {
-                                            const prompt = encodeURIComponent(
-                                                `Refresh and improve the "${item.category}" aspects of my website. ` +
-                                                `The ${item.category} score dropped ${item.drop} points (from ${item.previousScore} to ${item.currentScore}). ` +
-                                                `Recommendation: ${item.recommendation}. ` +
-                                                `Generate content that specifically addresses this gap and recovers the lost performance.`
-                                            );
-                                            window.location.href = `/dashboard/blog/new?prompt=${prompt}&keyword=${encodeURIComponent(item.category)}`;
-                                        }}
-                                        style={{
-                                            flexShrink: 0,
-                                            fontSize: 12,
-                                            fontWeight: 600,
-                                            padding: "5px 14px",
-                                            borderRadius: 8,
-                                            background: "rgba(16,185,129,0.12)",
-                                            color: "#34d399",
-                                            border: "1px solid rgba(16,185,129,0.25)",
-                                            cursor: "pointer",
-                                            transition: "background 0.15s",
-                                        }}
-                                        onMouseOver={(e) => (e.currentTarget.style.background = "rgba(16,185,129,0.22)")}
-                                        onMouseOut={(e) => (e.currentTarget.style.background = "rgba(16,185,129,0.12)")}
-                                    >
-                                        Re-optimise →
-                                    </button>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
+      <div className="card-surface p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <TrendingDown className="w-4 h-4 text-rose-400" />
+          <h3 className="text-sm font-semibold">Content Decay</h3>
         </div>
+        <div className="flex items-center justify-center py-8 text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin" />
+        </div>
+      </div>
     );
+  }
+
+  if (error) {
+    return (
+      <div className="card-surface p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <TrendingDown className="w-4 h-4 text-rose-400" />
+          <h3 className="text-sm font-semibold">Content Decay</h3>
+        </div>
+        <p className="text-xs text-muted-foreground">{error}</p>
+      </div>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="card-surface p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <TrendingDown className="w-4 h-4 text-emerald-400" />
+          <h3 className="text-sm font-semibold">Content Decay</h3>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-emerald-400">
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          No significant traffic drops detected
+        </div>
+      </div>
+    );
+  }
+
+  const criticalCount = rows.filter((r) => r.dropPercentage >= 50).length;
+  const totalLost = rows.reduce((s, r) => s + (r.previousClicks - r.currentClicks), 0);
+
+  return (
+    <div className="card-surface p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <TrendingDown className="w-4 h-4 text-rose-400" />
+          <h3 className="text-sm font-semibold">Content Decay</h3>
+          {criticalCount > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
+              {criticalCount} critical
+            </span>
+          )}
+        </div>
+        <span className="text-[11px] text-muted-foreground tabular-nums">
+          −{totalLost.toLocaleString()} clicks
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-2.5">
+        {rows.map((row) => {
+          const sev = severity(row.dropPercentage);
+          const cfg = SEV_MAP[sev];
+          const Icon = cfg.icon;
+          const isRefreshing = refreshingUrl === row.url;
+          let slug: string;
+          try {
+            slug = new URL(row.url).pathname || row.url;
+          } catch {
+            slug = row.url;
+          }
+
+          return (
+            <div key={row.url} className="rounded-lg border border-border bg-card/50 p-3 group">
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${cfg.cls}`}>
+                  <Icon className="w-2.5 h-2.5" /> {cfg.label}
+                </span>
+                <a
+                  href={row.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium text-foreground hover:text-primary truncate max-w-[180px] flex items-center gap-1 transition-colors"
+                  title={row.url}
+                >
+                  {slug}
+                  <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" />
+                </a>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                  <span className="tabular-nums">{row.previousClicks} → {row.currentClicks}</span>
+                  <span className={`font-bold tabular-nums ${sev === "critical" ? "text-rose-400" : sev === "warning" ? "text-amber-400" : "text-blue-400"}`}>
+                    −{row.dropPercentage}%
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleRefresh(row.url)}
+                  disabled={!!refreshingUrl}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {isRefreshing ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <RefreshCcw className="w-3 h-3" />
+                  )}
+                  {isRefreshing ? "Refreshing…" : "Re-optimise"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <Link
+        href={`/dashboard/content-decay?siteId=${siteId}`}
+        className="flex items-center justify-center gap-1.5 mt-4 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+      >
+        View all decaying pages <ArrowRight className="w-3 h-3" />
+      </Link>
+    </div>
+  );
 }

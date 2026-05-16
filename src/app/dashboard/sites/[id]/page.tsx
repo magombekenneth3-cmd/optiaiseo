@@ -14,6 +14,7 @@ import { ArrowLeft, GitBranch, Bot, TrendingUp, ClipboardList, CheckCircle, Aler
 import { getSiteBenchmarkContext } from "@/app/actions/benchmarks";
 import { BenchmarkPanel, BenchmarkPlaceholder } from "@/components/dashboard/BenchmarkPanel";
 import { CacheStatsWidget } from "@/components/dashboard/CacheStatsWidget";
+import { ContentDecayPanel } from "@/components/dashboard/ContentDecayPanel";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -225,7 +226,8 @@ export default async function SiteDetailsPage({ params }: { params: Promise<{ id
                         </Link>
                     </div>
 
-                    {/* Entity Panel — entity-first SEO */}
+                    <ContentDecayPanel siteId={site.id} />
+
                     <EntityPanel siteId={site.id} />
 
                     {/* Industry Benchmark */}
