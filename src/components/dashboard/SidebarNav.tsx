@@ -67,6 +67,7 @@ const SECONDARY_ITEMS = [
     { name: "Backlinks",       href: "/dashboard/backlinks",       icon: Link2,        contextSiteId: true  },
     { name: "Auto Indexer",    href: "/dashboard/indexing",        icon: Zap,          contextSiteId: false },
     { name: "Content Decay",   href: "/dashboard/content-decay",   icon: TrendingDown, contextSiteId: true  },
+    { name: "Healing Log",     href: "/dashboard/healing",         icon: Zap,          contextSiteId: true  },
     { name: "Team",            href: "/dashboard/team",            icon: Users,        contextSiteId: false },
 ];
 

@@ -369,6 +369,7 @@ const PAGE_TITLE_PREFIX: Array<[string, string]> = [
     ["/dashboard/planner", "Content Planner"],
     ["/dashboard/refresh", "Content Refresh"],
     ["/dashboard/content-decay", "Content Decay"],
+    ["/dashboard/healing", "Self-Healing Log"],
 ];
 
 function getTitle(path: string): string {

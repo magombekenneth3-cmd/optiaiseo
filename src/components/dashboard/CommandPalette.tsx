@@ -31,6 +31,7 @@ const COMMANDS: Command[] = [
   { id: "planner",        label: "Content Planner",    description: "Plan your content",       href: "/dashboard/planner",            icon: Calendar,        keywords: ["plan", "schedule", "content"] },
   { id: "refresh",        label: "Content Refresh",    description: "Update stale content",    href: "/dashboard/refresh",            icon: ClipboardList,   keywords: ["refresh", "update", "stale"] },
   { id: "decay",          label: "Content Decay",      description: "Find declining pages",    href: "/dashboard/content-decay",      icon: TrendingDown,    keywords: ["decay", "decline", "traffic"] },
+  { id: "healing",        label: "Self-Healing Log",   description: "Automated fix audit trail", href: "/dashboard/healing",           icon: Zap,             keywords: ["healing", "fix", "autopilot", "log"] },
   { id: "billing",        label: "Plans & Billing",    description: "Manage subscription",     href: "/dashboard/billing",            icon: CreditCard,      keywords: ["billing", "plan", "upgrade", "pay"] },
   { id: "settings",       label: "Settings",           description: "Account settings",        href: "/dashboard/settings",           icon: Settings,        keywords: ["settings", "account", "profile"] },
 ];
