@@ -122,7 +122,8 @@ model User {
   referralId             String?
   commissions            Commission[]
   embedLeads             EmbedLead[]
-  credits                Int                      @default(50)
+  creditsLockedAt            DateTime?               // Set when grace period expires – makes credits read‑only
+
   voiceSessions          VoiceSession[]
   wpApiKey               String?                  @unique
   apiKeys                ApiKey[]
