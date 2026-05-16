@@ -17,11 +17,12 @@
 "use client";
 
 import { toast } from "sonner";
-import { Zap, CreditCard, AlertTriangle, Clock, ShieldAlert } from "lucide-react";
+import { Zap, CreditCard, AlertTriangle, Clock, ShieldAlert, Lock } from "lucide-react";
 
 
 export type ActionErrorCode =
     | "insufficient_credits"
+    | "credits_locked"
     | "TIER_INSUFFICIENT"
     | "rate_limit"
     | "unauthorized"
@@ -52,6 +53,13 @@ export function showActionError(result: ActionFailResult): void {
             toast.error(
                 <InsufficientCreditsToast message={message} />,
                 { duration: DURATION_CRITICAL, id: "insufficient-credits" }
+            );
+            return;
+
+        case "credits_locked":
+            toast.error(
+                <CreditsLockedToast />,
+                { duration: DURATION_CRITICAL, id: "credits-locked" }
             );
             return;
 
@@ -120,6 +128,35 @@ function InsufficientCreditsToast({ message }: { message: string }) {
                         className="text-xs text-amber-400 underline underline-offset-2 hover:text-amber-300"
                     >
                         Upgrade plan →
+                    </a>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function CreditsLockedToast() {
+    return (
+        <div className="flex items-start gap-2.5 min-w-[260px]">
+            <Lock className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <div className="flex flex-col gap-1">
+                <span className="font-semibold text-sm">Credits locked</span>
+                <span className="text-xs opacity-80 leading-relaxed">
+                    Your subscription expired. Resubscribe or top up within 2 days to keep your remaining credits.
+                </span>
+                <div className="flex items-center gap-2 mt-1.5">
+                    <a
+                        href="/dashboard/billing"
+                        className="inline-flex items-center gap-1 text-xs font-semibold bg-rose-500 hover:bg-rose-400 text-white px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                        <CreditCard className="w-3 h-3" />
+                        Resubscribe
+                    </a>
+                    <a
+                        href="/dashboard/billing?tab=credits"
+                        className="text-xs text-rose-400 underline underline-offset-2 hover:text-rose-300"
+                    >
+                        Buy credits →
                     </a>
                 </div>
             </div>

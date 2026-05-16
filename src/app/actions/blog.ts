@@ -191,8 +191,10 @@ export async function generateBlog(
         if (!creditResult.allowed) {
             return {
                 success: false,
-                error: `Insufficient credits. Blog generation costs 10 credits. You have ${creditResult.remaining}. Credits reset monthly.`,
-                code: "insufficient_credits",
+                error: creditResult.reason === "credits_locked"
+                    ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
+                    : `Insufficient credits. Blog generation costs 10 credits. You have ${creditResult.remaining}. Credits reset monthly.`,
+                code: creditResult.reason ?? "insufficient_credits",
             };
         }
 
@@ -370,8 +372,10 @@ export async function generateAttackBlog(
         if (!creditResult.allowed) {
             return {
                 success: false,
-                error: `Insufficient credits. Competitor blog generation costs 10 credits. You have ${creditResult.remaining}. Credits reset monthly.`,
-                code: "insufficient_credits",
+                error: creditResult.reason === "credits_locked"
+                    ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
+                    : `Insufficient credits. Competitor blog generation costs 10 credits. You have ${creditResult.remaining}. Credits reset monthly.`,
+                code: creditResult.reason ?? "insufficient_credits",
             };
         }
 

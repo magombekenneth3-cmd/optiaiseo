@@ -177,8 +177,10 @@ export async function runAeoReport(siteId: string): Promise<RunAeoReportResult> 
                 await redis.del(lockKey).catch(() => { });
                 return {
                     success: false,
-                    error: `Insufficient credits. You need 5 credits for an AEO audit. You have ${creditResult.remaining}.`,
-                    code: "insufficient_credits",
+                    error: creditResult.reason === "credits_locked"
+                        ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
+                        : `Insufficient credits. You need 5 credits for an AEO audit. You have ${creditResult.remaining}.`,
+                    code: creditResult.reason ?? "insufficient_credits",
                 };
             }
 

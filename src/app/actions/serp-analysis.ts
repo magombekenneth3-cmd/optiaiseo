@@ -140,7 +140,12 @@ export async function analyseKeywordVsSerp(
 
     const creditResult = await consumeCredits(user.id, "serp_analysis");
     if (!creditResult.allowed) {
-        return { data: null, error: "Insufficient credits. Top up or upgrade your plan." };
+        return {
+            data: null,
+            error: creditResult.reason === "credits_locked"
+                ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
+                : "Insufficient credits. Top up or upgrade your plan.",
+        };
     }
 
     const record = await prisma.keywordSerpAnalysis.upsert({

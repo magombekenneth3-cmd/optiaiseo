@@ -198,7 +198,13 @@ export async function getKeywordGaps(siteId: string): Promise<ActionResult<Keywo
 
         const creditResult = await consumeCredits(user.id, "competitor_analysis");
         if (!creditResult.allowed) {
-            return { success: false, error: `Not enough credits (${creditResult.remaining} remaining, need 8). Buy a credit pack or upgrade your plan.` };
+            return {
+                success: false,
+                error: creditResult.reason === "credits_locked"
+                    ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
+                    : `Not enough credits (${creditResult.remaining} remaining, need 8). Buy a credit pack or upgrade your plan.`,
+                code: creditResult.reason ?? "insufficient_credits",
+            };
         }
 
         const { default: pLimit } = await import("p-limit");

@@ -42,6 +42,7 @@ export default async function DashboardLayout({
       trialEndsAt: true,
       role: true,
       credits: true,
+      creditsLockedAt: true,
       sites: {
         orderBy: { createdAt: "desc" },
         select: {
@@ -151,7 +152,7 @@ export default async function DashboardLayout({
         defaultSiteId={defaultSiteId}
         sites={userSites}
         isSuperAdmin={user.role === "SUPER_ADMIN"}
-        user={{ name: userName, email: user.email || "", tier: userPlan, credits: user.credits ?? 0 }}
+        user={{ name: userName, email: user.email || "", tier: userPlan, credits: user.credits ?? 0, creditsLocked: !!user.creditsLockedAt }}
       />
 
       {/* ── Main Content ─────────────────────────────────────────────────── */}
