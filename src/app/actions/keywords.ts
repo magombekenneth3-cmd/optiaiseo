@@ -394,7 +394,6 @@ export async function generateBlogForKeyword(
                 error: creditResult.reason === "credits_locked"
                     ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
                     : `Not enough credits (${creditResult.remaining} remaining, need 10). Buy a credit pack or upgrade your plan.`,
-                code: creditResult.reason ?? "insufficient_credits",
             };
         }
 

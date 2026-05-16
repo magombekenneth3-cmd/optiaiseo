@@ -218,7 +218,6 @@ export async function getPageAudits(auditId: string): Promise<GetPageAuditsResul
             error: creditResult.reason === "credits_locked"
                 ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
                 : `Not enough credits (${creditResult.remaining} remaining, need 10). Buy a credit pack or upgrade your plan.`,
-            code: creditResult.reason ?? "insufficient_credits",
             pages: [], upsell: true,
         };
     }

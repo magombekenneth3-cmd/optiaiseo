@@ -167,18 +167,18 @@ export function CollapsibleSidebar({ defaultSiteId, sites = [], isSuperAdmin = f
                 {collapsed && (
                     <TooltipProvider>
                         <Tooltip>
-                            <TooltipTrigger asChild>
-                                <a
+                            <TooltipTrigger
+                                render={<a
                                     href="/dashboard/billing?tab=credits"
                                     className="flex justify-center items-center w-10 h-7 mx-auto mb-1.5 rounded-lg bg-muted/40 border border-border hover:bg-muted transition-colors"
-                                >
-                                    <span className={`w-1.5 h-1.5 rounded-full mr-1 ${
-                                        user.creditsLocked
-                                            ? "bg-rose-500"
-                                            : user.credits > 20 ? "bg-emerald-500" : user.credits > 5 ? "bg-amber-500" : "bg-rose-500 animate-pulse"
-                                    }`} />
-                                    <span className="text-[10px] font-bold text-foreground">{user.credits}</span>
-                                </a>
+                                />}
+                            >
+                                <span className={`w-1.5 h-1.5 rounded-full mr-1 ${
+                                    user.creditsLocked
+                                        ? "bg-rose-500"
+                                        : user.credits > 20 ? "bg-emerald-500" : user.credits > 5 ? "bg-amber-500" : "bg-rose-500 animate-pulse"
+                                }`} />
+                                <span className="text-[10px] font-bold text-foreground">{user.credits}</span>
                             </TooltipTrigger>
                             <TooltipContent side="right" className="text-xs">
                                 {user.creditsLocked
