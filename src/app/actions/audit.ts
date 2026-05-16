@@ -6,7 +6,8 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { runSiteAudit } from "@/lib/audit";
 import { clearSessionCaches } from "@/lib/seo/ai";
 import { checkAuditLimit } from "@/lib/rate-limit";
-import { getEffectiveTier, requireTiers, guardErrorToResult } from "@/lib/stripe/guards";
+import { getEffectiveTier, guardErrorToResult } from "@/lib/stripe/guards";
+import { consumeCredits } from "@/lib/credits";
 import { redis } from "@/lib/redis";
 import { inngest } from "@/lib/inngest/client";
 import { requireUser } from "@/lib/auth/require-user";
@@ -210,10 +211,9 @@ export async function getPageAudits(auditId: string): Promise<GetPageAuditsResul
     if (!auth.ok) return { ...auth.error, pages: [] };
     const { user } = auth;
 
-    try {
-        await requireTiers(user.id, ["STARTER", "PRO", "AGENCY"]);
-    } catch (err) {
-        return { ...guardErrorToResult(err), pages: [], upsell: true };
+    const creditResult = await consumeCredits(user.id, "full_site_audit");
+    if (!creditResult.allowed) {
+        return { success: false, error: `Not enough credits (${creditResult.remaining} remaining, need 10). Buy a credit pack or upgrade your plan.`, pages: [], upsell: true };
     }
 
     const audit = await prisma.audit.findFirst({

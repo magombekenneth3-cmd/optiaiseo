@@ -1,6 +1,7 @@
 "use server";
 
 import { requireTiers, guardErrorToResult } from "@/lib/stripe/guards";
+import { consumeCredits } from "@/lib/credits";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth/require-user";
@@ -108,10 +109,15 @@ export async function refreshDecayingContent(
         const { user } = auth;
 
         try {
-        await requireTiers(user.id, ["STARTER", "PRO", "AGENCY"]);
-    } catch (err) {
-        return guardErrorToResult(err);
-    }
+            await requireTiers(user.id, ["STARTER", "PRO", "AGENCY"]);
+        } catch (err) {
+            return guardErrorToResult(err);
+        }
+
+        const creditResult = await consumeCredits(user.id, "blog_generation");
+        if (!creditResult.allowed) {
+            return { success: false, error: `Not enough credits (${creditResult.remaining} remaining, need 10). Buy a credit pack or upgrade your plan.` };
+        }
 
         const site = await prisma.site.findUnique({ where: { id: siteId, userId: user.id } });
         if (!site) return { success: false, error: "Site not found" };

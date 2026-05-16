@@ -5,7 +5,7 @@ import { rateLimit } from "@/lib/rate-limit/check";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { requireTiers, getEffectiveTier, guardErrorToResult } from "@/lib/stripe/guards";
+import { getEffectiveTier, guardErrorToResult } from "@/lib/stripe/guards";
 import { consumeCredits } from "@/lib/credits";
 import { redis } from "@/lib/redis";
 import { inngest } from "@/lib/inngest/client";
@@ -102,13 +102,7 @@ export async function runAeoReport(siteId: string): Promise<RunAeoReportResult> 
         const user = await getAuthenticatedUser();
         if (!user) return { success: false, error: "Unauthorized" };
 
-        if (user.role !== "AGENCY_ADMIN") {
-        try {
-            await requireTiers(user.id, ["PRO", "AGENCY"]);
-        } catch (err) {
-            return guardErrorToResult(err);
-        }
-    }
+
 
         // --- Rate limiting ---
         const burstLimited = await rateLimit("aeoCheck", user.id);

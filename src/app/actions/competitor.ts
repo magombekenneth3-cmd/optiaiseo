@@ -7,6 +7,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { withinLimit, getPlan } from "@/lib/stripe/plans";
 import { requireFeature, guardErrorToResult } from "@/lib/stripe/guards";
+import { consumeCredits } from "@/lib/credits";
 import { fetchCompetitorKeywordGaps } from "@/lib/competitors";
 
 // Types
@@ -194,6 +195,11 @@ export async function getKeywordGaps(siteId: string): Promise<ActionResult<Keywo
 
         if (!site) return { success: false, error: "Site not found" };
         if (!site.competitors.length) return { success: true, data: [] as KeywordGap[] };
+
+        const creditResult = await consumeCredits(user.id, "competitor_analysis");
+        if (!creditResult.allowed) {
+            return { success: false, error: `Not enough credits (${creditResult.remaining} remaining, need 8). Buy a credit pack or upgrade your plan.` };
+        }
 
         const { default: pLimit } = await import("p-limit");
         const limit = pLimit(3);

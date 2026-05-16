@@ -34,7 +34,8 @@ import { getUserGscToken } from "@/lib/gsc/token";
 import { generateBlogFromKeywordGap } from "@/lib/blog";
 import { computeShareOfVoice, type SovEntry } from "@/lib/keywords/share-of-voice";
 import { limiters } from "@/lib/rate-limit";
-import { requireTiers, guardErrorToResult } from "@/lib/stripe/guards";
+import { guardErrorToResult } from "@/lib/stripe/guards";
+import { consumeCredits } from "@/lib/credits";
 import { checkBlogLimit } from "@/lib/rate-limit";
 
 type EnrichedKeywordRow = KeywordRow & {
@@ -386,11 +387,10 @@ export async function generateBlogForKeyword(
         });
         if (!user) return { success: false, error: "User not found" };
 
-        try {
-        await requireTiers(user.id, ["PRO", "AGENCY"]);
-    } catch (err) {
-        return guardErrorToResult(err);
-    }
+        const creditResult = await consumeCredits(user.id, "blog_generation");
+        if (!creditResult.allowed) {
+            return { success: false, error: `Not enough credits (${creditResult.remaining} remaining, need 10). Buy a credit pack or upgrade your plan.` };
+        }
 
         const site = siteId
             ? await prisma.site.findFirst({ where: { id: siteId, userId }, select: SITE_SELECT })
