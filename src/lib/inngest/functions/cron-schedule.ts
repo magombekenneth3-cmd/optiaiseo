@@ -419,7 +419,7 @@ export const cronGracePeriodEnforcer = inngest.createFunction(
             for (const sub of expiredSubs) {
                 logger.info("[GracePeriodEnforcer] Locking credits — grace expired", {
                     userId: sub.userId,
-                    cancelledAt: sub.cancelledAt?.toISOString(),
+                    cancelledAt: String(sub.cancelledAt ?? ""),
                     creditsLocked: sub.user.credits,
                     previousTier: sub.user.subscriptionTier,
                 });
@@ -484,7 +484,7 @@ export const cronCreditWipeFinalizer = inngest.createFunction(
                 logger.info("[CreditWipeFinalizer] Wiping locked credits", {
                     userId: u.id,
                     creditsWiped: u.credits,
-                    lockedAt: u.creditsLockedAt?.toISOString(),
+                    lockedAt: String(u.creditsLockedAt ?? ""),
                 });
 
                 await prisma.user.update({
