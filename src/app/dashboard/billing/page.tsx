@@ -141,7 +141,7 @@ const accentMap: Record<Accent, { ring: string; badge: string; btn: string; icon
 
 // Search-param handler — MUST live in its own component inside <Suspense>
 // because Next.js 14 throws on useSearchParams() called outside Suspense.
-function BillingSearchParamsReader({ onMount }: { onMount: (success: boolean, canceled: boolean, billing: string | null) => void }) {
+function BillingSearchParamsReader({ onMount }: { onMount: (success: boolean, canceled: boolean, billing: string | null, plan: string | null) => void }) {
     const searchParams = useSearchParams();
     const firedRef = useRef(false);
 
@@ -152,10 +152,11 @@ function BillingSearchParamsReader({ onMount }: { onMount: (success: boolean, ca
             searchParams.get("success") === "true",
             searchParams.get("canceled") === "true",
             searchParams.get("billing"),
+            searchParams.get("plan"),
         );
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    return null; // renders nothing — side-effect only
+    return null;
 }
 
 export default function BillingPage() {
@@ -177,17 +178,19 @@ export default function BillingPage() {
     const sessionLoading = status === "loading" || isFetchingTier;
 
     // Called once by BillingSearchParamsReader after mount.
-    const handleSearchParams = (success: boolean, canceled: boolean, billingParam: string | null) => {
-        // Pre-select annual billing toggle if URL param says so
+    const handleSearchParams = (success: boolean, canceled: boolean, billingParam: string | null, planParam: string | null) => {
         if (billingParam === "annual") setBilling("annual");
-        // Clear any pending checkout flags when returning from Stripe
+        if (planParam) {
+            const tierName = planParam.charAt(0).toUpperCase() + planParam.slice(1).toLowerCase();
+            toast.info(`Complete your upgrade to ${tierName} below.`, { duration: 6000 });
+            window.history.replaceState(null, "", "/dashboard/billing" + (billingParam === "annual" ? "?billing=annual" : ""));
+        }
         if (success || canceled) {
             ["FREE", "STARTER", "PRO", "AGENCY"].forEach(t => sessionStorage.removeItem(`checkout_pending_${t}`));
         }
         if (success) {
             toast.success("Subscription updated successfully!");
             window.history.replaceState(null, "", "/dashboard/billing");
-            // Poll the DB directly for up to 10s to wait for the webhook to update the tier.
             let attempts = 0;
             const poll = setInterval(async () => {
                 attempts++;
@@ -196,7 +199,6 @@ export default function BillingPage() {
                 if (tier !== "FREE") setRealTier(tier);
                 if (tier !== "FREE" || attempts >= 5) clearInterval(poll);
             }, 2000);
-            // Cleanup handled by component unmount (React StrictMode safe)
             return () => clearInterval(poll);
         }
         if (canceled) {

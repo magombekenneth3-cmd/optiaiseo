@@ -286,17 +286,31 @@ function FirstWinCard({
     );
 }
 
-function GscStep({ siteId, alreadyCited }: { siteId: string | null; alreadyCited: boolean }) {
+function GscStep({ siteId, alreadyCited, upgradePlan, upgradeBilling }: { siteId: string | null; alreadyCited: boolean; upgradePlan?: string | null; upgradeBilling?: string | null }) {
     const router = useRouter();
 
+    const buildDashboardUrl = () => {
+        if (upgradePlan) {
+            const bp = new URLSearchParams();
+            if (upgradeBilling) bp.set("billing", upgradeBilling);
+            bp.set("plan", upgradePlan);
+            return `/dashboard/billing?${bp.toString()}`;
+        }
+        return siteId ? `/dashboard/sites/${siteId}` : "/dashboard";
+    };
+
     const handleConnect = () => {
-        const callbackUrl = siteId ? `/dashboard/sites/${siteId}?gsc=connected` : "/dashboard";
+        const callbackUrl = buildDashboardUrl();
         router.push(`/api/auth/signin/google-gsc?callbackUrl=${encodeURIComponent(callbackUrl)}`);
     };
 
     const handleSkip = () => {
-        toast.success("Welcome! Let's look at your first audit.");
-        router.push(siteId ? `/dashboard/sites/${siteId}` : "/dashboard");
+        if (upgradePlan) {
+            toast.success("Welcome! Let's set up your plan.");
+        } else {
+            toast.success("Welcome! Let's look at your first audit.");
+        }
+        router.push(buildDashboardUrl());
     };
 
     const benefits = alreadyCited
@@ -361,7 +375,7 @@ function GscStep({ siteId, alreadyCited }: { siteId: string | null; alreadyCited
     );
 }
 
-export function OnboardingSweep({ userName }: { userName: string }) {
+export function OnboardingSweep({ userName, upgradePlan, upgradeBilling }: { userName: string; upgradePlan?: string | null; upgradeBilling?: string | null }) {
     const [step, setStep] = useState<Step>("domain");
     const [domain, setDomain] = useState("");
     const [siteId, setSiteId] = useState<string | null>(null);
@@ -482,6 +496,8 @@ export function OnboardingSweep({ userName }: { userName: string }) {
                 <GscStep
                     siteId={siteId}
                     alreadyCited={spotResult?.status === "cited"}
+                    upgradePlan={upgradePlan}
+                    upgradeBilling={upgradeBilling}
                 />
             )}
         </div>

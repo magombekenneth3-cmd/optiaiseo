@@ -118,7 +118,9 @@ export default function PricingClient({ plans, featureRows, faqs }: PricingClien
                             </ul>
 
                             <Link
-                                href={`${plan.ctaHref}${billingAnnual && plan.price.monthly > 0 ? "&billing=annual" : ""}`}
+                                href={billingAnnual && plan.price.monthly > 0
+                                    ? (plan.ctaHref.includes('?') ? `${plan.ctaHref}&billing=annual` : `${plan.ctaHref}?billing=annual`)
+                                    : plan.ctaHref}
                                 className={`w-full py-2.5 rounded-xl font-semibold transition-all flex items-center justify-center text-sm ${
                                     plan.highlight
                                         ? "bg-foreground text-background hover:opacity-90"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { signupUser } from "@/app/actions/signup";
 import Link from "next/link";
@@ -45,11 +45,24 @@ export function SignupForm() {
     const [isRegistered, setIsRegistered] = useState(false);
 
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const planParam = searchParams.get("plan");
+    const billingParam = searchParams.get("billing");
+
+    const buildPostAuthUrl = () => {
+        if (planParam) {
+            const bp = new URLSearchParams();
+            if (billingParam) bp.set("billing", billingParam);
+            bp.set("plan", planParam);
+            return `/dashboard/billing?${bp.toString()}`;
+        }
+        return "/dashboard";
+    };
 
     const handleOAuth = async (provider: string) => {
         setLoading(provider);
         try {
-            await signIn(provider, { callbackUrl: "/dashboard" });
+            await signIn(provider, { callbackUrl: buildPostAuthUrl() });
         } catch {
             setError("Could not connect — please try again.");
         } finally {
@@ -91,7 +104,7 @@ export function SignupForm() {
     };
 
     if (isRegistered) {
-        return <OnboardingSweep userName={name} />;
+        return <OnboardingSweep userName={name} upgradePlan={planParam} upgradeBilling={billingParam} />;
     }
 
     const socialBtnClass =
