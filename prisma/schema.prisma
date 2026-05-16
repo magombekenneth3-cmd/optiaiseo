@@ -252,6 +252,8 @@ model AhrefsSnapshot {
   backlinkDomains  Json?
   fetchedAt        DateTime @default(now())
   site             Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, fetchedAt(sort: Desc)])
 }
 
 model RankSnapshot {
@@ -541,6 +543,7 @@ model CompetitorAhrefsSnapshot {
   competitor       Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
 
   @@index([competitorId])
+  @@index([competitorId, createdAt(sort: Desc)])
   @@index([createdAt])
 }
 
@@ -636,6 +639,7 @@ model AeoReport {
   proofs                 AeoProof[]
 
   @@index([siteId])
+  @@index([siteId, status, createdAt(sort: Desc)])
   @@index([createdAt])
 }
 
