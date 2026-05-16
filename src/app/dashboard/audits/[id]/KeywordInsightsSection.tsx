@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { getKeywordRankingsFast } from "@/app/actions/keywords";
-import QueryDeepDive from "@/components/dashboard/QueryDeepDive";
+import { KeywordSerpPanel } from "@/components/dashboard/KeywordSerpPanel";
 import {
     TrendingUp, Search, Zap, AlertTriangle,
     ChevronDown, ExternalLink, ArrowUpRight,
@@ -224,7 +224,7 @@ function CannibalizationAlert({ issues }: { issues: CannibalizationIssue[] }) {
 
 // ── Traffic table ─────────────────────────────────────────────────────────────
 
-function TrafficTable({ keywords, siteId, domain }: { keywords: KeywordRow[]; siteId: string; domain: string }) {
+function TrafficTable({ keywords, siteId }: { keywords: KeywordRow[]; siteId: string }) {
     const [showAll, setShowAll] = useState(false);
     const [sortBy, setSortBy] = useState<"impressions" | "clicks" | "position" | "ctr">("impressions");
     const [sortAsc, setSortAsc] = useState(false);
@@ -319,16 +319,13 @@ function TrafficTable({ keywords, siteId, domain }: { keywords: KeywordRow[]; si
                                     {isOpen && (
                                         <tr key={`dive-${i}`}>
                                             <td colSpan={5} className="p-0">
-                                                <QueryDeepDive
+                                                <KeywordSerpPanel
                                                     keyword={kw.keyword}
-                                                    userUrl={kw.url.startsWith("http") ? kw.url : `https://${kw.url}`}
-                                                    userPosition={kw.position}
-                                                    userClicks={kw.clicks}
-                                                    userImpressions={kw.impressions}
-                                                    userCtr={kw.ctr}
+                                                    position={kw.position}
+                                                    impressions={kw.impressions}
+                                                    clicks={kw.clicks}
+                                                    landingUrl={kw.url.startsWith("http") ? kw.url : `https://${kw.url}`}
                                                     siteId={siteId}
-                                                    domain={domain}
-                                                    onClose={() => setOpenQuery(null)}
                                                 />
                                             </td>
                                         </tr>
@@ -430,7 +427,7 @@ export default function KeywordInsightsSection({ siteId, domain }: { siteId: str
                     {/* Two-column: traffic table + opportunities */}
                     <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-4 items-start">
                         {/* Left: traffic table */}
-                        <TrafficTable keywords={data.keywords} siteId={siteId} domain={domain} />
+                        <TrafficTable keywords={data.keywords} siteId={siteId} />
 
                         {/* Right: opportunity cards */}
                         {data.opportunities.length > 0 && (
