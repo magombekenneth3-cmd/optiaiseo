@@ -27,8 +27,10 @@ function ForecastPanel({ siteId }: { siteId: string }) {
         fetch(`/api/aeo/forecast?siteId=${encodeURIComponent(siteId)}`)
             .then(r => r.json())
             .then(d => {
-                if (d.forecast) setForecast(d.forecast as VisibilityForecast);
-                else setError(d.error ?? "Forecast unavailable");
+                if (d.error) { setError(d.error); return; }
+                const f = d.currentCitationRate !== undefined ? d : d.forecast;
+                if (f) setForecast(f as VisibilityForecast);
+                else setError("Forecast unavailable");
             })
             .catch(() => setError("Could not load forecast"))
             .finally(() => setLoading(false));
