@@ -21,6 +21,14 @@ import {
     ChevronUp, ArrowUpRight, Loader2, Search,
     CheckCircle2, XCircle, Minus,
 } from "lucide-react";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from "recharts";
 
 // Types are imported from @/types/backlinks above
 // GapReport is the BacklinkGapReport shape
@@ -166,6 +174,7 @@ export default function BacklinksClient({
     const [alerts, setAlerts] = useState<BacklinkAlert[]>([]);
     const [quality, setQuality] = useState<QualitySummary | null>(null);
     const [gap, setGap] = useState<GapReport | null>(null);
+    const [drTrend, setDrTrend] = useState<{ date: string; dr: number }[]>([]);
 
     const [loadingLive, setLoadingLive] = useState(false);
     const [loadingStored, setLoadingStored] = useState(false);
@@ -232,7 +241,13 @@ export default function BacklinksClient({
 
     // Fetch alerts + quality on mount (summary + stored already seeded from server)
     useEffect(() => {
-        if (effectiveSiteId) fetchLive();
+        if (effectiveSiteId) {
+            fetchLive();
+            fetch(`/api/backlinks/dr-trend?siteId=${effectiveSiteId}`)
+              .then((r) => r.ok ? r.json() : null)
+              .then((data) => { if (data?.trend?.length) setDrTrend(data.trend); })
+              .catch(() => {});
+        }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [effectiveSiteId]);
 
@@ -352,6 +367,45 @@ export default function BacklinksClient({
                     <StatCard label="Broken / Toxic" value={summary.brokenBacklinks} icon={ShieldAlert} accent="rgba(251,191,36,.08)" iconColor="#fbbf24" />
                 </div>
             )}
+
+            {drTrend.length > 1 && (
+              <div style={{
+                padding: "18px 20px",
+                borderRadius: 14,
+                background: "rgba(255,255,255,.02)",
+                border: "1px solid rgba(255,255,255,.07)",
+                marginBottom: 28,
+              }}>
+                <p style={{ margin: "0 0 12px", fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,.35)" }}>
+                  Domain rating — 90 days
+                </p>
+                <ResponsiveContainer width="100%" height={80}>
+                  <LineChart data={drTrend} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                    <XAxis dataKey="date" hide />
+                    <YAxis domain={["dataMin - 2", "dataMax + 2"]} hide />
+                    <Tooltip
+                      contentStyle={{
+                        background: "#1a1a2e",
+                        border: "1px solid rgba(255,255,255,.1)",
+                        borderRadius: 8,
+                        fontSize: 12,
+                      }}
+                      formatter={(v: number) => [`DR ${v}`, ""]}
+                      labelFormatter={(l: string) => l}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="dr"
+                      stroke="#34d399"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4, fill: "#34d399" }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
             </PanelErrorBoundary>
 
             {/* ── Two-column layout: alerts + quality ── */}

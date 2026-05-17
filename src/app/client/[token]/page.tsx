@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import {
   Shield, TrendingUp, BarChart2, CheckCircle, XCircle,
-  Globe, Zap, FileText, Info,
+  Globe, Zap, FileText, Info, Link2,
 } from "lucide-react";
 
 export async function generateMetadata(
@@ -35,7 +35,7 @@ export default async function ClientPortalPage(
   if (!site) notFound();
 
   // Run all related queries in parallel
-  const [audit, aeoReport, blogs] = await Promise.all([
+  const [audit, aeoReport, blogs, backlinkSummary, recentAlerts] = await Promise.all([
     prisma.audit.findFirst({
       where:   { siteId: site.id },
       orderBy: { runTimestamp: "desc" },
@@ -69,6 +69,20 @@ export default async function ClientPortalPage(
         targetKeywords: true,
         createdAt:      true,
       },
+    }),
+    (async () => {
+      const [total, toxic, dofollow] = await Promise.all([
+        prisma.backlinkDetail.count({ where: { siteId: site.id } }),
+        prisma.backlinkDetail.count({ where: { siteId: site.id, isToxic: true } }),
+        prisma.backlinkDetail.count({ where: { siteId: site.id, isDoFollow: true } }),
+      ]);
+      return { total, toxic, dofollow };
+    })(),
+    prisma.backlinkAlert.findMany({
+      where: { siteId: site.id },
+      orderBy: { detectedAt: "desc" },
+      take: 5,
+      select: { type: true, domain: true, dr: true, detectedAt: true },
     }),
   ]);
 
@@ -252,6 +266,75 @@ export default async function ClientPortalPage(
           </section>
         )}
 
+        {/* Backlink Health */}
+        {backlinkSummary.total > 0 && (
+          <section className="bg-[#161b22] border border-[#21262d] rounded-2xl p-6">
+            <h2 className="text-base font-bold text-white mb-5 flex items-center gap-2">
+              <Link2 className="w-4 h-4 text-blue-400" />
+              Backlink Health
+            </h2>
+
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              {[
+                { label: "Total links", value: backlinkSummary.total },
+                { label: "Dofollow", value: backlinkSummary.dofollow },
+                { label: "Toxic", value: backlinkSummary.toxic },
+              ].map(({ label, value }) => (
+                <div key={label} className="bg-[#0d1117] rounded-xl p-4 text-center">
+                  <div className="text-xs text-gray-500 mb-1">{label}</div>
+                  <div
+                    className="text-xl font-black"
+                    style={{
+                      color:
+                        label === "Toxic" && value > 0
+                          ? "#ef4444"
+                          : "rgba(255,255,255,0.85)",
+                    }}
+                  >
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {recentAlerts.length > 0 && (
+              <div>
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-3">
+                  Recent activity
+                </p>
+                <div className="flex flex-col gap-2">
+                  {recentAlerts.map((alert: { type: string; domain: string; dr: number | null; detectedAt: Date }, i: number) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-3 py-2.5 border-b border-[#21262d] last:border-0"
+                    >
+                      <span
+                        className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                          alert.type === "gained"
+                            ? "bg-emerald-500/10 text-emerald-400"
+                            : "bg-red-500/10 text-red-400"
+                        }`}
+                      >
+                        {alert.type === "gained" ? "+" : "−"}
+                      </span>
+                      <span className="text-sm text-gray-300 flex-1">{alert.domain}</span>
+                      {alert.dr !== null && (
+                        <span className="text-xs text-gray-500 tabular-nums">DR {alert.dr}</span>
+                      )}
+                      <span className="text-xs text-gray-600 tabular-nums">
+                        {alert.detectedAt.toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                        })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Recent Content */}
         {blogs.length > 0 && (
           <section className="bg-[#161b22] border border-[#21262d] rounded-2xl p-6">
@@ -260,7 +343,7 @@ export default async function ClientPortalPage(
               Recent Content
             </h2>
             <div className="flex flex-col gap-2">
-              {blogs.map((blog, i) => (
+              {blogs.map((blog: { title: string; status: string; citationScore: number | null; targetKeywords: string[]; createdAt: Date }, i: number) => (
                 <div key={i} className="flex items-center gap-3 py-3 border-b border-[#21262d] last:border-0">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-200 truncate">{blog.title}</p>

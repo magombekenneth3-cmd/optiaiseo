@@ -17,6 +17,7 @@ import {
     auditPostFixJob,
     publishBlogToCmsJob,
     analyseCompetitorPageJob,
+    drSnapshotJob,
 } from "@/lib/inngest/functions";
 import { freshnessDecayCron } from "@/lib/inngest/freshness-decay";
 import { computeBenchmarksJob } from "@/lib/inngest/functions/benchmarks";
@@ -144,6 +145,7 @@ export const { GET, POST, PUT } = serve({
         weeklyCompetitorAlertsJob,  // weekly cron (Tue 06:00 UTC)
         competitorVelocityJob,      // weekly cron (Mon 04:30 UTC)
         cronWeeklyCompetitorAlerts, // fan-out cron (Mon 07:00 UTC)
+        drSnapshotJob,              // weekly cron (Wed 04:00 UTC)
 
         runCitationGapOnDemand,     // event: aeo/citation-gap.requested
         runCitationGapWeekly,       // weekly cron (Wed 06:00 UTC)

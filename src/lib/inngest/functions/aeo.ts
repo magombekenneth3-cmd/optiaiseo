@@ -6,6 +6,7 @@ import { checkAeoLimit } from "@/lib/rate-limit";
 import { runAeoAudit, runAeoAuditLite } from "@/lib/aeo";
 import { CREDIT_COSTS } from "@/lib/credits";
 import { CONCURRENCY } from "../concurrency";
+import { fireWhiteLabelWebhook } from "@/lib/webhooks/white-label";
 
 
 export const runAeoAuditJob = inngest.createFunction(
@@ -107,6 +108,16 @@ export const runAeoAuditJob = inngest.createFunction(
             const { redis } = await import("@/lib/redis");
             const forecast = await generateVisibilityForecast(siteId);
             await redis.set(`forecast:${siteId}`, JSON.stringify(forecast), { ex: 60 * 60 * 24 * 7 });
+        });
+
+        await step.run("fire-aeo-webhook", async () => {
+            await fireWhiteLabelWebhook(site.user.id, {
+                event: "aeo.completed",
+                siteId,
+                domain: site.domain,
+                timestamp: new Date().toISOString(),
+                data: { reportId, score: result.score, grade: result.grade },
+            });
         });
 
         return { success: true };

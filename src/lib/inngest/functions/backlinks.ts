@@ -15,6 +15,7 @@ import { getBacklinkDetails } from "@/lib/backlinks/index";
 import { analyseAndStoreBacklinks } from "@/lib/backlinks/quality-analysis";
 import { detectBacklinkAlerts } from "@/lib/backlinks/alerts";
 import { logger } from "@/lib/logger";
+import { fireWhiteLabelWebhook } from "@/lib/webhooks/white-label";
 
 export const backlinkCheckSite = inngest.createFunction(
     {
@@ -78,6 +79,21 @@ export const backlinkCheckSite = inngest.createFunction(
         );
 
         if (gained > 0 || lost > 0) {
+            await step.run("fire-webhook", async () => {
+                const site = await prisma.site.findUnique({
+                    where: { id: siteId },
+                    select: { userId: true },
+                });
+                if (!site) return;
+                await fireWhiteLabelWebhook(site.userId, {
+                    event: "backlinks.alerts_detected",
+                    siteId,
+                    domain,
+                    timestamp: new Date().toISOString(),
+                    data: { gained, lost },
+                });
+            });
+
             await step.run("deliver-alerts", async () => {
                 const { prisma } = await import("@/lib/prisma");
                 const site = await prisma.site.findUnique({

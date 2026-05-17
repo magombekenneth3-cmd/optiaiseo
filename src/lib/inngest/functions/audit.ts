@@ -12,6 +12,7 @@ import { executeHealingWithConfidenceGate } from "@/lib/self-healing/confidence"
 import { detectGscAnomalies, generateGscHealingPlan } from "@/lib/self-healing/gsc";
 import { writeMetricSnapshot } from "@/lib/metrics/metric-snapshot";
 import { redis } from "@/lib/redis";
+import { fireWhiteLabelWebhook } from "@/lib/webhooks/white-label";
 
 // Handles the non-blocking audit.run.manual event fired by the runAudit server
 // action. The server action creates a PENDING audit record immediately and
@@ -108,6 +109,16 @@ export const processManualAuditJob = inngest.createFunction(
             logger.info("[ManualAudit] Queued multi-page audit", { domain, auditId, tier });
         }
 
+        await step.run("fire-audit-webhook", async () => {
+            await fireWhiteLabelWebhook(userId, {
+                event: "audit.completed",
+                siteId,
+                domain,
+                timestamp: new Date().toISOString(),
+                data: { auditId, seoScore: auditResult.overallScore },
+            });
+        });
+
         logger.info("[ManualAudit] Homepage audit complete", {
             domain,
             score: auditResult.overallScore,
@@ -170,7 +181,7 @@ export const runWeeklyAuditJob = inngest.createFunction(
             });
         });
 
-        await step.run("save-audit", async () => {
+        const savedAudit = await step.run("save-audit", async () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const allItems = auditResult.categories.flatMap((c: { items: any[] }) => c.items);
 
@@ -205,7 +216,7 @@ export const runWeeklyAuditJob = inngest.createFunction(
                 return "PENDING";
             }
 
-            await prisma.audit.create({
+            const created = await prisma.audit.create({
                 data: {
                     siteId: site.id,
                     categoryScores: auditResult.categories.reduce(
@@ -261,7 +272,7 @@ export const runWeeklyAuditJob = inngest.createFunction(
                 inp: getSnapMetric("inp"),
             }).catch(() => {/* non-fatal */ });
 
-            return { score: auditResult.overallScore, diff: diff?.summary };
+            return { score: auditResult.overallScore, diff: diff?.summary, auditId: created.id };
 
         });
 
@@ -305,6 +316,16 @@ export const runWeeklyAuditJob = inngest.createFunction(
                     actionCount: actions.length,
                 });
             }
+        });
+
+        await step.run("fire-audit-webhook", async () => {
+            await fireWhiteLabelWebhook(site.userId, {
+                event: "audit.completed",
+                siteId: site.id,
+                domain: site.domain,
+                timestamp: new Date().toISOString(),
+                data: { auditId: savedAudit.auditId, seoScore: auditResult.overallScore },
+            });
         });
 
         return { success: true, score: auditResult.overallScore };
