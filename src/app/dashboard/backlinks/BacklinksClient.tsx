@@ -391,7 +391,7 @@ export default function BacklinksClient({
                         fontSize: 12,
                       }}
                       formatter={(v: any) => [`DR ${typeof v === "number" ? v : "N/A"}`, ""]}
-                      labelFormatter={(l: string) => l}
+                      labelFormatter={(l: any) => l}
                     />
                     <Line
                       type="monotone"
