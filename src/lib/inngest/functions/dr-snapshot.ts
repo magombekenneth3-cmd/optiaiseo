@@ -29,11 +29,12 @@ async function fetchDomainRating(domain: string): Promise<{
       [{ target: domain, include_subdomains: true }],
     );
     const result = data?.tasks?.[0]?.result?.[0];
-    if (!result) return null;
+    const item = result?.items?.[0];
+    if (!item) return null;
     return {
-      domainRating: result.rank ?? 0,
-      backlinks: result.backlinks ?? 0,
-      referringDomains: result.referring_domains ?? 0,
+      domainRating: item.rank ?? 0,
+      backlinks: item.backlinks ?? 0,
+      referringDomains: item.referring_domains ?? 0,
     };
   } catch (err) {
     logger.warn("[DrSnapshot] fetch failed", { domain, error: String(err) });
