@@ -6,7 +6,15 @@ import type { NormalisedIssue } from "@/lib/seo-audit/parse-audit-result";
 
 export type SeverityFilter = "all" | "critical" | "high" | "medium" | "low";
 
-const FilterContext = createContext<SeverityFilter>("all");
+type FilterContextValue = {
+    activeFilter: SeverityFilter;
+    setActiveFilter: (f: SeverityFilter) => void;
+};
+
+const FilterContext = createContext<FilterContextValue>({
+    activeFilter: "all",
+    setActiveFilter: () => {},
+});
 
 export function useAuditFilter() {
     return useContext(FilterContext);
@@ -20,10 +28,10 @@ interface Props {
 }
 
 export function AuditDetailClient({ children }: Props) {
-    const [activeFilter] = useState<SeverityFilter>("all");
+    const [activeFilter, setActiveFilter] = useState<SeverityFilter>("all");
 
     return (
-        <FilterContext.Provider value={activeFilter}>
+        <FilterContext.Provider value={{ activeFilter, setActiveFilter }}>
             {children}
         </FilterContext.Provider>
     );

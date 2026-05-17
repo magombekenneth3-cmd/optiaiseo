@@ -104,19 +104,26 @@ export function MetricCard({
 
       {/* Value block */}
       {isEmpty ? (
-        <div className="flex-1 flex flex-col gap-1.5">
-          <span className="text-3xl font-bold text-muted-foreground/30 tracking-tight">—</span>
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 py-2 text-center">
+          {/* Larger, centred icon */}
+          <div className="w-10 h-10 rounded-2xl bg-muted/60 border border-border flex items-center justify-center">
+            <Icon className={`w-5 h-5 ${iconColor} opacity-40`} aria-hidden="true" />
+          </div>
+
           {emptyLabel && (
-            emptyHref ? (
-              <Link
-                href={emptyHref}
-                className="text-xs font-semibold text-brand hover:underline underline-offset-2 inline-flex items-center gap-1"
-              >
-                {emptyLabel} <ArrowUpRight className="w-3 h-3" />
-              </Link>
-            ) : (
-              <p className="text-xs text-muted-foreground/60">{emptyLabel}</p>
-            )
+            <>
+              <p className="text-xs text-muted-foreground leading-relaxed max-w-[140px]">
+                {emptyLabel}
+              </p>
+              {emptyHref && (
+                <Link
+                  href={emptyHref}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand/10 text-brand border border-brand/20 text-xs font-semibold hover:bg-brand/15 transition-colors"
+                >
+                  Set up <ArrowUpRight className="w-3 h-3" aria-hidden="true" />
+                </Link>
+              )}
+            </>
           )}
         </div>
       ) : (

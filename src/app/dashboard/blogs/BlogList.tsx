@@ -9,44 +9,8 @@ import { InternalLinksModal } from "./InternalLinksModal";
 import { Eye, ExternalLink, Link as LinkIcon, Loader2, RefreshCw, X, Zap } from "lucide-react";
 import { RepurposeTab } from "@/components/blog/RepurposeTab";
 import { toast } from "sonner";
+import { HashnodeIcon, MediumIcon, WordPressIcon, GhostIcon } from "@/components/icons/platforms";
 
-
-function HashnodeIcon({ className }: { className?: string }) {
-    return (
-        <svg className={className} viewBox="0 0 337 337" fill="currentColor">
-            <path fillRule="evenodd" clipRule="evenodd" d="M23.155 112.598c-30.873 30.874-30.873 80.93 0 111.804l89.443 89.443c30.874 30.873 80.93 30.873 111.804 0l89.443-89.443c30.873-30.874 30.873-80.93 0-111.804l-89.443-89.443c-30.874-30.873-80.93-30.873-111.804 0l-89.443 89.443zm184.476 95.033c22.398-22.398 22.398-58.7 0-81.098-22.397-22.398-58.7-22.398-81.097 0-22.398 22.397-22.398 58.7 0 81.098 22.397 22.397 58.7 22.397 81.097 0z" />
-        </svg>
-    );
-}
-
-// Medium icon as inline SVG
-function MediumIcon({ className }: { className?: string }) {
-    return (
-        <svg className={className} viewBox="0 0 1770 1000" fill="currentColor">
-            <circle cx="500" cy="500" r="500" />
-            <ellipse cx="1230" cy="500" rx="230" ry="430" />
-            <ellipse cx="1640" cy="500" rx="130" ry="340" />
-        </svg>
-    );
-}
-
-// WordPress icon as inline SVG
-function WordPressIcon({ className }: { className?: string }) {
-    return (
-        <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zM3.251 12c0-1.268.268-2.473.745-3.564L7.75 19.151C5.15 17.834 3.251 15.126 3.251 12zm8.749 8.749c-.862 0-1.694-.119-2.482-.342l2.637-7.658 2.699 7.396c.018.043.038.084.06.123-.894.319-1.855.481-2.914.481zm1.215-12.996c.531-.028.01-.713-.521-.685-.53.028-1.274.056-1.274.056s-1.218-.014-2.004-.014c1.855-5.616 7.007-1.246 3.799.643zm3.504 10.93L19.47 9.131c.494-1.235.659-2.224.659-3.104 0-.319-.021-.614-.059-.888.638.965 1.008 2.116 1.008 3.361 0 2.58-1.399 4.836-3.359 6.184zm-1.52-9.023c.309 1.665-.285 3.566-1.162 5.961l-1.515 5.055-4.351-12.945c.001 0 2.313.193 2.313.193.531.056.472-.713-.06-.741 0 0-3.258-.27-5.362-.374C7.338 4.358 9.567 3.249 12 3.249c1.913 0 3.669.681 5.025 1.803-.033-.003-.065-.009-.099-.009-.954 0-1.629.831-1.727 1.617z"/>
-        </svg>
-    );
-}
-
-// Ghost icon as inline SVG  
-function GhostIcon({ className }: { className?: string }) {
-    return (
-        <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8zm-1-6.5a1.5 1.5 0 1 0 1.5 1.5A1.5 1.5 0 0 0 11 13.5zm4 0A1.5 1.5 0 1 0 16.5 15 1.5 1.5 0 0 0 15 13.5zm-3-6.5a5 5 0 0 0-5 5h10a5 5 0 0 0-5-5z"/>
-        </svg>
-    );
-}
 
 function SnippetOptimizeButton({ blogId, keyword }: { blogId: string; keyword?: string }) {
     const [isOpen, setIsOpen] = useState(false);

@@ -95,9 +95,22 @@ function SitePickerDropdown({ sites, activeSiteId }: { sites: Site[]; activeSite
     const switchSite = (siteId: string) => {
         setOpen(false);
         const base = pathname.startsWith("/dashboard/sites/") ? "/dashboard" : pathname;
-        const contextPages = ["/dashboard/keywords", "/dashboard/audits", "/dashboard/aeo", "/dashboard/refresh", "/dashboard/backlinks", "/dashboard/competitors", "/dashboard/serp-gap"];
+        const contextPages = [
+            "/dashboard/keywords",
+            "/dashboard/audits",
+            "/dashboard/aeo",
+            "/dashboard/refresh",
+            "/dashboard/backlinks",
+            "/dashboard/competitors",
+            "/dashboard/serp-gap",
+            "/dashboard/content-decay",
+            "/dashboard/planner",
+            "/dashboard/indexing",
+            "/dashboard/healing",
+            "/dashboard/recommendations",
+        ];
         const isContextPage = contextPages.some(p => base.startsWith(p));
-        router.push(isContextPage ? `${base}?siteId=${siteId}` : `/dashboard/keywords?siteId=${siteId}`);
+        router.push(isContextPage ? `${base}?siteId=${siteId}` : `/dashboard?siteId=${siteId}`);
     };
 
     return (
@@ -346,9 +359,30 @@ function SidebarNavInner({
                 <SitePickerDropdown sites={sites} activeSiteId={siteId} />
             )}
 
-            {/* Primary nav */}
+            {/* Primary nav — grouped */}
             <div className={`space-y-0.5 ${isCollapsed ? "flex flex-col items-center" : ""}`}>
-                {NAV_ITEMS.map((item) => {
+                {/* Top-level items */}
+                {NAV_ITEMS.filter(i => i.name === "Dashboard" || i.name === "My Sites").map((item) => {
+                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
+                    const isActive = item.exact
+                        ? pathname === item.href
+                        : pathname === item.href || pathname.startsWith(item.href + "/");
+                    const missingContext = item.contextSiteId && !siteId;
+                    return (
+                        <NavLink
+                            key={item.name}
+                            item={item}
+                            href={href}
+                            isActive={isActive}
+                            missingContext={!!missingContext}
+                            isCollapsed={isCollapsed}
+                        />
+                    );
+                })}
+
+                {/* Analyse group */}
+                {!isCollapsed && <NavSectionLabel>Analyse</NavSectionLabel>}
+                {NAV_ITEMS.filter(i => ["SEO Audits", "Keywords", "Competitors", "AI Visibility"].includes(i.name)).map((item) => {
                     const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
                     const isActive = item.href === "/dashboard/aeo"
                         ? (pathname === "/dashboard/aeo" || /\/dashboard\/sites\/[^/]+\/aeo/.test(pathname))
@@ -356,7 +390,26 @@ function SidebarNavInner({
                             ? pathname === item.href
                             : pathname === item.href || pathname.startsWith(item.href + "/");
                     const missingContext = item.contextSiteId && !siteId;
+                    return (
+                        <NavLink
+                            key={item.name}
+                            item={item}
+                            href={href}
+                            isActive={isActive}
+                            missingContext={!!missingContext}
+                            isCollapsed={isCollapsed}
+                        />
+                    );
+                })}
 
+                {/* Content group */}
+                {!isCollapsed && <NavSectionLabel>Content</NavSectionLabel>}
+                {NAV_ITEMS.filter(i => i.name === "AI Content").map((item) => {
+                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
+                    const isActive = item.exact
+                        ? pathname === item.href
+                        : pathname === item.href || pathname.startsWith(item.href + "/");
+                    const missingContext = item.contextSiteId && !siteId;
                     return (
                         <NavLink
                             key={item.name}
