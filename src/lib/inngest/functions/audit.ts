@@ -42,7 +42,7 @@ export const processManualAuditJob = inngest.createFunction(
         triggers: [{ event: "audit.run.manual" }],
     },
     async ({ event, step }) => {
-        const { siteId, auditId, domain, tier, auditMode, lockKey } = event.data as {
+        const { siteId, auditId, domain, userId, tier, auditMode, lockKey } = event.data as {
             siteId: string;
             auditId: string;
             domain: string;
