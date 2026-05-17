@@ -80,6 +80,7 @@ export const backlinkCheckSite = inngest.createFunction(
 
         if (gained > 0 || lost > 0) {
             await step.run("fire-webhook", async () => {
+                const { prisma } = await import("@/lib/prisma");
                 const site = await prisma.site.findUnique({
                     where: { id: siteId },
                     select: { userId: true },
