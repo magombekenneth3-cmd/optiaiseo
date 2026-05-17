@@ -289,10 +289,9 @@ export default function BillingPage() {
         setIsPortalLoading(true);
         try {
             const res = await fetch("/api/stripe/portal", { method: "POST" });
-             
-            if (!res.ok) throw new Error((await res.json()).error || "Failed to open portal");
-            window.location.href = (await res.json()).url;
-         
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to open portal");
+            window.location.href = data.url;
         } catch (err: unknown) {
             toast.error((err as Error).message);
         } finally {
@@ -417,14 +416,14 @@ export default function BillingPage() {
             <div className="flex items-center justify-center gap-1 bg-muted rounded-xl p-1 w-fit mx-auto">
                 <button
                     onClick={() => setBilling("monthly")}
-                    className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${billing === "monthly" ? "bg-white/10 text-white shadow" : "text-muted-foreground hover:text-foreground"
+                    className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${billing === "monthly" ? "bg-foreground/10 text-foreground shadow" : "text-muted-foreground hover:text-foreground"
                         }`}
                 >
                     Monthly
                 </button>
                 <button
                     onClick={() => setBilling("annual")}
-                    className={`px-5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${billing === "annual" ? "bg-white/10 text-white shadow" : "text-muted-foreground hover:text-foreground"
+                    className={`px-5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${billing === "annual" ? "bg-foreground/10 text-foreground shadow" : "text-muted-foreground hover:text-foreground"
                         }`}
                 >
                     Annual

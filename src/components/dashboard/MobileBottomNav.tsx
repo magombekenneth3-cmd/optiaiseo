@@ -77,10 +77,12 @@ export function MobileBottomNav({
                 <button
                     id="mobile-tab-more"
                     onClick={() => setMoreOpen(true)}
-                    className="flex-1 flex flex-col items-center justify-center gap-0.5 text-xs font-semibold text-muted-foreground transition-colors"
+                    className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-colors ${
+                        moreOpen ? "text-foreground" : "text-muted-foreground"
+                    }`}
                 >
-                    <div className="flex items-center justify-center rounded-xl w-9 h-7">
-                        <MoreHorizontal className="w-[18px] h-[18px]" />
+                    <div className={`flex items-center justify-center rounded-xl w-9 h-7 ${moreOpen ? "bg-foreground/8" : ""}`}>
+                        <MoreHorizontal className={`w-[18px] h-[18px] ${moreOpen ? "text-brand" : ""}`} />
                     </div>
                     <span>More</span>
                 </button>

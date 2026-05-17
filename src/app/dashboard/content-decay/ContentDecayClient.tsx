@@ -191,7 +191,7 @@ export function ContentDecayClient({
           <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
             <CheckCircle2 className="w-7 h-7 text-emerald-400" />
           </div>
-          <p className="text-lg font-semibold text-foreground">No decay detected 🎉</p>
+          <p className="text-lg font-semibold text-foreground">No decay detected</p>
           <p className="text-sm text-muted-foreground max-w-md">
             None of your pages have lost more than 15% of their traffic compared to the same period. Keep up the great work!
           </p>

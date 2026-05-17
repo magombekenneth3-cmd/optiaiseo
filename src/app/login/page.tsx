@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { LoginButtons } from '@/components/auth/LoginButtons';
+import { Mic, Bot, Zap } from 'lucide-react';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { redirect } from 'next/navigation';
@@ -127,12 +128,14 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
 
                     <ul className="space-y-4">
                         {[
-                            { emoji: "🎙️", title: "Voice agent — Aria", desc: "Manage your whole SEO strategy by voice" },
-                            { emoji: "🤖", title: "AI Visibility (GSoV)", desc: "Track citations across 4 AI engines daily" },
-                            { emoji: "⚡", title: "Auto-fix GitHub PRs", desc: "Code fixes shipped while you sleep" },
-                        ].map(({ emoji, title, desc }) => (
+                            { icon: Mic, title: "Voice agent — Aria", desc: "Manage your whole SEO strategy by voice" },
+                            { icon: Bot, title: "AI Visibility (GSoV)", desc: "Track citations across 4 AI engines daily" },
+                            { icon: Zap, title: "Auto-fix GitHub PRs", desc: "Code fixes shipped while you sleep" },
+                        ].map(({ icon: Icon, title, desc }) => (
                             <li key={title} className="flex items-start gap-3">
-                                <span className="text-xl shrink-0 mt-0.5" aria-hidden="true">{emoji}</span>
+                                <span className="w-8 h-8 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center shrink-0 mt-0.5">
+                                    <Icon className="w-4 h-4 text-brand" />
+                                </span>
                                 <div>
                                     <p className="text-sm font-semibold">{title}</p>
                                     <p className="text-xs text-muted-foreground">{desc}</p>

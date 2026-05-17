@@ -3,7 +3,7 @@
 import { updateWhiteLabel } from "@/app/actions/user";
 import { useState } from "react";
 import { toast } from "sonner";
-import { PaintBucket, Link as LinkIcon, Building2, Crown } from "lucide-react";
+import { PaintBucket, Link as LinkIcon, Building2, Crown, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 interface WhiteLabelFormProps {
@@ -72,7 +72,7 @@ export function WhiteLabelForm({
                             defaultValue={initialCompanyName || ""}
                             placeholder="e.g. Acme SEO Agency"
                             disabled={!isAgency}
-                            className="w-full bg-black/50 border border-border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand/50 transition-shadow disabled:opacity-50"
+                            className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand/50 transition-shadow disabled:opacity-50"
                         />
                         <p className="text-xs text-muted-foreground">Appears on the report cover and footer.</p>
                     </div>
@@ -88,7 +88,7 @@ export function WhiteLabelForm({
                             defaultValue={initialLogoUrl || ""}
                             placeholder="https://example.com/logo.png"
                             disabled={!isAgency}
-                            className="w-full bg-black/50 border border-border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand/50 transition-shadow disabled:opacity-50"
+                            className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand/50 transition-shadow disabled:opacity-50"
                         />
                         <p className="text-xs text-muted-foreground">URL to a publicly accessible logo image.</p>
                     </div>
@@ -101,7 +101,7 @@ export function WhiteLabelForm({
                                 name="primaryColor"
                                 defaultValue={initialPrimaryColor || "#2563eb"}
                                 disabled={!isAgency}
-                                className="w-12 h-12 p-1 bg-black/50 border border-border rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-12 h-12 p-1 bg-card border border-border rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             />
                             <p className="text-xs text-muted-foreground">Pick a color to match your brand theme.</p>
                         </div>
@@ -115,7 +115,7 @@ export function WhiteLabelForm({
                         className="bg-brand text-white hover:bg-brand/90 px-5 py-2 rounded-lg text-sm font-bold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                         {isPending ? (
-                            <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg> Saving...</>
+                            <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
                         ) : "Save Preferences"}
                     </button>
                 </div>

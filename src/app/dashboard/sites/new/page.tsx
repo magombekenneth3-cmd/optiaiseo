@@ -11,7 +11,6 @@ export default function NewSiteRegistration() {
     const [mode, setMode] = useState<"REPORT_ONLY" | "FULL_ACCESS">("REPORT_ONLY");
     const [domain, setDomain] = useState("");
     const [domainError, setDomainError] = useState("");
-    const [_githubConnected, _setGithubConnected] = useState(false);
     const [submitError, setSubmitError] = useState("");
 
     // Entity fields — Step 4

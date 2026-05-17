@@ -56,6 +56,7 @@ export default function PricingClient({ plans, featureRows, faqs }: PricingClien
                 <button
                     role="switch"
                     aria-checked={billingAnnual}
+                    aria-label="Toggle annual billing"
                     onClick={() => setBillingAnnual((v) => !v)}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-ring ${billingAnnual ? "bg-brand" : "bg-muted"}`}
                 >
@@ -121,7 +122,7 @@ export default function PricingClient({ plans, featureRows, faqs }: PricingClien
                                 href={billingAnnual && plan.price.monthly > 0
                                     ? (plan.ctaHref.includes('?') ? `${plan.ctaHref}&billing=annual` : `${plan.ctaHref}?billing=annual`)
                                     : plan.ctaHref}
-                                className={`w-full py-2.5 rounded-xl font-semibold transition-all flex items-center justify-center text-sm ${
+                                className={`w-full py-2.5 rounded-xl font-semibold transition-all flex items-center justify-center text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                                     plan.highlight
                                         ? "bg-foreground text-background hover:opacity-90"
                                         : "border border-border hover:bg-accent"
@@ -181,11 +182,13 @@ export default function PricingClient({ plans, featureRows, faqs }: PricingClien
                                         <Plus className="w-4 h-4" />
                                     </span>
                                 </button>
-                                {openFaq === i && (
-                                    <div className="px-6 pb-5 text-sm text-muted-foreground leading-relaxed border-t border-border pt-4">
-                                        {faq.a}
+                                <div className={`grid transition-all duration-300 ease-out ${openFaq === i ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                                    <div className="overflow-hidden">
+                                        <div className="px-6 pb-5 text-sm text-muted-foreground leading-relaxed border-t border-border pt-4">
+                                            {faq.a}
+                                        </div>
                                     </div>
-                                )}
+                                </div>
                             </div>
                         ))}
                     </div>

@@ -1,16 +1,5 @@
 "use client";
 
-/**
- * Referral programme dashboard.
- *
- * Shows:
- *  - Unique referral link with one-click copy
- *  - Lifetime stats: signups, conversions, total earned, pending
- *  - Commission history table (month, amount, status)
- *
- * All data is fetched from /api/referral.
- */
-
 import { useState, useEffect, useCallback } from "react";
 import {
     Gift, Copy, CheckCheck, Users, DollarSign,
@@ -20,7 +9,7 @@ import {
 
 interface Commission {
     id: string;
-    month: string;         // e.g. "2026-04"
+    month: string;
     amountCents: number;
     status: "pending" | "paid";
     createdAt: string;
@@ -48,32 +37,29 @@ function fmtMonth(month: string): string {
 
 
 function StatCard({
-    label, value, icon: Icon, accent, iconColor, sub,
+    label, value, icon: Icon, accent, sub,
 }: {
     label: string; value: string | number;
-    icon: React.ElementType; accent: string; iconColor: string; sub?: string;
+    icon: React.ElementType; accent: string; sub?: string;
 }) {
+    const colorMap: Record<string, { iconBg: string; iconBorder: string; iconColor: string }> = {
+        blue:    { iconBg: "bg-blue-500/10",    iconBorder: "border-blue-500/20",    iconColor: "text-blue-400" },
+        emerald: { iconBg: "bg-emerald-500/10", iconBorder: "border-emerald-500/20", iconColor: "text-emerald-400" },
+        amber:   { iconBg: "bg-amber-500/10",   iconBorder: "border-amber-500/20",   iconColor: "text-amber-400" },
+    };
+    const c = colorMap[accent] ?? colorMap.blue;
     return (
-        <div style={{
-            padding: "20px",
-            borderRadius: 14,
-            background: "rgba(255,255,255,.02)",
-            border: "1px solid rgba(255,255,255,.07)",
-        }}>
-            <div style={{
-                width: 34, height: 34, borderRadius: 10,
-                background: accent, border: `1px solid ${iconColor}25`,
-                display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14,
-            }}>
-                <Icon size={16} style={{ color: iconColor }} />
+        <div className="card-surface p-5">
+            <div className={`w-9 h-9 rounded-xl ${c.iconBg} border ${c.iconBorder} flex items-center justify-center mb-3.5`}>
+                <Icon className={`w-4 h-4 ${c.iconColor}`} />
             </div>
-            <p style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "rgba(255,255,255,.9)", letterSpacing: "-.03em", fontVariantNumeric: "tabular-nums" }}>
+            <p className="text-2xl font-black tracking-tight tabular-nums text-foreground">
                 {value}
             </p>
-            <p style={{ margin: "4px 0 0", fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,.35)", textTransform: "uppercase", letterSpacing: ".05em" }}>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mt-1">
                 {label}
             </p>
-            {sub && <p style={{ margin: "4px 0 0", fontSize: 11, color: "rgba(255,255,255,.2)" }}>{sub}</p>}
+            {sub && <p className="text-[11px] text-muted-foreground/60 mt-1">{sub}</p>}
         </div>
     );
 }
@@ -121,18 +107,15 @@ export function ReferralClient() {
             await navigator.clipboard.writeText(text);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
-        } catch {
-            // fallback — silently ignore if clipboard not available
-        }
+        } catch { /* clipboard not available */ }
     };
 
 
     if (loading) {
         return (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, color: "rgba(255,255,255,.25)", padding: "60px 0", justifyContent: "center" }}>
-                <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
-                Loading referral data…
-                <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+            <div className="flex items-center gap-2.5 text-muted-foreground py-16 justify-center">
+                <Loader2 className="w-4.5 h-4.5 animate-spin" />
+                <span className="text-sm">Loading referral data…</span>
             </div>
         );
     }
@@ -140,10 +123,13 @@ export function ReferralClient() {
 
     if (error) {
         return (
-            <div style={{ padding: "16px 20px", borderRadius: 12, background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.2)", color: "#f87171", fontSize: 13, display: "flex", alignItems: "center", gap: 10, margin: "40px 0" }}>
-                {error}
-                <button onClick={load} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 7, background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.2)", color: "#f87171", fontSize: 11, cursor: "pointer" }}>
-                    <RefreshCw size={11} /> Retry
+            <div className="card-surface p-4 border-rose-500/20 bg-rose-500/5 flex items-center gap-2.5 text-rose-400 text-sm my-10">
+                <span className="flex-1">{error}</span>
+                <button
+                    onClick={load}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold hover:bg-rose-500/20 transition-colors"
+                >
+                    <RefreshCw className="w-3 h-3" /> Retry
                 </button>
             </div>
         );
@@ -152,27 +138,27 @@ export function ReferralClient() {
 
     if (!data) {
         return (
-            <div style={{ maxWidth: 580, margin: "60px auto", textAlign: "center" }}>
-                <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(16,185,129,.1)", border: "1px solid rgba(16,185,129,.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
-                    <Gift size={24} style={{ color: "#34d399" }} />
+            <div className="max-w-xl mx-auto py-16 text-center fade-in-up">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-5">
+                    <Gift className="w-7 h-7 text-emerald-400" />
                 </div>
-                <h1 style={{ margin: "0 0 12px", fontSize: 26, fontWeight: 800, color: "rgba(255,255,255,.9)", letterSpacing: "-.03em" }}>
+                <h1 className="text-2xl font-black tracking-tight mb-3 text-foreground">
                     Earn 20% recurring commission
                 </h1>
-                <p style={{ margin: "0 0 32px", fontSize: 15, color: "rgba(255,255,255,.4)", lineHeight: 1.7 }}>
+                <p className="text-muted-foreground text-sm mb-8 leading-relaxed max-w-md mx-auto">
                     Refer a friend, colleague, or client to OptiAISEO and earn 20% of their subscription
-                    every month they stay — for as long as they're a customer.
+                    every month they stay — for as long as they&apos;re a customer.
                 </p>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 36 }}>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-9">
                     {[
                         { icon: Users, label: "Share your link", desc: "Anyone who signs up through your link is attributed to you automatically" },
                         { icon: TrendingUp, label: "They upgrade", desc: "When they move to a paid plan, you start earning commission" },
                         { icon: DollarSign, label: "You get paid", desc: "20% recurring commission paid monthly via Stripe" },
                     ].map(({ icon: Icon, label, desc }) => (
-                        <div key={label} style={{ padding: "16px", borderRadius: 12, background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", textAlign: "left" }}>
-                            <Icon size={16} style={{ color: "#34d399", marginBottom: 10 }} />
-                            <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.8)" }}>{label}</p>
-                            <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,.3)", lineHeight: 1.6 }}>{desc}</p>
+                        <div key={label} className="card-surface p-4 text-left">
+                            <Icon className="w-4 h-4 text-emerald-400 mb-2.5" />
+                            <p className="text-xs font-bold text-foreground mb-1.5">{label}</p>
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">{desc}</p>
                         </div>
                     ))}
                 </div>
@@ -180,19 +166,11 @@ export function ReferralClient() {
                     id="activate-referral"
                     onClick={activate}
                     disabled={activating}
-                    style={{
-                        padding: "13px 32px", borderRadius: 12,
-                        background: "linear-gradient(135deg, #10b981, #3b82f6)",
-                        border: "none", color: "#fff", fontSize: 15, fontWeight: 700,
-                        cursor: activating ? "not-allowed" : "pointer",
-                        opacity: activating ? .7 : 1, transition: "all .15s",
-                        display: "inline-flex", alignItems: "center", gap: 8,
-                    }}
+                    className="inline-flex items-center gap-2 px-8 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-blue-600 text-white font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
                 >
-                    {activating ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Gift size={16} />}
+                    {activating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Gift className="w-4 h-4" />}
                     {activating ? "Activating…" : "Activate My Referral Link"}
                 </button>
-                <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
             </div>
         );
     }
@@ -203,48 +181,43 @@ export function ReferralClient() {
         : 0;
 
     return (
-        <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 0 80px" }}>
+        <div className="max-w-5xl mx-auto pb-20 fade-in-up">
 
-            {/* Header */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "28px 0 24px", borderBottom: "1px solid rgba(255,255,255,.05)", marginBottom: 28 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(16,185,129,.1)", border: "1px solid rgba(16,185,129,.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <Gift size={16} style={{ color: "#34d399" }} />
+            <div className="flex items-center gap-3 py-7 border-b border-border mb-7">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                    <Gift className="w-4 h-4 text-emerald-400" />
                 </div>
                 <div>
-                    <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "rgba(255,255,255,.9)", letterSpacing: "-.02em" }}>Refer &amp; Earn</h1>
-                    <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,.3)" }}>20% recurring commission · paid monthly</p>
+                    <h1 className="text-xl font-bold tracking-tight text-foreground">Refer &amp; Earn</h1>
+                    <p className="text-[11px] text-muted-foreground">20% recurring commission · paid monthly</p>
                 </div>
                 <button
                     onClick={load}
                     title="Refresh"
-                    style={{ marginLeft: "auto", padding: "7px 10px", borderRadius: 9, background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)", color: "rgba(255,255,255,.4)", cursor: "pointer" }}
+                    className="ml-auto p-2 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                 >
-                    <RefreshCw size={13} />
+                    <RefreshCw className="w-3.5 h-3.5" />
                 </button>
             </div>
 
-            {/* Referral link box */}
-            <div style={{ padding: "20px", borderRadius: 14, background: "rgba(16,185,129,.05)", border: "1px solid rgba(16,185,129,.15)", marginBottom: 24 }}>
-                <p style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", color: "rgba(255,255,255,.35)" }}>
+            <div className="card-surface p-5 border-emerald-500/20 bg-emerald-500/5 mb-6">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2.5">
                     Your referral link
                 </p>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <div style={{ flex: 1, padding: "10px 14px", borderRadius: 9, background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)", fontSize: 13, color: "rgba(255,255,255,.7)", fontFamily: "monospace", wordBreak: "break-all" }}>
+                <div className="flex gap-2 items-center">
+                    <div className="flex-1 px-3.5 py-2.5 rounded-lg bg-card border border-border text-sm text-foreground/70 font-mono break-all">
                         {data.shareLink}
                     </div>
                     <button
                         id="copy-referral-link"
                         onClick={() => copy(data.shareLink)}
-                        style={{
-                            flexShrink: 0, display: "flex", alignItems: "center", gap: 6,
-                            padding: "10px 16px", borderRadius: 9,
-                            background: copied ? "rgba(16,185,129,.15)" : "rgba(255,255,255,.06)",
-                            border: copied ? "1px solid rgba(16,185,129,.3)" : "1px solid rgba(255,255,255,.1)",
-                            color: copied ? "#34d399" : "rgba(255,255,255,.7)",
-                            fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all .2s",
-                        }}
+                        className={`shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-bold transition-all ${
+                            copied
+                                ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400"
+                                : "bg-card border border-border text-foreground/70 hover:bg-accent"
+                        }`}
                     >
-                        {copied ? <CheckCheck size={13} /> : <Copy size={13} />}
+                        {copied ? <CheckCheck className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                         {copied ? "Copied!" : "Copy"}
                     </button>
                     <a
@@ -252,42 +225,40 @@ export function ReferralClient() {
                         target="_blank"
                         rel="noopener noreferrer"
                         title="Preview link"
-                        style={{ flexShrink: 0, padding: "10px", borderRadius: 9, background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)", color: "rgba(255,255,255,.4)", display: "flex", alignItems: "center" }}
+                        className="shrink-0 p-2.5 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground transition-colors flex items-center"
                     >
-                        <ExternalLink size={13} />
+                        <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                 </div>
-                <p style={{ margin: "10px 0 0", fontSize: 11, color: "rgba(255,255,255,.25)" }}>
-                    Referral code: <strong style={{ color: "rgba(255,255,255,.5)", fontFamily: "monospace" }}>{data.code}</strong>
+                <p className="text-[11px] text-muted-foreground mt-2.5">
+                    Referral code: <strong className="text-foreground/50 font-mono">{data.code}</strong>
                 </p>
             </div>
 
-            {/* Stats */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12, marginBottom: 28 }}>
-                <StatCard label="Signups" value={data.signups} icon={Users} accent="rgba(59,130,246,.1)" iconColor="#60a5fa" sub="people who used your link" />
-                <StatCard label="Conversions" value={data.conversions} icon={TrendingUp} accent="rgba(16,185,129,.1)" iconColor="#34d399" sub={`${conversionRate}% conversion rate`} />
-                <StatCard label="Total Earned" value={fmt$(data.totalEarnedCents)} icon={DollarSign} accent="rgba(16,185,129,.1)" iconColor="#34d399" sub="lifetime paid commissions" />
-                <StatCard label="Pending" value={fmt$(data.pendingCents)} icon={Clock} accent="rgba(251,191,36,.08)" iconColor="#fbbf24" sub="will be paid next cycle" />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-7">
+                <StatCard label="Signups" value={data.signups} icon={Users} accent="blue" sub="people who used your link" />
+                <StatCard label="Conversions" value={data.conversions} icon={TrendingUp} accent="emerald" sub={`${conversionRate}% conversion rate`} />
+                <StatCard label="Total Earned" value={fmt$(data.totalEarnedCents)} icon={DollarSign} accent="emerald" sub="lifetime paid commissions" />
+                <StatCard label="Pending" value={fmt$(data.pendingCents)} icon={Clock} accent="amber" sub="will be paid next cycle" />
             </div>
 
-            {/* Commission history */}
-            <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,.07)", background: "rgba(255,255,255,.015)", overflow: "hidden" }}>
-                <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,.06)" }}>
-                    <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "rgba(255,255,255,.4)" }}>
+            <div className="card-surface overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-border">
+                    <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                         Commission History
                     </h3>
                 </div>
-                <div style={{ padding: "0 18px" }}>
+                <div className="px-5">
                     {data.commissions.length === 0 ? (
-                        <p style={{ textAlign: "center", padding: "32px 0", fontSize: 13, color: "rgba(255,255,255,.2)", margin: 0 }}>
+                        <p className="text-center py-8 text-sm text-muted-foreground">
                             No commissions yet — share your link to get started.
                         </p>
                     ) : (
-                        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <table className="w-full text-sm">
                             <thead>
-                                <tr style={{ borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+                                <tr className="border-b border-border">
                                     {["Month", "Amount", "Status", "Date"].map(h => (
-                                        <th key={h} style={{ padding: "10px 8px", textAlign: "left", fontSize: 10, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "rgba(255,255,255,.25)" }}>
+                                        <th key={h} className="py-3 px-2 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                                             {h}
                                         </th>
                                     ))}
@@ -297,25 +268,24 @@ export function ReferralClient() {
                                 {data.commissions.map((c, i) => (
                                     <tr
                                         key={c.id}
-                                        style={{ borderBottom: i < data.commissions.length - 1 ? "1px solid rgba(255,255,255,.04)" : "none" }}
+                                        className={i < data.commissions.length - 1 ? "border-b border-border/50" : ""}
                                     >
-                                        <td style={{ padding: "10px 8px", fontSize: 12, color: "rgba(255,255,255,.7)", fontWeight: 500 }}>
+                                        <td className="py-2.5 px-2 text-xs font-medium text-foreground/70">
                                             {fmtMonth(c.month)}
                                         </td>
-                                        <td style={{ padding: "10px 8px", fontSize: 12, fontWeight: 700, color: "#34d399", fontVariantNumeric: "tabular-nums" }}>
+                                        <td className="py-2.5 px-2 text-xs font-bold text-emerald-400 tabular-nums">
                                             {fmt$(c.amountCents)}
                                         </td>
-                                        <td style={{ padding: "10px 8px" }}>
-                                            <span style={{
-                                                fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 5,
-                                                background: c.status === "paid" ? "rgba(16,185,129,.1)" : "rgba(251,191,36,.08)",
-                                                color: c.status === "paid" ? "#34d399" : "#fbbf24",
-                                                border: `1px solid ${c.status === "paid" ? "rgba(16,185,129,.2)" : "rgba(251,191,36,.15)"}`,
-                                            }}>
+                                        <td className="py-2.5 px-2">
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                                                c.status === "paid"
+                                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                                    : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                            }`}>
                                                 {c.status === "paid" ? "Paid" : "Pending"}
                                             </span>
                                         </td>
-                                        <td style={{ padding: "10px 8px", fontSize: 11, color: "rgba(255,255,255,.25)" }}>
+                                        <td className="py-2.5 px-2 text-[11px] text-muted-foreground">
                                             {new Date(c.createdAt).toLocaleDateString()}
                                         </td>
                                     </tr>
@@ -325,8 +295,6 @@ export function ReferralClient() {
                     )}
                 </div>
             </div>
-
-            <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </div>
     );
 }

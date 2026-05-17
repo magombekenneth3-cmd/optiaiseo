@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { SignupForm } from "@/components/auth/SignupForm";
+import { Gift, Bot, FileText, BarChart3, Search } from "lucide-react";
 
 export const metadata: Metadata = {
     title: "Sign Up — Start Free | OptiAISEO",
@@ -10,11 +11,11 @@ export const metadata: Metadata = {
 };
 
 const freePerks = [
-    { icon: "🎁", text: "7-day full Pro trial — no credit card required" },
-    { icon: "🤖", text: "AEO visibility tracking (ChatGPT, Gemini, Perplexity)" },
-    { icon: "✍️", text: "AI-powered blog posts — SEO-optimised in minutes" },
-    { icon: "📊", text: "Google Search Console integration" },
-    { icon: "🔍", text: "5 audits per month included free" },
+    { icon: Gift, text: "7-day full Pro trial — no credit card required" },
+    { icon: Bot, text: "AEO visibility tracking (ChatGPT, Gemini, Perplexity)" },
+    { icon: FileText, text: "AI-powered blog posts — SEO-optimised in minutes" },
+    { icon: BarChart3, text: "Google Search Console integration" },
+    { icon: Search, text: "5 audits per month included free" },
 ];
 
 export default function SignupPage() {
@@ -39,9 +40,11 @@ export default function SignupPage() {
                 </p>
 
                 <ul className="space-y-4 mb-10">
-                    {freePerks.map(({ icon, text }) => (
+                    {freePerks.map(({ icon: Icon, text }) => (
                         <li key={text} className="flex items-center gap-3">
-                            <span className="text-lg shrink-0 w-8 text-center">{icon}</span>
+                            <span className="w-8 h-8 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center shrink-0">
+                                <Icon className="w-4 h-4 text-brand" />
+                            </span>
                             <span className="text-sm font-medium text-foreground">{text}</span>
                         </li>
                     ))}
@@ -87,9 +90,9 @@ export default function SignupPage() {
 
                     {/* Mobile perks — shown inline below heading on small screens */}
                     <ul className="lg:hidden mt-4 flex flex-wrap justify-center gap-2">
-                        {freePerks.map(({ icon, text }) => (
+                        {freePerks.map(({ icon: Icon, text }) => (
                             <li key={text} className="text-xs font-medium px-2.5 py-1 rounded-full bg-card border border-border text-muted-foreground flex items-center gap-1">
-                                <span>{icon}</span> {text}
+                                <Icon className="w-3 h-3" /> {text}
                             </li>
                         ))}
                     </ul>

@@ -488,10 +488,10 @@ function AddForm({ siteId, onAdded, existingCount }: { siteId: string; onAdded: 
 
 
 const DETECT_STEPS = [
-  { icon: "🔍", label: "Scraping site pages for services…" },
-  { icon: "🌐", label: "Searching SERPs for service-matched sites…" },
-  { icon: "🤖", label: "AI verifying direct competitors…" },
-  { icon: "✅", label: "Saving verified competitors…" },
+  { icon: Search, label: "Scraping site pages for services…" },
+  { icon: Globe, label: "Searching SERPs for service-matched sites…" },
+  { icon: Sparkles, label: "AI verifying direct competitors…" },
+  { icon: CheckCircle2, label: "Saving verified competitors…" },
 ];
 
 export function CompetitorsDashboard({ sites, activeSiteId, activeSiteDomain, competitors: init, isPaid, tier }: Props) {
@@ -585,6 +585,7 @@ export function CompetitorsDashboard({ sites, activeSiteId, activeSiteDomain, co
               {DETECT_STEPS.map((step, i) => {
                 const isDone   = i < detectStep;
                 const isActive = i === detectStep;
+                const StepIcon = step.icon;
                 return (
                   <div
                     key={i}
@@ -595,8 +596,8 @@ export function CompetitorsDashboard({ sites, activeSiteId, activeSiteDomain, co
                       opacity: isDone ? 0.45 : i > detectStep ? 0.28 : 1,
                     }}
                   >
-                    <span className="text-base w-6 text-center shrink-0">
-                      {isDone ? "✅" : isActive ? step.icon : "⏳"}
+                    <span className="w-6 flex items-center justify-center shrink-0">
+                      {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <StepIcon className={`w-4 h-4 ${isActive ? "text-violet-400" : "text-muted-foreground"}`} />}
                     </span>
                     <span className={`text-xs font-medium flex-1 ${
                       isActive ? "text-violet-300" : isDone ? "text-muted-foreground line-through" : "text-muted-foreground"
