@@ -1228,6 +1228,305 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
         </div>
       </section>
 
+      {/* ── SEO Guide Content — comprehensive H2 sections for content depth ── */}
+      <section
+        id="seo-guide"
+        aria-labelledby="seo-guide-heading"
+        className="relative py-24 border-t border-border bg-muted/20"
+      >
+        <div className="max-w-4xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <p className="text-xs font-bold uppercase tracking-widest text-brand mb-3">The Complete SEO Guide</p>
+            <h2
+              id="seo-guide-heading"
+              className="text-3xl md:text-5xl font-bold tracking-tight mb-4"
+            >
+              Everything you need to know about SEO
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+              Search Engine Optimization is the practice of improving your website so it ranks higher in search results.
+              Whether you&apos;re new to SEO or looking to refine your strategy, this guide covers the fundamentals
+              that top-ranking pages share — from how Google discovers content to optimizing your images for search.
+            </p>
+          </div>
+
+          {/* Table of Contents */}
+          <nav aria-label="Guide table of contents" className="card-surface rounded-2xl p-6 mb-12">
+            <p className="text-sm font-bold mb-4 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-brand/10 flex items-center justify-center">
+                <Sparkles className="w-3.5 h-3.5 text-brand" />
+              </span>
+              In this guide
+            </p>
+            <ol className="grid grid-cols-1 sm:grid-cols-2 gap-2 list-none">
+              {[
+                { href: "#why-seo-important", label: "Why is SEO important?" },
+                { href: "#how-google-works", label: "How does Google Search work?" },
+                { href: "#seo-results-timeline", label: "How long until I see results?" },
+                { href: "#help-google-find-content", label: "Help Google find your content" },
+                { href: "#organize-your-site", label: "Organize your site" },
+                { href: "#make-content-useful", label: "Make your site interesting and useful" },
+                { href: "#influence-serp-appearance", label: "Influence how your site looks in search" },
+                { href: "#optimize-images", label: "Add and optimize images" },
+              ].map((item, i) => (
+                <li key={item.href}>
+                  <a
+                    href={item.href}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  >
+                    <span className="w-5 h-5 rounded-full bg-brand/10 text-brand text-xs font-bold flex items-center justify-center shrink-0">
+                      {i + 1}
+                    </span>
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </nav>
+
+          {/* Video embed */}
+          <div className="mb-16 rounded-2xl overflow-hidden border border-border">
+            <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+              <iframe
+                className="absolute top-0 left-0 w-full h-full"
+                src="https://www.youtube.com/embed/nKF1GFEGqlE"
+                title="What is SEO? Search Engine Optimization explained"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                loading="lazy"
+              />
+            </div>
+            <div className="px-5 py-3 bg-card text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">Watch:</span> What is SEO and how does it work? A visual explainer.
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-16">
+
+            {/* H2 1: Why is SEO important? */}
+            <article id="why-seo-important">
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
+                Why is SEO important?
+              </h2>
+              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
+                <p>
+                  SEO is the single most cost-effective channel for sustainable organic growth. Unlike paid advertising where traffic stops the moment you stop spending, rankings earned through SEO compound over time — a well-optimized page can generate traffic for years with minimal ongoing cost.
+                </p>
+                <p>
+                  Consider this: Google processes over{" "}
+                  <a href="https://www.internetlivestats.com/google-search-statistics/" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline font-medium">
+                    8.5 billion searches per day
+                  </a>. The first page of results captures over 90% of all clicks, and the top three positions alone account for roughly 55% of click-through rates. If your website isn&apos;t ranking, you&apos;re invisible to the vast majority of your potential customers.
+                </p>
+                <p>
+                  For businesses, SEO drives qualified intent-based traffic — people actively searching for what you offer. A user searching &ldquo;best project management tool for remote teams&rdquo; has far higher purchase intent than someone scrolling past a social media ad. That&apos;s why SEO consistently delivers the highest ROI of any digital marketing channel, according to{" "}
+                  <a href="https://www.brightedge.com/resources/research-reports/organic-search-still-largest-channel" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline font-medium">
+                    BrightEdge research
+                  </a>{" "}
+                  showing organic search drives 53% of all website traffic.
+                </p>
+                <p>
+                  In 2025, SEO has expanded beyond traditional blue links. With AI Overviews, featured snippets, and answer engines like ChatGPT and Perplexity citing sources directly, optimizing for search now means optimizing for AI visibility too — a discipline known as Answer Engine Optimization (AEO).
+                </p>
+              </div>
+            </article>
+
+            {/* H2 2: How does Google Search work? */}
+            <article id="how-google-works">
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
+                How does Google Search work?
+              </h2>
+              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
+                <p>
+                  Google Search operates in three stages: crawling, indexing, and ranking. Understanding each stage is essential for diagnosing why a page isn&apos;t performing.
+                </p>
+                <p>
+                  <strong className="text-foreground">Crawling</strong> is how Google discovers content. Googlebot — Google&apos;s web crawler — follows links from known pages to find new and updated content. If your pages aren&apos;t linked from anywhere, or if your <code className="px-1.5 py-0.5 rounded bg-card border border-border text-xs">robots.txt</code> blocks access, Google won&apos;t even know they exist.
+                </p>
+                <p>
+                  <strong className="text-foreground">Indexing</strong> is the analysis phase. Once Googlebot fetches a page, Google processes the content — reading text, cataloging images, parsing structured data, and understanding entity relationships. Pages that are thin, duplicate, or blocked by a <code className="px-1.5 py-0.5 rounded bg-card border border-border text-xs">noindex</code> tag will not be added to the index.
+                </p>
+                <p>
+                  <strong className="text-foreground">Ranking</strong> is where Google decides the order of results. Google evaluates hundreds of signals including content relevance, page experience (Core Web Vitals), backlink authority, and E-E-A-T (Experience, Expertise, Authoritativeness, Trustworthiness). According to{" "}
+                  <a href="https://developers.google.com/search/docs/fundamentals/seo-starter-guide" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline font-medium">
+                    Google&apos;s own SEO starter guide
+                  </a>, the most fundamental step is ensuring your content is useful, reliable, and people-first.
+                </p>
+                <p>
+                  OptiAISEO automates all three stages: we submit sitemaps to Google, detect indexing issues, analyze ranking signals against competitors, and auto-fix technical problems that prevent your content from performing.
+                </p>
+              </div>
+            </article>
+
+            {/* H2 3: How long until I see results? */}
+            <article id="seo-results-timeline">
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
+                How long until I see impact in search results?
+              </h2>
+              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
+                <p>
+                  SEO is not instant. Most websites see measurable ranking improvements within 4 to 6 months of consistent optimization work. Technical fixes like schema markup or Core Web Vitals improvements can show impact within weeks, but content-driven gains and backlink authority take longer to compound.
+                </p>
+                <p>
+                  The timeline depends on three factors: your current domain authority, the competitiveness of your target keywords, and the quality of your execution. A new domain targeting &ldquo;best CRM software&rdquo; will take significantly longer than an established site targeting a long-tail phrase like &ldquo;CRM for freelance consultants.&rdquo;
+                </p>
+                <p>
+                  Google has stated that it can take{" "}
+                  <a href="https://developers.google.com/search/docs/fundamentals/do-i-need-seo" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline font-medium">
+                    four months to a year
+                  </a>{" "}
+                  before you begin to see benefits from SEO changes. The key is consistency: sites that publish high-quality content regularly, fix technical issues promptly, and build authoritative backlinks outperform competitors who treat SEO as a one-time project.
+                </p>
+                <p>
+                  OptiAISEO accelerates this timeline by automating the repetitive work — weekly audits, auto-generated content, schema injection, and continuous monitoring — so you build momentum faster than doing everything manually.
+                </p>
+              </div>
+            </article>
+
+            {/* H2 4: Help Google find your content */}
+            <article id="help-google-find-content">
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
+                Help Google find your content
+              </h2>
+              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
+                <p>
+                  The first step in SEO is making sure Google can actually discover your pages. A page that isn&apos;t crawled can never be indexed, and a page that isn&apos;t indexed can never rank.
+                </p>
+                <p>
+                  <strong className="text-foreground">Submit a sitemap.</strong> An XML sitemap is a structured file that tells Google about every important page on your site. Submit it through Google Search Console to ensure complete coverage. OptiAISEO generates and monitors your sitemap automatically.
+                </p>
+                <p>
+                  <strong className="text-foreground">Use internal links strategically.</strong> Every page on your site should be reachable within 3 clicks from your homepage. Orphan pages — those with no internal links pointing to them — are the most common cause of crawl gaps. OptiAISEO&apos;s internal link optimizer identifies orphan pages and suggests contextual linking opportunities.
+                </p>
+                <p>
+                  <strong className="text-foreground">Check your robots.txt.</strong> A misconfigured <code className="px-1.5 py-0.5 rounded bg-card border border-border text-xs">robots.txt</code> file can accidentally block critical pages from being crawled. Common mistakes include blocking CSS/JS files (which prevents Google from rendering your page) or accidentally disallowing entire directories. OptiAISEO audits your robots.txt configuration in every technical audit.
+                </p>
+                <p>
+                  <strong className="text-foreground">Request indexing for new pages.</strong> When you publish new content, use the URL Inspection tool in Google Search Console to request indexing. This speeds up the discovery process from days to hours.
+                </p>
+              </div>
+            </article>
+
+            {/* H2 5: Organize your site */}
+            <article id="organize-your-site">
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
+                Organize your site for better rankings
+              </h2>
+              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
+                <p>
+                  Site architecture directly impacts how Google understands and ranks your content. A well-organized site makes it easier for crawlers to navigate, users to find information, and search engines to determine which pages are most important.
+                </p>
+                <p>
+                  <strong className="text-foreground">Use a logical URL structure.</strong> URLs should be descriptive, readable, and follow a consistent hierarchy. For example, <code className="px-1.5 py-0.5 rounded bg-card border border-border text-xs">/blog/seo-guide</code> is better than <code className="px-1.5 py-0.5 rounded bg-card border border-border text-xs">/p?id=4827</code>. Good URL structure helps both users and search engines understand your content before they even visit the page.
+                </p>
+                <p>
+                  <strong className="text-foreground">Implement breadcrumb navigation.</strong> Breadcrumbs show users and search engines the path from the homepage to the current page. Google displays breadcrumbs in search results, improving click-through rates. Add BreadcrumbList schema to your pages — OptiAISEO injects this automatically during technical audits.
+                </p>
+                <p>
+                  <strong className="text-foreground">Create content hubs.</strong> Group related content under pillar pages with supporting cluster content linked back to the pillar. This topical authority structure signals to Google that you have comprehensive coverage of a subject, which is a key ranking factor in 2025.
+                </p>
+                <p>
+                  <strong className="text-foreground">Use heading hierarchy correctly.</strong> Every page should have a single H1 tag, followed by H2s for main sections and H3s for subsections. This hierarchical structure helps Google understand topic relationships within your content. Our audit reports flag heading hierarchy issues automatically.
+                </p>
+              </div>
+            </article>
+
+            {/* H2 6: Make your site interesting and useful */}
+            <article id="make-content-useful">
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
+                Make your site interesting and useful
+              </h2>
+              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
+                <p>
+                  Content quality is the most important ranking factor in 2025. Google&apos;s Helpful Content System evaluates whether your pages are written primarily for people, not search engines. Pages that provide genuine value consistently outrank those optimized purely for keywords.
+                </p>
+                <p>
+                  <strong className="text-foreground">Answer real questions.</strong> Use tools like Google&apos;s &ldquo;People Also Ask&rdquo; and Answer The Public to identify questions your audience is actually asking. Structure your content to provide clear, direct answers — this is also how you get cited in AI Overviews and featured snippets.
+                </p>
+                <p>
+                  <strong className="text-foreground">Go deeper than competitors.</strong> If the average top-ranking page for your keyword has 3,000 words and covers 12 subtopics, writing a 500-word overview won&apos;t rank. OptiAISEO&apos;s SERP Gap Analysis shows you exactly how your content compares to competitors — word count, heading structure, topic coverage, and E-E-A-T signals.
+                </p>
+                <p>
+                  <strong className="text-foreground">Include original data and expert insights.</strong> Content that contains original statistics, case studies, or expert quotes earns more backlinks and is more likely to be cited by AI models. According to a{" "}
+                  <a href="https://backlinko.com/search-engine-ranking" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline font-medium">
+                    Backlinko study of 11.8 million search results
+                  </a>, the average first-page result contains comprehensive, in-depth content that thoroughly covers the topic.
+                </p>
+                <p>
+                  <strong className="text-foreground">Keep content fresh.</strong> Update your most important pages regularly with new data, examples, and insights. Google tracks content freshness — pages that haven&apos;t been updated in years gradually lose ranking authority. OptiAISEO&apos;s content decay alerts notify you when a high-performing page starts losing traffic.
+                </p>
+              </div>
+            </article>
+
+            {/* H2 7: Influence how your site looks in Google Search */}
+            <article id="influence-serp-appearance">
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
+                Influence how your site looks in Google Search
+              </h2>
+              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
+                <p>
+                  How your pages appear in search results directly impacts click-through rates. A compelling title, clear description, and rich snippets can double your CTR at the same ranking position.
+                </p>
+                <p>
+                  <strong className="text-foreground">Write compelling title tags.</strong> Your title tag is the most visible element in search results. Keep it under 60 characters, include your primary keyword near the beginning, and make it compelling enough to click. Avoid generic titles like &ldquo;Home&rdquo; or &ldquo;Untitled&rdquo; — every page should have a unique, descriptive title.
+                </p>
+                <p>
+                  <strong className="text-foreground">Craft meta descriptions that sell.</strong> While meta descriptions don&apos;t directly affect rankings, they significantly impact CTR. Write 150-160 character descriptions that summarize the page&apos;s value proposition and include a call-to-action. If you don&apos;t provide one, Google will generate its own — and it rarely matches your intent.
+                </p>
+                <p>
+                  <strong className="text-foreground">Implement structured data (schema markup).</strong> JSON-LD schema enables rich results in Google — star ratings, FAQ dropdowns, product prices, event dates, and more. Pages with rich results see CTR increases of 20-30% on average. OptiAISEO detects missing schema opportunities and can auto-inject the markup via GitHub PR.
+                </p>
+                <p>
+                  <strong className="text-foreground">Optimize for sitelinks.</strong> Sitelinks are the sub-links Google shows beneath your main result. To earn them, use clear navigation, descriptive anchor text for internal links, and ensure your most important pages are well-linked. A table of contents with anchor links also increases your chances of earning sitelinks.
+                </p>
+              </div>
+            </article>
+
+            {/* H2 8: Add images and optimize them */}
+            <article id="optimize-images">
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
+                Add images to your site, and optimize them
+              </h2>
+              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
+                <p>
+                  Visual content breaks up text, reduces bounce rates, and creates additional ranking opportunities through Google Images. Pages with relevant images consistently outperform text-only pages in both engagement metrics and search rankings.
+                </p>
+                <p>
+                  <strong className="text-foreground">Use descriptive alt text.</strong> Alt text is the primary way Google understands what an image contains. Write natural, descriptive alt text that accurately describes the image — &ldquo;Screenshot of Google Search Console performance report showing organic traffic growth&rdquo; is far better than &ldquo;image1.png&rdquo; or leaving it blank entirely.
+                </p>
+                <p>
+                  <strong className="text-foreground">Compress images for performance.</strong> Large image files are the number one cause of slow page loads, and page speed is a confirmed ranking factor. Use modern formats like WebP or AVIF, and implement lazy loading for images below the fold. Every second of load time delay reduces conversions by roughly 7%.
+                </p>
+                <p>
+                  <strong className="text-foreground">Use original visuals when possible.</strong> Custom screenshots, diagrams, infographics, and data visualizations perform significantly better than generic stock photos. They&apos;re also more likely to earn backlinks when other sites reference your visual content. Tools like Canva, Figma, or even simple annotated screenshots can dramatically improve content quality.
+                </p>
+                <p>
+                  <strong className="text-foreground">Add descriptive filenames.</strong> Before uploading, rename image files to be descriptive: <code className="px-1.5 py-0.5 rounded bg-card border border-border text-xs">seo-audit-dashboard.webp</code> tells Google what the image is about, while <code className="px-1.5 py-0.5 rounded bg-card border border-border text-xs">IMG_4382.jpg</code> provides zero context. OptiAISEO flags images with non-descriptive filenames during audits.
+                </p>
+              </div>
+            </article>
+
+          </div>
+
+          {/* CTA within guide */}
+          <div className="mt-16 text-center">
+            <div className="card-surface rounded-2xl p-8 inline-block max-w-lg mx-auto">
+              <h3 className="text-lg font-bold mb-2">Ready to fix your SEO?</h3>
+              <p className="text-sm text-muted-foreground mb-5">
+                OptiAISEO identifies every gap shown in this guide — content depth, schema, technical issues, and AI visibility — then auto-generates the fixes.
+              </p>
+              <Link
+                href="/signup"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-foreground text-background font-bold text-sm hover:opacity-90 transition-all active:scale-95"
+              >
+                <Zap className="w-4 h-4" />
+                Start your free audit
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── Pre-footer CTA ────────────────────────────────────────────────── */}
       <section className="relative py-24 border-t border-zinc-800/40 bg-zinc-950 text-white overflow-hidden">
         <div
