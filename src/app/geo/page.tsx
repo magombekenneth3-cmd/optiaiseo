@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 
 const schemas = [
   { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Home", item: SITE_URL }, { "@type": "ListItem", position: 2, name: "GEO Guide", item: PAGE_URL }] },
-  { "@context": "https://schema.org", "@type": "Article", headline: TITLE, description: DESC, url: PAGE_URL, datePublished: "2024-06-01", dateModified: new Date().toISOString().split("T")[0], author: { "@type": "Organization", name: "OptiAISEO", url: SITE_URL }, publisher: { "@type": "Organization", name: "OptiAISEO", url: SITE_URL } },
+  { "@context": "https://schema.org", "@type": "Article", headline: TITLE, description: DESC, url: PAGE_URL, datePublished: "2024-06-01", dateModified: new Date().toISOString().split("T")[0], author: { "@type": "Organization", name: "OptiAISEO", url: SITE_URL }, publisher: { "@type": "Organization", name: "OptiAISEO", url: SITE_URL }, speakable: { "@type": "SpeakableSpecification", cssSelector: ["h1", "#geo-definition", "h2", "#faq-heading"] } },
   {
     "@context": "https://schema.org", "@type": "FAQPage", mainEntity: [
       { q: "What is Generative Engine Optimization (GEO)?", a: "GEO is the practice of optimizing your website so that AI systems — ChatGPT, Claude, Perplexity, Google AI Overviews — cite your brand when answering user queries." },

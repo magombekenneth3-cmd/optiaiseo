@@ -19,30 +19,25 @@ const FOR_CONTENT_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "WebPage",
   "name": "AI Content SEO Platform for Content Teams | OptiAISEO",
-  "url": "https://optiaiseo.online/for-content",
+  "url": `${SITE_URL}/for-content`,
   "description": "Find keyword gaps, auto-generate SEO articles, and publish them directly to your CMS with OptiAISEO.",
-  "publisher": {
-    "@type": "Organization",
-    "name": "OptiAISEO",
-    "url": "https://optiaiseo.online",
-    "logo": {
-      "@type": "ImageObject",
-      "url": "https://optiaiseo.online/logo.png"
-    }
-  },
+  "speakable": { "@type": "SpeakableSpecification", "cssSelector": ["h1", "h2", "[data-speakable]"] },
+  "breadcrumb": { "@type": "BreadcrumbList", "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": "Home", "item": SITE_URL },
+    { "@type": "ListItem", "position": 2, "name": "For Content Teams", "item": `${SITE_URL}/for-content` },
+  ]},
+  "publisher": { "@type": "Organization", "name": "OptiAISEO", "url": SITE_URL, "logo": { "@type": "ImageObject", "url": `${SITE_URL}/favicon.ico` } },
   "about": {
     "@type": "Service",
     "name": "AI-Powered Content SEO Platform",
-    "url": "https://optiaiseo.online/for-content",
-    "provider": {
-      "@type": "Organization",
-      "name": "OptiAISEO",
-      "url": "https://optiaiseo.online"
-    },
+    "serviceType": "Content Marketing Technology",
+    "url": `${SITE_URL}/for-content`,
+    "areaServed": { "@type": "Place", "name": "Global" },
+    "provider": { "@type": "Organization", "name": "OptiAISEO", "url": SITE_URL },
     "offers": [
-      { "@type": "Offer", "name": "Free Plan", "price": "0", "priceCurrency": "USD", "url": "https://optiaiseo.online/signup" },
-      { "@type": "Offer", "name": "Pro Plan", "price": "49", "priceCurrency": "USD", "url": "https://optiaiseo.online/pricing" },
-      { "@type": "Offer", "name": "Agency Plan", "price": "99", "priceCurrency": "USD", "url": "https://optiaiseo.online/pricing" }
+      { "@type": "Offer", "name": "Free Plan", "price": "0", "priceCurrency": "USD", "url": `${SITE_URL}/signup` },
+      { "@type": "Offer", "name": "Pro Plan", "price": "49", "priceCurrency": "USD", "url": `${SITE_URL}/pricing` },
+      { "@type": "Offer", "name": "Agency Plan", "price": "149", "priceCurrency": "USD", "url": `${SITE_URL}/pricing` }
     ]
   }
 };

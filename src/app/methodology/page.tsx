@@ -27,17 +27,30 @@ const METHODOLOGY_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "TechArticle",
   "name": "AEO Methodology - How We Measure AI Search Visibility | OptiAISEO",
-  "url": "https://optiaiseo.online/methodology",
-  "description": "Our methodology for measuring AEO scores: AI engines queried, citation detection, and accuracy validation.",
+  "url": `${METHODOLOGY_SITE_URL}/methodology`,
+  "description": "Our methodology for measuring AEO scores: AI engines queried, citation detection, accuracy validation, and known limitations.",
+  "speakable": {
+    "@type": "SpeakableSpecification",
+    "cssSelector": ["h1", "h2", "section p"],
+  },
+  "breadcrumb": {
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": METHODOLOGY_SITE_URL },
+      { "@type": "ListItem", "position": 2, "name": "Methodology", "item": `${METHODOLOGY_SITE_URL}/methodology` },
+    ],
+  },
   "publisher": {
     "@type": "Organization",
     "name": "OptiAISEO",
-    "url": "https://optiaiseo.online",
-    "logo": {
-      "@type": "ImageObject",
-      "url": "https://optiaiseo.online/logo.png"
-    }
-  }
+    "url": METHODOLOGY_SITE_URL,
+    "logo": { "@type": "ImageObject", "url": `${METHODOLOGY_SITE_URL}/favicon.ico` }
+  },
+  "about": {
+    "@type": "Thing",
+    "name": "Answer Engine Optimization (AEO)",
+    "description": "The practice of optimizing content for AI-powered search engines and answer engines like ChatGPT, Perplexity, Claude, and Google AI Overviews.",
+  },
 };
 
 export default function MethodologyPage() {

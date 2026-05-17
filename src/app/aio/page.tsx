@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 const schemas = [
   { "@context":"https://schema.org","@type":"BreadcrumbList", itemListElement:[{"@type":"ListItem",position:1,name:"Home",item:SITE_URL},{"@type":"ListItem",position:2,name:"AIO Guide",item:PAGE_URL}] },
-  { "@context":"https://schema.org","@type":"Article", headline:TITLE,description:DESC,url:PAGE_URL, datePublished:"2024-08-01",dateModified:new Date().toISOString().split("T")[0], author:{"@type":"Organization",name:"OptiAISEO",url:SITE_URL},publisher:{"@type":"Organization",name:"OptiAISEO",url:SITE_URL} },
+  { "@context":"https://schema.org","@type":"Article", headline:TITLE,description:DESC,url:PAGE_URL, datePublished:"2024-08-01",dateModified:new Date().toISOString().split("T")[0], author:{"@type":"Organization",name:"OptiAISEO",url:SITE_URL},publisher:{"@type":"Organization",name:"OptiAISEO",url:SITE_URL}, speakable:{"@type":"SpeakableSpecification",cssSelector:["h1","#aio-definition","h2","#faq-heading"]} },
   { "@context":"https://schema.org","@type":"FAQPage", mainEntity:[
     {q:"What is AI Optimization (AIO)?",a:"AIO is the discipline of ensuring AI language models correctly understand your brand — your products, expertise, geography, and identity — so they accurately represent it in AI-generated answers."},
     {q:"Why does it matter if AI misrepresents my brand?",a:"AI models are now the first point of research for millions of users. If AI describes your brand incorrectly — wrong services, wrong location, outdated products — you lose potential customers before they ever visit your site."},

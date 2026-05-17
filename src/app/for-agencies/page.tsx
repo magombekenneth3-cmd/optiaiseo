@@ -19,30 +19,44 @@ const FOR_AGENCIES_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "WebPage",
   "name": "White-Label SEO Platform for Agencies | OptiAISEO",
-  "url": "https://optiaiseo.online/for-agencies",
+  "url": `${SITE_URL}/for-agencies`,
   "description": "Manage unlimited client sites, generate white-label reports, auto-publish SEO fixes, and track AI citation scores.",
+  "speakable": {
+    "@type": "SpeakableSpecification",
+    "cssSelector": ["h1", "h2", "[data-speakable]"],
+  },
+  "breadcrumb": {
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": SITE_URL },
+      { "@type": "ListItem", "position": 2, "name": "Solutions", "item": `${SITE_URL}/for-agencies` },
+      { "@type": "ListItem", "position": 3, "name": "For Agencies", "item": `${SITE_URL}/for-agencies` },
+    ],
+  },
   "publisher": {
     "@type": "Organization",
     "name": "OptiAISEO",
-    "url": "https://optiaiseo.online",
+    "url": SITE_URL,
     "logo": {
       "@type": "ImageObject",
-      "url": "https://optiaiseo.online/logo.png"
+      "url": `${SITE_URL}/favicon.ico`
     }
   },
   "about": {
     "@type": "Service",
     "name": "White-Label SEO & AEO Platform",
-    "url": "https://optiaiseo.online/for-agencies",
+    "serviceType": "Digital Marketing Technology",
+    "url": `${SITE_URL}/for-agencies`,
     "provider": {
       "@type": "Organization",
       "name": "OptiAISEO",
-      "url": "https://optiaiseo.online"
+      "url": SITE_URL
     },
+    "areaServed": { "@type": "Place", "name": "Global" },
     "offers": [
-      { "@type": "Offer", "name": "Free Plan", "price": "0", "priceCurrency": "USD", "url": "https://optiaiseo.online/signup" },
-      { "@type": "Offer", "name": "Pro Plan", "price": "49", "priceCurrency": "USD", "url": "https://optiaiseo.online/pricing" },
-      { "@type": "Offer", "name": "Agency Plan", "price": "99", "priceCurrency": "USD", "url": "https://optiaiseo.online/pricing" }
+      { "@type": "Offer", "name": "Free Plan", "price": "0", "priceCurrency": "USD", "url": `${SITE_URL}/signup` },
+      { "@type": "Offer", "name": "Pro Plan", "price": "49", "priceCurrency": "USD", "url": `${SITE_URL}/pricing` },
+      { "@type": "Offer", "name": "Agency Plan", "price": "149", "priceCurrency": "USD", "url": `${SITE_URL}/pricing` }
     ]
   }
 };

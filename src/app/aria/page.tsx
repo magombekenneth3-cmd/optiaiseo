@@ -24,9 +24,60 @@ export const metadata: Metadata = {
   },
 };
 
+const ariaSchema = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Aria — AI Voice SEO Agent",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+  description: "Aria is a real-time voice AI agent for SEO. She reads audit results, explains issues in plain language, opens GitHub PRs to fix them, and critiques live site UX — all by voice with sub-second latency. Powered by Gemini 2.5 Flash and LiveKit WebRTC.",
+  url: `${SITE_URL}/aria`,
+  featureList: [
+    "Sub-second voice latency via Gemini 2.5 Live API",
+    "Full barge-in support — interrupt mid-sentence",
+    "Visual Playwright critiques of live site UX",
+    "GitHub auto-fix Pull Requests by voice command",
+    "Audit walkthrough and issue explanation",
+    "Keyword and competitor analysis by voice",
+  ],
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
+    description: "Free trial included with all OptiAISEO plans",
+    url: `${SITE_URL}/signup`,
+  },
+  provider: {
+    "@type": "Organization",
+    name: "OptiAISEO",
+    url: SITE_URL,
+  },
+};
+
+const ariaPageSchema = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  name: "Manage SEO by Voice — Meet Aria | OptiAISEO",
+  url: `${SITE_URL}/aria`,
+  description: "Meet Aria — your AI voice SEO agent. Manage keyword tracking, content, and site fixes hands-free. The future of SEO is a conversation.",
+  speakable: {
+    "@type": "SpeakableSpecification",
+    cssSelector: ["h1", "main p"],
+  },
+  breadcrumb: {
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: "Aria", item: `${SITE_URL}/aria` },
+    ],
+  },
+};
+
 export default function AriaLandingPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ariaSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ariaPageSchema) }} />
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-xl border-b border-border">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">

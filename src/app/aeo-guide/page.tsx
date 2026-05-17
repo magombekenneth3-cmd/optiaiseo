@@ -19,6 +19,43 @@ export const metadata: Metadata = {
   },
 };
 
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+
+const aeoGuideSchema = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: "AEO Guides – Answer Engine Optimization Hub",
+  url: `${SITE_URL}/aeo-guide`,
+  description: "Browse 60+ AEO guides covering how to rank in ChatGPT, Perplexity, and Google AI Overviews. Updated for 2026.",
+  publisher: {
+    "@type": "Organization",
+    name: "OptiAISEO",
+    url: SITE_URL,
+  },
+  speakable: {
+    "@type": "SpeakableSpecification",
+    cssSelector: ["h1", "header p"],
+  },
+  breadcrumb: {
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: "AEO Guides", item: `${SITE_URL}/aeo-guide` },
+    ],
+  },
+  mainEntity: {
+    "@type": "ItemList",
+    name: "Answer Engine Optimization Guides",
+    numberOfItems: (AEO_PAGES as AeoPage[]).length,
+    itemListElement: (AEO_PAGES as AeoPage[]).slice(0, 20).map((p, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name: p.title,
+      url: `${SITE_URL}/aeo-guide/${p.slug}`,
+    })),
+  },
+};
+
 const INTENT_META: Record<string, { label: string; color: string; description: string }> = {
   definition: { label: "Definitions",       color: "bg-blue-500/10 text-blue-400 border-blue-500/20",     description: "Understand the core concepts" },
   comparison: { label: "Comparisons",       color: "bg-orange-500/10 text-orange-400 border-orange-500/20", description: "AEO vs SEO vs GEO — head-to-head" },
@@ -33,6 +70,8 @@ export default function AeoGuideIndexPage() {
   const pages = AEO_PAGES as AeoPage[];
 
   return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(aeoGuideSchema) }} />
     <main className="max-w-5xl mx-auto px-4 py-12 text-foreground">
       <header className="mb-10 text-center">
         <span className="inline-flex mb-3 px-3 py-1 rounded-full text-xs font-bold uppercase bg-violet-500/10 text-violet-400 border border-violet-500/20">
@@ -93,5 +132,6 @@ export default function AeoGuideIndexPage() {
         </Link>
       </section>
     </main>
+    </>
   );
 }
