@@ -164,6 +164,7 @@ Return ONLY a valid JSON object with this exact structure:
 
 Rules:
 - Generate 8-12 tasks total across 4 weeks
+- EVERY week (1-4) MUST have at least 1 task. Week 4 must include monitoring, internal linking, and promotion tasks.
 - contentBlueprint: generate one entry per missing topic from the MISSING TOPICS list above (up to 8)
 - authorityRoadmap: generate 4-6 concrete link-building steps relevant to this specific keyword/niche
 - Week 1: Critical and high-priority quick wins
@@ -193,7 +194,7 @@ export async function generateImplementationPlan(
         const prompt = buildPlanPrompt(report);
         const raw = await callGeminiJson<Omit<ImplementationPlan, "keyword" | "clientUrl" | "clientCurrentPosition" | "generatedAt">>(
             prompt,
-            { maxOutputTokens: 4096, temperature: 0.2 }
+            { maxOutputTokens: 6144, temperature: 0.2 }
         );
 
         if (!raw || !raw.tasks?.length) {

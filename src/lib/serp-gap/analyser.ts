@@ -412,6 +412,23 @@ function computeGaps(client: PageSignals, competitors: PageSignals[]): ContentGa
         });
     }
 
+    // Domain authority / referring domains gap
+    // Uses external link count as a scrape-accessible proxy for site authority.
+    // Pages ranking top-5 for competitive terms typically have far more inbound/outbound citation signals.
+    const avgExtLinks = avg((p) => p.externalLinkCount);
+    const extLinkGap = avgExtLinks - client.externalLinkCount;
+    if (extLinkGap > 5) {
+        const authGapLevel: ContentGap["gap"] = extLinkGap > 30 ? "critical" : extLinkGap > 15 ? "high" : "medium";
+        gaps.push({
+            dimension: "Domain authority (referring domains)",
+            clientValue: client.externalLinkCount,
+            topCompetitorAvg: avgExtLinks,
+            gap: authGapLevel,
+            impact: `Top-ranking competitors have ~${avgExtLinks} external links on their pages vs. your ${client.externalLinkCount}. This reflects a significant authority gap that content alone cannot close. Pages at position ${client.position}+ for competitive keywords typically need sustained link-building to break into the top 30.`,
+            recommendation: `1. Run an Ahrefs/Moz Link Intersect audit to find domains linking to 2+ competitors but not you.\n2. Launch broken-link outreach to 20+ intersect domains.\n3. Create one original data asset (survey, benchmark report) and pitch to 10-15 niche publications.\n4. Add 3-5 outbound citations to authoritative sources to improve E-E-A-T signals.\n5. Boost internal PageRank by linking from your 3 highest-authority pages using partial-match anchors.`,
+        });
+    }
+
     // Sort by gap severity
     const severity: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
     return gaps.sort((a, b) => severity[a.gap] - severity[b.gap]);
