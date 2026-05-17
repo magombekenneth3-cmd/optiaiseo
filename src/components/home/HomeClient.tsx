@@ -1284,16 +1284,17 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
             </ol>
           </nav>
 
-          {/* Video embed */}
+          {/* Video embed — lazy-loaded: shows thumbnail until user clicks play */}
           <div className="mb-16 rounded-2xl overflow-hidden border border-border">
             <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
               <iframe
                 className="absolute top-0 left-0 w-full h-full"
-                src="https://www.youtube.com/embed/nKF1GFEGqlE"
+                src="https://www.youtube.com/embed/MYE6T_gd7H0?si=fo6u1X2_ncyOQl-S"
                 title="What is SEO? Search Engine Optimization explained"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
                 loading="lazy"
+                srcDoc={`<style>*{padding:0;margin:0;overflow:hidden}html,body{height:100%}img,span{position:absolute;width:100%;top:0;bottom:0;margin:auto}span{height:1.5em;text-align:center;font:48px/1.5 sans-serif;color:white;text-shadow:0 0 .5em black}</style><a href=https://www.youtube.com/embed/MYE6T_gd7H0?autoplay=1><img src=https://img.youtube.com/vi/MYE6T_gd7H0/hqdefault.jpg alt='What is SEO? Watch the explainer video'><span>&#x25BA;</span></a>`}
               />
             </div>
             <div className="px-5 py-3 bg-card text-xs text-muted-foreground">

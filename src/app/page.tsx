@@ -98,13 +98,60 @@ const webPageSchema = {
   dateModified: new Date().toISOString().split("T")[0],
   speakable: {
     "@type": "SpeakableSpecification",
-    cssSelector: ["#aiseo-definition", "#faq-heading"],
+    cssSelector: [
+      "#aiseo-definition",
+      "#faq-heading",
+      "#why-seo-important",
+      "#how-google-works",
+      "#seo-results-timeline",
+    ],
   },
   breadcrumb: {
     "@type": "BreadcrumbList",
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
     ],
+  },
+  mainEntity: {
+    "@type": "Article",
+    headline: "Everything You Need to Know About SEO",
+    description: "A comprehensive guide covering why SEO matters, how Google Search works, content optimization, site organization, SERP appearance, and image optimization.",
+    author: {
+      "@type": "Organization",
+      name: "OptiAISEO",
+      url: SITE_URL,
+    },
+    datePublished: "2024-01-01",
+    dateModified: new Date().toISOString().split("T")[0],
+    video: {
+      "@type": "VideoObject",
+      name: "What is SEO? Search Engine Optimization Explained",
+      description: "A visual explainer covering the fundamentals of SEO — how search engines work, why rankings matter, and how to optimize your website for Google.",
+      thumbnailUrl: "https://img.youtube.com/vi/MYE6T_gd7H0/hqdefault.jpg",
+      uploadDate: "2024-01-01",
+      contentUrl: "https://www.youtube.com/watch?v=MYE6T_gd7H0",
+      embedUrl: "https://www.youtube.com/embed/MYE6T_gd7H0",
+    },
+  },
+};
+
+const videoSchema = {
+  "@context": "https://schema.org",
+  "@type": "VideoObject",
+  name: "What is SEO? Search Engine Optimization Explained",
+  description: "A visual explainer covering the fundamentals of SEO — how search engines work, why rankings matter, and how to optimize your website for Google.",
+  thumbnailUrl: "https://img.youtube.com/vi/MYE6T_gd7H0/hqdefault.jpg",
+  uploadDate: "2024-01-01",
+  contentUrl: "https://www.youtube.com/watch?v=MYE6T_gd7H0",
+  embedUrl: "https://www.youtube.com/embed/MYE6T_gd7H0",
+  publisher: {
+    "@type": "Organization",
+    name: "OptiAISEO",
+    url: SITE_URL,
+    logo: {
+      "@type": "ImageObject",
+      url: `${SITE_URL}/favicon.ico`,
+    },
   },
 };
 
@@ -267,6 +314,7 @@ export default async function Home() {
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(webPageSchema) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareSchema) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(videoSchema) }} />
         <HomeClient faqItems={faqItems} stats={stats} />
       </>
     );
