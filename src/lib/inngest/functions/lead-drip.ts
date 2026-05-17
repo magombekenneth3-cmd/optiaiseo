@@ -301,15 +301,24 @@ export const leadDripSequenceJob = inngest.createFunction(
     const skip2 = await step.run("check-skip-day2", () => shouldSkip(userId));
     if (!skip2) {
       await step.run("send-day2-email", async () => {
-        await getResend().emails.send({
-          from: getFrom(),
-          to: email,
-          subject: "Why AI engines aren't citing your site (yet)",
-          html: buildDay2Html(displayName, userId),
-          text: buildDay2Text(displayName, userId),
-          headers: listUnsubHeaders(userId),
-        });
-        logger.info("[DripSequence] Day 2 email sent", { userId });
+        try {
+          const result = await getResend().emails.send({
+            from: getFrom(),
+            to: email,
+            subject: "Why AI engines aren't citing your site (yet)",
+            html: buildDay2Html(displayName, userId),
+            text: buildDay2Text(displayName, userId),
+            headers: listUnsubHeaders(userId),
+          });
+          if (result.error) {
+            logger.error("[DripSequence] Day 2 email send failed", { userId, error: result.error });
+            throw new Error(result.error.message);
+          }
+          logger.info("[DripSequence] Day 2 email sent", { userId, messageId: result.data?.id });
+        } catch (err) {
+          logger.error("[DripSequence] Day 2 email exception", { userId, error: (err as Error)?.message });
+          throw err;
+        }
       });
     }
 
@@ -318,15 +327,24 @@ export const leadDripSequenceJob = inngest.createFunction(
     const skip5 = await step.run("check-skip-day5", () => shouldSkip(userId));
     if (!skip5) {
       await step.run("send-day5-email", async () => {
-        await getResend().emails.send({
-          from: getFrom(),
-          to: email,
-          subject: "How sites like yours are appearing in ChatGPT answers",
-          html: buildDay5Html(displayName, userId),
-          text: buildDay5Text(displayName, userId),
-          headers: listUnsubHeaders(userId),
-        });
-        logger.info("[DripSequence] Day 5 email sent", { userId });
+        try {
+          const result = await getResend().emails.send({
+            from: getFrom(),
+            to: email,
+            subject: "How sites like yours are appearing in ChatGPT answers",
+            html: buildDay5Html(displayName, userId),
+            text: buildDay5Text(displayName, userId),
+            headers: listUnsubHeaders(userId),
+          });
+          if (result.error) {
+            logger.error("[DripSequence] Day 5 email send failed", { userId, error: result.error });
+            throw new Error(result.error.message);
+          }
+          logger.info("[DripSequence] Day 5 email sent", { userId, messageId: result.data?.id });
+        } catch (err) {
+          logger.error("[DripSequence] Day 5 email exception", { userId, error: (err as Error)?.message });
+          throw err;
+        }
       });
     }
 
@@ -335,15 +353,24 @@ export const leadDripSequenceJob = inngest.createFunction(
     const skip10 = await step.run("check-skip-day10", () => shouldSkip(userId));
     if (!skip10) {
       await step.run("send-day10-email", async () => {
-        await getResend().emails.send({
-          from: getFrom(),
-          to: email,
-          subject: "Your competitors are pulling ahead in AI search 📊",
-          html: buildDay10Html(displayName, userId),
-          text: buildDay10Text(displayName, userId),
-          headers: listUnsubHeaders(userId),
-        });
-        logger.info("[DripSequence] Day 10 email sent", { userId });
+        try {
+          const result = await getResend().emails.send({
+            from: getFrom(),
+            to: email,
+            subject: "Your competitors are pulling ahead in AI search 📊",
+            html: buildDay10Html(displayName, userId),
+            text: buildDay10Text(displayName, userId),
+            headers: listUnsubHeaders(userId),
+          });
+          if (result.error) {
+            logger.error("[DripSequence] Day 10 email send failed", { userId, error: result.error });
+            throw new Error(result.error.message);
+          }
+          logger.info("[DripSequence] Day 10 email sent", { userId, messageId: result.data?.id });
+        } catch (err) {
+          logger.error("[DripSequence] Day 10 email exception", { userId, error: (err as Error)?.message });
+          throw err;
+        }
       });
     }
 
@@ -352,15 +379,24 @@ export const leadDripSequenceJob = inngest.createFunction(
     const skip14 = await step.run("check-skip-day14", () => shouldSkip(userId));
     if (!skip14) {
       await step.run("send-day14-email", async () => {
-        await getResend().emails.send({
-          from: getFrom(),
-          to: email,
-          subject: "The feature most OptiAISEO users find last (but love most)",
-          html: buildDay14Html(displayName, userId),
-          text: buildDay14Text(displayName, userId),
-          headers: listUnsubHeaders(userId),
-        });
-        logger.info("[DripSequence] Day 14 email sent", { userId });
+        try {
+          const result = await getResend().emails.send({
+            from: getFrom(),
+            to: email,
+            subject: "The feature most OptiAISEO users find last (but love most)",
+            html: buildDay14Html(displayName, userId),
+            text: buildDay14Text(displayName, userId),
+            headers: listUnsubHeaders(userId),
+          });
+          if (result.error) {
+            logger.error("[DripSequence] Day 14 email send failed", { userId, error: result.error });
+            throw new Error(result.error.message);
+          }
+          logger.info("[DripSequence] Day 14 email sent", { userId, messageId: result.data?.id });
+        } catch (err) {
+          logger.error("[DripSequence] Day 14 email exception", { userId, error: (err as Error)?.message });
+          throw err;
+        }
       });
     }
 
@@ -379,17 +415,26 @@ export const leadDripSequenceJob = inngest.createFunction(
       );
 
       await step.run("send-day21-email", async () => {
-        await getResend().emails.send({
-          from: getFrom(),
-          to: email,
-          subject: competitorDomain
-            ? `${competitorDomain} is pulling ahead in AI search`
-            : "Your competitors are gaining ground in AI search",
-          html: buildDay21Html(displayName, competitorDomain, userId),
-          text: buildDay21Text(displayName, competitorDomain, userId),
-          headers: listUnsubHeaders(userId),
-        });
-        logger.info("[DripSequence] Day 21 email sent", { userId, competitorDomain });
+        try {
+          const result = await getResend().emails.send({
+            from: getFrom(),
+            to: email,
+            subject: competitorDomain
+              ? `${competitorDomain} is pulling ahead in AI search`
+              : "Your competitors are gaining ground in AI search",
+            html: buildDay21Html(displayName, competitorDomain, userId),
+            text: buildDay21Text(displayName, competitorDomain, userId),
+            headers: listUnsubHeaders(userId),
+          });
+          if (result.error) {
+            logger.error("[DripSequence] Day 21 email send failed", { userId, error: result.error });
+            throw new Error(result.error.message);
+          }
+          logger.info("[DripSequence] Day 21 email sent", { userId, competitorDomain, messageId: result.data?.id });
+        } catch (err) {
+          logger.error("[DripSequence] Day 21 email exception", { userId, error: (err as Error)?.message });
+          throw err;
+        }
       });
     }
 
@@ -398,15 +443,24 @@ export const leadDripSequenceJob = inngest.createFunction(
     const skip30 = await step.run("check-skip-day30", () => shouldSkip(userId));
     if (!skip30) {
       await step.run("send-day30-email", async () => {
-        await getResend().emails.send({
-          from: getFrom(),
-          to: email,
-          subject: "Last thing: 20% off your first month",
-          html: buildDay30Html(displayName, userId),
-          text: buildDay30Text(displayName, userId),
-          headers: listUnsubHeaders(userId),
-        });
-        logger.info("[DripSequence] Day 30 email sent", { userId });
+        try {
+          const result = await getResend().emails.send({
+            from: getFrom(),
+            to: email,
+            subject: "Last thing: 20% off your first month",
+            html: buildDay30Html(displayName, userId),
+            text: buildDay30Text(displayName, userId),
+            headers: listUnsubHeaders(userId),
+          });
+          if (result.error) {
+            logger.error("[DripSequence] Day 30 email send failed", { userId, error: result.error });
+            throw new Error(result.error.message);
+          }
+          logger.info("[DripSequence] Day 30 email sent", { userId, messageId: result.data?.id });
+        } catch (err) {
+          logger.error("[DripSequence] Day 30 email exception", { userId, error: (err as Error)?.message });
+          throw err;
+        }
       });
     }
 
