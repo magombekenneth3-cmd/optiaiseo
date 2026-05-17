@@ -390,7 +390,7 @@ export default function BacklinksClient({
                         borderRadius: 8,
                         fontSize: 12,
                       }}
-                      formatter={(v: number) => [`DR ${v}`, ""]}
+                      formatter={(v: number | undefined) => [`DR ${v ?? "N/A"}`, ""]}
                       labelFormatter={(l: string) => l}
                     />
                     <Line
