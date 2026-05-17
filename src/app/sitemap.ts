@@ -24,7 +24,13 @@ if (!SITE_URL) {
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const blogs = await prisma.blog
         .findMany({
-            where: { status: "PUBLISHED" },
+            where: {
+                status: "PUBLISHED",
+                OR: [
+                    { isEditorial: true },
+                    { site: { domain: "optiaiseo.online" } },
+                ],
+            },
             select: { slug: true, updatedAt: true },
             orderBy: { updatedAt: "desc" },
             take: 1000,

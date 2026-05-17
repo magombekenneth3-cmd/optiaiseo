@@ -62,11 +62,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         ? `${SITE_URL}/blog/${blog.slug}`
         : `https://${blog.site.domain}/blog/${blog.slug}`;
 
+    // Index editorial posts and any blog served on our domain.
+    // Only noindex user-generated content hosted on external domains.
+    const shouldIndex = isEditorial || blog.site.domain === "optiaiseo.online";
+
     return {
         title: blog.title,
         description: blog.metaDescription ?? undefined,
         alternates: { canonical },
-        robots: isEditorial ? undefined : { index: false, follow: false },
+        robots: shouldIndex ? undefined : { index: false, follow: false },
         openGraph: {
             title: blog.title,
             description: blog.metaDescription ?? undefined,
