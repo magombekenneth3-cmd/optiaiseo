@@ -29,10 +29,10 @@ export function safeUrl(url: string | undefined): string | undefined {
 
 
 export function scoreColor(score: number): string {
-    if (score >= 80) return "#34d978";   // emerald
-    if (score >= 60) return "#f5a623";   // amber
-    if (score >= 40) return "#ff8c42";   // orange
-    return "#ff5757";                    // red
+    if (score >= 80) return "#34d978";   
+    if (score >= 60) return "#f5a623";   
+    if (score >= 40) return "#ff8c42";  
+    return "#ff5757";                    
 }
 
 export function scoreBgColor(score: number): string {
