@@ -6,6 +6,7 @@
  */
 
 import { callGemini as geminiCall } from "@/lib/gemini/client";
+import { HARD_CONSTRAINTS } from "@/lib/seo/prompts";
 import type { FrameworkContext } from "./context-inference";
 
 // Types
@@ -92,26 +93,38 @@ export function validateFix(
         return `AI generated an invalid file path: "${path}". Not in the allowed list for ${frameworkCtx.name}.`;
     }
 
-    const forbiddenPatterns: Array<[RegExp, string]> = [
-        [/\buseState\s*\(/, "useState hook"],
-        [/\buseEffect\s*\(/, "useEffect hook"],
-        [/\buseContext\s*\(/, "useContext hook"],
-        [/\bimport\s+.*\s+from\s+['"]react['"]/, "React import"],
-        [/\bclassName\s*=/, "className attribute (UI component)"],
-    ];
-
-    for (const [pattern, label] of forbiddenPatterns) {
-        if (pattern.test(content)) {
-            return `AI generated forbidden pattern (${label}). Fix rejected to prevent breaking your application.`;
-        }
-    }
-
     if (/metadata\s*=\s*\{[^}]*\bjsonLd\b/i.test(content)) {
         return "AI placed jsonLd inside the metadata export, which breaks the Next.js build. Fix rejected.";
     }
 
     if (content.trim().length < 40) {
         return "AI returned content that is too short to be a valid fix.";
+    }
+
+    const isConfigFile =
+        path.endsWith("layout.tsx") ||
+        path.endsWith("metadata.ts") ||
+        path.endsWith("robots.ts") ||
+        path.endsWith("sitemap.ts") ||
+        path.endsWith("sitemap.xml.ts") ||
+        path.endsWith(".config.ts") ||
+        path.endsWith(".config.js") ||
+        path.endsWith("robots.txt");
+
+    if (isConfigFile) {
+        const forbiddenInConfig: Array<[RegExp, string]> = [
+            [/\buseState\s*\(/, "useState hook"],
+            [/\buseEffect\s*\(/, "useEffect hook"],
+            [/\buseContext\s*\(/, "useContext hook"],
+            [/\bimport\s+.*\s+from\s+['"]react['"]/, "React import"],
+            [/\bclassName\s*=/, "className attribute (UI component)"],
+        ];
+
+        for (const [pattern, label] of forbiddenInConfig) {
+            if (pattern.test(content)) {
+                return `AI generated forbidden pattern (${label}) in a config/metadata file. Fix rejected to prevent breaking your application.`;
+            }
+        }
     }
 
     return null;
@@ -163,6 +176,8 @@ export function buildFixPrompt(
 
 ${frameworkHints}
 
+${HARD_CONSTRAINTS}
+
 Website: ${domain}
 Issue ID: ${issueId}
 Issue Title: ${issueTitle}
@@ -193,9 +208,12 @@ Do not wrap in markdown. Return raw JSON only.`;
 export function buildRequirementsPrompt(
     domain: string,
     issue: SeoIssue,
+    framework?: string,
 ): string {
     const issueId = issue.checkId ?? issue.id ?? "unknown";
-    return `You are an SEO specialist for a Next.js web application at ${domain}.
+    const frameworkLabel = framework ?? "web application";
+
+    return `You are an SEO specialist for a ${frameworkLabel} at ${domain}.
 
 For the following SEO issue, determine what additional context is needed to generate an accurate fix.
 

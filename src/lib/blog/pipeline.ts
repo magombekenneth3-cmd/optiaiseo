@@ -271,6 +271,23 @@ Rules:
 - "entities" should be real named things (e.g. "Ahrefs", "E-E-A-T", "John Mueller").
 - Return ONLY the JSON object. No commentary, no markdown fences.`;
 
+    const competitorSaturation = serpContext?.results
+        .slice(0, 5)
+        .flatMap(r => r.scrapedHeadings ?? [])
+        .filter(h => h.length > 5)
+        .slice(0, 14)
+        .join(" | ") ?? "";
+
+    const saturationBlock = `
+SATURATED ANGLES — every top competitor already covers these topics:
+${competitorSaturation || "Not available"}
+
+DIFFERENTIATION MANDATE:
+- Your "contentGaps" must NOT overlap with the saturated angles above.
+- Your "contrarianAngles" must challenge or reframe one of the saturated angles, not repeat it.
+- Ask: what does every result cover shallowly that deserves a full treatment?
+  What does every result avoid saying because it's uncomfortable or counterintuitive?`;
+
     const fallback: ResearchBrain = {
         intent: `Help the searcher understand and act on "${keyword}"`,
         searcherMindset: "Seeking practical, expert guidance",
@@ -285,7 +302,7 @@ Rules:
     };
 
     try {
-        return await callGeminiJson<ResearchBrain>(prompt, {
+        return await callGeminiJson<ResearchBrain>(prompt + saturationBlock, {
             model: AI_MODELS.GEMINI_FLASH,
             temperature: 0.4,
             maxOutputTokens: 2048,
@@ -627,9 +644,21 @@ Output: ONLY the section in Markdown including the ## heading. No commentary.`;
     const fallbackText = `## ${section.heading}\n\n[Section generation failed \u2014 regenerate this section.]`;
 
     try {
+        const temperatureByEvidence: Partial<Record<OutlineSection["evidenceType"], number>> = {
+            data:       0.20,
+            case_study: 0.30,
+            how_to:     0.35,
+            comparison: 0.40,
+            faq:        0.40,
+            example:    0.55,
+            opinion:    0.65,
+        };
+
+        const sectionTemperature = temperatureByEvidence[section.evidenceType] ?? 0.50;
+
         const text = await callGemini(prompt, {
             model: AI_MODELS.GEMINI_PRO,
-            temperature: 0.75,
+            temperature: sectionTemperature,
             maxOutputTokens: 3000,
             timeoutMs: 90_000,
             maxRetries: 3,
@@ -698,10 +727,21 @@ EDITORIAL INSTRUCTIONS — apply every one:
 4. ACTIVE VOICE: Replace every passive construction.
 5. CONTRACTIONS: Add natural contractions throughout — "you'll", "it's", "don't", "here's", "we've". At least one per paragraph.
 6. OPINION SIGNALS: Each H2 section must contain at least one contradiction, named exception, or practitioner note.
-7. REMOVE THESE PHRASES (replace with plain language): In conclusion / It's worth noting / Furthermore / Moreover / Additionally / Delve into / Leverage / Seamlessly / Comprehensive guide / Cutting-edge / Game-changing / Robust / Now more than ever / When it comes to / In today's digital landscape / It is important to / It is essential to / Final thoughts / To summarise / In summary / Unlock the potential / Drive engagement / Foster growth / Empower users
-8. FAQ ANSWERS: Every FAQ answer must open with: Yes / No / a number / a tool name / a time frame.
-9. MICRO-IMPERFECTIONS: Add one or two controlled irregularities per 500 words (fragment for emphasis, abrupt transition, short emphatic standalone).
-10. PRESERVE: All factual claims, named entities, statistics with sources, heading structure, FAQ questions. Do NOT invent new facts.
+7. KEYWORD DENSITY AUDIT: Count how many times the primary keyword
+   "${ctx.keyword}" (and its exact variants) appears in the text.
+   - Target: once per 150–200 words.
+   - If it appears more than once per 120 words in any paragraph, replace
+     excess instances with:
+     a) A pronoun (it, this, they, the approach)
+     b) A category term (the technique, this method, the practice)
+     c) A related phrase from the semantic field
+   - Exception: never remove the keyword from H2 headings or the article's
+     first 100 words. Those are anchor placements, not stuffing.
+   - Do not add the keyword where it doesn't naturally fit.
+8. REMOVE THESE PHRASES (replace with plain language): In conclusion / It's worth noting / Furthermore / Moreover / Additionally / Delve into / Leverage / Seamlessly / Comprehensive guide / Cutting-edge / Game-changing / Robust / Now more than ever / When it comes to / In today's digital landscape / It is important to / It is essential to / Final thoughts / To summarise / In summary / Unlock the potential / Drive engagement / Foster growth / Empower users
+9. FAQ ANSWERS: Every FAQ answer must open with: Yes / No / a number / a tool name / a time frame.
+10. MICRO-IMPERFECTIONS: Add one or two controlled irregularities per 500 words (fragment for emphasis, abrupt transition, short emphatic standalone).
+11. PRESERVE: All factual claims, named entities, statistics with sources, heading structure, FAQ questions. Do NOT invent new facts.
 
 Return ONLY the rewritten content in Markdown — same heading structure, no commentary.
 

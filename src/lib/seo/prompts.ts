@@ -92,7 +92,7 @@ Note: Framework could not be detected from the repository. Output generic HTML.
 Add a comment at the top of the code noting the framework should be adapted.`.trim(),
 };
 
-const HARD_CONSTRAINTS = `
+export const HARD_CONSTRAINTS = `
 HARD CONSTRAINTS — NEVER VIOLATE:
 1. NEVER use placeholder values like: yourdomain.com, example.com, "Your Business Name", "Your City", "000-000-0000", "yoursite.com"
 2. Use ONLY the real brand and domain provided in the context below
@@ -112,6 +112,37 @@ SURGICAL OUTPUT RULES — MANDATORY FOR LAYOUT.TSX:
 - CRITICAL ERROR AVOIDANCE: Do NOT include \`jsonLd:\` or \`script:\` — they are NOT valid Next.js Metadata fields and will cause a build failure.
 - Do NOT include \`verification: { google: "YOUR_..." }\` — only include verification if you have the real token
 - The pipeline will surgically merge this block into the existing file. Output nothing else.`.trim();
+
+const INTENT_TITLE_RULES = `
+INTENT-BASED TITLE & DESCRIPTION RULES — apply the matching pattern to the detected intent:
+
+INFORMATIONAL (how-to, guides, explainers):
+  Title pattern:  "How to [Achieve X] — [Qualifier or Year]"
+  Title pattern:  "[Primary Question] — [Direct Answer Signal]"
+  Description:    Lead with the main answer or key insight. Promise a specific outcome.
+  Example title:  "How to Fix Broken Internal Links (2025 Step-by-Step Guide)"
+
+TRANSACTIONAL (buy, sign up, pricing, free trial):
+  Title pattern:  "[Action Verb] [Product/Service] — [Key Benefit or Trust Signal]"
+  Description:    Surface the primary CTA and the strongest trust marker (free trial,
+                  money-back, no card required). Remove any question framing.
+  Example title:  "Start Your SEO Audit — Free Trial, No Credit Card"
+
+NAVIGATIONAL (brand name searches, login, specific pages):
+  Title pattern:  "[Brand] — [Primary Offering]"
+  Description:    Confirm this is the right destination. Include the brand name in the
+                  first 5 words of the description.
+  Example title:  "OptiAISEO — AI-Powered SEO Audit & Fix Platform"
+
+COMMERCIAL INVESTIGATION (best X, X vs Y, X review, X alternatives):
+  Title pattern:  "Best [Category] [Year]: [Differentiator]"
+  Title pattern:  "[Brand A] vs [Brand B]: [Decision Signal]"
+  Description:    Surface the comparison angle and a specific proof point
+                  (number of tools reviewed, methodology, update date).
+  Example title:  "Best SEO Audit Tools 2025: Ranked by Real User Data"
+
+Detect the intent from the page content in CONTEXT below and apply the matching pattern.
+Do not apply an informational pattern to a transactional page or vice versa.`.trim();
 
 function buildContext(ctx: PromptContext): string {
     const brand = ctx.content.title || ctx.domain.replace(/^www\./, "").split(".")[0];
@@ -141,6 +172,7 @@ const PROMPTS: Record<string, (ctx: PromptContext) => string> = {
     "title-tag": (ctx) => `You are a senior SEO engineer.
 ${FRAMEWORK_RULES[ctx.framework]}
 ${HARD_CONSTRAINTS}
+${INTENT_TITLE_RULES}
 ${ctx.filePath.endsWith("layout.tsx") ? SURGICAL_LAYOUT_RULES : ""}
 
 TASK: Generate a new title and meta description for this website.
@@ -159,6 +191,7 @@ ${ctx.filePath.endsWith("layout.tsx")
     "meta-description": (ctx) => `You are a senior SEO engineer.
 ${FRAMEWORK_RULES[ctx.framework]}
 ${HARD_CONSTRAINTS}
+${INTENT_TITLE_RULES}
 ${ctx.filePath.endsWith("layout.tsx") ? SURGICAL_LAYOUT_RULES : ""}
 
 TASK: Write a compelling meta description for this website.
@@ -201,6 +234,17 @@ TASK: Optimize the heading hierarchy (H1 → H2 → H3) to boost SERP clicks and
 - Never skip from H1 to H3.
 - Do not change the overall visible text meaning, just the heading phrasing and structure.
 
+CANNIBALIZATION GUARD — apply before choosing H1 keyword:
+- The H1 must target a keyword with intent that is UNIQUE to this page.
+- If the detected site already has a dedicated page for a topic (e.g. a /pricing
+  page owns "pricing"), do not assign "pricing" as the H1 keyword on any other page.
+- For pages that cover an overlapping topic, use a more specific long-tail variant
+  that adds a qualifying modifier: audience, location, use case, or year.
+  Bad:  H1 = "SEO Tools" (if a dedicated /seo-tools page exists)
+  Good: H1 = "SEO Tools for SaaS Companies" (qualified, non-competing intent)
+- Check the PAGE HEADINGS in CONTEXT below for existing coverage signals.
+  If the existing H1 appears generic or already used elsewhere, differentiate it.
+
 CONTEXT:
 ${buildContext(ctx)}
 
@@ -210,11 +254,29 @@ Return ONLY the corrected ${ctx.filePath} content.`,
 ${FRAMEWORK_RULES[ctx.framework]}
 ${HARD_CONSTRAINTS}
 
-TASK: Identify opportunities for 5–10 new internal links to maximize link equity flow.
-- Ensure links connect topically relevant pages (hub and spoke model).
-- Use highly descriptive anchor text containing target keywords — never "click here" or "read more".
-- Target pages that likely exist based on the site's context.
-- Place links contextually within paragraphs where they add value, not just shoved at the end.
+TASK: Identify and implement 5–8 internal links to maximise link equity flow.
+
+LINK EQUITY RULES — apply in this exact order:
+1. PLACEMENT PRIORITY: Links in the first 200 words of body copy carry the most equity.
+   Place the highest-priority link (to the pillar page) in the first meaningful paragraph.
+   Do not place more than 2 links per 300 words.
+
+2. DIRECTIONALITY:
+   - UPWARD links (this page → pillar/hub page): use when this page is a supporting
+     spoke. These strengthen the authority of your most important pages.
+   - DOWNWARD links (this page → supporting spoke): use when this page is a pillar.
+     These distribute authority and improve crawlability of thinner pages.
+   Identify whether this page is a PILLAR or SPOKE from the context below.
+
+3. ANCHOR TEXT RULE: Anchor text must contain the TARGET page's primary keyword —
+   not this page's keyword. Never use "click here", "read more", or "this article".
+   Good: "see our guide to technical SEO audits"
+   Bad:  "learn more about our platform"
+
+4. LINK COUNT LIMIT: 5–8 contextual body copy links maximum. Do not add navigation
+   or footer links — only contextual in-paragraph links.
+
+5. NO SELF-LINKING: Do not link to the current page's own URL.
 
 CONTEXT:
 ${buildContext(ctx)}
@@ -267,7 +329,11 @@ TASK: Add Twitter Card meta tags:
 - twitter:title (under 60 chars)
 - twitter:description (120–160 chars)
 - twitter:image (absolute URL only — if unknown, omit the field entirely)
-- twitter:site (realistic handle based on brand name, prefixed with @)
+- twitter:site: OMIT this field entirely unless the real Twitter/X handle is
+  explicitly provided in the CONTEXT below under "TWITTER_HANDLE" or "SOCIAL_HANDLE".
+  Do not guess, derive, or invent a handle from the brand name.
+  If the handle is missing: output a commented placeholder in the code:
+  {/* twitter:site: add your real @handle in userContext.twitterHandle */}
 
 CONTEXT:
 ${buildContext(ctx)}
@@ -293,20 +359,46 @@ Return ONLY the complete updated file content for ${ctx.filePath}.`,
 
 
     "content-decay-detector": (ctx) => `You are a senior SEO content strategist.
-${FRAMEWORK_RULES[ctx.framework]}
 ${HARD_CONSTRAINTS}
 
-TASK: This page appears to be suffering from content decay (outdated information, dropping rankings).
-Write a Content Refresh Blueprint to update the page. Focus on:
-1. Identifying stale statistics or outdated facts to replace.
-2. Adding a new section explaining recent developments in the topic.
-3. Adding an "Updated [Current Year]" badge or text.
-4. Ensuring E-E-A-T signals are strong (author credibility, expert quotes).
+TASK: Analyse this page for content decay signals and produce a Content Refresh Brief
+for a human editor to act on. Do NOT rewrite the content — that requires real current
+data that you cannot verify.
+
+OUTPUT FORMAT — produce a structured markdown brief with these exact sections:
+
+## Content Decay Signals
+List 3–6 specific passages, phrases, or sections in the current content that indicate
+staleness. Quote the specific text and explain why it's a decay signal.
+Example: "References '2022 study by...' — likely outdated; verify if a newer version exists."
+
+## Priority Updates (Must Fix)
+What the editor must change before republishing. Be specific about which sections.
+
+## Priority Updates (Nice to Fix)
+What would improve the content but isn't blocking the refresh.
+
+## New Sections to Add
+Topics that Google now expects for this keyword based on current search intent,
+that the current content doesn't cover. Base this on the existing headings in CONTEXT.
+
+## Freshness Signals to Add
+- Specific locations to add "Updated [Year]" markers
+- Where to add the dateModified schema field
+- Suggested language for the intro to signal recency
+
+## E-E-A-T Gaps
+- Is there an author byline? If not, flag it.
+- Are there expert citations or primary sources? If not, flag specific claims to source.
+- Are there first-person experience signals ("in practice", "we tested")? If not, flag.
+
+## Suggested Re-publish Timeline
+Based on the severity of decay signals: immediate / within 30 days / next quarter.
 
 CONTEXT:
 ${buildContext(ctx)}
 
-Return ONLY the updated file content for ${ctx.filePath}.`,
+Return ONLY the markdown brief. Do not rewrite the page content.`,
 
     "search-intent-mapper": (ctx) => `You are a senior SEO intent specialist.
 ${FRAMEWORK_RULES[ctx.framework]}
@@ -330,8 +422,13 @@ ${HARD_CONSTRAINTS}
 TASK: Generate a production-ready robots.txt file. Rules:
 - Allow all crawlers access to public pages
 - Disallow these paths: /api/, /dashboard/, /admin/, /_next/
-- Include Sitemap: directive pointing to the sitemap URL
-- Add a Crawl-delay: 1 for all bots
+- Include the Sitemap directive: Sitemap: https://${ctx.domain}/sitemap.xml
+- Add User-agent: * with explicit Allow: / before all Disallow rules to prevent
+  over-restrictive interpretation by edge case crawlers
+- DO NOT add Crawl-delay — Googlebot ignores this directive entirely. Add a comment
+  explaining that crawl rate for Google is managed in Google Search Console under
+  Settings → Crawl rate, not in robots.txt.
+- Add a comment block at the top explaining what each Disallow protects
 
 DOMAIN: ${ctx.domain}
 
@@ -573,12 +670,39 @@ Return ONLY the complete ${ctx.filePath} content.`,
 ${FRAMEWORK_RULES[ctx.framework]}
 ${HARD_CONSTRAINTS}
 
-TASK: Generate an AggregateRating + Review JSON-LD schema. Create realistic review data based on what the product offers. Use real-sounding reviewer names. Rating out of 5.
+TASK: Generate an AggregateRating JSON-LD schema TEMPLATE for this site.
+
+CRITICAL COMPLIANCE RULES — Google will penalise fake review data:
+- Do NOT invent reviewer names, review text, star ratings, or review counts.
+- Do NOT guess ratingValue or reviewCount. These MUST come from real review platforms.
+- Individual Review items: OMIT entirely. Add a code comment explaining they must
+  be fetched from a real review API (Google, Trustpilot, G2, Capterra, etc.).
+- Output ONLY the AggregateRating wrapper with placeholder tokens the editor replaces.
+- Add an HTML comment above the script warning the user to verify data before deploying.
+
+OUTPUT FORMAT:
+<!-- ⚠ BEFORE DEPLOYING: Replace all [PLACEHOLDER] tokens with real data from your
+     review platform. Fabricated review data violates Google's guidelines and triggers
+     manual actions. Fetch ratingValue and reviewCount from your review platform API. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": "[REAL product name from context]",
+  "aggregateRating": {
+    "@type": "AggregateRating",
+    "ratingValue": "[REPLACE: real average rating, e.g. 4.7]",
+    "reviewCount": "[REPLACE: real review count from your platform]",
+    "bestRating": "5",
+    "worstRating": "1"
+  }
+}
+</script>
 
 CONTEXT:
 ${buildContext(ctx)}
 
-Return ONLY the complete ${ctx.filePath} content.`,
+Return ONLY the complete ${ctx.filePath} content with the template and warning comment.`,
 
     "schema-speakable": (ctx) => `You are a senior schema.org and AEO expert.
 ${FRAMEWORK_RULES[ctx.framework]}
@@ -749,16 +873,35 @@ Return ONLY the HTML <section> block:
     "statistics-citations": (ctx) => `You are a senior AEO content strategist.
 ${HARD_CONSTRAINTS}
 
-TASK: Generate 4–5 punchy, specific statistics or citation-ready facts about the problem this brand/product solves or its market segment. Requirements:
-- Each fact must be specific (percentages, dollar amounts, time values)
-- Attribute each to a realistic source category (e.g. "industry research", "SEO studies")
-- Never fabricate specific organization names or paper titles
-- Format as a bulleted list inside a <ul> with <li> tags
+TASK: Generate a statistics and claims block for this brand's content.
+
+CLAIM INTEGRITY PROTOCOL — mandatory for every output line:
+- TIER 1 (preferred): If you have a real, verifiable fact with a specific named source
+  (e.g. "Ahrefs 2024 study", "HubSpot State of Marketing 2024"), include it with the
+  source named inline.
+- TIER 2 (acceptable): If you have a real insight but no specific source, write the
+  claim without a number. "Most companies see significant drop-off in the first week" is
+  honest. "73% of companies" with no real source is not.
+- TIER 3 (never): Do not write percentages, dollar amounts, or precise counts without
+  a specific, named, verifiable source. "Industry research" is not a source.
+
+OUTPUT FORMAT — for each claim, use one of these two patterns:
+
+Pattern A (verified):
+<li><strong>[Specific claim with number]</strong> — <em>[Real source name, year]</em></li>
+
+Pattern B (insight without number):
+<li><strong>[Insight written as a confident general truth]</strong> —
+<em>[EDITOR: Add a real statistic here from [suggested source type, e.g. Google Analytics
+benchmark data] before publishing]</em></li>
+
+Generate 4–5 items. Mix Tier 1 and Tier 2 honestly. The editor note in Pattern B
+tells the human writer exactly where to find real data to fill the gap.
 
 CONTEXT:
 ${buildContext(ctx)}
 
-Return ONLY the HTML <ul> block.`,
+Return ONLY the HTML <ul> block with the items.`,
 
     "content_statistics": (ctx) => PROMPTS["statistics-citations"](ctx),
 
@@ -902,7 +1045,98 @@ Return ONLY the complete file content for ${ctx.filePath}.`,
     "schema_howto": (ctx) => PROMPTS["schema-howto"](ctx),
     "schema_article": (ctx) => PROMPTS["schema-article"](ctx),
     "schema_speakable": (ctx) => PROMPTS["schema-speakable"](ctx),
-    "schema_organization": (ctx) => PROMPTS["schema-organization"](ctx),
+    \"schema_organization\": (ctx) => PROMPTS["schema-organization"](ctx),
+
+    "eeat-author-byline": (ctx) => `You are a senior E-E-A-T and content credibility expert.
+${FRAMEWORK_RULES[ctx.framework]}
+${HARD_CONSTRAINTS}
+
+TASK: Add a proper author byline section to this page that satisfies Google's
+E-E-A-T (Experience, Expertise, Authoritativeness, Trustworthiness) requirements.
+
+Requirements:
+- Author name (use real name from userContext.authorName if provided, otherwise
+  output a placeholder with a code comment)
+- Author title and credentials relevant to the page topic
+- Link to an author archive page (/author/[slug]) — create the href even if the
+  page doesn't exist yet; the editor will build it
+- Author image with descriptive alt text
+- A 2-3 sentence author bio that signals first-hand experience ("Has worked with
+  X clients on...", "Tested Y tools in Z context")
+- Person JSON-LD schema with the author's name, url, and sameAs links
+- datePublished and dateModified visible on the page in a human-readable format
+
+CRITICAL: Only use the real author name if provided in CONTEXT.
+If not provided, output: <!-- TODO: Replace with real author name and credentials -->
+Never invent author credentials or fabricate expertise claims.
+
+CONTEXT:
+${buildContext(ctx)}
+
+Return ONLY the complete updated ${ctx.filePath} content.`,
+
+    "content-freshness": (ctx) => `You are a senior technical SEO engineer.
+${FRAMEWORK_RULES[ctx.framework]}
+${HARD_CONSTRAINTS}
+
+TASK: Add content freshness signals to this page to improve ranking for
+time-sensitive queries and increase E-E-A-T credibility.
+
+Changes to make:
+1. Add datePublished and dateModified fields to any Article/BlogPosting JSON-LD
+   schema on the page. Use ISO 8601 format. dateModified = today.
+2. Add a visible "Last updated: [Month Year]" element near the top of the article body.
+   It should be inside a <time datetime="[ISO date]"> element for machine readability.
+3. Add "as of [Year]" to any sentence in the intro or H2s that makes a time-sensitive
+   claim (statistics, tool names, processes that change).
+4. If no Article schema exists, add one specifically for the freshness fields.
+
+DO NOT:
+- Change the substantive content of the page
+- Remove or alter any existing headings, paragraphs, or CTAs
+- Add a date to pages where freshness is not relevant (contact, pricing, login pages)
+
+CONTEXT:
+${buildContext(ctx)}
+
+Return ONLY the complete updated ${ctx.filePath} content.`,
+
+    "resource-hints": (ctx) => `You are a senior performance SEO engineer.
+${FRAMEWORK_RULES[ctx.framework]}
+${HARD_CONSTRAINTS}
+
+TASK: Add resource hint link tags to the <head> to improve LCP and reduce
+render-blocking latency. This is distinct from the core-web-vitals fix —
+it targets network-level optimisation, not image or script attributes.
+
+Add these resource hints based on the site's detected third-party dependencies:
+
+DNS-PREFETCH — add for all external domains the page requests:
+<link rel="dns-prefetch" href="//fonts.googleapis.com">
+<link rel="dns-prefetch" href="//www.googletagmanager.com">
+<link rel="dns-prefetch" href="//www.google-analytics.com">
+
+PRECONNECT — add for the highest-priority external origins (max 3):
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+PRELOAD — only for above-the-fold critical resources:
+- Hero image: <link rel="preload" as="image" href="[hero image URL if known]">
+- Critical font file: <link rel="preload" as="font" type="font/woff2"
+  href="[font URL if known]" crossorigin>
+
+RULES:
+- Only add preconnect for domains you can confirm from the page content in CONTEXT.
+  Do not add preconnect for domains not referenced in the detected integrations.
+- dns-prefetch is low-risk — it's fine to add for common third parties.
+- Do not add more than 3 preconnect hints (too many defeats the purpose).
+- In Next.js App Router, add these to the metadata object's other field or as
+  explicit <link> tags in the layout's <head> section.
+
+CONTEXT:
+${buildContext(ctx)}
+
+Return ONLY the complete updated ${ctx.filePath} content.`,
 };
 
 /**
