@@ -431,9 +431,6 @@ export async function buildPost(
         assembled = await injectInternalLinks(assembled, siteId, slug, ctx.siteDomain);
     }
 
-    logger.debug("[Blog Engine] Running humanization pass...", { keyword: ctx.keyword });
-    assembled = await humanizePost(assembled, ctx);
-
     const rhythmWarnings = auditRhythm(assembled);
     const bannedWarnings = auditBannedPhrases(assembled).warnings;
     const listCountErrors = validateListCount(title, assembled).errors;

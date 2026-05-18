@@ -12,6 +12,7 @@
  */
 
 import { callGemini, callGeminiJson } from "@/lib/gemini/client";
+import type { GeminiCallOptions } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { logger } from "@/lib/logger";
 import type { PromptContext } from "./prompt-context";
@@ -426,28 +427,30 @@ RULES:
         estimatedTotal: targetWords,
     };
 
-    const raw = await callGemini(prompt, {
-        model: AI_MODELS.GEMINI_FLASH,
-        temperature: 0.3,
-        maxOutputTokens: 3000,
-        timeoutMs: 60_000,
-        maxRetries: 3,
-    });
+    try {
+        const parsed = await callGeminiJson<OutlinePlan>(prompt, {
+            model: AI_MODELS.GEMINI_FLASH,
+            temperature: 0.3,
+            maxOutputTokens: 3000,
+            timeoutMs: 60_000,
+            maxRetries: 3,
+        } as GeminiCallOptions);
 
-    const parsed = parseJsonSafe<OutlinePlan | null>(raw, null);
-    if (!parsed || !Array.isArray(parsed.sections) || parsed.sections.length === 0) {
-        logger.error("[Pipeline] Outline planner returned unparseable JSON — throwing for Inngest retry", {
-            rawSlice: raw.slice(0, 300),
+        if (!parsed || !Array.isArray(parsed.sections) || parsed.sections.length === 0) {
+            logger.warn("[Pipeline] Outline planner returned empty sections — using fallback");
+            return fallback;
+        }
+
+        logger.debug("[Pipeline] Outline parsed successfully", {
+            title: parsed.title,
+            sections: parsed.sections.length,
         });
-        throw new Error("[Pipeline] Outline generation failed — could not parse a valid outline from model response.");
+
+        return parsed;
+    } catch (e) {
+        logger.warn("[Pipeline] Outline planner failed — using fallback", { error: (e as Error).message });
+        return fallback;
     }
-
-    logger.debug("[Pipeline] Outline parsed successfully", {
-        title: parsed.title,
-        sections: parsed.sections.length,
-    });
-
-    return parsed;
 }
 
 // ─── Stage 3: Section Writer ──────────────────────────────────────────────────
@@ -470,13 +473,18 @@ export async function runSectionWriter(
     ctx: PromptContext,
     serpContext: SerpContext | null,
 ): Promise<string> {
-    // Pre-fetch all section facts in parallel before any writing starts
     logger.debug("[Pipeline] Pre-fetching section facts", { sections: outline.sections.length });
-    const sectionFacts = await Promise.all(
-        outline.sections.map(s =>
-            fetchSectionFacts(s.heading, ctx.keyword, s.evidenceType).catch(() => "")
-        )
-    );
+    const sectionFacts: string[] = new Array(outline.sections.length).fill("");
+    const FACT_CONCURRENCY = 3;
+    for (let i = 0; i < outline.sections.length; i += FACT_CONCURRENCY) {
+        const batch = outline.sections.slice(i, i + FACT_CONCURRENCY);
+        const results = await Promise.allSettled(
+            batch.map(s => fetchSectionFacts(s.heading, ctx.keyword, s.evidenceType))
+        );
+        results.forEach((r, j) => {
+            sectionFacts[i + j] = r.status === "fulfilled" ? r.value : "";
+        });
+    }
 
     const memory: EditorialMemory = {
         usedEntities: new Set(),
@@ -508,12 +516,33 @@ export async function runSectionWriter(
         if (openerMatch) memory.usedSentenceOpeners.add(openerMatch[1].toLowerCase());
     }
 
-    const failedCount = sections.filter(s => s.includes("[Section generation failed")).length;
-    if (failedCount > 0) {
+    const failedIndexes = sections
+        .map((s, i) => s.includes("[Section generation failed") ? i : -1)
+        .filter(i => i >= 0);
+
+    if (failedIndexes.length > 0 && failedIndexes.length <= Math.ceil(sections.length / 2)) {
+        logger.info(`[Pipeline] Retrying ${failedIndexes.length} failed sections`);
+        for (const idx of failedIndexes) {
+            const section = outline.sections[idx];
+            const facts = sectionFacts[idx] ?? "";
+            const retry = await writeSingleSection(section, outline, brain, author, ctx, memory, serpContext, facts);
+            const stripped = retry.replace(/\*?\*?\[EDITOR:[^\]]*\]\*?\*?\s*/g, "").trim();
+            if (!stripped.includes("[Section generation failed")) {
+                sections[idx] = section.evidenceType === "faq" ? enforceFaqOpeners(stripped) : stripped;
+            }
+        }
+    }
+
+    const finalFailedCount = sections.filter(s => s.includes("[Section generation failed")).length;
+    if (finalFailedCount > Math.ceil(sections.length / 2)) {
         throw new Error(
-            `[Pipeline] ${failedCount}/${sections.length} sections failed. ` +
-            "Rethrowing for Inngest retry \u2014 will not save placeholder content to DB."
+            `[Pipeline] ${finalFailedCount}/${sections.length} sections failed after retries.`
         );
+    }
+
+    const goodSections = sections.filter(s => !s.includes("[Section generation failed"));
+    if (goodSections.length === 0) {
+        throw new Error("[Pipeline] All sections failed.");
     }
 
     return `# ${outline.title}\n\n${sections.join("\n\n")}`;

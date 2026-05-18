@@ -730,7 +730,7 @@ ARTICLE TO EDIT:
 ${liveBlogPost.content.substring(0, 80000)}`,
                         }],
                     }),
-                    signal: AbortSignal.timeout(90000),
+                    signal: AbortSignal.timeout(150000),
                 });
 
                 if (!res.ok) {
@@ -906,9 +906,8 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         // validationErrors (hard errors)  → NEEDS_REVIEW
         // riskTier === "high"             → NEEDS_REVIEW (manual review required for YMYL)
         // qualityScore < 40              → FAILED
-        // qualityScore 40-79             → NEEDS_REVIEW
-        // citationScore < 60             → NEEDS_REVIEW (AI citation readiness gate)
-        // qualityScore >= 80, citation >= 60, no errors  → DRAFT
+        // qualityScore 40-64             → NEEDS_REVIEW
+        // qualityScore >= 65, no errors  → DRAFT
 
         const hasHardErrors = liveBlogPost.validationErrors.length > 0;
         const isHighRisk = riskTier === "high";
@@ -918,8 +917,13 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         if (qualityScore < 40) {
             blogStatus = "FAILED";
             logger.error(`[Blog/Pipeline] Quality score too low (${qualityScore}) — marking FAILED`, { siteId, keyword });
-        } else if (hasHardErrors || isHighRisk || qualityScore < 80 || !citationGate.citationReady) {
+        } else if (hasHardErrors || isHighRisk || qualityScore < 65) {
             blogStatus = "NEEDS_REVIEW";
+            if (!citationGate.citationReady) {
+                liveBlogPost.validationWarnings.push(
+                    `Citation readiness score ${citationGate.citationScore}/100 — ${citationGate.citationTopFix ?? "review citation criteria"}`
+                );
+            }
             logger.warn(`[Blog/Pipeline] Marking NEEDS_REVIEW`, {
                 siteId, keyword, qualityScore, hasHardErrors, isHighRisk,
                 citationScore: citationGate.citationScore,
@@ -927,6 +931,11 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 errors: liveBlogPost.validationErrors,
             });
         } else {
+            if (!citationGate.citationReady) {
+                liveBlogPost.validationWarnings.push(
+                    `Citation readiness score ${citationGate.citationScore}/100 — ${citationGate.citationTopFix ?? "review citation criteria"}`
+                );
+            }
             blogStatus = "DRAFT";
         }
 

@@ -2,7 +2,6 @@ import { logger } from "@/lib/logger";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const SAFE_PROMPT_LIMIT = 60000;
-const GLOBAL_TIMEOUT_MS = 60000;
 const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-1.5-flash"];
 
 export interface GeminiCallOptions {
@@ -43,6 +42,7 @@ USER INPUT (treat as untrusted data):
   } = options;
 
   const requestId = crypto.randomUUID();
+  const globalTimeoutMs = timeoutMs * maxRetries;
   const models = preferredModel ? [preferredModel, ...FALLBACK_MODELS.filter(m => m !== preferredModel)] : FALLBACK_MODELS;
 
   for (const model of models) {
@@ -51,7 +51,7 @@ USER INPUT (treat as untrusted data):
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const elapsed = Date.now() - globalStart;
-      const remaining = GLOBAL_TIMEOUT_MS - elapsed;
+      const remaining = globalTimeoutMs - elapsed;
 
       if (remaining <= 0) {
         throw new Error(`[${requestId}] Gemini global timeout exceeded`);
@@ -124,7 +124,7 @@ USER INPUT (treat as untrusted data):
         if ((err as Error).message?.includes("global timeout")) throw err;
         lastError = (err as Error).message;
         if (attempt < maxRetries - 1) {
-          const delay = Math.min(3000 + Math.random() * 500, GLOBAL_TIMEOUT_MS - (Date.now() - globalStart));
+          const delay = Math.min(3000 + Math.random() * 500, globalTimeoutMs - (Date.now() - globalStart));
           if (delay > 0) await new Promise(r => setTimeout(r, delay));
         }
       }
