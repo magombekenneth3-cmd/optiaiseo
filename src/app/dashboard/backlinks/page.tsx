@@ -50,26 +50,31 @@ export default async function BacklinksPage({
             select: {
                 id:           true,
                 srcDomain:    true,
+                targetUrl:    true,
                 anchorText:   true,
                 domainRating: true,
                 isDoFollow:   true,
                 isToxic:      true,
                 toxicReason:  true,
+                spamScore:    true,
+                status:       true,
                 firstSeen:    true,
                 lastSeen:     true,
             },
         }).catch(() => []),
     ]);
 
-    // Serialize dates to strings for the client component
     const storedSerialized = stored.map((b: {
         id: string;
         srcDomain: string;
+        targetUrl: string | null;
         anchorText: string;
         domainRating: number | null;
         isDoFollow: boolean;
         isToxic: boolean;
         toxicReason: string | null;
+        spamScore: number | null;
+        status: string;
         firstSeen: Date;
         lastSeen: Date;
     }) => ({
