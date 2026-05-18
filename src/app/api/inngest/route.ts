@@ -80,6 +80,7 @@ import { internalLinksOnPublishJob } from "@/lib/inngest/functions/internal-link
 import { blogCitationMonitorJob } from "@/lib/inngest/functions/blog-citation-monitor";
 
 import { backlinkCheckSite } from "@/lib/inngest/functions/backlinks";
+import { backlinkOutreachFollowupJob } from "@/lib/inngest/functions/backlink-outreach-followup";
 import { rankAlertCheckerJob } from "@/lib/inngest/functions/rank-alert-checker";
 import { weeklyDigestJob } from "@/lib/inngest/functions/weekly-digest";
 import { githubAutofixSiteJob } from "@/lib/inngest/functions/github-autofix";
@@ -137,6 +138,7 @@ export const { GET, POST, PUT } = serve({
         backlinkCheckSite,          // event: backlinks.check.site + Mon 03:00 UTC cron
         backlinksSiteJob,           // fan-out child: backlinks.check.site — must be registered
         cronWeeklyBacklinks,        // weekly backlinks fan-out cron (Mon 03:00 UTC)
+        backlinkOutreachFollowupJob, // daily 09:00 UTC — auto-advance stale outreach cards
 
         analyseCompetitorPageJob,
         competitorAlertsSiteJob,    // event: competitor.alerts.site
