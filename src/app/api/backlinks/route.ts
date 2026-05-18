@@ -126,7 +126,7 @@ export async function GET(req: NextRequest) {
                 orderBy: { detectedAt: "desc" },
                 take:    50,
                 select: {
-                    id: true, type: true, domain: true, dr: true, detectedAt: true,
+                    id: true, type: true, domain: true, url: true, dr: true, detectedAt: true,
                 },
             });
             return NextResponse.json({ alerts });
@@ -145,6 +145,7 @@ export async function GET(req: NextRequest) {
                 select: {
                     id:           true,
                     srcDomain:    true,
+                    targetUrl:    true,
                     anchorText:   true,
                     domainRating: true,
                     isDoFollow:   true,

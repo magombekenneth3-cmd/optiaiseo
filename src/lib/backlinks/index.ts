@@ -27,11 +27,15 @@ const EMPTY_SUMMARY: BacklinkSummary = {
     totalBacklinks:   0,
     referringDomains: 0,
     domainRating:     0,
+    drDelta30d:       null,
     newLastWeek:      0,
     lostLastWeek:     0,
+    doFollowRatio:    0,
+    topLinkedPage:    null,
     topAnchors:       [],
     brokenBacklinks:  0,
     toxicCount:       0,
+    avgReferringDR:   null,
 };
 
 /**
@@ -67,14 +71,18 @@ export async function getBacklinkSummary(
                     totalBacklinks:   result.backlinks          ?? 0,
                     referringDomains: result.referring_domains  ?? 0,
                     domainRating:     result.rank               ?? 0,
+                    drDelta30d:       null,     // computed below from DB
                     newLastWeek:      result.new_backlinks_7d   ?? 0,
                     lostLastWeek:     result.lost_backlinks_7d  ?? 0,
+                    doFollowRatio:    0,         // computed below from DB
+                    topLinkedPage:    null,       // computed below from DB
                     topAnchors:       (result.anchors ?? []).slice(0, 10).map((a: any) => ({
                         anchor: a.anchor,
                         count:  a.backlinks,
                     })),
                     brokenBacklinks:  result.broken_backlinks   ?? 0,
-                    toxicCount:       0, // placeholder — overwritten below if siteId provided
+                    toxicCount:       0,         // overwritten below if siteId provided
+                    avgReferringDR:   null,       // computed below from DB
                 } satisfies BacklinkSummary;
             } catch (err) {
                 logger.error("[Backlinks] Failed to fetch backlink summary", {
@@ -85,20 +93,33 @@ export async function getBacklinkSummary(
         },
     );
 
-    // Pull real toxic count from DB — zero DataForSEO cost, not cached per domain
-    // because it's already a simple DB count that's cheap and always fresh.
-    let toxicCount = 0;
+    // Pull enriched metrics from DB — zero DataForSEO cost, always fresh.
     if (siteId) {
         try {
-            toxicCount = await prisma.backlinkDetail.count({
-                where: { siteId, isToxic: true },
-            });
+            const [toxicCount, totalCount, doFollowCount, avgResult, topPage] = await Promise.all([
+                prisma.backlinkDetail.count({ where: { siteId, isToxic: true } }),
+                prisma.backlinkDetail.count({ where: { siteId } }),
+                prisma.backlinkDetail.count({ where: { siteId, isDoFollow: true } }),
+                prisma.backlinkDetail.aggregate({ where: { siteId, domainRating: { not: null } }, _avg: { domainRating: true } }),
+                prisma.backlinkDetail.groupBy({
+                    by: ["targetUrl"],
+                    where: { siteId, targetUrl: { not: "" } },
+                    _count: { id: true },
+                    orderBy: { _count: { id: "desc" } },
+                    take: 1,
+                }),
+            ]);
+
+            liveData.toxicCount = toxicCount;
+            liveData.doFollowRatio = totalCount > 0 ? Math.round((doFollowCount / totalCount) * 100) : 0;
+            liveData.avgReferringDR = avgResult._avg.domainRating != null ? Math.round(avgResult._avg.domainRating) : null;
+            liveData.topLinkedPage = topPage.length > 0 ? topPage[0].targetUrl : null;
         } catch (err) {
-            logger.warn("[Backlinks] Failed to read toxic count from DB", { siteId, error: String(err) });
+            logger.warn("[Backlinks] Failed to read enriched metrics from DB", { siteId, error: String(err) });
         }
     }
 
-    return { ...liveData, toxicCount };
+    return liveData;
 }
 
 // ─── Details ─────────────────────────────────────────────────────────────────

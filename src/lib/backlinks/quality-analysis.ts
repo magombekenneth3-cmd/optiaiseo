@@ -93,6 +93,7 @@ export async function analyseAndStoreBacklinks(
                     siteId,
                     srcDomain:    bl.srcDomain,
                     anchorText:   bl.anchorText,
+                    targetUrl:    bl.targetUrl ?? "",
                     domainRating: bl.domainRating ?? null,
                     isDoFollow:   bl.isDoFollow   ?? true,
                     isToxic,

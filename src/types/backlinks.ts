@@ -6,11 +6,15 @@ export interface BacklinkSummary {
     totalBacklinks: number;
     referringDomains: number;
     domainRating: number;
+    drDelta30d: number | null;
     newLastWeek: number;
     lostLastWeek: number;
+    doFollowRatio: number;
+    topLinkedPage: string | null;
     topAnchors: { anchor: string; count: number }[];
     brokenBacklinks: number;
     toxicCount: number;
+    avgReferringDR: number | null;
 }
 
 export interface BacklinkDetail {
@@ -25,19 +29,23 @@ export interface BacklinkDetail {
 export interface StoredBacklink {
     id: string;
     srcDomain: string;
+    targetUrl: string | null;
     anchorText: string;
     domainRating: number | null;
     isDoFollow: boolean;
     isToxic: boolean;
     toxicReason: string | null;
+    spamScore: number | null;
     firstSeen: string;
     lastSeen: string;
+    status: "active" | "lost" | "broken";
 }
 
 export interface BacklinkAlert {
     id: string;
     type: "gained" | "lost";
     domain: string;
+    sourceUrl: string | null;
     dr: number | null;
     detectedAt: string;
 }
