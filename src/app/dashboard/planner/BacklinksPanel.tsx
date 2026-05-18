@@ -134,18 +134,23 @@ function KanbanCard({
         transform: transform
             ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
             : undefined,
-        opacity:   isDragging ? 0.4 : 1,
-        padding:   "10px 12px",
-        borderRadius: 10,
-        background: "rgba(255,255,255,.03)",
-        border: "1px solid rgba(255,255,255,.08)",
-        cursor: "grab",
-        userSelect: "none",
-        display: "flex",
+        opacity:     isDragging ? 0.35 : 1,
+        padding:     "11px 13px",
+        borderRadius: 11,
+        background:  isDragging ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.03)",
+        border:      isDragging
+            ? "1px solid rgba(255,255,255,.18)"
+            : "1px solid rgba(255,255,255,.08)",
+        cursor:      "grab",
+        userSelect:  "none",
+        display:     "flex",
         flexDirection: "column",
-        gap: 7,
-        transition: "box-shadow .12s",
-        boxShadow: isDragging ? "0 8px 24px rgba(0,0,0,.4)" : "none",
+        gap:         7,
+        transition:  "box-shadow .15s ease, border-color .15s ease, background .15s ease, transform .1s ease",
+        boxShadow:   isDragging
+            ? "0 16px 40px rgba(0,0,0,.55), 0 4px 12px rgba(0,0,0,.3)"
+            : "0 1px 3px rgba(0,0,0,.2)",
+        willChange:  "transform",
     };
 
     return (
@@ -191,8 +196,9 @@ function KanbanCard({
                 {isOverdue && (
                     <span style={{
                         fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 4,
-                        background: "rgba(239,68,68,.15)", color: "#f87171",
-                        border: "1px solid rgba(239,68,68,.25)",
+                        background: "rgba(239,68,68,.18)", color: "#f87171",
+                        border: "1px solid rgba(239,68,68,.35)",
+                        animation: "pulseOverdue 2s ease infinite",
                     }}>
                         Follow-up overdue
                     </span>
@@ -311,13 +317,16 @@ function KanbanColumn({
                     minHeight: 120,
                     padding: "8px 6px",
                     borderRadius: "0 0 10px 10px",
-                    border: `1px solid ${meta.border}`,
+                    border: `1px solid ${isOver ? meta.dot : meta.border}`,
                     borderTop: "none",
-                    background: isOver ? `${meta.bg}` : "rgba(255,255,255,.01)",
+                    background: isOver
+                        ? `${meta.bg.replace(".06", ".12")}`
+                        : "rgba(255,255,255,.01)",
+                    boxShadow: isOver ? `inset 0 0 0 1px ${meta.dot}30, 0 0 20px ${meta.dot}12` : "none",
                     display: "flex",
                     flexDirection: "column",
                     gap: 6,
-                    transition: "background .12s",
+                    transition: "background .15s ease, border-color .15s ease, box-shadow .15s ease",
                 }}
             >
                 {cards.map(target => (
@@ -588,13 +597,14 @@ export function BacklinksPanel({ siteId, item, onUpdate }: Props) {
                 <DragOverlay dropAnimation={null}>
                     {activeCard ? (
                         <div style={{
-                            padding: "10px 12px", borderRadius: 10,
-                            background: "rgba(30,30,40,.95)",
-                            border: "1px solid rgba(255,255,255,.15)",
-                            boxShadow: "0 16px 48px rgba(0,0,0,.5)",
-                            opacity: .92, minWidth: 160, maxWidth: 220,
+                            padding: "11px 13px", borderRadius: 11,
+                            background: "rgba(18,18,32,.98)",
+                            border: "1px solid rgba(255,255,255,.2)",
+                            boxShadow: "0 24px 64px rgba(0,0,0,.65), 0 4px 16px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.06) inset",
+                            opacity: 0.95, minWidth: 170, maxWidth: 230,
+                            backdropFilter: "blur(12px)",
                         }}>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.9)" }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.92)" }}>
                                 {activeCard.domain}
                             </span>
                         </div>
@@ -604,6 +614,18 @@ export function BacklinksPanel({ siteId, item, onUpdate }: Props) {
 
             {/* Add-target form */}
             <AddTargetForm onAdd={addTarget} />
+
+            {/* Keyframes for Kanban animations */}
+            <style>{`
+                @keyframes pulseOverdue {
+                    0%, 100% { opacity: 1; }
+                    50%       { opacity: .6; }
+                }
+                @keyframes cardIn {
+                    from { opacity: 0; transform: translateY(6px) scale(.97); }
+                    to   { opacity: 1; transform: translateY(0) scale(1); }
+                }
+            `}</style>
         </div>
     );
 }

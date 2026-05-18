@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import styles from "./BacklinksClient.module.css";
 import { useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 import { PanelErrorBoundary } from "@/components/dashboard/PanelErrorBoundary";
@@ -320,61 +321,32 @@ export default function BacklinksClient({
 
 
     return (
-        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 0 80px" }}>
+        <div className={styles.root} style={{ maxWidth: 1100, margin: "0 auto", padding: "0 0 80px" }}>
 
             {/* ── Page header ── */}
-            <div style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "28px 0 24px",
-                borderBottom: "1px solid rgba(255,255,255,.05)",
-                marginBottom: 28, flexWrap: "wrap", gap: 12,
-            }}>
+            <div className={styles.header}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{
-                        width: 32, height: 32, borderRadius: 9,
-                        background: "rgba(59,130,246,.1)",
-                        border: "1px solid rgba(59,130,246,.2)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
+                    <div className={styles.headerIconWrap}>
                         <Link2 size={15} style={{ color: "#60a5fa" }} />
                     </div>
                     <div>
-                        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "rgba(255,255,255,.9)", letterSpacing: "-.02em" }}>
-                            Backlinks
-                        </h1>
-                        <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,.3)" }}>
-                            Live monitoring · quality analysis · competitor gap
-                        </p>
+                        <h1 className={styles.headerTitle}>Backlinks</h1>
+                        <p className={styles.headerSub}>Live monitoring · quality analysis · competitor gap</p>
                     </div>
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {/* Circuit-breaker banner */}
                     {(cbState === "OPEN" || cbState === "HALF") && (
-                        <div style={{
-                            display: "inline-flex", alignItems: "center", gap: 6,
-                            padding: "6px 12px", borderRadius: 8,
-                            background: "rgba(251,191,36,.08)",
-                            border: "1px solid rgba(251,191,36,.2)",
-                            color: "#fbbf24", fontSize: 11, fontWeight: 600,
-                        }}>
+                        <div className={styles.cbBanner}>
                             ⚠ DataForSEO circuit {cbState === "OPEN" ? "open" : "half-open"} — showing cached data
                         </div>
                     )}
 
-                    {/* Disavow download — only shown when toxic links exist */}
                     {quality && quality.toxic > 0 && effectiveSiteId && (
                         <a
                             href={`/api/backlinks/disavow?siteId=${effectiveSiteId}`}
                             download
-                            style={{
-                                display: "inline-flex", alignItems: "center", gap: 6,
-                                padding: "7px 13px", borderRadius: 10,
-                                background: "rgba(239,68,68,.08)",
-                                border: "1px solid rgba(239,68,68,.2)",
-                                color: "#f87171", fontSize: 11, fontWeight: 600,
-                                textDecoration: "none", transition: "all .15s",
-                            }}
+                            className={styles.btnDisavow}
                         >
                             <Download size={11} />
                             Disavow ({quality.toxic})
@@ -384,18 +356,9 @@ export default function BacklinksClient({
                     <button
                         onClick={() => fetchLive(true)}
                         disabled={loadingLive}
-                        style={{
-                            display: "inline-flex", alignItems: "center", gap: 7,
-                            padding: "8px 14px", borderRadius: 10,
-                            background: "rgba(255,255,255,.04)",
-                            border: "1px solid rgba(255,255,255,.1)",
-                            color: "rgba(255,255,255,.6)", fontSize: 12, fontWeight: 600,
-                            cursor: loadingLive ? "not-allowed" : "pointer",
-                            opacity: loadingLive ? .5 : 1,
-                            transition: "all .15s",
-                        }}
+                        className={styles.btnRefresh}
                     >
-                        <RefreshCw size={12} style={{ animation: loadingLive ? "spin 1s linear infinite" : "none" }} />
+                        <RefreshCw size={12} className={loadingLive ? styles.spinning : undefined} />
                         Refresh
                     </button>
                 </div>
@@ -403,11 +366,7 @@ export default function BacklinksClient({
 
             {/* ── Error banner ── */}
             {error && (
-                <div style={{
-                    marginBottom: 20, padding: "12px 16px", borderRadius: 10,
-                    background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.2)",
-                    color: "#f87171", fontSize: 12, display: "flex", alignItems: "center", gap: 8,
-                }}>
+                <div className={styles.errorBanner}>
                     <AlertTriangle size={13} />
                     {error}
                 </div>
@@ -421,11 +380,7 @@ export default function BacklinksClient({
                     Loading live data…
                 </div>
             ) : summary && (
-                <div style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-                    gap: 12, marginBottom: 28,
-                }}>
+                <div className={styles.statsGrid}>
                     <StatCard label="Total Backlinks" value={fmt(summary.totalBacklinks)} icon={Link2} accent="rgba(59,130,246,.1)" iconColor="#60a5fa" />
                     <StatCard label="Referring Domains" value={fmt(summary.referringDomains)} icon={Globe} accent="rgba(16,185,129,.1)" iconColor="#34d399" />
                     <StatCard label="Domain Rating" value={summary.domainRating} icon={TrendingUp} accent="rgba(139,92,246,.1)" iconColor="#a78bfa" />
@@ -622,11 +577,7 @@ export default function BacklinksClient({
                                 value={domainSearch}
                                 onChange={e => setDomainSearch(e.target.value)}
                                 placeholder="Filter domain…"
-                                style={{
-                                    background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.1)",
-                                    borderRadius: 8, padding: "5px 10px 5px 24px",
-                                    color: "rgba(255,255,255,.7)", fontSize: 11, outline: "none", width: 140,
-                                }}
+                                className={styles.searchInput}
                             />
                         </div>
                         {/* Toxic filter */}
@@ -781,28 +732,15 @@ export default function BacklinksClient({
                             onChange={e => setCompetitorInput(e.target.value)}
                             onKeyDown={e => e.key === "Enter" && fetchGap()}
                             placeholder="competitor.com"
-                            style={{
-                                width: "100%", boxSizing: "border-box",
-                                background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.1)",
-                                borderRadius: 9, padding: "8px 12px 8px 30px",
-                                color: "rgba(255,255,255,.8)", fontSize: 12, outline: "none",
-                            }}
+                            className={styles.gapInput}
                         />
                     </div>
                     <button
                         onClick={fetchGap}
                         disabled={loadingGap || !competitorInput.trim()}
-                        style={{
-                            padding: "8px 16px", borderRadius: 9,
-                            background: "rgba(59,130,246,.15)", border: "1px solid rgba(59,130,246,.3)",
-                            color: "#60a5fa", fontSize: 12, fontWeight: 700,
-                            cursor: loadingGap || !competitorInput.trim() ? "not-allowed" : "pointer",
-                            opacity: loadingGap || !competitorInput.trim() ? .5 : 1,
-                            display: "flex", alignItems: "center", gap: 7,
-                            transition: "all .15s",
-                        }}
+                        className={styles.btnAnalyse}
                     >
-                        {loadingGap ? <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} /> : <Search size={12} />}
+                        {loadingGap ? <Loader2 size={12} className={styles.spinning} /> : <Search size={12} />}
                         Analyse
                     </button>
                 </div>
@@ -855,11 +793,7 @@ export default function BacklinksClient({
                                 </h4>
                                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                                     {gap.gap.opportunityDomains.map(({ domain, dr }) => (
-                                        <div key={domain} style={{
-                                            display: "inline-flex", alignItems: "center", gap: 5,
-                                            padding: "5px 10px", borderRadius: 7,
-                                            background: "rgba(59,130,246,.06)", border: "1px solid rgba(59,130,246,.15)",
-                                        }}>
+                                        <div key={domain} className={styles.gapChip}>
                                             <a
                                                 href={`https://${domain}`} target="_blank" rel="noopener noreferrer"
                                                 style={{ color: "#60a5fa", fontSize: 11, fontWeight: 500, textDecoration: "none" }}
@@ -869,18 +803,11 @@ export default function BacklinksClient({
                                             </a>
                                             <ArrowUpRight size={9} style={{ opacity: .4, color: "#60a5fa" }} />
                                             {addedDomains.has(domain) ? (
-                                                <span style={{ fontSize: 9, fontWeight: 700, color: "#34d399", marginLeft: 4 }}>✓ Added</span>
+                                                <span className={styles.addedBadge}>✓ Added</span>
                                             ) : (
                                                 <button
                                                     onClick={() => handleAddToPlanner(domain, dr ?? null)}
-                                                    style={{
-                                                        display: "inline-flex", alignItems: "center", gap: 3,
-                                                        marginLeft: 4, padding: "2px 7px", borderRadius: 5,
-                                                        background: "rgba(16,185,129,.12)",
-                                                        border: "1px solid rgba(16,185,129,.25)",
-                                                        color: "#34d399", fontSize: 9, fontWeight: 700,
-                                                        cursor: "pointer", transition: "all .12s",
-                                                    }}
+                                                    className={styles.btnAddPlanner}
                                                     title={`Add ${domain} to planner`}
                                                 >
                                                     <Plus size={8} />
@@ -905,23 +832,8 @@ export default function BacklinksClient({
 
             {/* ── Gap → Planner modal ── */}
             {gapModal && (
-                <div style={{
-                    position: "fixed", inset: 0, zIndex: 1000,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    background: "rgba(0,0,0,.65)",
-                }} onClick={() => setGapModal(null)}>
-                    <div
-                        style={{
-                            background: "#13131f",
-                            border: "1px solid rgba(255,255,255,.1)",
-                            borderRadius: 16,
-                            padding: "24px",
-                            width: 360,
-                            maxWidth: "90vw",
-                            boxShadow: "0 24px 80px rgba(0,0,0,.6)",
-                        }}
-                        onClick={e => e.stopPropagation()}
-                    >
+                <div className={styles.modalBackdrop} onClick={() => setGapModal(null)}>
+                    <div className={styles.modal} onClick={e => e.stopPropagation()}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                             <div>
                                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,.9)" }}>Add to Planner</p>
@@ -939,22 +851,14 @@ export default function BacklinksClient({
                                 No planner items yet. Create one first in the Content Planner.
                             </p>
                         ) : (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: 280, overflowY: "auto" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
                                 {plannerItems.map(pi => (
                                     <button
                                         key={pi.id}
                                         onClick={() => confirmAddToPlanner(pi.id)}
                                         disabled={plannerPending}
-                                        style={{
-                                            textAlign: "left", padding: "9px 12px",
-                                            borderRadius: 8, cursor: "pointer",
-                                            background: "rgba(255,255,255,.03)",
-                                            border: "1px solid rgba(255,255,255,.08)",
-                                            color: "rgba(255,255,255,.75)",
-                                            fontSize: 12, fontWeight: 500,
-                                            transition: "all .12s",
-                                            opacity: plannerPending ? .5 : 1,
-                                        }}
+                                        className={styles.plannerBtn}
+                                        style={{ opacity: plannerPending ? .5 : 1 }}
                                     >
                                         {pi.title ?? pi.keyword}
                                         <span style={{ display: "block", fontSize: 10, color: "rgba(255,255,255,.3)", marginTop: 2 }}>{pi.keyword}</span>
@@ -966,8 +870,7 @@ export default function BacklinksClient({
                 </div>
             )}
 
-            {/* Keyframe for spinner */}
-            <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+            {/* Keyframes are in BacklinksClient.module.css */}
         </div>
     );
 }
