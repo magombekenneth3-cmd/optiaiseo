@@ -1,7 +1,18 @@
 // src/app/dashboard/planner/BacklinksPanel.tsx
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useCallback } from "react";
+import {
+    DndContext,
+    DragOverlay,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    type DragStartEvent,
+    type DragEndEvent,
+} from "@dnd-kit/core";
+import { useDroppable } from "@dnd-kit/core";
+import { useDraggable } from "@dnd-kit/core";
 import { upsertBacklinkTarget, removeBacklinkTarget } from "@/app/actions/planner";
 import type { BacklinkTarget } from "@/types/planner";
 import type { PlannerItem } from "@/app/actions/planner";
@@ -12,70 +23,513 @@ interface Props {
     onUpdate: (updatedItem: PlannerItem) => void;
 }
 
-const TIER_COLORS: Record<number, string> = {
-    1: "bg-emerald-500/10 text-emerald-400",
-    2: "bg-amber-500/10 text-amber-400",
-    3: "bg-red-500/10 text-red-400",
-};
-const STATUS_COLORS: Record<string, string> = {
-    "Idea":           "bg-zinc-500/10 text-muted-foreground",
-    "Outreach Sent":  "bg-blue-500/10 text-blue-400",
-    "Following Up":   "bg-amber-500/10 text-amber-400",
-    "Won":            "bg-emerald-500/10 text-emerald-400",
-    "Rejected":       "bg-red-500/10 text-red-400",
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const COLUMNS: BacklinkTarget["status"][] = [
+    "Idea",
+    "Outreach Sent",
+    "Following Up",
+    "Won",
+    "Rejected",
+];
+
+const COLUMN_META: Record<BacklinkTarget["status"], { color: string; bg: string; border: string; dot: string }> = {
+    "Idea":          { color: "#9ca3af", bg: "rgba(156,163,175,.06)", border: "rgba(156,163,175,.15)", dot: "#6b7280" },
+    "Outreach Sent": { color: "#60a5fa", bg: "rgba(59,130,246,.06)",  border: "rgba(59,130,246,.2)",   dot: "#3b82f6" },
+    "Following Up":  { color: "#fbbf24", bg: "rgba(251,191,36,.06)",  border: "rgba(251,191,36,.2)",   dot: "#f59e0b" },
+    "Won":           { color: "#34d399", bg: "rgba(16,185,129,.06)",  border: "rgba(16,185,129,.2)",   dot: "#10b981" },
+    "Rejected":      { color: "#f87171", bg: "rgba(239,68,68,.06)",   border: "rgba(239,68,68,.2)",    dot: "#ef4444" },
 };
 
-const TYPES = ["guest_post", "resource_page", "broken_link", "quora", "medium", "podcast", "haro", "other"] as const;
+const TIER_META: Record<number, { label: string; color: string; bg: string }> = {
+    1: { label: "T1", color: "#34d399", bg: "rgba(16,185,129,.12)" },
+    2: { label: "T2", color: "#fbbf24", bg: "rgba(251,191,36,.12)" },
+    3: { label: "T3", color: "#f87171", bg: "rgba(239,68,68,.12)" },
+};
+
+const TYPE_ICONS: Record<BacklinkTarget["type"], string> = {
+    guest_post:    "✍",
+    resource_page: "📄",
+    broken_link:   "🔗",
+    quora:         "Q",
+    medium:        "M",
+    podcast:       "🎙",
+    haro:          "📰",
+    other:         "•",
+};
+
+const TYPES: BacklinkTarget["type"][] = [
+    "guest_post", "resource_page", "broken_link", "quora", "medium", "podcast", "haro", "other",
+];
+
+function drColor(dr: number) {
+    if (dr >= 60) return "#34d399";
+    if (dr >= 30) return "#fbbf24";
+    return "#f87171";
+}
+
+function daysSince(iso?: string): number | null {
+    if (!iso) return null;
+    return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+}
+
+// ─── Column stats (all client-side, no extra fetch) ──────────────────────────
+
+function colStats(backlinks: BacklinkTarget[], col: BacklinkTarget["status"]) {
+    const cards  = backlinks.filter(b => b.status === col);
+    const avgDr  = cards.filter(b => b.dr != null).reduce((s, b) => s + b.dr!, 0) / (cards.filter(b => b.dr != null).length || 1);
+    const oldest = cards
+        .filter(b => b.contactedAt)
+        .sort((a, b) => a.contactedAt!.localeCompare(b.contactedAt!))
+        .at(0);
+    return {
+        count:  cards.length,
+        avgDr:  cards.some(b => b.dr != null) ? Math.round(avgDr) : null,
+        oldestDays: oldest ? daysSince(oldest.contactedAt) : null,
+    };
+}
+
+// ─── Win-rate analytics ───────────────────────────────────────────────────────
+
+function winRateStats(backlinks: BacklinkTarget[]) {
+    const won  = backlinks.filter(b => b.status === "Won");
+    const sent = backlinks.filter(b =>
+        b.status === "Outreach Sent" || b.status === "Following Up" || b.status === "Won" || b.status === "Rejected"
+    );
+    const closeRate = sent.length > 0 ? ((won.length / sent.length) * 100).toFixed(1) : null;
+    const avgDrWon  = won.filter(b => b.dr != null).length > 0
+        ? Math.round(won.reduce((s, b) => s + (b.dr ?? 0), 0) / won.filter(b => b.dr != null).length)
+        : null;
+    // Days to close: wonAt – contactedAt
+    const closeDurations = won
+        .filter(b => b.wonAt && b.contactedAt)
+        .map(b => Math.floor((new Date(b.wonAt!).getTime() - new Date(b.contactedAt!).getTime()) / 86_400_000));
+    const avgDaysToClose = closeDurations.length > 0
+        ? Math.round(closeDurations.reduce((s, d) => s + d, 0) / closeDurations.length)
+        : null;
+    return { won: won.length, sent: sent.length, closeRate, avgDrWon, avgDaysToClose };
+}
+
+// ─── Draggable card ───────────────────────────────────────────────────────────
+
+function KanbanCard({
+    target,
+    onRemove,
+    onEditNote,
+    isDragging = false,
+}: {
+    target: BacklinkTarget;
+    onRemove: () => void;
+    onEditNote: (note: string) => void;
+    isDragging?: boolean;
+}) {
+    const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: target.id });
+    const [editingNote, setEditingNote] = useState(false);
+    const [noteVal, setNoteVal]         = useState(target.note ?? "");
+
+    const isOverdue = target.followUpAt && new Date(target.followUpAt) < new Date();
+    const days      = daysSince(target.contactedAt);
+
+    const style: React.CSSProperties = {
+        transform: transform
+            ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+            : undefined,
+        opacity:   isDragging ? 0.4 : 1,
+        padding:   "10px 12px",
+        borderRadius: 10,
+        background: "rgba(255,255,255,.03)",
+        border: "1px solid rgba(255,255,255,.08)",
+        cursor: "grab",
+        userSelect: "none",
+        display: "flex",
+        flexDirection: "column",
+        gap: 7,
+        transition: "box-shadow .12s",
+        boxShadow: isDragging ? "0 8px 24px rgba(0,0,0,.4)" : "none",
+    };
+
+    return (
+        <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+            {/* Row 1: tier + type icon + domain */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                <span style={{
+                    fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 4,
+                    background: TIER_META[target.tier].bg,
+                    color:      TIER_META[target.tier].color,
+                    flexShrink: 0,
+                }}>
+                    {TIER_META[target.tier].label}
+                </span>
+                <span style={{ fontSize: 11, flexShrink: 0, opacity: .6 }}>
+                    {TYPE_ICONS[target.type]}
+                </span>
+                <span style={{
+                    fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.85)",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1,
+                }}>
+                    {target.domain}
+                </span>
+            </div>
+
+            {/* Row 2: DR + contactedAt + overdue badge */}
+            <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                {target.dr != null && (
+                    <span style={{
+                        fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 4,
+                        color: drColor(target.dr),
+                        background: `${drColor(target.dr)}18`,
+                        border: `1px solid ${drColor(target.dr)}30`,
+                    }}>
+                        DR {target.dr}
+                    </span>
+                )}
+                {days != null && (
+                    <span style={{ fontSize: 10, color: "rgba(255,255,255,.3)" }}>
+                        {days}d ago
+                    </span>
+                )}
+                {isOverdue && (
+                    <span style={{
+                        fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 4,
+                        background: "rgba(239,68,68,.15)", color: "#f87171",
+                        border: "1px solid rgba(239,68,68,.25)",
+                    }}>
+                        Follow-up overdue
+                    </span>
+                )}
+            </div>
+
+            {/* Row 3: note */}
+            {editingNote ? (
+                <div style={{ display: "flex", gap: 5 }} onPointerDown={e => e.stopPropagation()}>
+                    <input
+                        autoFocus
+                        value={noteVal}
+                        onChange={e => setNoteVal(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === "Enter") { onEditNote(noteVal); setEditingNote(false); }
+                            if (e.key === "Escape") { setNoteVal(target.note ?? ""); setEditingNote(false); }
+                        }}
+                        style={{
+                            flex: 1, fontSize: 11, background: "rgba(255,255,255,.06)",
+                            border: "1px solid rgba(255,255,255,.15)", borderRadius: 6,
+                            padding: "3px 7px", color: "rgba(255,255,255,.8)", outline: "none",
+                        }}
+                    />
+                    <button
+                        onClick={() => { onEditNote(noteVal); setEditingNote(false); }}
+                        style={{ fontSize: 10, color: "#34d399", background: "none", border: "none", cursor: "pointer", padding: "0 4px" }}
+                    >✓</button>
+                </div>
+            ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+                    <span
+                        style={{ fontSize: 10, color: "rgba(255,255,255,.3)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        title={target.note}
+                    >
+                        {target.note || <span style={{ fontStyle: "italic", opacity: .4 }}>No note</span>}
+                    </span>
+                    <button
+                        onPointerDown={e => e.stopPropagation()}
+                        onClick={() => setEditingNote(true)}
+                        style={{ fontSize: 10, color: "rgba(255,255,255,.25)", background: "none", border: "none", cursor: "pointer", flexShrink: 0, padding: "0 2px" }}
+                        title="Edit note"
+                    >✎</button>
+                    <button
+                        onPointerDown={e => e.stopPropagation()}
+                        onClick={onRemove}
+                        style={{ fontSize: 10, color: "rgba(239,68,68,.5)", background: "none", border: "none", cursor: "pointer", flexShrink: 0, padding: "0 2px" }}
+                        title="Remove"
+                    >✕</button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Droppable column ─────────────────────────────────────────────────────────
+
+function KanbanColumn({
+    status,
+    cards,
+    allBacklinks,
+    onRemove,
+    onEditNote,
+    activeId,
+}: {
+    status: BacklinkTarget["status"];
+    cards: BacklinkTarget[];
+    allBacklinks: BacklinkTarget[];
+    onRemove: (id: string) => void;
+    onEditNote: (id: string, note: string) => void;
+    activeId: string | null;
+}) {
+    const { setNodeRef, isOver } = useDroppable({ id: status });
+    const meta  = COLUMN_META[status];
+    const stats = colStats(allBacklinks, status);
+
+    return (
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+            {/* Column header */}
+            <div style={{
+                padding: "10px 12px",
+                borderRadius: "10px 10px 0 0",
+                background: meta.bg,
+                border: `1px solid ${meta.border}`,
+                borderBottom: "none",
+                marginBottom: 0,
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: meta.dot, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: meta.color, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                        {status}
+                    </span>
+                    <span style={{
+                        marginLeft: "auto", fontSize: 10, fontWeight: 700,
+                        background: meta.bg, color: meta.color,
+                        padding: "1px 6px", borderRadius: 4,
+                        border: `1px solid ${meta.border}`,
+                    }}>
+                        {stats.count}
+                    </span>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {stats.avgDr != null && (
+                        <span style={{ fontSize: 9, color: "rgba(255,255,255,.3)" }}>avg DR {stats.avgDr}</span>
+                    )}
+                    {stats.oldestDays != null && (
+                        <span style={{ fontSize: 9, color: "rgba(255,255,255,.3)" }}>oldest {stats.oldestDays}d</span>
+                    )}
+                </div>
+            </div>
+
+            {/* Drop zone */}
+            <div
+                ref={setNodeRef}
+                style={{
+                    flex: 1,
+                    minHeight: 120,
+                    padding: "8px 6px",
+                    borderRadius: "0 0 10px 10px",
+                    border: `1px solid ${meta.border}`,
+                    borderTop: "none",
+                    background: isOver ? `${meta.bg}` : "rgba(255,255,255,.01)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    transition: "background .12s",
+                }}
+            >
+                {cards.map(target => (
+                    <KanbanCard
+                        key={target.id}
+                        target={target}
+                        onRemove={() => onRemove(target.id)}
+                        onEditNote={note => onEditNote(target.id, note)}
+                        isDragging={activeId === target.id}
+                    />
+                ))}
+                {cards.length === 0 && (
+                    <div style={{
+                        flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 10, color: "rgba(255,255,255,.12)", pointerEvents: "none",
+                        padding: "12px 0",
+                    }}>
+                        Drop here
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ─── Add-target form ──────────────────────────────────────────────────────────
+
+function AddTargetForm({ onAdd }: { onAdd: (t: BacklinkTarget) => void }) {
+    const [v, setV] = useState<Partial<BacklinkTarget>>({ tier: 1, type: "resource_page", status: "Idea" });
+
+    const submit = () => {
+        if (!v.domain?.trim()) return;
+        onAdd({
+            id:          `bl-${Date.now()}`,
+            domain:      v.domain.trim(),
+            type:        v.type as BacklinkTarget["type"],
+            tier:        (v.tier ?? 1) as 1 | 2 | 3,
+            status:      v.status as BacklinkTarget["status"],
+            note:        v.note || undefined,
+            contactedAt: v.contactedAt || undefined,
+            followUpAt:  v.followUpAt  || undefined,
+        });
+        setV({ tier: 1, type: "resource_page", status: "Idea" });
+    };
+
+    const inp = (style?: React.CSSProperties): React.CSSProperties => ({
+        background: "rgba(255,255,255,.04)",
+        border: "1px solid rgba(255,255,255,.1)",
+        borderRadius: 8,
+        padding: "6px 10px",
+        color: "rgba(255,255,255,.8)",
+        fontSize: 12,
+        outline: "none",
+        ...style,
+    });
+
+    return (
+        <div style={{ padding: "12px 0", borderTop: "1px solid rgba(255,255,255,.06)" }}>
+            <p style={{ margin: "0 0 8px", fontSize: 10, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "rgba(255,255,255,.3)" }}>
+                Add Target
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <input
+                    value={v.domain ?? ""}
+                    onChange={e => setV(p => ({ ...p, domain: e.target.value }))}
+                    placeholder="domain.com"
+                    style={{ ...inp(), gridColumn: "1 / -1" }}
+                />
+                <select
+                    value={v.type}
+                    onChange={e => setV(p => ({ ...p, type: e.target.value as BacklinkTarget["type"] }))}
+                    style={inp()}
+                >
+                    {TYPES.map(t => <option key={t} value={t}>{TYPE_ICONS[t]} {t.replace("_", " ")}</option>)}
+                </select>
+                <select
+                    value={v.tier}
+                    onChange={e => setV(p => ({ ...p, tier: Number(e.target.value) as 1 | 2 | 3 }))}
+                    style={inp()}
+                >
+                    <option value={1}>T1 — Easy</option>
+                    <option value={2}>T2 — Medium</option>
+                    <option value={3}>T3 — Hard</option>
+                </select>
+                <input
+                    value={v.note ?? ""}
+                    onChange={e => setV(p => ({ ...p, note: e.target.value }))}
+                    placeholder="Note (optional)"
+                    style={{ ...inp(), gridColumn: "1 / -1" }}
+                />
+                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    <label style={{ fontSize: 9, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: ".05em" }}>Contacted</label>
+                    <input type="date" value={v.contactedAt ?? ""} onChange={e => setV(p => ({ ...p, contactedAt: e.target.value || undefined }))} style={inp()} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    <label style={{ fontSize: 9, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: ".05em" }}>Follow-up</label>
+                    <input type="date" value={v.followUpAt ?? ""} onChange={e => setV(p => ({ ...p, followUpAt: e.target.value || undefined }))} style={inp()} />
+                </div>
+                <button
+                    onClick={submit}
+                    disabled={!v.domain?.trim()}
+                    style={{
+                        gridColumn: "1 / -1",
+                        padding: "7px",
+                        borderRadius: 8,
+                        background: v.domain?.trim() ? "rgba(16,185,129,.15)" : "rgba(255,255,255,.04)",
+                        border: `1px solid ${v.domain?.trim() ? "rgba(16,185,129,.3)" : "rgba(255,255,255,.1)"}`,
+                        color: v.domain?.trim() ? "#34d399" : "rgba(255,255,255,.25)",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: v.domain?.trim() ? "pointer" : "not-allowed",
+                        transition: "all .15s",
+                    }}
+                >
+                    + Add Target
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ─── Win-rate bar ─────────────────────────────────────────────────────────────
+
+function WinRateBar({ backlinks }: { backlinks: BacklinkTarget[] }) {
+    const stats = winRateStats(backlinks);
+    if (stats.sent === 0) return null;
+
+    return (
+        <div style={{
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "rgba(16,185,129,.04)",
+            border: "1px solid rgba(16,185,129,.12)",
+            display: "flex",
+            alignItems: "center",
+            gap: 20,
+            flexWrap: "wrap",
+        }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#34d399" }}>
+                Won {stats.won} / Sent {stats.sent}
+                {stats.closeRate != null && (
+                    <span style={{ marginLeft: 6, fontSize: 12 }}>→ {stats.closeRate}% close rate</span>
+                )}
+            </span>
+            {stats.avgDaysToClose != null && (
+                <span style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>
+                    Avg {stats.avgDaysToClose}d to close
+                </span>
+            )}
+            {stats.avgDrWon != null && (
+                <span style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>
+                    Avg DR won: <span style={{ color: drColor(stats.avgDrWon), fontWeight: 700 }}>{stats.avgDrWon}</span>
+                </span>
+            )}
+        </div>
+    );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export function BacklinksPanel({ siteId, item, onUpdate }: Props) {
     const [isPending, startTransition] = useTransition();
+    const [activeId, setActiveId]      = useState<string | null>(null);
+
     const backlinks: BacklinkTarget[] = (item.backlinks as unknown as BacklinkTarget[]) ?? [];
 
-    const [newTarget, setNewTarget] = useState<Partial<BacklinkTarget>>({
-        tier: 1,
-        type: "quora",
-        status: "Idea",
-        contactedAt: undefined,
-    });
+    const sensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+    );
 
-    const addTarget = () => {
-        if (!newTarget.domain) return;
-        const target: BacklinkTarget = {
-            id:          `bl-${Date.now()}`,
-            domain:      newTarget.domain,
-            type:        newTarget.type as BacklinkTarget["type"],
-            tier:        (newTarget.tier ?? 1) as 1 | 2 | 3,
-            status:      newTarget.status as BacklinkTarget["status"],
-            note:        newTarget.note,
-            contactedAt: newTarget.contactedAt || undefined,
-        };
-        startTransition(async () => {
-            await upsertBacklinkTarget(siteId, item.id, target);
-            onUpdate({ ...item, backlinks: [target, ...backlinks] as unknown as typeof item.backlinks });
-            setNewTarget({ tier: 1, type: "quora", status: "Idea", contactedAt: undefined });
+    // ── Mutate helpers ──────────────────────────────────────────────────────
 
-            // Lazily fetch DR for the new target — failure is silent (decorative only)
-            fetch(`/api/backlinks?siteId=${siteId}&mode=summary&domain=${target.domain}`)
-                .then(r => r.ok ? r.json() : null)
-                .then(data => {
-                    if (!data?.summary?.domainRating) return;
-                    const withDR = { ...target, dr: data.summary.domainRating as number };
-                    onUpdate({
-                        ...item,
-                        backlinks: [withDR, ...backlinks] as unknown as typeof item.backlinks,
-                    });
-                })
-                .catch(() => {});
-        });
-    };
-
-    const updateStatus = (targetId: string, status: BacklinkTarget["status"]) => {
-        const updated = backlinks.map(b => b.id === targetId ? { ...b, status } : b);
-        const target  = updated.find(b => b.id === targetId)!;
+    const persist = useCallback((updated: BacklinkTarget[], target: BacklinkTarget) => {
         startTransition(async () => {
             await upsertBacklinkTarget(siteId, item.id, target);
             onUpdate({ ...item, backlinks: updated as unknown as typeof item.backlinks });
         });
+    }, [siteId, item, onUpdate]);
+
+    const addTarget = (target: BacklinkTarget) => {
+        const updated = [target, ...backlinks];
+        persist(updated, target);
+
+        // Lazily fetch DR for the new target
+        fetch(`/api/backlinks?siteId=${siteId}&mode=summary&domain=${target.domain}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data?.summary?.domainRating) return;
+                const withDR = { ...target, dr: data.summary.domainRating as number };
+                const next   = [withDR, ...backlinks];
+                startTransition(async () => {
+                    await upsertBacklinkTarget(siteId, item.id, withDR);
+                    onUpdate({ ...item, backlinks: next as unknown as typeof item.backlinks });
+                });
+            })
+            .catch(() => {});
+    };
+
+    const moveCard = (targetId: string, newStatus: BacklinkTarget["status"]) => {
+        const updated = backlinks.map(b =>
+            b.id === targetId
+                ? { ...b, status: newStatus, movedAt: new Date().toISOString(), ...(newStatus === "Won" ? { wonAt: new Date().toISOString() } : {}) }
+                : b
+        );
+        const target = updated.find(b => b.id === targetId)!;
+        persist(updated, target);
+    };
+
+    const editNote = (targetId: string, note: string) => {
+        const updated = backlinks.map(b => b.id === targetId ? { ...b, note } : b);
+        const target  = updated.find(b => b.id === targetId)!;
+        persist(updated, target);
     };
 
     const removeTarget = (targetId: string) => {
@@ -86,132 +540,70 @@ export function BacklinksPanel({ siteId, item, onUpdate }: Props) {
         });
     };
 
-    const wonCount  = backlinks.filter(b => b.status === "Won").length;
-    const sentCount = backlinks.filter(b => b.status === "Outreach Sent" || b.status === "Following Up").length;
+    // ── Drag handlers ───────────────────────────────────────────────────────
+
+    const onDragStart = ({ active }: DragStartEvent) => setActiveId(String(active.id));
+
+    const onDragEnd = ({ active, over }: DragEndEvent) => {
+        setActiveId(null);
+        if (!over) return;
+        const newStatus = over.id as BacklinkTarget["status"];
+        if (!COLUMNS.includes(newStatus)) return;
+        const card = backlinks.find(b => b.id === active.id);
+        if (!card || card.status === newStatus) return;
+        moveCard(String(active.id), newStatus);
+    };
+
+    const activeCard = activeId ? backlinks.find(b => b.id === activeId) : null;
 
     return (
-        <div className="space-y-5">
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-3">
-                {[
-                    { label: "Total targets",   value: backlinks.length },
-                    { label: "Outreach active", value: sentCount },
-                    { label: "Links won",       value: wonCount },
-                ].map(stat => (
-                    <div key={stat.label} className="p-3 rounded-xl border border-border bg-muted/30 text-center">
-                        <p className="text-2xl font-bold">{stat.value}</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">{stat.label}</p>
-                    </div>
-                ))}
-            </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Win-rate bar */}
+            <WinRateBar backlinks={backlinks} />
 
-            {/* Add new target */}
-            <div>
-                <h4 className="text-xs uppercase font-bold tracking-wider text-muted-foreground mb-2">Add target</h4>
-                <div className="grid grid-cols-2 gap-2">
-                    <input
-                        value={newTarget.domain ?? ""}
-                        onChange={e => setNewTarget(p => ({ ...p, domain: e.target.value }))}
-                        placeholder="domain.com"
-                        className="bg-muted/40 border border-border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-emerald-500"
-                    />
-                    <select
-                        value={newTarget.type}
-                        onChange={e => setNewTarget(p => ({ ...p, type: e.target.value as BacklinkTarget["type"] }))}
-                        className="bg-muted/40 border border-border rounded-lg px-3 py-1.5 text-sm outline-none"
-                    >
-                        {TYPES.map(t => <option key={t} value={t}>{t.replace("_", " ")}</option>)}
-                    </select>
-                    <select
-                        value={newTarget.tier}
-                        onChange={e => setNewTarget(p => ({ ...p, tier: Number(e.target.value) as 1 | 2 | 3 }))}
-                        className="bg-muted/40 border border-border rounded-lg px-3 py-1.5 text-sm outline-none"
-                    >
-                        <option value={1}>Tier 1 — Easy</option>
-                        <option value={2}>Tier 2 — Medium</option>
-                        <option value={3}>Tier 3 — Hard</option>
-                    </select>
-                    <input
-                        value={newTarget.note ?? ""}
-                        onChange={e => setNewTarget(p => ({ ...p, note: e.target.value }))}
-                        placeholder="Note (optional)"
-                        className="bg-muted/40 border border-border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-emerald-500"
-                    />
-                    {/* Editable contactedAt — not auto-set */}
-                    <input
-                        type="date"
-                        value={newTarget.contactedAt ?? ""}
-                        onChange={e => setNewTarget(p => ({ ...p, contactedAt: e.target.value || undefined }))}
-                        className="bg-muted/40 border border-border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-emerald-500 col-span-2"
-                        title="Contacted date (optional)"
-                    />
-                    <button
-                        onClick={addTarget}
-                        disabled={isPending || !newTarget.domain}
-                        className="col-span-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-sm font-bold hover:bg-emerald-500/20 disabled:opacity-50"
-                    >
-                        Add target
-                    </button>
+            {/* Kanban board */}
+            <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+                <div style={{
+                    display: "grid",
+                    gridTemplateColumns: `repeat(${COLUMNS.length}, minmax(0, 1fr))`,
+                    gap: 8,
+                    alignItems: "start",
+                    opacity: isPending ? .75 : 1,
+                    transition: "opacity .15s",
+                }}>
+                    {COLUMNS.map(col => (
+                        <KanbanColumn
+                            key={col}
+                            status={col}
+                            cards={backlinks.filter(b => b.status === col)}
+                            allBacklinks={backlinks}
+                            onRemove={removeTarget}
+                            onEditNote={editNote}
+                            activeId={activeId}
+                        />
+                    ))}
                 </div>
-            </div>
 
-            {/* Targets list */}
-            <div className="space-y-2">
-                {backlinks.length === 0 && (
-                    <p className="text-xs text-muted-foreground py-2">
-                        No backlink targets yet. Start with Tier 1 (Quora, Medium, Pinterest) — lowest effort.
-                    </p>
-                )}
-                {backlinks.map(b => {
-                    const bWithDR = b as BacklinkTarget & { dr?: number };
-                    return (
-                        <div
-                            key={b.id}
-                            className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/20 text-sm"
-                        >
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${TIER_COLORS[b.tier]}`}>
-                                T{b.tier}
+                {/* Ghost card rendered at cursor while dragging */}
+                <DragOverlay dropAnimation={null}>
+                    {activeCard ? (
+                        <div style={{
+                            padding: "10px 12px", borderRadius: 10,
+                            background: "rgba(30,30,40,.95)",
+                            border: "1px solid rgba(255,255,255,.15)",
+                            boxShadow: "0 16px 48px rgba(0,0,0,.5)",
+                            opacity: .92, minWidth: 160, maxWidth: 220,
+                        }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.9)" }}>
+                                {activeCard.domain}
                             </span>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                    <p className="font-medium truncate">{b.domain}</p>
-                                    {/* DR badge — shown when available after lazy fetch */}
-                                    {bWithDR.dr != null && (
-                                        <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
-                                            DR {bWithDR.dr}
-                                        </span>
-                                    )}
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                    {b.type.replace("_", " ")}
-                                    {b.note ? ` · ${b.note}` : ""}
-                                    {b.contactedAt ? ` · ${b.contactedAt}` : ""}
-                                </p>
-                            </div>
-                            <select
-                                value={b.status}
-                                onChange={e => updateStatus(b.id, e.target.value as BacklinkTarget["status"])}
-                                disabled={isPending}
-                                className={`text-xs font-semibold px-2 py-1 rounded-md outline-none bg-transparent ${STATUS_COLORS[b.status]} hover:brightness-110 cursor-pointer`}
-                            >
-                                {Object.keys(STATUS_COLORS).map(s => (
-                                    <option key={s} value={s} className="text-foreground bg-popover">{s}</option>
-                                ))}
-                            </select>
-                            {/* Delete button */}
-                            <button
-                                onClick={() => removeTarget(b.id)}
-                                disabled={isPending}
-                                className="text-muted-foreground hover:text-destructive transition-colors ml-1 shrink-0"
-                                aria-label={`Remove ${b.domain}`}
-                                title="Remove target"
-                            >
-                                ✕
-                            </button>
                         </div>
-                    );
-                })}
-            </div>
+                    ) : null}
+                </DragOverlay>
+            </DndContext>
+
+            {/* Add-target form */}
+            <AddTargetForm onAdd={addTarget} />
         </div>
     );
 }

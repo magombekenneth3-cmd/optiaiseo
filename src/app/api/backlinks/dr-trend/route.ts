@@ -53,8 +53,8 @@ export async function GET(req: NextRequest) {
   });
 
   const trend: DrTrendPoint[] = snapshots
-    .filter((s) => s.domainRating !== null)
-    .map((s) => ({
+    .filter((s: { domainRating: number | null; fetchedAt: Date }) => s.domainRating !== null)
+    .map((s: { domainRating: number | null; fetchedAt: Date }) => ({
       date: s.fetchedAt.toISOString().slice(0, 10),
       dr: Math.round(s.domainRating as number),
     }));

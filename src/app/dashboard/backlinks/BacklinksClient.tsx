@@ -13,13 +13,14 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import { useTransition } from "react";
 import { PanelErrorBoundary } from "@/components/dashboard/PanelErrorBoundary";
 import type { BacklinkSummary, StoredBacklink, BacklinkAlert, QualitySummary, BacklinkGapReport } from "@/types/backlinks";
 import {
     Link2, TrendingUp, TrendingDown, AlertTriangle,
     ShieldAlert, Globe, RefreshCw, ChevronDown,
     ChevronUp, ArrowUpRight, Loader2, Search,
-    CheckCircle2, XCircle, Minus,
+    CheckCircle2, XCircle, Minus, Download, Plus, X,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -29,6 +30,7 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
+import { addBacklinkTargetFromGap, getPlannerItemsForSite } from "@/app/actions/backlinks";
 
 // Types are imported from @/types/backlinks above
 // GapReport is the BacklinkGapReport shape
@@ -175,6 +177,13 @@ export default function BacklinksClient({
     const [quality, setQuality] = useState<QualitySummary | null>(null);
     const [gap, setGap] = useState<GapReport | null>(null);
     const [drTrend, setDrTrend] = useState<{ date: string; dr: number }[]>([]);
+    const [cbState, setCbState] = useState<"CLOSED" | "OPEN" | "HALF">("CLOSED");
+
+    // Gap → Planner modal state
+    const [plannerItems, setPlannerItems] = useState<{ id: string; keyword: string; title: string | null }[]>([]);
+    const [gapModal, setGapModal] = useState<{ domain: string; dr: number | null } | null>(null);
+    const [addedDomains, setAddedDomains] = useState<Set<string>>(new Set());
+    const [plannerPending, startPlannerTransition] = useTransition();
 
     const [loadingLive, setLoadingLive] = useState(false);
     const [loadingStored, setLoadingStored] = useState(false);
@@ -247,9 +256,35 @@ export default function BacklinksClient({
               .then((r) => r.ok ? r.json() : null)
               .then((data) => { if (data?.trend?.length) setDrTrend(data.trend); })
               .catch(() => {});
+
+            // Poll circuit breaker state once on mount
+            fetch(`/api/backlinks/health?siteId=${effectiveSiteId}`)
+              .then(r => r.ok ? r.json() : null)
+              .then(data => { if (data?.state) setCbState(data.state); })
+              .catch(() => {});
+
+            // Prefetch planner items for the gap → planner modal
+            getPlannerItemsForSite(effectiveSiteId)
+              .then(res => { if (res.success && res.items) setPlannerItems(res.items); })
+              .catch(() => {});
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [effectiveSiteId]);
+
+    const handleAddToPlanner = (domain: string, dr: number | null) => {
+        setGapModal({ domain, dr });
+    };
+
+    const confirmAddToPlanner = (itemId: string) => {
+        if (!effectiveSiteId || !gapModal) return;
+        startPlannerTransition(async () => {
+            const res = await addBacklinkTargetFromGap(effectiveSiteId, itemId, gapModal.domain, gapModal.dr);
+            if (res.success) {
+                setAddedDomains(prev => new Set([...prev, gapModal.domain]));
+                setGapModal(null);
+            }
+        });
+    };
 
 
     const filteredStored = stored
@@ -313,23 +348,57 @@ export default function BacklinksClient({
                     </div>
                 </div>
 
-                <button
-                    onClick={() => fetchLive(true)}
-                    disabled={loadingLive}
-                    style={{
-                        display: "inline-flex", alignItems: "center", gap: 7,
-                        padding: "8px 14px", borderRadius: 10,
-                        background: "rgba(255,255,255,.04)",
-                        border: "1px solid rgba(255,255,255,.1)",
-                        color: "rgba(255,255,255,.6)", fontSize: 12, fontWeight: 600,
-                        cursor: loadingLive ? "not-allowed" : "pointer",
-                        opacity: loadingLive ? .5 : 1,
-                        transition: "all .15s",
-                    }}
-                >
-                    <RefreshCw size={12} style={{ animation: loadingLive ? "spin 1s linear infinite" : "none" }} />
-                    Refresh
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {/* Circuit-breaker banner */}
+                    {(cbState === "OPEN" || cbState === "HALF") && (
+                        <div style={{
+                            display: "inline-flex", alignItems: "center", gap: 6,
+                            padding: "6px 12px", borderRadius: 8,
+                            background: "rgba(251,191,36,.08)",
+                            border: "1px solid rgba(251,191,36,.2)",
+                            color: "#fbbf24", fontSize: 11, fontWeight: 600,
+                        }}>
+                            ⚠ DataForSEO circuit {cbState === "OPEN" ? "open" : "half-open"} — showing cached data
+                        </div>
+                    )}
+
+                    {/* Disavow download — only shown when toxic links exist */}
+                    {quality && quality.toxic > 0 && effectiveSiteId && (
+                        <a
+                            href={`/api/backlinks/disavow?siteId=${effectiveSiteId}`}
+                            download
+                            style={{
+                                display: "inline-flex", alignItems: "center", gap: 6,
+                                padding: "7px 13px", borderRadius: 10,
+                                background: "rgba(239,68,68,.08)",
+                                border: "1px solid rgba(239,68,68,.2)",
+                                color: "#f87171", fontSize: 11, fontWeight: 600,
+                                textDecoration: "none", transition: "all .15s",
+                            }}
+                        >
+                            <Download size={11} />
+                            Disavow ({quality.toxic})
+                        </a>
+                    )}
+
+                    <button
+                        onClick={() => fetchLive(true)}
+                        disabled={loadingLive}
+                        style={{
+                            display: "inline-flex", alignItems: "center", gap: 7,
+                            padding: "8px 14px", borderRadius: 10,
+                            background: "rgba(255,255,255,.04)",
+                            border: "1px solid rgba(255,255,255,.1)",
+                            color: "rgba(255,255,255,.6)", fontSize: 12, fontWeight: 600,
+                            cursor: loadingLive ? "not-allowed" : "pointer",
+                            opacity: loadingLive ? .5 : 1,
+                            transition: "all .15s",
+                        }}
+                    >
+                        <RefreshCw size={12} style={{ animation: loadingLive ? "spin 1s linear infinite" : "none" }} />
+                        Refresh
+                    </button>
+                </div>
             </div>
 
             {/* ── Error banner ── */}
@@ -786,20 +855,39 @@ export default function BacklinksClient({
                                 </h4>
                                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                                     {gap.gap.opportunityDomains.map(({ domain, dr }) => (
-                                        <a key={domain}
-                                            href={`https://${domain}`} target="_blank" rel="noopener noreferrer"
-                                            style={{
-                                                display: "inline-flex", alignItems: "center", gap: 5,
-                                                padding: "5px 10px", borderRadius: 7,
-                                                background: "rgba(59,130,246,.06)", border: "1px solid rgba(59,130,246,.15)",
-                                                color: "#60a5fa", fontSize: 11, fontWeight: 500, textDecoration: "none",
-                                                transition: "all .12s",
-                                            }}
-                                        >
-                                            {domain}
-                                            <span style={{ fontSize: 9, opacity: .55, marginLeft: 2, fontVariantNumeric: "tabular-nums" }}>DR {dr}</span>
-                                            <ArrowUpRight size={9} style={{ opacity: .6 }} />
-                                        </a>
+                                        <div key={domain} style={{
+                                            display: "inline-flex", alignItems: "center", gap: 5,
+                                            padding: "5px 10px", borderRadius: 7,
+                                            background: "rgba(59,130,246,.06)", border: "1px solid rgba(59,130,246,.15)",
+                                        }}>
+                                            <a
+                                                href={`https://${domain}`} target="_blank" rel="noopener noreferrer"
+                                                style={{ color: "#60a5fa", fontSize: 11, fontWeight: 500, textDecoration: "none" }}
+                                            >
+                                                {domain}
+                                                {dr != null && <span style={{ fontSize: 9, opacity: .55, marginLeft: 4, fontVariantNumeric: "tabular-nums" }}>DR {dr}</span>}
+                                            </a>
+                                            <ArrowUpRight size={9} style={{ opacity: .4, color: "#60a5fa" }} />
+                                            {addedDomains.has(domain) ? (
+                                                <span style={{ fontSize: 9, fontWeight: 700, color: "#34d399", marginLeft: 4 }}>✓ Added</span>
+                                            ) : (
+                                                <button
+                                                    onClick={() => handleAddToPlanner(domain, dr ?? null)}
+                                                    style={{
+                                                        display: "inline-flex", alignItems: "center", gap: 3,
+                                                        marginLeft: 4, padding: "2px 7px", borderRadius: 5,
+                                                        background: "rgba(16,185,129,.12)",
+                                                        border: "1px solid rgba(16,185,129,.25)",
+                                                        color: "#34d399", fontSize: 9, fontWeight: 700,
+                                                        cursor: "pointer", transition: "all .12s",
+                                                    }}
+                                                    title={`Add ${domain} to planner`}
+                                                >
+                                                    <Plus size={8} />
+                                                    Planner
+                                                </button>
+                                            )}
+                                        </div>
                                     ))}
                                 </div>
                             </div>
@@ -814,6 +902,69 @@ export default function BacklinksClient({
                 )}
             </Section>
             </PanelErrorBoundary>
+
+            {/* ── Gap → Planner modal ── */}
+            {gapModal && (
+                <div style={{
+                    position: "fixed", inset: 0, zIndex: 1000,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    background: "rgba(0,0,0,.65)",
+                }} onClick={() => setGapModal(null)}>
+                    <div
+                        style={{
+                            background: "#13131f",
+                            border: "1px solid rgba(255,255,255,.1)",
+                            borderRadius: 16,
+                            padding: "24px",
+                            width: 360,
+                            maxWidth: "90vw",
+                            boxShadow: "0 24px 80px rgba(0,0,0,.6)",
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                            <div>
+                                <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,.9)" }}>Add to Planner</p>
+                                <p style={{ margin: "3px 0 0", fontSize: 11, color: "rgba(255,255,255,.35)" }}>
+                                    {gapModal.domain}{gapModal.dr != null ? ` · DR ${gapModal.dr}` : ""}
+                                </p>
+                            </div>
+                            <button onClick={() => setGapModal(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,.4)", padding: 4 }}>
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <p style={{ margin: "0 0 10px", fontSize: 11, color: "rgba(255,255,255,.4)" }}>Select a planner item to attach this outreach target to:</p>
+                        {plannerItems.length === 0 ? (
+                            <p style={{ fontSize: 12, color: "rgba(255,255,255,.25)", textAlign: "center", padding: "16px 0" }}>
+                                No planner items yet. Create one first in the Content Planner.
+                            </p>
+                        ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: 280, overflowY: "auto" }}>
+                                {plannerItems.map(pi => (
+                                    <button
+                                        key={pi.id}
+                                        onClick={() => confirmAddToPlanner(pi.id)}
+                                        disabled={plannerPending}
+                                        style={{
+                                            textAlign: "left", padding: "9px 12px",
+                                            borderRadius: 8, cursor: "pointer",
+                                            background: "rgba(255,255,255,.03)",
+                                            border: "1px solid rgba(255,255,255,.08)",
+                                            color: "rgba(255,255,255,.75)",
+                                            fontSize: 12, fontWeight: 500,
+                                            transition: "all .12s",
+                                            opacity: plannerPending ? .5 : 1,
+                                        }}
+                                    >
+                                        {pi.title ?? pi.keyword}
+                                        <span style={{ display: "block", fontSize: 10, color: "rgba(255,255,255,.3)", marginTop: 2 }}>{pi.keyword}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Keyframe for spinner */}
             <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>

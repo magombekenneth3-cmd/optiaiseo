@@ -10,12 +10,7 @@
  */
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-
-const TOXIC_KEYWORDS = [
-    "casino", "poker", "slots", "bet", "gambling", "lottery",
-    "viagra", "cialis", "pharmacy", "pills", "medication", "drug",
-    "porn", "adult", "xxx", "sex", "escort", "nude",
-];
+import { TOXIC_KEYWORDS } from "./constants";
 
 interface RawBacklink {
     srcDomain:    string;
@@ -59,9 +54,9 @@ export async function analyseAndStoreBacklinks(
         let toxicReason: string | undefined;
 
         // Rule 1: Exact-match anchor > 30% of all anchors
-        // Only apply the ratio rule when we have enough data (≥15 links);
-        // small sites with 1-2 links would always hit 100% on any anchor.
-        if (total >= 15 && anchorCount / total > 0.30) {
+        // Apply the ratio rule when we have ≥10 links (lowered from 15;
+        // catches smaller spam profiles before they embed deeper).
+        if (total >= 10 && anchorCount / total > 0.30) {
             isToxic = true;
             toxicReason = "exact_match_anchor";
         }
@@ -145,6 +140,6 @@ export async function getBacklinkQualitySummary(siteId: string) {
         toxic,
         doFollow,
         nofollow:     total - doFollow,
-        toxicReasons: byReason.map(r => ({ reason: r.toxicReason, count: r._count.id })),
+        toxicReasons: byReason.map((r: { toxicReason: string | null; _count: { id: number } }) => ({ reason: r.toxicReason, count: r._count.id })),
     };
 }

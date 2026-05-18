@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const sites = await prisma.site.findMany({
         where: { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },
         select: { id: true, domain: true },
-    });
+    }) as { id: string; domain: string }[];
 
     if (sites.length > 0) {
         await inngest.send(

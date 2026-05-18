@@ -19,6 +19,14 @@ export interface BacklinkTarget {
   contactedAt?: string;   // ISO date
   note?: string;
   url?: string;
+  // Kanban tracking fields
+  dr?: number;            // lazily fetched domain rating
+  movedAt?: string;       // ISO — when status last changed (track stall time)
+  followUpAt?: string;    // ISO — scheduled follow-up reminder
+  contactEmail?: string;  // outreach personalisation
+  pageUrl?: string;       // the specific page you want the link from
+  linkedUrl?: string;     // the URL on your site you want linked
+  wonAt?: string;         // ISO — when the link was won (close rate analytics)
 }
 
 export interface PageScoreChecks {

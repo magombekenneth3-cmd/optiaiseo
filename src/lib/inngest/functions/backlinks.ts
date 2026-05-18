@@ -39,7 +39,7 @@ export const backlinkCheckSite = inngest.createFunction(
                     where:  { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },
                     select: { id: true, domain: true },
                 })
-            );
+            ) as { id: string; domain: string }[];
             await inngest.send(
                 sites.map(s => ({ name: "backlinks.check.site" as const, data: { siteId: s.id, domain: s.domain } }))
             );
@@ -110,8 +110,8 @@ export const backlinkCheckSite = inngest.createFunction(
                     take: 20,
                 });
 
-                const gainedList = alerts.filter(a => a.type === "gained").map(a => ({ domain: a.domain, dr: a.dr }));
-                const lostList = alerts.filter(a => a.type === "lost").map(a => ({ domain: a.domain, dr: a.dr }));
+                const gainedList = alerts.filter((a: { type: string; domain: string; dr: number | null }) => a.type === "gained").map((a: { type: string; domain: string; dr: number | null }) => ({ domain: a.domain, dr: a.dr }));
+                const lostList = alerts.filter((a: { type: string; domain: string; dr: number | null }) => a.type === "lost").map((a: { type: string; domain: string; dr: number | null }) => ({ domain: a.domain, dr: a.dr }));
 
                 const { sendBacklinkAlertEmail } = await import("@/lib/email/backlink-alert");
                 await sendBacklinkAlertEmail(site.user.email, {

@@ -22,7 +22,7 @@ export async function detectBacklinkAlerts(
     ]);
 
     const freshSet  = new Map(fresh.map(r  => [r.srcDomain.toLowerCase(), r.dr]));
-    const storedSet = new Map(stored.map(r => [r.srcDomain.toLowerCase(), r.domainRating]));
+    const storedSet = new Map(stored.map((r: { srcDomain: string; domainRating: number | null }) => [r.srcDomain.toLowerCase(), r.domainRating]));
 
     const gained = [...freshSet.entries()].filter(([d]) => !storedSet.has(d));
     const lost   = [...storedSet.entries()].filter(([d]) => !freshSet.has(d));

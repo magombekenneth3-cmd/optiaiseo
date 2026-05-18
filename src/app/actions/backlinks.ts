@@ -75,3 +75,70 @@ export async function getBacklinkGap(siteId: string, competitorDomain: string) {
         return { success: false as const, error: (err as Error).message };
     }
 }
+
+// ─── Infer outreach type from domain heuristics ───────────────────────────────
+function inferOutreachType(domain: string): "guest_post" | "resource_page" | "broken_link" | "quora" | "medium" | "podcast" | "haro" | "other" {
+    if (/quora\.com/.test(domain)) return "quora";
+    if (/medium\.com/.test(domain)) return "medium";
+    if (/podcast|anchor\.fm|buzzsprout|simplecast/.test(domain)) return "podcast";
+    return "resource_page"; // safe default for high-DR referring domains
+}
+
+// ─── Add gap opportunity → planner item ──────────────────────────────────────
+/**
+ * Moves a competitor gap opportunity into an existing PlannerItem's backlink
+ * target list. Called from the BacklinksClient "+ Planner" button.
+ *
+ * Ownership check:
+ *   • assertSiteOwner validates siteId belongs to the session user.
+ *   • The upsertBacklinkTarget call also verifies itemId ∈ siteId.
+ */
+export async function addBacklinkTargetFromGap(
+    siteId: string,
+    itemId: string,
+    domain: string,
+    dr: number | null,
+): Promise<{ success: boolean; error?: string }> {
+    try {
+        await assertSiteOwner(siteId);
+
+        const { upsertBacklinkTarget } = await import("@/app/actions/planner");
+
+        const type = inferOutreachType(domain);
+        const tier = (dr != null && dr > 50) ? 2 : 1;
+
+        const target = {
+            id:     `gap-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            domain,
+            type,
+            tier:   tier as 1 | 2 | 3,
+            status: "Idea" as const,
+            dr:     dr ?? undefined,
+            note:   "Added from competitor gap analysis",
+        };
+
+        return await upsertBacklinkTarget(siteId, itemId, target);
+    } catch (err) {
+        return { success: false, error: (err as Error).message };
+    }
+}
+
+// ─── List planner items (for the gap → planner modal picker) ─────────────────
+export async function getPlannerItemsForSite(siteId: string): Promise<{
+    success: boolean;
+    items?: { id: string; keyword: string; title: string | null }[];
+    error?: string;
+}> {
+    try {
+        await assertSiteOwner(siteId);
+        const items = await prisma.plannerItem.findMany({
+            where:   { siteId },
+            select:  { id: true, keyword: true, title: true },
+            orderBy: { createdAt: "desc" },
+            take:    50,
+        });
+        return { success: true, items };
+    } catch (err) {
+        return { success: false, error: (err as Error).message };
+    }
+}

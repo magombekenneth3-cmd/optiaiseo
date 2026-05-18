@@ -62,7 +62,17 @@ export default async function BacklinksPage({
     ]);
 
     // Serialize dates to strings for the client component
-    const storedSerialized = stored.map(b => ({
+    const storedSerialized = stored.map((b: {
+        id: string;
+        srcDomain: string;
+        anchorText: string;
+        domainRating: number | null;
+        isDoFollow: boolean;
+        isToxic: boolean;
+        toxicReason: string | null;
+        firstSeen: Date;
+        lastSeen: Date;
+    }) => ({
         ...b,
         firstSeen: b.firstSeen.toISOString(),
         lastSeen:  b.lastSeen.toISOString(),
