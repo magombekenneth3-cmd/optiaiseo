@@ -93,12 +93,11 @@ export async function PATCH(
     where: { id },
     data: {
       subscriptionTier: tier,
-      // Reset credits to new tier allowance immediately
       credits,
       trialEndsAt: null,
+      creditsLockedAt: null,
       preferences: {
         ...existingPrefs,
-        // Bump session version so JWT cache is stale for this user
         sessionVersion: Date.now(),
         lastTierUpgrade: {
           from: currentTier,
@@ -117,25 +116,32 @@ export async function PATCH(
     },
   });
 
-  // Update subscription record
+  const adminPeriodEnd = new Date();
+  adminPeriodEnd.setFullYear(adminPeriodEnd.getFullYear() + 1);
+
   await prisma.subscription.upsert({
     where: { userId: id },
     create: {
       userId: id,
       status: tier === "FREE" ? "inactive" : "active",
+      currentPeriodEnd: tier === "FREE" ? null : adminPeriodEnd,
+      cancelledAt: null,
+      cancelAtPeriodEnd: false,
     },
     update: {
       status: tier === "FREE" ? "inactive" : "active",
+      currentPeriodEnd: tier === "FREE" ? null : adminPeriodEnd,
+      cancelledAt: null,
+      cancelAtPeriodEnd: false,
     },
   });
 
-  // Invalidate JWT cache so session reflects new tier immediately
   if (existing.email) {
     await redis.del(jwtCacheKey(existing.email)).catch(() => {});
   }
 
-  // Clear audit rate-limit key so new monthly quota takes effect now
   await redis.del(`audit-rate:${id}`).catch(() => {});
+  await redis.del(`blog:${id}:${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, "0")}`).catch(() => {});
 
   logger.info("[Admin] Tier upgraded", {
     userId: id,
