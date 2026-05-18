@@ -1045,7 +1045,7 @@ Return ONLY the complete file content for ${ctx.filePath}.`,
     "schema_howto": (ctx) => PROMPTS["schema-howto"](ctx),
     "schema_article": (ctx) => PROMPTS["schema-article"](ctx),
     "schema_speakable": (ctx) => PROMPTS["schema-speakable"](ctx),
-    \"schema_organization\": (ctx) => PROMPTS["schema-organization"](ctx),
+    "schema_organization": (ctx) => PROMPTS["schema-organization"](ctx),
 
     "eeat-author-byline": (ctx) => `You are a senior E-E-A-T and content credibility expert.
 ${FRAMEWORK_RULES[ctx.framework]}
