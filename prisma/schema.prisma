@@ -931,6 +931,8 @@ model BacklinkDetail {
   lastSeen     DateTime @default(now())
   isToxic      Boolean  @default(false)
   toxicReason  String?
+  spamScore    Float?
+  status       String   @default("active")
   site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@unique([siteId, srcDomain, anchorText])
