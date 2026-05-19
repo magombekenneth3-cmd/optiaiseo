@@ -60,6 +60,12 @@ export async function captureSerpFeatures(
     const domainStripped = stripDomain(domain)
     let saved = 0
 
+    const site = await prisma.site.findUnique({
+        where: { id: siteId },
+        select: { userId: true },
+    })
+    const userId = site?.userId
+
     for (const keyword of keywords.slice(0, KEYWORD_CAP)) {
         const serp = await fetchSerp(keyword)
         if (!serp) continue
@@ -71,20 +77,84 @@ export async function captureSerpFeatures(
 
         const answerBox = serp.answerBox as Record<string, string> | undefined;
         const snippetText = answerBox?.answer ?? answerBox?.snippet ?? null;
+        const hasSnippet = !!serp.answerBox;
+        const hasPaa = (serp.peopleAlsoAsk?.length ?? 0) > 0;
+        const hasLocalPack = !!serp.localResults;
+        const hasVideo = (serp.videos?.length ?? 0) > 0;
 
-        await prisma.serpFeature.create({
+        // Fetch old state before updating
+        const oldFeature = await prisma.serpFeature.findUnique({
+            where: { siteId_keyword: { siteId, keyword } },
+        })
+
+        // Create historical snapshot record
+        await prisma.serpFeatureSnapshot.create({
             data: {
                 siteId,
                 keyword,
                 hasAiOverview,
-                hasSnippet: !!serp.answerBox,
+                hasSnippet,
                 snippetText,
-                hasPaa: (serp.peopleAlsoAsk?.length ?? 0) > 0,
-                hasLocalPack: !!serp.localResults,
-                hasVideo: (serp.videos?.length ?? 0) > 0,
+                hasPaa,
+                hasLocalPack,
+                hasVideo,
                 brandInAio,
             },
         })
+
+        // Update the unique current feature record (upsert)
+        await prisma.serpFeature.upsert({
+            where: { siteId_keyword: { siteId, keyword } },
+            create: {
+                siteId,
+                keyword,
+                hasAiOverview,
+                hasSnippet,
+                snippetText,
+                hasPaa,
+                hasLocalPack,
+                hasVideo,
+                brandInAio,
+            },
+            update: {
+                hasAiOverview,
+                hasSnippet,
+                snippetText,
+                hasPaa,
+                hasLocalPack,
+                hasVideo,
+                brandInAio,
+                capturedAt: new Date(),
+            },
+        })
+
+        // Check for lost features and alert
+        if (oldFeature && userId) {
+            const lostFeatures: string[] = []
+            if (oldFeature.hasSnippet && !hasSnippet) {
+                lostFeatures.push("Featured Snippet")
+            }
+            if (oldFeature.brandInAio && !brandInAio) {
+                lostFeatures.push("Brand mention in AI Overview")
+            }
+
+            if (lostFeatures.length > 0) {
+                try {
+                    await prisma.notification.create({
+                        data: {
+                            userId,
+                            type: "serp_feature_lost",
+                            title: `Lost SERP Feature: ${keyword}`,
+                            body: `Your site ${domain} lost the following feature(s) for the keyword "${keyword}": ${lostFeatures.join(", ")}.`,
+                            href: `/dashboard/sites/${siteId}/seo`,
+                            metadata: { keyword, lostFeatures },
+                        },
+                    })
+                } catch (e: unknown) {
+                    logger.error("[SerpFeatures] Failed to create notification", { error: (e as Error)?.message });
+                }
+            }
+        }
 
         saved++
         await delay(SERP_DELAY_MS)

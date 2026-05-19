@@ -199,6 +199,7 @@ model Site {
   backlinkDetails        BacklinkDetail[]
   healingOutcomes        HealingOutcome[]
   serpFeatures           SerpFeature[]
+  serpFeatureSnapshots   SerpFeatureSnapshot[]
   uptimeAlerts           UptimeAlert[]
   voiceSessions          VoiceSession[]
   detectedServices       DetectedService[]
@@ -978,6 +979,24 @@ model SerpFeature {
   rankSnapshot   RankSnapshot? @relation(fields: [rankSnapshotId], references: [id], onDelete: SetNull)
 
   @@unique([siteId, keyword])
+  @@index([siteId, keyword])
+  @@index([siteId, capturedAt(sort: Desc)])
+}
+
+model SerpFeatureSnapshot {
+  id            String   @id @default(cuid())
+  siteId        String
+  keyword       String
+  hasAiOverview Boolean  @default(false)
+  hasSnippet    Boolean  @default(false)
+  snippetText   String?
+  hasPaa        Boolean  @default(false)
+  hasLocalPack  Boolean  @default(false)
+  hasVideo      Boolean  @default(false)
+  brandInAio    Boolean  @default(false)
+  capturedAt    DateTime @default(now())
+  site          Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
   @@index([siteId, keyword])
   @@index([siteId, capturedAt(sort: Desc)])
 }
