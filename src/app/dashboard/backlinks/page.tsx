@@ -79,6 +79,7 @@ export default async function BacklinksPage({
         lastSeen: Date;
     }) => ({
         ...b,
+        status: b.status as "active" | "lost" | "broken",
         firstSeen: b.firstSeen.toISOString(),
         lastSeen:  b.lastSeen.toISOString(),
     }));
