@@ -15,9 +15,9 @@ type AuditMode = "homepage" | "full";
 
 const TIER_PAGE_LIMITS: Record<string, number> = {
     FREE: 5,
-    PRO: 25,
-    AGENCY: 50,
-    ENTERPRISE: 100,
+    STARTER: 50,
+    PRO: 250,
+    AGENCY: 500,
 };
 
 function getTierLabel(tier?: string) {
