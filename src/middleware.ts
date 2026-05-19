@@ -23,7 +23,7 @@ function buildCsp(nonce: string): string {
     return [
         "default-src 'self'",
         `script-src 'self' 'nonce-${nonce}'${isDev ? " 'unsafe-eval'" : ""} https://js.stripe.com`,
-        `style-src 'self' 'nonce-${nonce}' 'unsafe-inline'`,
+        `style-src 'self' 'unsafe-inline'`,
         "img-src 'self' data: blob: https://images.unsplash.com https://lh3.googleusercontent.com https://avatars.githubusercontent.com https://cdn.hashnode.com",
         "font-src 'self' data:",
         "connect-src 'self' https://api.stripe.com https://*.livekit.cloud wss://*.livekit.cloud https://generativelanguage.googleapis.com https://api.anthropic.com https://api.openai.com https://inn.gs https://*.inngest.com https://*.upstash.io https://api.resend.com https://api.serper.dev https://serpapi.com",
