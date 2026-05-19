@@ -55,7 +55,13 @@ import {
     cronWeeklySerpAnalysis,
     cronGracePeriodEnforcer,
     cronCreditWipeFinalizer,
+    cronStuckBlogSweep,
 } from "@/lib/inngest/functions/cron-schedule";
+
+import {
+    serpFeatureWeeklyCron,
+    serpFeatureSiteJob,
+} from "@/lib/inngest/functions/serp-feature-tracker";
 
 import {
     competitorAlertsSiteJob,
@@ -216,5 +222,10 @@ export const { GET, POST, PUT } = serve({
         // Subscription grace-period lifecycle (daily crons)
         cronGracePeriodEnforcer,     // 01:00 UTC — locks credits after 2-day grace
         cronCreditWipeFinalizer,     // 02:00 UTC — wipes locked credits after 2 more days
+
+        // Missing registered jobs
+        cronStuckBlogSweep,
+        serpFeatureWeeklyCron,
+        serpFeatureSiteJob,
     ],
 });

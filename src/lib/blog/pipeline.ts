@@ -14,6 +14,7 @@
 import { callGemini, callGeminiJson } from "@/lib/gemini/client";
 import type { GeminiCallOptions } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
+import { generateWithFallback, generateWithFallbackJson } from "./ai-client";
 import { logger } from "@/lib/logger";
 import type { PromptContext } from "./prompt-context";
 import type { SerpContext } from "./serp";
@@ -303,12 +304,10 @@ DIFFERENTIATION MANDATE:
     };
 
     try {
-        return await callGeminiJson<ResearchBrain>(prompt + saturationBlock, {
+        return await generateWithFallbackJson<ResearchBrain>({
+            prompt: prompt + saturationBlock,
             model: AI_MODELS.GEMINI_FLASH,
-            temperature: 0.4,
-            maxOutputTokens: 2048,
-            timeoutMs: 60_000,
-            maxRetries: 3,
+            maxTokens: 2048,
         });
     } catch (e) {
         logger.warn("[Pipeline] Research brain failed — using fallback", { error: (e as Error).message });
@@ -428,13 +427,11 @@ RULES:
     };
 
     try {
-        const parsed = await callGeminiJson<OutlinePlan>(prompt, {
+        const parsed = await generateWithFallbackJson<OutlinePlan>({
+            prompt,
             model: AI_MODELS.GEMINI_FLASH,
-            temperature: 0.3,
-            maxOutputTokens: 3000,
-            timeoutMs: 60_000,
-            maxRetries: 3,
-        } as GeminiCallOptions);
+            maxTokens: 3000,
+        });
 
         if (!parsed || !Array.isArray(parsed.sections) || parsed.sections.length === 0) {
             logger.warn("[Pipeline] Outline planner returned empty sections — using fallback");
@@ -685,12 +682,10 @@ Output: ONLY the section in Markdown including the ## heading. No commentary.`;
 
         const sectionTemperature = temperatureByEvidence[section.evidenceType] ?? 0.50;
 
-        const text = await callGemini(prompt, {
+        const text = await generateWithFallback({
+            prompt,
             model: AI_MODELS.GEMINI_PRO,
-            temperature: sectionTemperature,
-            maxOutputTokens: 3000,
-            timeoutMs: 90_000,
-            maxRetries: 3,
+            maxTokens: 3000,
         });
 
         const trimmed = text.trim();
@@ -778,12 +773,10 @@ CONTENT:
 ${chunk}`;
 
         try {
-            const rewritten = await callGemini(prompt, {
+            const rewritten = await generateWithFallback({
+                prompt,
                 model: AI_MODELS.GEMINI_PRO,
-                temperature: 0.8,
-                maxOutputTokens: 8192,
-                timeoutMs: 90_000,
-                maxRetries: 2,
+                maxTokens: 8192,
             });
 
             const trimmed = rewritten.trim();

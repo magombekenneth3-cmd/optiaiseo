@@ -203,6 +203,13 @@ export function validateEnv() {
     if (disabledFeatures.length > 0) {
         logger.warn(`[Env] ${disabledFeatures.length} optional integrations disabled: ${disabledFeatures.join(', ')}`);
     }
+
+    if (!process.env.OPENAI_API_KEY) {
+        logger.warn("[Startup] OPENAI_API_KEY not set — blog generation fallback (OpenAI) disabled");
+    }
+    if (!process.env.ANTHROPIC_API_KEY) {
+        logger.warn("[Startup] ANTHROPIC_API_KEY not set — blog generation fallback (Anthropic) disabled");
+    }
 }
 
 // Validate Stripe price IDs are present in production (non-fatal warning in dev).

@@ -12,8 +12,16 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        // Rate limiting: 3 requests/minute per user
-        const rateLimitResult = await checkRateLimit(`content-score:${user!.id}`, 3, 60);
+        // Dynamic rate limiting based on user tier:
+        // FREE: 3/min, STARTER: 10/min, PRO: 25/min, AGENCY: 60/min
+        const { getEffectiveTier } = await import("@/lib/stripe/guards");
+        const tier = await getEffectiveTier(user.id);
+        let limit = 3;
+        if (tier === "STARTER") limit = 10;
+        else if (tier === "PRO") limit = 25;
+        else if (tier === "AGENCY") limit = 60;
+
+        const rateLimitResult = await checkRateLimit(`content-score:${user.id}`, limit, 60);
         if (!rateLimitResult.allowed) {
             return NextResponse.json(
                 { error: "Too many requests. Please wait a moment." },

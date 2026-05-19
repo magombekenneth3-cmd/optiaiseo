@@ -9,6 +9,7 @@ import { generateAeoFix, generateAllFixes, pushFixToGitHub } from "@/app/actions
 import { PrReviewModal, type PrReviewPayload } from "@/components/PrReviewModal";
 import { VisibilityForecastCard } from "@/components/aeo/VisibilityForecastCard";
 import type { AeoResult, AeoCheck } from "@/lib/aeo";
+import { CreditGate } from "@/components/ui/CreditGate";
 
 // ... (skipping unchanged gradeMeta, categoryMeta, impactBadge, ScoreRing, CheckCard)
 
@@ -372,21 +373,23 @@ export default function AeoPage() {
                         Answer Engine Optimization — how well your site appears in ChatGPT, Perplexity & Google AI Overviews
                     </p>
                 </div>
-                <button
-                    onClick={handleRun}
-                    disabled={loading}
-                    className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-xl text-sm transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {loading ? (
-                        <>
-                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                            </svg>
-                            Scanning…
-                        </>
-                    ) : "Run AEO Audit"}
-                </button>
+                <CreditGate action="aeo_check">
+                    <button
+                        onClick={handleRun}
+                        disabled={loading}
+                        className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-xl text-sm transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {loading ? (
+                            <>
+                                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                                Scanning…
+                            </>
+                        ) : "Run AEO Audit"}
+                    </button>
+                </CreditGate>
             </div>
 
             {error && (
@@ -405,12 +408,14 @@ export default function AeoPage() {
                     <p className="text-muted-foreground text-sm mb-6">
                         Run your first AEO audit to see how well this site appears in AI answer engines.
                     </p>
-                    <button
-                        onClick={handleRun}
-                        className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-xl text-sm transition-all"
-                    >
-                        Run First AEO Audit
-                    </button>
+                    <CreditGate action="aeo_check">
+                        <button
+                            onClick={handleRun}
+                            className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-xl text-sm transition-all"
+                        >
+                            Run First AEO Audit
+                        </button>
+                    </CreditGate>
                 </div>
             )}
 

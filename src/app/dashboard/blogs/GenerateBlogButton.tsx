@@ -9,6 +9,7 @@ import { showActionError } from "@/lib/ui/action-errors";
 import { Loader2, Sparkles, ChevronDown, FileText, BarChart } from "lucide-react";
 import { AuthorInput, GenerateBlogModal } from "./BlogStepper";
 import { UpgradeModal } from "@/components/UpgradeModal";
+import { CreditGate } from "@/components/ui/CreditGate";
 
 interface GenerateBlogButtonProps {
     siteId: string;
@@ -81,32 +82,34 @@ export function GenerateBlogButton({ siteId, siteDomain, initialKeyword }: Gener
         <>
             <div className="relative inline-block text-left">
                 <div className="flex flex-col items-center gap-2">
-                    <div className="flex items-center">
-                        <button
-                            onClick={() => openModal()}
-                            disabled={isPending}
-                            className="inline-flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-black px-5 py-2.5 rounded-l-xl font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.35)] min-w-[155px]"
-                        >
-                            {isPending ? (
-                                <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    Generating…
-                                </>
-                            ) : (
-                                <>
-                                    <Sparkles className="w-4 h-4" />
-                                    Generate Post
-                                </>
-                            )}
-                        </button>
-                        <button
-                            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                            disabled={isPending}
-                            className="inline-flex items-center justify-center px-3 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-r-xl border-l border-emerald-600/30 transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.35)]"
-                        >
-                            <ChevronDown className="w-4 h-4" />
-                        </button>
-                    </div>
+                    <CreditGate action="blog_generation">
+                        <div className="flex items-center">
+                            <button
+                                onClick={() => openModal()}
+                                disabled={isPending}
+                                className="inline-flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-black px-5 py-2.5 rounded-l-xl font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.35)] min-w-[155px]"
+                            >
+                                {isPending ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Generating…
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles className="w-4 h-4" />
+                                        Generate Post
+                                    </>
+                                )}
+                            </button>
+                            <button
+                                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                                disabled={isPending}
+                                className="inline-flex items-center justify-center px-3 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-r-xl border-l border-emerald-600/30 transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.35)]"
+                            >
+                                <ChevronDown className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </CreditGate>
                     {!isPending && (
                         <span className="text-xs font-bold text-emerald-400/80 uppercase tracking-widest flex items-center gap-1.5 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/60 animate-pulse" />

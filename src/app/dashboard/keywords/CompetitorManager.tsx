@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { showActionError } from "@/lib/ui/action-errors";
 import { Zap, Plus, RefreshCw, Trash2, Crosshair, Microscope, X, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
+import { CreditGate } from "@/components/ui/CreditGate";
 
 // ─── Page Analysis Panel ──────────────────────────────────────────────────────
 interface PageAnalysis {
@@ -598,17 +599,19 @@ export function CompetitorManager({
                                                     </button>
                                                 )}
 
-                                                <button
-                                                    onClick={() => handleGenerate(comp.id, comp.domain, kw.keyword, kw.searchVolume || 1000, kw.difficulty || 45, kw.intent)}
-                                                    disabled={generatingId === `${comp.id}::${kw.keyword}`}
-                                                    className="w-full py-1.5 bg-muted hover:bg-indigo-500/20 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors text-white hover:text-indigo-300 disabled:opacity-50"
-                                                >
-                                                    {generatingId === `${comp.id}::${kw.keyword}` ? (
-                                                        <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Generating...</>
-                                                    ) : (
-                                                        <>Generate Post to Outrank</>
-                                                    )}
-                                                </button>
+                                                <CreditGate action="blog_generation">
+                                                    <button
+                                                        onClick={() => handleGenerate(comp.id, comp.domain, kw.keyword, kw.searchVolume || 1000, kw.difficulty || 45, kw.intent)}
+                                                        disabled={generatingId === `${comp.id}::${kw.keyword}`}
+                                                        className="w-full py-1.5 bg-muted hover:bg-indigo-500/20 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors text-white hover:text-indigo-300 disabled:opacity-50"
+                                                    >
+                                                        {generatingId === `${comp.id}::${kw.keyword}` ? (
+                                                            <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Generating...</>
+                                                        ) : (
+                                                            <>Generate Post to Outrank</>
+                                                        )}
+                                                    </button>
+                                                </CreditGate>
 
                                                 {/* Page analysis panel — collapses per keyword card */}
                                                 {analysis && (

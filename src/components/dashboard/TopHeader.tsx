@@ -366,6 +366,7 @@ const PAGE_TITLE_PREFIX: Array<[string, string]> = [
     ["/dashboard/aeo", "AEO Rank Tracking"],
     ["/dashboard/voice", "AI Voice Agent"],
     ["/dashboard/indexing", "Auto Indexer"],
+    ["/dashboard/editor", "Content Editor"],
     ["/dashboard/planner", "Content Planner"],
     ["/dashboard/refresh", "Content Refresh"],
     ["/dashboard/content-decay", "Content Decay"],

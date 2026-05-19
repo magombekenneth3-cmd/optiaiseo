@@ -13,6 +13,7 @@ import {
     MonitorSmartphone,
     ClipboardList,
     FileText,
+    Highlighter,
     CreditCard,
     Settings,
     Mic,
@@ -62,6 +63,7 @@ const ACCOUNT_ITEMS = [
 const SECONDARY_ITEMS = [
     { name: "Recommendations", href: "/dashboard/recommendations", icon: Lightbulb,    contextSiteId: false, group: "strategy" },
     { name: "SERP Gap Analysis",href: "/dashboard/serp-gap",       icon: BarChart3,    contextSiteId: true,  group: "strategy" },
+    { name: "Content Editor",  href: "/dashboard/editor",          icon: Highlighter,  contextSiteId: false, group: "content" },
     { name: "Content Planner", href: "/dashboard/planner",         icon: Calendar,     contextSiteId: true,  group: "content" },
     { name: "Re-Optimize",     href: "/dashboard/refresh",         icon: ClipboardList,contextSiteId: true,  group: "content" },
     { name: "Content Decay",   href: "/dashboard/content-decay",   icon: TrendingDown, contextSiteId: true,  group: "content" },

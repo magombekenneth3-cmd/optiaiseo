@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { runAudit } from "@/app/actions/audit";
 import { showActionError } from "@/lib/ui/action-errors";
+import { CreditGate } from "@/components/ui/CreditGate";
 import { Loader2, ScanLine, CheckCircle2, AlertCircle, Globe, Home, ChevronDown } from "lucide-react";
 
 type AuditMode = "homepage" | "full";
@@ -59,32 +60,34 @@ function AuditModeSelector({
             </button>
 
             {/* Full Site Audit */}
-            <button
-                onClick={() => onSelect("full")}
-                disabled={disabled}
-                className="flex items-start gap-3 px-3 py-2.5 rounded-xl hover:bg-muted border border-transparent hover:border-border transition-all text-left group"
-            >
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-emerald-500/20 transition-colors">
-                    <Globe className="w-4 h-4 text-emerald-400" />
-                </div>
-                <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-white">Full Site Audit</p>
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
-                            isFree
-                                ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                                : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                        }`}>
-                            up to {pages} pages
-                        </span>
+            <CreditGate action="full_site_audit">
+                <button
+                    onClick={() => onSelect("full")}
+                    disabled={disabled}
+                    className="flex items-start gap-3 px-3 py-2.5 rounded-xl hover:bg-muted border border-transparent hover:border-border transition-all text-left group w-full"
+                >
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-emerald-500/20 transition-colors">
+                        <Globe className="w-4 h-4 text-emerald-400" />
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                        {isFree
-                            ? "Crawls up to 5 pages — upgrade for more"
-                            : `Deep scan across up to ${pages} pages`}
-                    </p>
-                </div>
-            </button>
+                    <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-white">Full Site Audit</p>
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
+                                isFree
+                                    ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                    : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                            }`}>
+                                up to {pages} pages
+                            </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            {isFree
+                                ? "Crawls up to 5 pages — upgrade for more"
+                                : `Deep scan across up to ${pages} pages`}
+                        </p>
+                    </div>
+                </button>
+            </CreditGate>
 
             {isFree && (
                 <div className="mt-1 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs text-amber-400/80">

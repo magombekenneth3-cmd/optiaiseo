@@ -16,6 +16,7 @@ import {
   BarChart, Bar, Cell,
 } from "recharts";
 import { addBacklinkTargetFromGap, getPlannerItemsForSite } from "@/app/actions/backlinks";
+import { CreditGate } from "@/components/ui/CreditGate";
 
 type GapReport = BacklinkGapReport;
 
@@ -734,10 +735,12 @@ export default function BacklinksClient({
                                                             {addedDomains.has(domain) ? (
                                                                 <span className="text-[10px] font-bold text-emerald-400">✓ Added</span>
                                                             ) : (
-                                                                <button onClick={() => handleAddToPlanner(domain, dr ?? null)}
-                                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/20 transition-colors">
-                                                                    <Plus size={9} /> Planner
-                                                                </button>
+                                                                <CreditGate action="backlink_outreach">
+                                                                    <button onClick={() => handleAddToPlanner(domain, dr ?? null)}
+                                                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/20 transition-colors">
+                                                                        <Plus size={9} /> Planner
+                                                                    </button>
+                                                                </CreditGate>
                                                             )}
                                                         </td>
                                                     </tr>

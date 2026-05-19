@@ -7,6 +7,7 @@ import { BookOpen } from "lucide-react";
 import { GenerateBlogModal, type AuthorInput } from "@/app/dashboard/blogs/BlogStepper";
 import { generateBlog } from "@/app/actions/blog";
 import { showActionError } from "@/lib/ui/action-errors";
+import { CreditGate } from "@/components/ui/CreditGate";
 
 export function GenerateBlogButton({
     keyword,
@@ -74,14 +75,16 @@ export function GenerateBlogButton({
 
     return (
         <>
-            <button
-                onClick={() => setModalOpen(true)}
-                disabled={isPending}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg border border-emerald-500/20 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
-            >
-                <BookOpen className="w-3 h-3 shrink-0" />
-                Generate Blog
-            </button>
+            <CreditGate action="blog_generation">
+                <button
+                    onClick={() => setModalOpen(true)}
+                    disabled={isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg border border-emerald-500/20 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                >
+                    <BookOpen className="w-3 h-3 shrink-0" />
+                    Generate Blog
+                </button>
+            </CreditGate>
 
             {modalOpen && (
                 <GenerateBlogModal

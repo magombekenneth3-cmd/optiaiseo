@@ -27,6 +27,7 @@ import QueryLibraryPanel from "@/components/aeo/QueryLibraryPanel";
 import { BacklinkPanel } from "@/components/dashboard/BacklinkPanel";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { PdfDownloadButton } from "@/components/PdfDownloadButton";
+import { CreditGate } from "@/components/ui/CreditGate";
 
 // ─── Score utilities ──────────────────────────────────────────────────────────
 
@@ -475,18 +476,20 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                         </button>
 
                         {/* Secondary: Deep Audit — visually quieter */}
-                        <button
-                            onClick={handleDeepScan}
-                            disabled={deepScanning || isPolling}
-                            className="flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed
-              border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted hover:border-border"
-                            title="Full Generative Search Intelligence audit — uses more credits"
-                        >
-                            {deepScanning ? "Queuing…"
-                                : isPolling ? <><SpinnerSvg className="w-3.5 h-3.5" /> Running…</>
-                                    : pollingStatus === "done" ? "✅ Done"
-                                        : <><Sparkles className="w-3 h-3" /> Deep Audit</>}
-                        </button>
+                        <CreditGate action="aeo_check">
+                            <button
+                                onClick={handleDeepScan}
+                                disabled={deepScanning || isPolling}
+                                className="flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed
+                  border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted hover:border-border"
+                                title="Full Generative Search Intelligence audit — uses more credits"
+                            >
+                                {deepScanning ? "Queuing…"
+                                    : isPolling ? <><SpinnerSvg className="w-3.5 h-3.5" /> Running…</>
+                                        : pollingStatus === "done" ? "✅ Done"
+                                            : <><Sparkles className="w-3 h-3" /> Deep Audit</>}
+                            </button>
+                        </CreditGate>
 
                         {/* PDF Export — only when a report exists */}
                         {rate !== null && result?.id && (
