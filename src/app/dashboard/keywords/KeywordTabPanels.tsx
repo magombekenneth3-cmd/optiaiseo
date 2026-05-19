@@ -12,9 +12,11 @@ import { ShareOfVoiceChart } from "./ShareOfVoiceChart";
 import { TrackedKeywordsPanel } from "./TrackedKeywordsPanel";
 import { RevenueSimulator } from "@/components/dashboard/RevenueSimulator";
 import { KeywordClustersPanel } from "./KeywordClustersPanel";
+import { AllKeywordsTable } from "./AllKeywordsTable";
 import { estimateKeywordRoi } from "@/lib/keywords/roi";
 
 const TABS = [
+    { id: "keywords",    label: "All Keywords",label2: "Keywords", desc: "Full keyword rankings from Search Console" },
     { id: "playbook",    label: "Playbook",    desc: "AI-ranked quick wins & fixes"       },
     { id: "research",    label: "Research",    desc: "Discover new keyword opportunities"  },
     { id: "competitors", label: "Competitors", desc: "Benchmark against rivals"            },
@@ -45,15 +47,16 @@ interface Props {
     revenueKeywords: { id: string; keyword: string; position: number; searchVolume: number; cpc: number }[];
     competitorCount?: number;
     trackedCount?: number;
+    keywords?: { keyword: string; position: number; clicks: number; impressions: number; ctr: number; url: string; intent?: string | null; difficulty?: number | null; positionHistory?: { date: string; position: number }[] }[];
 }
 
 export function KeywordTabPanels({
     siteId, categorised, opportunities, summary, domain,
     userTier, maxTracked, trackedKeywordsData, competitors,
     hasRankTracking, hasShareOfVoice, revenueKeywords,
-    competitorCount = 0, trackedCount = 0,
+    competitorCount = 0, trackedCount = 0, keywords = [],
 }: Props) {
-    const [activeTab, setActiveTab] = useState<TabId>("playbook");
+    const [activeTab, setActiveTab] = useState<TabId>("keywords");
 
     return (
         <div className="rounded-2xl border border-[#30363d] bg-[#0d1117] overflow-hidden">
@@ -62,6 +65,7 @@ export function KeywordTabPanels({
                 {TABS.map((tab) => {
                     const isActive = activeTab === tab.id;
                     const badge =
+                        tab.id === "keywords"    && keywords.length    > 0 ? keywords.length    :
                         tab.id === "competitors" && competitorCount > 0 ? competitorCount :
                         tab.id === "tracked"     && trackedCount    > 0 ? trackedCount    : undefined;
                     return (
@@ -95,6 +99,13 @@ export function KeywordTabPanels({
 
             {/* Panel content */}
             <div className="p-1">
+                {activeTab === "keywords" && (
+                    <PanelErrorBoundary fallbackTitle="Keywords table failed to load">
+                        <div className="p-0">
+                            <AllKeywordsTable keywords={keywords} siteId={siteId} />
+                        </div>
+                    </PanelErrorBoundary>
+                )}
                 {activeTab === "playbook" && (
                     <PanelErrorBoundary fallbackTitle="Playbook panel failed to load">
                         <div className="flex flex-col gap-4 p-5">

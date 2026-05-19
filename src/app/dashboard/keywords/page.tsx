@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import { getKeywordRankingsFast } from "@/app/actions/keywords";
-import { AlertCircle, Zap, Search } from "lucide-react";
+import { AlertCircle, Search } from "lucide-react";
 import { ConnectGSCButton } from "@/components/ConnectGSCButton";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -14,9 +14,9 @@ import { estimateKeywordRoi } from "@/lib/keywords/roi";
 import { getVisibilityScore } from "@/lib/keywords/visibility-score";
 import { hasFeature } from "@/lib/stripe/plans";
 import { CtrDiagnosisBanner } from "@/components/dashboard/CtrDiagnosisBanner";
-import { AllKeywordsTable } from "./AllKeywordsTable";
 import { KeywordTabPanels } from "./KeywordTabPanels";
-import { UnifiedAnalyticsPanel } from "@/components/dashboard/UnifiedAnalyticsPanel";
+import { CollapsibleAnalytics } from "./CollapsibleAnalytics";
+import { OpportunitiesList } from "./OpportunitiesList";
 
 export const metadata: Metadata = {
     title: "Keywords | OptiAISEO",
@@ -36,13 +36,6 @@ type VisibilityRow = { score: number; trend: string; top10Pct: number } | null;
 const MAX_TRACKED_MAP: Record<string, number> = { FREE: 0, STARTER: 10, PRO: 100, AGENCY: -1 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-function posColor(pos: number) {
-    if (pos <= 3)  return { text: "#2ea043", bg: "#0d2818", border: "rgba(46,160,67,0.3)"   };
-    if (pos <= 10) return { text: "#388bfd", bg: "#0d1f3c", border: "rgba(56,139,253,0.3)"  };
-    if (pos <= 20) return { text: "#d29922", bg: "#2d2208", border: "rgba(210,153,34,0.3)"  };
-    return         { text: "#f85149", bg: "#2c1417", border: "rgba(248,81,73,0.3)"          };
-}
 
 function fmt(n: number) { return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n); }
 
@@ -277,97 +270,26 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
             {/* ── Unified overview strip ── */}
             <OverviewStrip summary={summary} visibilityScore={visibilityScore} />
 
-            {/* ── GSC + GA4 Unified Analytics ── */}
+            {/* ── CTR Diagnosis (promoted above opportunities) ── */}
+            <PanelErrorBoundary fallbackTitle="">
+                <CtrDiagnosisBanner keywords={keywords} domain={activeSite?.domain ?? ""} />
+            </PanelErrorBoundary>
+
+            {/* ── GSC + GA4 Unified Analytics (collapsed by default) ── */}
             {activeSiteId && (
                 <PanelErrorBoundary fallbackTitle="Unified Analytics">
-                    <UnifiedAnalyticsPanel siteId={activeSiteId} />
+                    <CollapsibleAnalytics siteId={activeSiteId} />
                 </PanelErrorBoundary>
             )}
 
-            {/* ── Opportunities ── */}
-            <div className="rounded-2xl border border-[#30363d] bg-[#0d1117] overflow-hidden">
-                {/* Header */}
-                <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-[#21262d]">
-                    <div>
-                        <div className="flex items-center gap-2 mb-0.5">
-                            <Zap className="w-4 h-4 text-[#d29922]" />
-                            <h2 className="text-[15px] font-semibold text-[#e6edf3]">Top Keyword Opportunities</h2>
-                        </div>
-                        <p className="text-[12px] text-[#6e7681]">
-                            High-impression keywords with poor rankings — generate a blog post to rank higher.
-                        </p>
-                    </div>
-                    {opportunities.length > 0 && (
-                        <span className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#d29922]/10 text-[#d29922] border border-[#d29922]/20">
-                            {opportunities.length} found
-                        </span>
-                    )}
-                </div>
+            {/* ── Top Opportunities (capped at 5 with expand) ── */}
+            <OpportunitiesList
+                opportunities={opportunities}
+                siteId={activeSiteId}
+                siteDomain={activeSite?.domain ?? ""}
+            />
 
-                {/* CTR diagnosis — contextual, not a page-wide banner */}
-                <div className="px-5 py-3 border-b border-[#21262d]">
-                    <PanelErrorBoundary fallbackTitle="">
-                        <CtrDiagnosisBanner keywords={keywords} domain={activeSite?.domain ?? ""} />
-                    </PanelErrorBoundary>
-                </div>
-
-                {/* Opportunities list — single unified list, no mobile/desktop duplicate */}
-                {opportunities.length === 0 ? (
-                    <div className="px-6 py-10 text-center text-[13px] text-[#6e7681]">
-                        No clear opportunities found yet. Check back after more data accumulates in Search Console.
-                    </div>
-                ) : (
-                    <div className="divide-y divide-[#161b22]">
-                        {opportunities.map((opp, i) => {
-                            const pc = posColor(opp.avgPosition);
-                            return (
-                                <div key={i} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[#0f1318] transition-colors">
-                                    {/* Position badge */}
-                                    <span
-                                        className="shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-md border"
-                                        style={{ color: pc.text, background: pc.bg, borderColor: pc.border }}
-                                    >
-                                        #{opp.avgPosition}
-                                    </span>
-
-                                    {/* Keyword + reason */}
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-[13px] font-semibold text-[#e6edf3] truncate">{opp.keyword}</p>
-                                        <p className="text-[11px] text-[#6e7681] mt-0.5 line-clamp-1">{opp.reason}</p>
-                                    </div>
-
-                                    {/* Metrics */}
-                                    <div className="hidden sm:flex items-center gap-4 shrink-0 text-[11px] text-[#6e7681]">
-                                        <span>{fmt(opp.impressions)} impr</span>
-                                        <span>{opp.ctr}% CTR</span>
-                                        <span className="relative group cursor-help">
-                                            <span className="font-bold text-[#d29922]">Score {opp.opportunityScore}</span>
-                                            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-lg border border-[#30363d] bg-[#161b22] px-3 py-2 text-[10px] text-[#c9d1d9] opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
-                                                <span className="block font-semibold text-[#e6edf3] mb-1">Opportunity score formula</span>
-                                                <span className="block font-mono">{opp.impressions.toLocaleString()} × (1 − {(opp.ctr / 100).toFixed(3)}) = {opp.opportunityScore.toLocaleString()}</span>
-                                                <span className="block text-[#6e7681] mt-1">Higher = more traffic to recover by improving CTR or ranking.</span>
-                                            </span>
-                                        </span>
-                                    </div>
-
-                                    {/* CTA */}
-                                    <div className="shrink-0">
-                                        <GenerateBlogButton
-                                            keyword={opp.keyword}
-                                            position={opp.avgPosition}
-                                            impressions={opp.impressions}
-                                            siteId={activeSiteId}
-                                            siteDomain={activeSite?.domain ?? ""}
-                                        />
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
-
-            {/* ── Secondary panels (tabbed) ── */}
+            {/* ── Tabbed panels (now includes All Keywords tab) ── */}
             {activeSiteId && (
                 <KeywordTabPanels
                     siteId={activeSiteId}
@@ -384,11 +306,9 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
                     revenueKeywords={revenueKeywords}
                     competitorCount={(competitors as unknown[]).length}
                     trackedCount={trackedKeywordsData.length}
+                    keywords={keywords}
                 />
             )}
-
-            {/* ── Full keywords table ── */}
-            <AllKeywordsTable keywords={keywords} siteId={activeSiteId} />
 
         </div>
     );
