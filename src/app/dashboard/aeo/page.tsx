@@ -28,6 +28,7 @@ import { BacklinkPanel } from "@/components/dashboard/BacklinkPanel";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { PdfDownloadButton } from "@/components/PdfDownloadButton";
 import { CreditGate } from "@/components/ui/CreditGate";
+import { AasCard } from "@/components/aeo/AasCard";
 
 // ─── Score utilities ──────────────────────────────────────────────────────────
 
@@ -1120,9 +1121,16 @@ function AeoRankPageInner() {
                 description="Three-layer AI visibility: AEO (get cited in answers) · GEO (get chosen as the recommendation) · AIO (get your brand understood by AI)."
             />
 
-            {/* Summary hero */}
+            {/* Summary grids */}
             {!loading && sites.length > 0 && (
-                <SummaryHero sites={sites} scannedSites={scannedSites} avgRate={avgRate} topGrade={topGrade} />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                    <div className="lg:col-span-2">
+                        <SummaryHero sites={sites} scannedSites={scannedSites} avgRate={avgRate} topGrade={topGrade} />
+                    </div>
+                    <div>
+                        {activeSite && <AasCard siteId={activeSite.id} />}
+                    </div>
+                </div>
             )}
 
             {/* PATCH: Intelligence panels now in a tabbed card instead of stacked */}
