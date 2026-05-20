@@ -19,8 +19,11 @@ import { AuditScoreBar } from "./AuditScoreBar";
 import { AuditCategoryRadar } from "./AuditCategoryRadar";
 
 const CATEGORY_ORDER = [
-    "basics", "on-page", "onpage", "technical", "off-page", "offpage",
-    "schema", "accessibility", "keywords", "social", "local",
+    "basics", "basics-analytics", "on-page", "onpage", "technical", "technical-seo",
+    "content-quality", "keyword-optimisation", "keywords", "keyword-optimization",
+    "off-page", "offpage", "schema", "schema-markup",
+    "performance", "accessibility", "social", "social-branding",
+    "local", "local-seo",
 ] as const;
 
 const getAudit = cache(getAuditById);
@@ -240,7 +243,15 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
                     <div className="mt-3 rounded-2xl border border-[#30363d] bg-[#0d1117] overflow-hidden shadow-xl shadow-black/20">
                         <div className="flex items-center justify-between px-5 py-4 border-b border-[#21262d]">
                             <div>
-                                <h2 className="text-sm font-semibold text-[#e6edf3]">Ranked by revenue impact</h2>
+                                <h2 className="text-sm font-semibold text-[#e6edf3] inline-flex items-center gap-1.5">
+                                    Ranked by revenue impact
+                                    <span
+                                        className="text-[#6e7681] cursor-help"
+                                        title="Priority = ROI Impact × 60% + AI Visibility × 40%. Higher scores mean greater potential revenue and search visibility gains."
+                                    >
+                                        ⓘ
+                                    </span>
+                                </h2>
                                 <p className="text-[11px] text-[#6e7681] mt-0.5">
                                     Top {topFixes.length} issues requiring immediate attention
                                 </p>

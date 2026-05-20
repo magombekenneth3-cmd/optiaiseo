@@ -82,7 +82,7 @@ function AuditModeSelector({
                         </div>
                         <p className="text-xs text-muted-foreground">
                             {isFree
-                                ? "Crawls up to 5 pages — upgrade for more"
+                                ? "Homepage + up to 4 additional pages"
                                 : `Deep scan across up to ${pages} pages`}
                         </p>
                     </div>
@@ -91,7 +91,7 @@ function AuditModeSelector({
 
             {isFree && (
                 <div className="mt-1 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs text-amber-400/80">
-                    🔓 Upgrade to Pro for up to 25 pages, Agency for 50
+                    Upgrade to Pro for up to 25 pages, Agency for 50
                 </div>
             )}
         </div>

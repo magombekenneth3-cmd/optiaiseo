@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { ContentEditor } from "@/app/dashboard/blogs/ContentEditor";
-import { RotateCcw, Save, Trash2 } from "lucide-react";
+import { Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface EditorShellProps {
@@ -13,6 +13,20 @@ export function EditorShell({ initialKeyword = "" }: EditorShellProps) {
     const [draftContent, setDraftContent] = useState("");
     const [draftKeyword, setDraftKeyword] = useState(initialKeyword);
     const [hasRestored, setHasRestored] = useState(false);
+
+    const handleClear = useCallback(() => {
+        setDraftContent("");
+        setDraftKeyword("");
+        localStorage.removeItem("optiaiseo:editor-draft-content");
+        localStorage.removeItem("optiaiseo:editor-draft-keyword");
+        toast.success("Draft cleared.");
+    }, []);
+
+    const handleSaveLocal = useCallback(() => {
+        localStorage.setItem("optiaiseo:editor-draft-content", draftContent);
+        localStorage.setItem("optiaiseo:editor-draft-keyword", draftKeyword);
+        toast.success("Draft saved manually to browser cache.");
+    }, [draftContent, draftKeyword]);
 
     // Load from localStorage on mount
     useEffect(() => {
@@ -33,33 +47,29 @@ export function EditorShell({ initialKeyword = "" }: EditorShellProps) {
             setDraftKeyword(initialKeyword);
         }
         setHasRestored(true);
-    }, [initialKeyword]);
+    }, [initialKeyword, handleClear]);
 
-    // Save to localStorage when content or keyword changes
+    // Auto-save to localStorage on change (debounced)
     useEffect(() => {
         if (!hasRestored) return;
-        
         const saveTimeout = setTimeout(() => {
             localStorage.setItem("optiaiseo:editor-draft-content", draftContent);
             localStorage.setItem("optiaiseo:editor-draft-keyword", draftKeyword);
         }, 1000);
-
         return () => clearTimeout(saveTimeout);
     }, [draftContent, draftKeyword, hasRestored]);
 
-    const handleClear = () => {
-        setDraftContent("");
-        setDraftKeyword("");
-        localStorage.removeItem("optiaiseo:editor-draft-content");
-        localStorage.removeItem("optiaiseo:editor-draft-keyword");
-        toast.success("Draft cleared.");
-    };
-
-    const handleSaveLocal = () => {
-        localStorage.setItem("optiaiseo:editor-draft-content", draftContent);
-        localStorage.setItem("optiaiseo:editor-draft-keyword", draftKeyword);
-        toast.success("Draft saved manually to browser cache.");
-    };
+    // Cmd+S / Ctrl+S keyboard shortcut for manual save
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+                e.preventDefault();
+                handleSaveLocal();
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [handleSaveLocal]);
 
     if (!hasRestored) {
         return (
@@ -79,7 +89,7 @@ export function EditorShell({ initialKeyword = "" }: EditorShellProps) {
                     <button
                         onClick={handleSaveLocal}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted/50 text-xs font-semibold transition-colors"
-                        title="Force Save to Browser Cache"
+                        title="Force Save to Browser Cache (⌘S)"
                     >
                         <Save className="w-3.5 h-3.5" />
                         Save Draft

@@ -1,6 +1,6 @@
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem, AuditStatus } from '../types';
-import { fetchHtml } from '../utils/fetch-html';
 import { parse, HTMLElement } from 'node-html-parser';
+
 import { analyzeInternalLinksForUrl } from '../internal-links';
 
 const MAX_HTML_BYTES = 10 * 1024 * 1024;

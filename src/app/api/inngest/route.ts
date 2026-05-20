@@ -30,7 +30,7 @@ import { sendFreeReportEmailJob } from "@/lib/inngest/functions/free-report-emai
 import { fireLeadWebhookJob } from "@/lib/inngest/functions/lead-webhook";
 import { leadDripSequenceJob } from "@/lib/inngest/functions/lead-drip";
 import { magicFirstAuditJob } from "@/lib/inngest/functions/magic-first-audit";
-import { processManualAuditJob } from "@/lib/inngest/functions/audit";
+import { processManualAuditJob, purgeExpiredSerpAnalysisJob } from "@/lib/inngest/functions/audit";
 import { runPageAuditJob, processPageAuditJob } from "@/lib/inngest/functions/page-audit";
 import {
     initQueryLibraryJob,
@@ -227,5 +227,6 @@ export const { GET, POST, PUT } = serve({
         cronStuckBlogSweep,
         serpFeatureWeeklyCron,
         serpFeatureSiteJob,
+        purgeExpiredSerpAnalysisJob,
     ],
 });

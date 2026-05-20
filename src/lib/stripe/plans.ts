@@ -83,7 +83,7 @@ export const PLANS = {
             backlinks: true,
             competitor: true,
             emailReports: true,
-            whiteLabel: false,
+            whiteLabel: true,
             clientPortal: false,
             developerApi: true,
         },

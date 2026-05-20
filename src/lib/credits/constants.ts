@@ -20,6 +20,7 @@ export const CREDIT_COSTS = {
     repurpose_format:    3,   // Content repurposing
     serp_gap_analysis:   5,   // SERP gap + implementation plan
     serp_analysis:       5,   // Keyword vs SERP analysis panel
+    backlink_outreach:   3,   // Add backlink gap to outreach planner
 } as const;
 
 export type CreditAction = keyof typeof CREDIT_COSTS;
@@ -36,6 +37,7 @@ export const ACTION_LABELS: Record<CreditAction, string> = {
     repurpose_format:    "Content Repurpose",
     serp_gap_analysis:   "SERP Gap Analysis",
     serp_analysis:       "Keyword SERP Analysis",
+    backlink_outreach:   "Backlink Outreach",
 };
 
 export const FREE_MONTHLY_CREDITS    =   50;

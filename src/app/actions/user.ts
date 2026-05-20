@@ -150,8 +150,8 @@ export async function updateWhiteLabel(formData: FormData) {
         const user = await getCurrentUser();
         if (!user) return { success: false, error: "Unauthorized" };
 
-        if (user.subscriptionTier !== "AGENCY") {
-            return { success: false, error: "White-label exports are only available on the Agency plan." };
+        if (user.subscriptionTier !== "PRO" && user.subscriptionTier !== "AGENCY") {
+            return { success: false, error: "White-label exports are only available on the Pro or Agency plans." };
         }
 
         const companyName = (formData.get("companyName") as string | null)?.trim() || "OptiAISEO";

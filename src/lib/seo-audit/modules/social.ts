@@ -1,31 +1,25 @@
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem } from '../types';
 import { parse } from 'node-html-parser';
-import { fetchHtml } from '../utils/fetch-html';
 
 export const SocialModule: AuditModule = {
     id: 'social-branding',
     label: 'Social & Branding Signals',
     run: async (context: AuditModuleContext): Promise<AuditCategoryResult> => {
-        let html = context.html;
-        if (!html) {
-            html = await fetchHtml(context.url);
-
-        }
-
-        const items: ChecklistItem[] = [];
-
-        if (!html) {
+        if (!context.html) {
             return {
                 id: SocialModule.id,
                 label: SocialModule.label,
-                items,
+                items: [],
                 score: 0,
                 passed: 0,
                 failed: 1,
                 warnings: 0
             };
         }
-        const root = parse(html || '');
+
+        const html = context.html;
+        const items: ChecklistItem[] = [];
+        const root = parse(html);
 
         // 1. Full Open Graph Audit (6 core + 2 recommended properties)
         const getOgContent = (prop: string) => root.querySelector(`meta[property="${prop}"]`)?.getAttribute('content')?.trim() || null;

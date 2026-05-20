@@ -1,6 +1,5 @@
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem } from '../types';
 import { parse, HTMLElement } from 'node-html-parser';
-import { fetchHtml } from '../utils/fetch-html';
 import { isSafeUrl } from '@/lib/security/safe-url';
 import { getAhrefsDomainOverview, getAhrefsBacklinks } from '@/lib/ahrefs';
 

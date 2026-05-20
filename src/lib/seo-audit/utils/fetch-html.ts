@@ -37,19 +37,33 @@ export async function fetchHtml(url: string): Promise<string> {
         try {
             const dns = await import("dns/promises");
             const { isIP } = await import("net");
-            const addresses = await dns.resolve4(hostname).catch(() => [] as string[]);
+            const addresses4 = await dns.resolve4(hostname).catch(() => [] as string[]);
+            const addresses6 = await dns.resolve6(hostname).catch(() => [] as string[]);
             const isPrivate = (ip: string): boolean => {
                 if (!isIP(ip)) return false;
-                const p = ip.split(".").map(Number);
-                return (
-                    p[0] === 10 ||
-                    (p[0] === 172 && p[1] >= 16 && p[1] <= 31) ||
-                    (p[0] === 192 && p[1] === 168) ||
-                    p[0] === 127 ||
-                    (p[0] === 169 && p[1] === 254)
-                );
+                if (isIP(ip) === 4) {
+                    const p = ip.split(".").map(Number);
+                    return (
+                        p[0] === 10 ||
+                        (p[0] === 172 && p[1] >= 16 && p[1] <= 31) ||
+                        (p[0] === 192 && p[1] === 168) ||
+                        p[0] === 127 ||
+                        (p[0] === 169 && p[1] === 254)
+                    );
+                }
+                if (isIP(ip) === 6) {
+                    const lower = ip.toLowerCase();
+                    return (
+                        lower === "::1" ||
+                        lower.startsWith("fc") ||
+                        lower.startsWith("fd") ||
+                        lower.startsWith("fe80") ||
+                        lower === "::"
+                    );
+                }
+                return false;
             };
-            for (const addr of addresses) {
+            for (const addr of [...addresses4, ...addresses6]) {
                 if (isPrivate(addr)) {
                     throw new Error(`[fetchHtml] Blocked SSRF: ${hostname} resolves to private IP ${addr}`);
                 }

@@ -1,5 +1,6 @@
 import { inngest } from "../client";
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 import { detectCategory, upsertMarketCategory } from "@/lib/intelligence/category-ai";
 import { fetchSiteText } from "@/lib/competitors/scraper";
 import { generateMarketQueries, fetchMarketSources, isListArticleOrDirectory } from "@/lib/intelligence/discovery-engine";
@@ -112,7 +113,7 @@ export const discoverMarketJob = inngest.createFunction(
             });
           }
         } catch (e) {
-          console.warn(`Failed to extract from ${source.link}`);
+          logger.warn("[intelligence] Failed to extract entities from source", { link: source.link, error: (e as Error).message });
         }
       }
       return allEntities;
@@ -142,33 +143,40 @@ export const discoverMarketJob = inngest.createFunction(
     // Persist to Graph
     await step.run("save-graph", async () => {
       for (const comp of scored) {
-        await prisma.competitor.upsert({
+        let compDomain: string;
+        try {
+          compDomain = new URL(comp.sourceUrls[0] || "https://unknown.com").hostname;
+        } catch {
+          compDomain = "unknown.com";
+        }
+
+        // Find existing competitor by marketCategoryId + domain (the logical unique key)
+        const existing = await prisma.competitor.findFirst({
           where: {
-             // Fake composite key for upserting global competitors
-             // Note: Currently unique constraint is [siteId, domain]. We need to handle this carefully.
-             id: "dummy-bypass"
-          },
-          create: {
             marketCategoryId: category.id,
-            domain: new URL(comp.sourceUrls[0] || "https://unknown.com").hostname,
-            name: comp.name,
-            score: comp.score,
+            domain: compDomain,
           },
-          update: {
-            score: comp.score,
-          }
-        }).catch(async () => {
-          // Fallback if unique constraint fails: just create it without siteId checking
-          // This happens because prisma expects siteId to be part of the unique key
+          select: { id: true },
+        });
+
+        if (existing) {
+          await prisma.competitor.update({
+            where: { id: existing.id },
+            data: {
+              score: comp.score,
+              name: comp.name,
+            },
+          });
+        } else {
           await prisma.competitor.create({
             data: {
               marketCategoryId: category.id,
-              domain: new URL(comp.sourceUrls[0] || "https://unknown.com").hostname,
+              domain: compDomain,
               name: comp.name,
               score: comp.score,
-            }
+            },
           });
-        });
+        }
       }
     });
 

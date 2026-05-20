@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import {
     CheckCircle2, Circle, ChevronDown, ChevronRight, Loader2,
     AlertCircle, ImageIcon, Bot, ListTree, Highlighter, AlertTriangle,
-    Sparkles, X, Clock, BookOpen, Activity,
+    Sparkles, X, Clock, BookOpen, Activity, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ContentScoreResult, OutlineHeading } from "@/lib/content-scoring";
@@ -325,6 +325,12 @@ export function ContentEditor({
     const aiColour = scoreData ? getAiColor(scoreData.aiDetectionScore ?? 0) : getAiColor(0);
     const scoreLabel = scoreData ? getScoreLabel(scoreData.score) : getScoreLabel(0);
 
+    const handleRescore = useCallback(() => {
+        if (!keyword.trim() || !content.trim() || isLoading) return;
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        fetchScore(content, keyword);
+    }, [keyword, content, isLoading]);
+
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 h-full min-h-[620px] text-foreground bg-card rounded-xl overflow-hidden border border-border">
@@ -369,6 +375,17 @@ export function ContentEditor({
                     >
                         <Highlighter className="w-3.5 h-3.5" />
                         Highlight
+                    </button>
+
+                    {/* Rescore */}
+                    <button
+                        onClick={handleRescore}
+                        disabled={!keyword.trim() || !content.trim() || isLoading}
+                        title="Re-analyze content against competitors"
+                        className="flex items-center gap-1.5 px-2.5 py-[5px] rounded-md text-xs font-medium transition-colors text-muted-foreground hover:text-foreground border border-border disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+                        Rescore
                     </button>
 
                     {/* AI Fix */}

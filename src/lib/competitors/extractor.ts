@@ -4,6 +4,7 @@
 // =============================================================================
 
 import type { DetectedService } from "./types";
+import { logger } from "@/lib/logger";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_SITE_TEXT_CHARS = 6_000;
@@ -147,13 +148,13 @@ Output format:
                 return sanitized.slice(0, maxServices);
             }
 
-            console.warn(
-                `[competitor-detect] All ${parsed.length} extracted services contained brand words — falling back.`,
-                parsed.map(s => s.name)
-            );
+            logger.warn("[competitor-detect] All extracted services contained brand words — falling back", {
+                count: parsed.length,
+                names: parsed.map(s => s.name),
+            });
         }
     } catch (err) {
-        console.warn("[competitor-detect] AI extraction failed:", (err as Error).message);
+        logger.warn("[competitor-detect] AI extraction failed", { error: (err as Error).message });
     }
 
     // This is vastly better than using the brand name as a SERP query.

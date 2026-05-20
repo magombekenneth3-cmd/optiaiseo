@@ -17,6 +17,7 @@ const envSchema = z.object({
     LIVEKIT_API_SECRET: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
+    OPENROUTER_API_KEY: z.string().optional(),
     PERPLEXITY_API_KEY: z.string().optional(),
     SERPER_API_KEY: z.string().optional(),
     RESEND_API_KEY: z.string().optional(),
@@ -189,6 +190,7 @@ export function validateEnv() {
         PERPLEXITY_API_KEY: "Perplexity citation checks",
         OPENAI_API_KEY: "ChatGPT citation checks",
         ANTHROPIC_API_KEY: "Claude citation checks",
+        OPENROUTER_API_KEY: "OpenRouter fallback",
         INNGEST_EVENT_KEY: "Background jobs (Inngest)",
         UPSTASH_REDIS_REST_URL: "Upstash Redis rate limiting",
         GOOGLE_CLIENT_EMAIL: "Google Service Account (GSC indexing)",
@@ -209,6 +211,9 @@ export function validateEnv() {
     }
     if (!process.env.ANTHROPIC_API_KEY) {
         logger.warn("[Startup] ANTHROPIC_API_KEY not set — blog generation fallback (Anthropic) disabled");
+    }
+    if (!process.env.OPENROUTER_API_KEY) {
+        logger.warn("[Startup] OPENROUTER_API_KEY not set — blog generation fallback (OpenRouter) disabled");
     }
 }
 

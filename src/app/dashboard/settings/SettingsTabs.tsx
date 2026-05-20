@@ -105,7 +105,7 @@ export function SettingsTabs({
                 {active === "workspace" && (
                     <div className="flex flex-col gap-6">
                         <WhiteLabelForm
-                            isAgency={isAgency}
+                            isAgency={isAgency || subscriptionTier === "PRO"}
                             initialCompanyName={wl?.companyName}
                             initialLogoUrl={wl?.logoUrl}
                             initialPrimaryColor={wl?.primaryColor}

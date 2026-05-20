@@ -1,5 +1,4 @@
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem } from "../types"
-import { fetchHtml } from "../utils/fetch-html"
 import { parse } from "node-html-parser"
 
 async function fetchGtmContainerGA4Ids(gtmId: string): Promise<string[]> {

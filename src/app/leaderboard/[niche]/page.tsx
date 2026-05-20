@@ -95,6 +95,13 @@ function EntryRow({ entry, showExpanded }: { entry: LeaderboardEntry; showExpand
 
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
+                    <img 
+                        src={`https://www.google.com/s2/favicons?sz=32&domain=${entry.domain}`}
+                        alt=""
+                        width={16}
+                        height={16}
+                        className="w-4 h-4 rounded shrink-0 bg-muted/40"
+                    />
                     <a
                         href={`https://${entry.domain}`}
                         target="_blank"

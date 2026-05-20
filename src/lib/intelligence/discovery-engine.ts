@@ -1,4 +1,5 @@
 import { CategoryProfile } from "./category-ai";
+import { logger } from "@/lib/logger";
 
 export function generateMarketQueries(profile: CategoryProfile): string[] {
   const geo = profile.geo.toLowerCase() === "global" ? "" : profile.geo;
@@ -39,6 +40,7 @@ export async function fetchMarketSources(queries: string[]): Promise<SerperResul
             q,
             num: 20, // get more results to find listicles/directories
           }),
+          signal: AbortSignal.timeout(12_000),
         });
         
         if (!res.ok) return;
@@ -56,7 +58,7 @@ export async function fetchMarketSources(queries: string[]): Promise<SerperResul
           }
         }
       } catch (err) {
-        console.error(`Serper query failed for "${q}":`, err);
+        logger.warn("[discovery-engine] Serper query failed", { query: q, error: (err as Error).message });
       }
     })
   );

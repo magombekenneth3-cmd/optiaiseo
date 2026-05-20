@@ -1,7 +1,7 @@
 import { logger } from "@/lib/logger";
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem } from '../types';
 import { parse } from 'node-html-parser';
-import { fetchHtml } from '../utils/fetch-html';
+
 import { validateRobotsAndSitemap } from '../../onpage/validator';
 import { runCrawlerAgent } from '../../crawler/agent';
 import { runSecurityAudit } from '../../audit/security';
@@ -10,26 +10,21 @@ export const TechnicalModule: AuditModule = {
     id: 'technical-seo',
     label: 'Technical SEO',
     run: async (context: AuditModuleContext): Promise<AuditCategoryResult> => {
-        let html = context.html;
-        if (!html) {
-            html = await fetchHtml(context.url);
-
-        }
-
-        const items: ChecklistItem[] = [];
-
-        if (!html) {
+        if (!context.html) {
             return {
                 id: TechnicalModule.id,
                 label: TechnicalModule.label,
-                items,
+                items: [],
                 score: 0,
                 passed: 0,
                 failed: 1,
                 warnings: 0
             };
         }
-        const root = parse(html || '');
+
+        const html = context.html;
+        const items: ChecklistItem[] = [];
+        const root = parse(html);
 
         // Run Crawler Agent + PageSpeed API + CrUX in parallel for maximum efficiency
         const [crawlerRes, psiData, psiDesktopData, cruxData] = await Promise.all([

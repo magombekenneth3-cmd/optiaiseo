@@ -1,6 +1,7 @@
 import { generateObject } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
+import { logger } from "@/lib/logger";
 
 export interface ExtractedEntity {
   name: string;
@@ -51,7 +52,7 @@ export async function extractEntitiesFromHtml(
       confidence: c.confidence,
     }));
   } catch (error) {
-    console.error("AI entity extraction failed, falling back to heuristic", error);
+    logger.warn("[entity-extraction] AI extraction failed, falling back to heuristic", { error: (error as Error).message });
     return heuristicFallback(cleanText);
   }
 }

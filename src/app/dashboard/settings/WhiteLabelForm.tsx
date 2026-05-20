@@ -36,15 +36,15 @@ export function WhiteLabelForm({
                     <div className="w-12 h-12 rounded-full bg-brand/10 border border-brand/20 flex flex-col items-center justify-center mb-3">
                         <Crown className="w-6 h-6 text-brand" />
                     </div>
-                    <h3 className="text-lg font-bold mb-1 tracking-tight">Agency Feature</h3>
+                    <h3 className="text-lg font-bold mb-1 tracking-tight">Pro &amp; Agency Feature</h3>
                     <p className="text-sm text-muted-foreground max-w-sm mb-5">
-                        Upgrade to the Agency plan to export white-labelled SEO & AEO audit PDFs with your own branding to share with clients.
+                        Upgrade to the Pro or Agency plan to export white-labelled SEO &amp; AEO audit PDFs with your own branding to share with clients.
                     </p>
                     <Link
                         href="/dashboard/billing"
                         className="bg-foreground text-background font-semibold px-5 py-2 rounded-lg text-sm hover:bg-foreground/90 transition-all font-inter"
                     >
-                        Upgrade to Agency
+                        Upgrade Plan
                     </Link>
                 </div>
             )}

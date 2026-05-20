@@ -686,6 +686,7 @@ Output: ONLY the section in Markdown including the ## heading. No commentary.`;
             prompt,
             model: AI_MODELS.GEMINI_PRO,
             maxTokens: 3000,
+            temperature: sectionTemperature,
         });
 
         const trimmed = text.trim();

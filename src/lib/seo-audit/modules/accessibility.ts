@@ -1,6 +1,5 @@
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem } from "../types"
 import { parse } from "node-html-parser"
-import { fetchHtml } from "../utils/fetch-html"
 
 export const AccessibilityModule: AuditModule = {
     id: "accessibility",

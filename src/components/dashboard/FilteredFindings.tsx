@@ -8,8 +8,11 @@ import { Search, ChevronDown, ChevronRight, AlertCircle, AlertTriangle, Info, Mi
 type SeverityFilter = "all" | "critical" | "high" | "medium" | "low";
 
 const CATEGORY_ORDER = [
-    "basics", "on-page", "onpage", "technical", "off-page", "offpage",
-    "schema", "accessibility", "keywords", "social", "local",
+    "basics", "basics-analytics", "on-page", "onpage", "technical", "technical-seo",
+    "content-quality", "keyword-optimisation", "keywords", "keyword-optimization",
+    "off-page", "offpage", "schema", "schema-markup",
+    "performance", "accessibility", "social", "social-branding",
+    "local", "local-seo",
 ] as const;
 
 const SEV_CONFIG: Record<string, {
@@ -165,15 +168,6 @@ function CategoryAccordion({
                                         hasGithub={hasGithub}
                                         fixStatus={fixStatus}
                                     />
-                                </div>
-                                {/* Badge pill */}
-                                <div className="px-3 py-3.5 shrink-0">
-                                    <span
-                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border"
-                                        style={{ color: sev.color, background: sev.bg, borderColor: sev.border }}
-                                    >
-                                        {sev.label}
-                                    </span>
                                 </div>
                             </div>
                         );

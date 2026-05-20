@@ -1,5 +1,6 @@
 
 import { isSafeUrl } from "@/lib/security/safe-url";
+import { logger } from "@/lib/logger";
 
 export type WebhookEventType =
   | "gsov_drop"
@@ -103,7 +104,7 @@ export async function dispatchWebhooks(
         try {
           const guard = isSafeUrl(site.slackWebhookUrl!);
           if (!guard.ok) {
-            console.warn(`[Webhook/Slack] Blocked unsafe URL for ${site.domain}: ${guard.error}`);
+            logger.warn("[Webhook/Slack] Blocked unsafe URL", { domain: site.domain, error: guard.error });
             return;
           }
           const res = await fetch(site.slackWebhookUrl!, {
@@ -113,10 +114,10 @@ export async function dispatchWebhooks(
             signal: AbortSignal.timeout(8000),
           });
           if (!res.ok) {
-            console.warn(`[Webhook/Slack] Non-OK response ${res.status} for ${site.domain}`);
+            logger.warn("[Webhook/Slack] Non-OK response", { domain: site.domain, status: res.status });
           }
         } catch (err) {
-          console.warn(`[Webhook/Slack] Delivery failed for ${site.domain}:`, (err as Error)?.message);
+          logger.warn("[Webhook/Slack] Delivery failed", { domain: site.domain, error: (err as Error)?.message });
         }
       })()
     );
@@ -128,7 +129,7 @@ export async function dispatchWebhooks(
         try {
           const guard = isSafeUrl(site.zapierWebhookUrl!);
           if (!guard.ok) {
-            console.warn(`[Webhook/Zapier] Blocked unsafe URL for ${site.domain}: ${guard.error}`);
+            logger.warn("[Webhook/Zapier] Blocked unsafe URL", { domain: site.domain, error: guard.error });
             return;
           }
           const res = await fetch(site.zapierWebhookUrl!, {
@@ -138,10 +139,10 @@ export async function dispatchWebhooks(
             signal: AbortSignal.timeout(8000),
           });
           if (!res.ok) {
-            console.warn(`[Webhook/Zapier] Non-OK response ${res.status} for ${site.domain}`);
+            logger.warn("[Webhook/Zapier] Non-OK response", { domain: site.domain, status: res.status });
           }
         } catch (err) {
-          console.warn(`[Webhook/Zapier] Delivery failed for ${site.domain}:`, (err as Error)?.message);
+          logger.warn("[Webhook/Zapier] Delivery failed", { domain: site.domain, error: (err as Error)?.message });
         }
       })()
     );
