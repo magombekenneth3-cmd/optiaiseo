@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isCronAuthorized } from "@/lib/cron-auth";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 /**
  * GET /api/cron/daily-briefing
@@ -109,8 +110,8 @@ export async function GET(req: NextRequest) {
                         topPerformingKeyword: topKw?.keyword ?? null,
                         topPerformingKeywordVolume: topKw?.impressions ?? null,
                         topPerformingKeywordPosition: topKw ? Math.round(topKw.position) : null,
-                        anomaliesFound: anomalies.length > 0 ? anomalies : null,
-                        quickWins: quickWins.length > 0 ? quickWins : null,
+                        anomaliesFound: anomalies.length > 0 ? anomalies : Prisma.JsonNull,
+                        quickWins: quickWins.length > 0 ? quickWins : Prisma.JsonNull,
                     },
                     create: {
                         id: `${site.id}-${dateKey.toISOString().slice(0, 10)}`,
@@ -122,8 +123,8 @@ export async function GET(req: NextRequest) {
                         topPerformingKeyword: topKw?.keyword ?? null,
                         topPerformingKeywordVolume: topKw?.impressions ?? null,
                         topPerformingKeywordPosition: topKw ? Math.round(topKw.position) : null,
-                        anomaliesFound: anomalies.length > 0 ? anomalies : null,
-                        quickWins: quickWins.length > 0 ? quickWins : null,
+                        anomaliesFound: anomalies.length > 0 ? anomalies : Prisma.JsonNull,
+                        quickWins: quickWins.length > 0 ? quickWins : Prisma.JsonNull,
                     },
                 });
 
