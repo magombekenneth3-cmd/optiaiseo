@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 
         for (const site of sites) {
             try {
-                const { getUserGscToken } = await import("@/app/actions/keywords");
+                const { getUserGscToken } = await import("@/lib/gsc/token");
                 const { fetchGSCKeywordsByDateRange, normaliseSiteUrl } = await import("@/lib/gsc");
 
                 const accessToken = await getUserGscToken(site.userId);
