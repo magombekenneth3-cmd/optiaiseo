@@ -197,7 +197,7 @@ AVG_WORDS=${wordCountAvg} YOUR_WORDS=${userWordCount}`;
             const topAnchors    = backlinkSummary?.topAnchors ?? [];
             const newLastWeek   = backlinkSummary?.newLastWeek ?? 0;
             const lostLastWeek  = backlinkSummary?.lostLastWeek ?? 0;
-            const dofollowRatio = backlinkSummary?.dofollowRatio ?? 0;
+            const dofollowRatio = backlinkSummary?.doFollowRatio ?? 0;
             const pageBacklinks = await prisma.backlinkDetail
                 .count({ where: { siteId, targetUrl: { contains: landingPageUrl } } })
                 .catch(() => 0);
