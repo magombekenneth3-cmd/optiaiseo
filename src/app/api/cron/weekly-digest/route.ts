@@ -43,12 +43,12 @@ export async function GET(req: NextRequest) {
                         audits: {
                             orderBy: { runTimestamp: "desc" },
                             take: 2,
-                            select: { overallScore: true, runTimestamp: true },
+                            select: { categoryScores: true, runTimestamp: true },
                         },
                         aeoSnapshots: {
                             orderBy: { createdAt: "desc" },
                             take: 2,
-                            select: { aeoScore: true, createdAt: true },
+                            select: { score: true, createdAt: true },
                         },
                         competitorAlerts: {
                             where: { createdAt: { gte: oneWeekAgo } },
@@ -83,9 +83,9 @@ export async function GET(req: NextRequest) {
 
                 // AEO score delta
                 const [latestAeo, prevAeo] = site.aeoSnapshots;
-                const aeoScore = latestAeo?.aeoScore ?? 0;
+                const aeoScore = latestAeo?.score ?? 0;
                 const aeoChange = latestAeo && prevAeo
-                    ? Math.round(latestAeo.aeoScore - prevAeo.aeoScore)
+                    ? Math.round(latestAeo.score - prevAeo.score)
                     : 0;
 
                 // Rank movements: compare first half vs second half of snapshots
