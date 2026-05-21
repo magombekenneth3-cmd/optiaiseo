@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
                 aeoSnapshots: {
                     orderBy: { createdAt: "desc" },
                     take: 2,
-                    select: { aeoScore: true, aeoGrade: true, createdAt: true },
+                    select: { score: true, grade: true, createdAt: true },
                 },
             },
         });
@@ -70,8 +70,8 @@ export async function GET(req: NextRequest) {
                 if (!latest || !previous) { skipped++; continue; }
                 if (!site.user.email) { skipped++; continue; }
 
-                const latestGrade = latest.aeoGrade ?? gradeFromScore(latest.aeoScore);
-                const previousGrade = previous.aeoGrade ?? gradeFromScore(previous.aeoScore);
+                const latestGrade = latest.grade ?? gradeFromScore(latest.score);
+                const previousGrade = previous.grade ?? gradeFromScore(previous.score);
 
                 if (!gradeDropped(previousGrade, latestGrade)) { skipped++; continue; }
 
@@ -98,8 +98,8 @@ export async function GET(req: NextRequest) {
                         details: {
                             previousGrade,
                             latestGrade,
-                            previousScore: previous.aeoScore,
-                            latestScore: latest.aeoScore,
+                            previousScore: previous.score,
+                            latestScore: latest.score,
                         },
                     },
                 });
@@ -110,8 +110,8 @@ export async function GET(req: NextRequest) {
                 const appUrl = process.env.NEXTAUTH_URL ?? "https://optiaiseo.online";
                 const fromAddress = process.env.EMAIL_FROM ?? "alerts@optiaiseo.online";
 
-                const scoreDelta = latest.aeoScore - previous.aeoScore;
-                const formattedDelta = scoreDelta > 0 ? `+${scoreDelta.toFixed(1)}` : scoreDelta.toFixed(1);
+                const scoreDelta = latest.score - previous.score;
+                const formattedDelta = scoreDelta > 0 ? `+${scoreDelta}` : `${scoreDelta}`;
 
                 await resend.emails.send({
                     from: fromAddress,
@@ -136,13 +136,13 @@ export async function GET(req: NextRequest) {
           <td width="48%" style="background:#1a1a1a;border-radius:12px;padding:20px;text-align:center;border:1px solid #ef444433;">
             <p style="color:#64748b;font-size:12px;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;">Previous Grade</p>
             <p style="color:#ef4444;font-size:48px;font-weight:900;margin:0;line-height:1;">${previousGrade}</p>
-            <p style="color:#64748b;font-size:12px;margin:8px 0 0;">Score: ${previous.aeoScore.toFixed(1)}</p>
+            <p style="color:#64748b;font-size:12px;margin:8px 0 0;">Score: ${previous.score}</p>
           </td>
           <td width="4%"></td>
           <td width="48%" style="background:#1a1a1a;border-radius:12px;padding:20px;text-align:center;border:1px solid #ef444433;">
             <p style="color:#64748b;font-size:12px;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;">Current Grade</p>
             <p style="color:#f87171;font-size:48px;font-weight:900;margin:0;line-height:1;">${latestGrade}</p>
-            <p style="color:#64748b;font-size:12px;margin:8px 0 0;">Score: ${latest.aeoScore.toFixed(1)} (${formattedDelta})</p>
+            <p style="color:#64748b;font-size:12px;margin:8px 0 0;">Score: ${latest.score} (${formattedDelta})</p>
           </td>
         </tr>
       </table>
