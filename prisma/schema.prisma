@@ -1338,10 +1338,14 @@ model Campaign {
   siteId          String
   userId          String
   name            String
-  keyword         String
-  clientUrl       String
-  initialPosition Int
+  type            String    @default("MANUAL")
+  keyword         String    @default("")
+  clientUrl       String    @default("")
+  initialPosition Int       @default(0)
   targetPosition  Int       @default(1)
+  keywordCount    Int       @default(0)
+  urlCount        Int       @default(0)
+  keywords        Json      @default("[]")
   status          String    @default("ACTIVE")
   createdAt       DateTime  @default(now())
   completedAt     DateTime?
@@ -1349,5 +1353,6 @@ model Campaign {
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([siteId, status])
+  @@index([siteId, type, status])
   @@index([userId])
 }
