@@ -1273,9 +1273,17 @@ model KeywordSerpAnalysis {
   headingGaps      Json      @default("[]")
   wordCountAvg     Int       @default(0)
   wordCountPage    Int       @default(0)
+  yourPageH2s      Json      @default("[]")
   drGap            Int?
   rdGapRoot        Int?
   rdGapPage        Int?
+  clientDR         Int?
+  clientRDs        Int?
+  toxicCount       Int       @default(0)
+  topAnchors       Json      @default("[]")
+  newLastWeek      Int       @default(0)
+  lostLastWeek     Int       @default(0)
+  dofollowRatio    Float     @default(0)
   opportunityDoms  Json      @default("[]")
   intentMismatch   Boolean   @default(false)
   intentNote       String?
