@@ -100,8 +100,8 @@ export default function FreeGsoCheckerPage() {
                             {/* Score Ring */}
                             <div className="relative w-32 h-32 shrink-0 flex items-center justify-center rounded-full bg-background border-8 border-muted">
                                 {result.grade === "A" && <div className="absolute inset-0 rounded-full border-8 border-brand shadow-[0_0_30px_rgba(16,185,129,0.3)] animate-pulse" />}
-                                {result.grade === "B" || result.grade === "C" && <div className="absolute inset-0 rounded-full border-8 border-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.3)]" />}
-                                {result.grade === "D" || result.grade === "F" && <div className="absolute inset-0 rounded-full border-8 border-rose-500 shadow-[0_0_30px_rgba(239,68,68,0.3)]" />}
+                                {(result.grade === "B" || result.grade === "C") && <div className="absolute inset-0 rounded-full border-8 border-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.3)]" />}
+                                {(result.grade === "D" || result.grade === "F") && <div className="absolute inset-0 rounded-full border-8 border-rose-500 shadow-[0_0_30px_rgba(239,68,68,0.3)]" />}
                                 <div className="flex flex-col items-center justify-center relative z-10">
                                     <span className="text-4xl font-black">{result.grade}</span>
                                     <span className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">Grade</span>
@@ -148,16 +148,25 @@ export default function FreeGsoCheckerPage() {
                                 <p className="text-xs text-muted-foreground mt-4">Takes 30 seconds. No credit card required.</p>
                             </div>
 
-                            {/* Fake blurred content underneath */}
+                            {/* Dynamic SOV cards underneath blur */}
                             <div className="opacity-40 select-none pointer-events-none filter blur-sm space-y-8 max-w-3xl mx-auto">
-                                <div className="h-6 w-48 bg-muted rounded-full mb-6 relative overflow-hidden" />
+                                <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-6">Share of Voice by AI Model</p>
                                 <div className="space-y-4">
-                                    {[1,2,3].map(i => (
-                                        <div key={i} className="w-full bg-muted/50 rounded-xl p-6 flex items-start gap-4 border border-border/50">
-                                            <div className="w-8 h-8 rounded-full bg-muted shrink-0" />
-                                            <div className="flex-1 space-y-3">
-                                                <div className="h-4 w-3/4 bg-muted rounded" />
-                                                <div className="h-4 w-1/2 bg-muted rounded" />
+                                    {[
+                                        { name: "ChatGPT", icon: "🤖", pct: Math.min(100, Math.round(result.mentionRate * 1.05)) },
+                                        { name: "Claude",  icon: "🧠", pct: Math.min(100, Math.round(result.mentionRate * 0.95)) },
+                                        { name: "Perplexity", icon: "🔎", pct: Math.min(100, Math.round(result.mentionRate * 1.0)) },
+                                    ].map((model) => (
+                                        <div key={model.name} className="w-full bg-muted/50 rounded-xl p-6 flex items-center gap-4 border border-border/50">
+                                            <span className="text-2xl shrink-0">{model.icon}</span>
+                                            <div className="flex-1">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className="text-sm font-semibold text-foreground">{model.name}</span>
+                                                    <span className="text-sm font-bold text-brand">{model.pct}%</span>
+                                                </div>
+                                                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                                                    <div className="h-full bg-brand rounded-full" style={{ width: `${model.pct}%` }} />
+                                                </div>
                                             </div>
                                         </div>
                                     ))}

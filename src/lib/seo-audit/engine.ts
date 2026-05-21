@@ -115,6 +115,7 @@ export class AuditEngine {
                     allRecommendations.push({
                         categoryId: category.id,
                         itemId: item.id,
+                        label: item.label,
                         finding: item.finding,
                         recommendation: item.recommendation.text,
                         priority: item.recommendation.priority,

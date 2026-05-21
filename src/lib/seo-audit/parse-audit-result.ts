@@ -108,6 +108,7 @@ function parseReportObject(report: RawReport): ParsedAuditResult {
         (rec): NormalizedRecommendation => ({
             categoryId:          rec.categoryId ?? "general",
             itemId:              rec.itemId ?? "",
+            label:               (rec as Record<string, unknown>).label as string ?? rec.itemId ?? "",
             finding:             rec.finding ?? "",
             recommendation:      rec.recommendation ?? "",
             priority:            (rec.priority as "High" | "Medium" | "Low") ?? "Medium",
@@ -222,6 +223,7 @@ function extractRecommendations(categories: AuditCategoryResult[]): NormalizedRe
                 recs.push({
                     categoryId:         cat.id,
                     itemId:             item.id,
+                    label:              item.label,
                     finding:            item.finding,
                     recommendation:     item.recommendation.text,
                     priority:           item.recommendation.priority,

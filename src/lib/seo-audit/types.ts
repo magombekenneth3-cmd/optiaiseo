@@ -62,6 +62,8 @@ export interface AuditCategoryResult {
 export interface NormalizedRecommendation {
     categoryId: string;
     itemId: string;
+    /** Human-readable label for the check (e.g. "Missing meta description") */
+    label: string;
     finding: string;
     recommendation: string;
     priority: RecommendationPriority;

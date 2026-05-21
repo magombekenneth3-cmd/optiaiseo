@@ -53,57 +53,117 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await (await import("next-auth")).getServerSession((await import("@/lib/auth")).authOptions);
-        if (!session?.user?.id) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
         const { id } = await params;
         const format = req.nextUrl.searchParams.get("format") ?? "xlsx";
 
-        const dbUser = await prisma.user.findUnique({
-            where: { email: session.user?.email ?? "" },
-            select: { id: true, whiteLabel: true },
-        });
-        if (!dbUser) return NextResponse.json({ error: "User not found" }, { status: 403 });
+        // ---------- Try authenticated Audit first ----------
+        const session = await (await import("next-auth")).getServerSession((await import("@/lib/auth")).authOptions);
 
-        const audit = await prisma.audit.findUnique({
-            where: { id },
-            include: { site: { select: { domain: true, userId: true } } },
-        });
+        let domain: string;
+        let auditDate: Date;
+        let categories: any[];
+        let issues: any[];
+        let categoryScores: Record<string, number>;
+        let overallScore: number;
+        let wl: Record<string, string | undefined> = {};
+        let vitals: { lcp?: number; cls?: number; inp?: number } = {};
 
-        if (!audit || audit.site.userId !== session.user!.id) {
-            return NextResponse.json({ error: "Audit not found" }, { status: 404 });
+        const audit = session?.user?.id
+            ? await prisma.audit.findUnique({
+                  where: { id },
+                  include: { site: { select: { domain: true, userId: true } } },
+              })
+            : null;
+
+        if (audit && session?.user?.id && audit.site.userId === session.user.id) {
+            // ── Authenticated audit path (original) ──
+            domain = audit.site.domain;
+            auditDate = new Date(audit.runTimestamp ?? (audit as any).createdAt);
+
+            const dbUser = await prisma.user.findUnique({
+                where: { email: session.user?.email ?? "" },
+                select: { whiteLabel: true },
+            });
+            wl = (dbUser?.whiteLabel as Record<string, string | undefined>) ?? {};
+
+            const parsed = parseAuditResult(audit.issueList);
+            categories = parsed.categories;
+            issues = categories.flatMap(cat =>
+                (cat.items ?? []).map((item: any) => ({
+                    category: cat.label ?? cat.id ?? "General",
+                    severity: item.status === "Fail" ? "error" : item.status === "Warning" ? "warning" : "info",
+                    title: item.label ?? item.id ?? "Issue",
+                    description: item.finding ?? "",
+                    fixSuggestion: item.recommendation?.text ?? "",
+                    impact: item.recommendation?.priority ?? "",
+                    roiImpact: item.roiImpact,
+                    aiVisibilityImpact: item.aiVisibilityImpact,
+                    status: item.status,
+                }))
+            );
+            categoryScores = (audit.categoryScores as Record<string, number>) ?? {};
+            overallScore = parsed.overallScore ?? 0;
+            if (!overallScore && Object.keys(categoryScores).length > 0) {
+                const vals = Object.values(categoryScores).filter(v => typeof v === "number") as number[];
+                if (vals.length > 0) overallScore = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+            }
+            vitals = {
+                lcp: audit.lcp != null ? Number(audit.lcp) : undefined,
+                cls: audit.cls != null ? Number(audit.cls) : undefined,
+                inp: audit.inp != null ? Number(audit.inp) : undefined,
+            };
+        } else {
+            // ── FreeAudit fallback (no session required) ──
+            const freeAudit = await prisma.freeAudit.findUnique({ where: { id } });
+            if (!freeAudit) {
+                return NextResponse.json({ error: "Audit not found" }, { status: 404 });
+            }
+
+            domain = freeAudit.domain;
+            auditDate = new Date(freeAudit.createdAt);
+
+            // Build synthetic categories and issues from the allRecs JSON blob
+            const recs = Array.isArray(freeAudit.allRecs) ? (freeAudit.allRecs as any[]) : [];
+            const grouped = new Map<string, any[]>();
+            for (const rec of recs) {
+                const catId = rec.categoryId ?? "general";
+                if (!grouped.has(catId)) grouped.set(catId, []);
+                grouped.get(catId)!.push(rec);
+            }
+
+            categories = Array.from(grouped.entries()).map(([catId, items]) => ({
+                id: catId,
+                label: catId.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
+                items: items.map((r: any) => ({
+                    id: r.itemId ?? r.label ?? "",
+                    label: r.label ?? r.itemId ?? "Issue",
+                    status: r.priority === "High" ? "Fail" : r.priority === "Medium" ? "Warning" : "Info",
+                    finding: r.finding ?? "",
+                    recommendation: r.recommendation ? { text: r.recommendation, priority: r.priority ?? "Medium" } : undefined,
+                    roiImpact: r.roiImpact ?? r.priorityScore,
+                    aiVisibilityImpact: r.aiVisibilityImpact,
+                })),
+            }));
+
+            issues = recs.map((rec: any) => ({
+                category: (rec.categoryId ?? "general").replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
+                severity: rec.priority === "High" ? "error" : rec.priority === "Medium" ? "warning" : "info",
+                title: rec.label ?? rec.itemId ?? "Issue",
+                description: rec.finding ?? "",
+                fixSuggestion: rec.recommendation ?? "",
+                impact: rec.priority ?? "",
+                roiImpact: rec.roiImpact ?? rec.priorityScore,
+                aiVisibilityImpact: rec.aiVisibilityImpact,
+                status: rec.priority === "High" ? "Fail" : rec.priority === "Medium" ? "Warning" : "Info",
+            }));
+
+            categoryScores = {};
+            overallScore = typeof freeAudit.overallScore === "number" ? freeAudit.overallScore : 0;
         }
 
-        const domain = audit.site.domain;
-        const auditDate = new Date(audit.runTimestamp ?? (audit as any).createdAt);
         const runDate = auditDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
         const runDateFilename = auditDate.toISOString().slice(0, 10);
         const safeDomain = domain.replace(/[^a-z0-9_.-]/gi, "_");
-
-        const parsed = parseAuditResult(audit.issueList);
-        const categories = parsed.categories;
-        const issues = categories.flatMap(cat =>
-            (cat.items ?? []).map(item => ({
-                category: cat.label ?? cat.id ?? "General",
-                severity: item.status === "Fail" ? "error" : item.status === "Warning" ? "warning" : "info",
-                title: item.label ?? item.id ?? "Issue",
-                description: item.finding ?? "",
-                fixSuggestion: item.recommendation?.text ?? "",
-                impact: item.recommendation?.priority ?? "",
-                roiImpact: item.roiImpact,
-                aiVisibilityImpact: item.aiVisibilityImpact,
-                status: item.status,
-            }))
-        );
-        const categoryScores = audit.categoryScores as Record<string, number> ?? {};
-
-        let overallScore: number = parsed.overallScore ?? 0;
-        if (!overallScore && Object.keys(categoryScores).length > 0) {
-            const vals = Object.values(categoryScores).filter(v => typeof v === "number") as number[];
-            if (vals.length > 0) overallScore = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
-        }
 
         const brokenLinksData = extractBrokenLinks(categories);
 
@@ -120,19 +180,13 @@ export async function GET(
                 }))
             );
 
-            const wl = (dbUser?.whiteLabel as Record<string, string | undefined>) ?? {};
-
             const pdfBuffer = await generateAuditReportPdf({
-                domain: audit.site.domain,
+                domain,
                 score: overallScore ?? 0,
                 createdAt: auditDate.toISOString().split("T")[0],
                 findings,
                 categoryScores,
-                vitals: {
-                    lcp: audit.lcp != null ? Number(audit.lcp) : undefined,
-                    cls: audit.cls != null ? Number(audit.cls) : undefined,
-                    inp: audit.inp != null ? Number(audit.inp) : undefined,
-                },
+                vitals,
                 whiteLabel: {
                     logoUrl: wl.logoUrl,
                     primaryColor: wl.primaryColor,
@@ -144,7 +198,7 @@ export async function GET(
             return new NextResponse(new Uint8Array(pdfBuffer), {
                 headers: {
                     "Content-Type": "application/pdf",
-                    "Content-Disposition": `attachment; filename="audit-${audit.site.domain}-${runDateFilename}.pdf"`,
+                    "Content-Disposition": `attachment; filename="audit-${domain}-${runDateFilename}.pdf"`,
                     "Cache-Control": "private, no-store",
                 },
             });
@@ -181,12 +235,12 @@ export async function GET(
             ["Confirmed Broken (HTTP 4xx/5xx)", brokenLinksData.brokenUrls.length],
             ["Unreachable / Timeout", brokenLinksData.unreachableUrls.length],
         ];
-        if ((audit.lcp as any) != null) {
+        if (vitals.lcp != null) {
             summaryRows.push(["── Core Web Vitals ──"]);
-            summaryRows.push(["LCP (Largest Contentful Paint)", `${Number(audit.lcp).toFixed(2)}s`]);
+            summaryRows.push(["LCP (Largest Contentful Paint)", `${vitals.lcp.toFixed(2)}s`]);
         }
-        if ((audit.cls as any) != null) summaryRows.push(["CLS (Cumulative Layout Shift)", Number(audit.cls).toFixed(3)]);
-        if ((audit.inp as any) != null) summaryRows.push(["INP / FID", `${Number(audit.inp).toFixed(0)}ms`]);
+        if (vitals.cls != null) summaryRows.push(["CLS (Cumulative Layout Shift)", vitals.cls.toFixed(3)]);
+        if (vitals.inp != null) summaryRows.push(["INP / FID", `${vitals.inp.toFixed(0)}ms`]);
 
         summaryRows.forEach(r => summarySheet.addRow(r));
         const titleRow = summarySheet.getRow(1);

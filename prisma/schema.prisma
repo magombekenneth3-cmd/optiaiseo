@@ -130,6 +130,8 @@ model User {
   dripSequence           DripSequence?
   creditHistory          CreditHistory[]
   notifications          Notification[]
+  dailyBriefings         DailyBriefing[]
+  campaigns              Campaign[]
 
   @@index([wpApiKey])
 }
@@ -219,6 +221,9 @@ model Site {
   mentionCorrectionLogs  MentionCorrectionLog[]
   serpGapAnalyses        SerpGapAnalysis[]
   keywordSerpAnalyses    KeywordSerpAnalysis[]
+  dailyBriefings         DailyBriefing[]
+  competitorAlerts       CompetitorAlert[]
+  campaigns              Campaign[]
 
 
   ga4PropertyId          String?
@@ -1246,6 +1251,7 @@ model SerpGapAnalysis {
   taskCount             Int?
   automatedTaskCount    Int?
   errorMessage          String?
+  autoQueued            Boolean   @default(false)
   createdAt             DateTime  @default(now())
   completedAt           DateTime?
   site                  Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
@@ -1275,16 +1281,6 @@ model KeywordSerpAnalysis {
   intentNote       String?
   contentType      String?
   disclaimerNeeded Boolean   @default(false)
-  // ── Sprint 1: persist computed fields (previously hardcoded to 0) ──
-  yourPageH2s      Json      @default("[]")
-  clientDR         Float?
-  clientRDs        Int?
-  toxicCount       Int?
-  topAnchors       Json      @default("[]")
-  newLastWeek      Int?
-  lostLastWeek     Int?
-  dofollowRatio    Float?
-  userPageScrapedOk Boolean  @default(true)
   createdAt        DateTime  @default(now())
   completedAt      DateTime?
   expiresAt        DateTime  @default(now())
@@ -1294,4 +1290,56 @@ model KeywordSerpAnalysis {
   @@index([siteId])
   @@index([siteId, status])          // purge job + dashboard status filter
   @@index([expiresAt])
+}
+
+model DailyBriefing {
+  id                            String   @id @default(cuid())
+  siteId                        String
+  userId                        String
+  date                          DateTime @default(now())
+  yesterdayTraffic               Int      @default(0)
+  organicImpressions             Int      @default(0)
+  topPerformingKeyword           String?
+  topPerformingKeywordVolume     Int?
+  topPerformingKeywordPosition   Int?
+  anomaliesFound                 Json?
+  quickWins                      Json?
+  createdAt                      DateTime @default(now())
+  site                           Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user                           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, date(sort: Desc)])
+  @@index([userId])
+}
+
+model CompetitorAlert {
+  id          String   @id @default(cuid())
+  siteId      String
+  competitor  String
+  message     String
+  gainedCount Int
+  details     Json
+  createdAt   DateTime @default(now())
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, createdAt(sort: Desc)])
+}
+
+model Campaign {
+  id              String    @id @default(cuid())
+  siteId          String
+  userId          String
+  name            String
+  keyword         String
+  clientUrl       String
+  initialPosition Int
+  targetPosition  Int       @default(1)
+  status          String    @default("ACTIVE")
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+  site            Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, status])
+  @@index([userId])
 }

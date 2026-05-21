@@ -381,7 +381,11 @@ export function OnboardingSweep({ userName, upgradePlan, upgradeBilling }: { use
     const [siteId, setSiteId] = useState<string | null>(null);
     const [spotResult, setSpotResult] = useState<SpotCheckResult | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const isMounted = useRef(true);
 
+    useEffect(() => {
+        return () => { isMounted.current = false; };
+    }, []);
     const firstName = userName.split(" ")[0] || userName;
 
     const handleDomainSubmit = async (e: React.FormEvent) => {
@@ -391,9 +395,11 @@ export function OnboardingSweep({ userName, upgradePlan, upgradeBilling }: { use
 
         try {
             const result = await runOnboardingSpotCheck(domain.trim());
+            if (!isMounted.current) return;
             setSpotResult(result);
             setStep("result");
         } catch {
+            if (!isMounted.current) return;
             toast.error("Couldn't complete the AI check — let's continue anyway.");
             await handleCreateSite();
         }
@@ -404,6 +410,7 @@ export function OnboardingSweep({ userName, upgradePlan, upgradeBilling }: { use
         setIsSaving(true);
 
         const res = await createSite({ domain: domain.trim(), operatingMode: "REPORT_ONLY" });
+        if (!isMounted.current) return;
         setIsSaving(false);
 
         if (!res.success) {

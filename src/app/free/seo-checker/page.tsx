@@ -154,7 +154,7 @@ export default function FreeSeoCheckerPage() {
                 <div className="w-full max-w-xl flex flex-col items-center gap-8">
 
                     {/* Header */}
-                    {phase === 'idle' && (
+                    {(phase === 'idle' || phase === 'error') && (
                         <div className="text-center fade-in-up">
                             <div
                                 className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold mb-4 border"
@@ -175,7 +175,7 @@ export default function FreeSeoCheckerPage() {
                         </div>
                     )}
                     {/* Sample report preview */}
-                    {phase === 'idle' && (
+                    {(phase === 'idle' || phase === 'error') && (
                         <div className="w-full rounded-2xl border border-border bg-card p-4 fade-in-up fade-in-up-1">
                             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
                                 Sample report preview
@@ -215,7 +215,7 @@ export default function FreeSeoCheckerPage() {
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                                 <input
                                     id="free-audit-url"
-                                    type="text"
+                                    type="url"
                                     value={url}
                                     onChange={(e) => setUrl(e.target.value)}
                                     placeholder="yourwebsite.com"
@@ -268,7 +268,7 @@ export default function FreeSeoCheckerPage() {
                         >
                             {/* Animated progress ring */}
                             <div className="relative w-20 h-20">
-                                <svg className="animate-spin w-full h-full" viewBox="0 0 80 80">
+                                <svg className="-rotate-90 w-full h-full" viewBox="0 0 80 80">
                                     <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border)" strokeWidth="7" />
                                     <circle
                                         cx="40" cy="40" r="34" fill="none"

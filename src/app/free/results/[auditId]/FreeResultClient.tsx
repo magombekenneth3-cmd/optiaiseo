@@ -12,6 +12,7 @@ import {
     Sparkles,
     TrendingUp,
     Download,
+    ExternalLink,
 } from 'lucide-react';
 
 
@@ -125,6 +126,7 @@ type TabFilter = 'all' | 'High' | 'Medium' | 'Low';
 export default function FreeResultClient({
     auditId,
     domain,
+    url,
     overallScore,
     categoryScores,
     topRecs,
@@ -152,7 +154,15 @@ export default function FreeResultClient({
     const FREE_ROW_COUNT = 5;
     const freeRecs = topRecs.slice(0, FREE_ROW_COUNT);
     const gatedCount = Math.max(0, totalRecCount - freeRecs.length);
-    const displayedRecs = unlocked ? allRecs : freeRecs;
+    const displayedRecs = unlocked ? (allRecs.length > 0 ? allRecs : topRecs) : freeRecs;
+
+    // Derive tab counts from the currently visible set so badges match rows
+    const visibleCounts = {
+        total:    displayedRecs.length,
+        errors:   displayedRecs.filter(r => r.priority === 'High').length,
+        warnings: displayedRecs.filter(r => r.priority === 'Medium').length,
+        notices:  displayedRecs.filter(r => r.priority === 'Low').length,
+    };
 
     async function handleShare() {
         const title = `${domain} SEO Score: ${overallScore}/100`;
@@ -245,14 +255,26 @@ export default function FreeResultClient({
                         style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
                     >
 
-                        <div className="flex items-center gap-2 self-start">
-                            <span className="text-sm font-semibold text-foreground break-all">{domain}</span>
-                            <span
-                                className="text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0"
-                                style={{ background: 'var(--brand-muted)', color: 'var(--brand)', border: '1px solid var(--brand-border)' }}
-                            >
-                                {new Date(createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                            </span>
+                        <div className="flex flex-col gap-1 self-start">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-foreground break-all">{domain}</span>
+                                <span
+                                    className="text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0"
+                                    style={{ background: 'var(--brand-muted)', color: 'var(--brand)', border: '1px solid var(--brand-border)' }}
+                                >
+                                    {new Date(createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </span>
+                            </div>
+                            {url && (
+                                <a
+                                    href={url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-muted-foreground hover:text-brand transition-colors flex items-center gap-1 truncate max-w-[240px]"
+                                >
+                                    {url.replace(/^https?:\/\//, '')} <ExternalLink className="w-3 h-3 shrink-0" />
+                                </a>
+                            )}
                         </div>
 
 
@@ -310,10 +332,10 @@ export default function FreeResultClient({
 
                         <div className="grid grid-cols-4 gap-3">
                             {[
-                                { label: 'Total',    value: issueStats.total,    color: 'var(--foreground)' },
-                                { label: 'Errors',   value: issueStats.errors,   color: '#ef4444' },
-                                { label: 'Warnings', value: issueStats.warnings, color: '#f59e0b' },
-                                { label: 'Notices',  value: issueStats.notices,  color: 'var(--muted-foreground)' },
+                                { label: 'Total',    value: visibleCounts.total,    color: 'var(--foreground)' },
+                                { label: 'Errors',   value: visibleCounts.errors,   color: '#ef4444' },
+                                { label: 'Warnings', value: visibleCounts.warnings, color: '#f59e0b' },
+                                { label: 'Notices',  value: visibleCounts.notices,  color: 'var(--muted-foreground)' },
                             ].map(s => (
                                 <div key={s.label} className="rounded-xl p-3" style={{ background: 'var(--muted)' }}>
                                     <p className="text-2xl font-black" style={{ color: s.color }}>{s.value}</p>
@@ -342,10 +364,10 @@ export default function FreeResultClient({
 
                     <div className="flex gap-1 border-b mb-0" style={{ borderColor: 'var(--border)' }}>
                         {([
-                            { id: 'all' as TabFilter,    label: 'All',      count: issueStats.total },
-                            { id: 'High' as TabFilter,   label: 'Errors',   count: issueStats.errors },
-                            { id: 'Medium' as TabFilter, label: 'Warnings', count: issueStats.warnings },
-                            { id: 'Low' as TabFilter,    label: 'Notices',  count: issueStats.notices },
+                            { id: 'all' as TabFilter,    label: 'All',      count: visibleCounts.total },
+                            { id: 'High' as TabFilter,   label: 'Errors',   count: visibleCounts.errors },
+                            { id: 'Medium' as TabFilter, label: 'Warnings', count: visibleCounts.warnings },
+                            { id: 'Low' as TabFilter,    label: 'Notices',  count: visibleCounts.notices },
                         ]).map(tab => (
                             <button
                                 key={tab.id}
@@ -505,9 +527,15 @@ export default function FreeResultClient({
                         {quickWins.map((rec, i) => (
                             <div
                                 key={i}
-                                className="flex items-start gap-3 px-5 py-3 border-b last:border-0"
+                                className="flex items-start gap-3 px-5 py-3 border-b last:border-0 relative"
                                 style={{ borderColor: 'var(--border)' }}
                             >
+                                {/* Blur + lock overlay for gated quick wins (index > 0 when locked) */}
+                                {!unlocked && i > 0 && (
+                                    <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg" style={{ background: 'color-mix(in srgb, var(--card) 60%, transparent)', backdropFilter: 'blur(3.5px)' }}>
+                                        <Lock className="w-4 h-4 text-muted-foreground" />
+                                    </div>
+                                )}
                                 <span
                                     className="w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5"
                                     style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}

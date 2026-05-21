@@ -8,6 +8,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Search, ExternalLink, TrendingUp, MessageCircle, Users, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 import RedditSeoContent from "@/components/seoContext/RedditContent";
+import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 
 interface RedditResult {
     keyword: string;
@@ -56,6 +57,12 @@ export default function RedditSeoFinderPage() {
 
     return (
         <div className="min-h-screen bg-background">
+            {/* Navigation */}
+            <nav className="border-b border-border px-4 sm:px-6 py-3 flex items-center justify-between bg-card/60 backdrop-blur-sm sticky top-0 z-10">
+                <Link href="/" className="font-bold text-lg" style={{ color: 'var(--brand)' }}>OptiAISEO</Link>
+                <NavAuthSection ctaText="Sign up free →" ctaHref="/signup" ctaClassName="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors font-medium" />
+            </nav>
+
             {/* Hero */}
             <section className="py-20 px-4 text-center bg-gradient-to-b from-brand/5 to-transparent">
                 <div className="max-w-3xl mx-auto">
