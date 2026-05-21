@@ -60,13 +60,13 @@ export async function GET(req: NextRequest) {
                     orderBy: { recordedAt: "desc" },
                     distinct: ["keyword"],
                     take: 30,
-                    select: { keyword: true, position: true, url: true, clicks: true, impressions: true },
+                    select: { keyword: true, position: true, url: true, searchVolume: true },
                 });
 
                 if (page2Keywords.length === 0) { skipped++; continue; }
 
                 // Prioritise by impressions (highest opportunity first)
-                const sorted = page2Keywords.sort((a, b) => (b.impressions ?? 0) - (a.impressions ?? 0));
+                const sorted = page2Keywords.sort((a, b) => (b.searchVolume ?? 0) - (a.searchVolume ?? 0));
 
                 // Group by landing URL for efficient content work
                 const urlGroups = new Map<string, typeof sorted>();
@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
                             keyword: k.keyword,
                             position: k.position,
                             url: k.url,
-                            impressions: k.impressions,
+                            searchVolume: k.searchVolume,
                         })),
                     },
                 });
@@ -110,7 +110,7 @@ export async function GET(req: NextRequest) {
                                 url,
                                 keywords: kws.slice(0, 5).map(k => k.keyword),
                                 avgPosition: Math.round(kws.reduce((s, k) => s + (k.position ?? 20), 0) / kws.length),
-                                totalImpressions: kws.reduce((s, k) => s + (k.impressions ?? 0), 0),
+                                totalSearchVolume: kws.reduce((s, k) => s + (k.searchVolume ?? 0), 0),
                             })),
                     },
                 });
