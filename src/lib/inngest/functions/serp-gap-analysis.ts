@@ -20,7 +20,7 @@ import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { analyseSerpGap } from "@/lib/serp-gap/analyser";
 import { generateImplementationPlan } from "@/lib/serp-gap/plan-generator";
-import { consumeCredits } from "@/lib/credits";
+import { consumeCredits, refundCredits } from "@/lib/credits";
 
 const CREDIT_COST = 5; // 5 credits per gap analysis
 
@@ -156,6 +156,12 @@ export const runSerpGapAnalysisJob = inngest.createFunction(
         } catch (error: unknown) {
             const errorMsg = error instanceof Error ? error.message : String(error);
             logger.error("[SerpGap] Job failed with error", { analysisId, keyword, errorMsg });
+
+            // Refund credits — the user paid but got nothing
+            await refundCredits(userId, "serp_gap_analysis").catch((refundErr) => {
+                logger.warn("[SerpGap] Credit refund failed", { userId, error: (refundErr as Error)?.message });
+            });
+
             await prisma.serpGapAnalysis.update({
                 where: { id: analysisId },
                 data: { status: "FAILED", errorMessage: `Job error: ${errorMsg}` },

@@ -134,37 +134,51 @@ export async function refreshCompetitorKeywords(siteId: string, competitorId: st
             });
         }
 
-        // Clear old keywords
-        await prisma.competitorKeyword.deleteMany({ where: { competitorId } });
-
-        // Save gaps enriched with real GSC data where available
+        // Atomically refresh keywords: insert new, then prune old in one transaction
         if (gaps.length > 0) {
-            await prisma.competitorKeyword.createMany({
-                data: gaps.map(gap => {
-                    const gsc = gscKeywords.get(gap.keyword.toLowerCase());
+            await prisma.$transaction(async (tx) => {
+                const created = await tx.competitorKeyword.createMany({
+                    data: gaps.map(gap => {
+                        const gsc = gscKeywords.get(gap.keyword.toLowerCase());
 
-                    const estimatedCtr = gap.serpFeatures
-                        ? getDynamicCtr(gap.position, gap.serpFeatures)
-                        : (CTR_CURVE[Math.min(gap.position, 10)] ?? 0.01);
-                    const estimatedImpressions = gap.searchVolume;
-                    const estimatedClicks = Math.round(estimatedImpressions * estimatedCtr);
+                        const estimatedCtr = gap.serpFeatures
+                            ? getDynamicCtr(gap.position, gap.serpFeatures)
+                            : (CTR_CURVE[Math.min(gap.position, 10)] ?? 0.01);
+                        const estimatedImpressions = gap.searchVolume;
+                        const estimatedClicks = Math.round(estimatedImpressions * estimatedCtr);
 
-                    return {
+                        return {
+                            competitorId,
+                            keyword: gap.keyword,
+                            position: gsc?.position ?? gap.position,
+                            searchVolume: gsc
+                                ? Math.round((gsc.impressions / 90) * 30)
+                                : gap.searchVolume,
+                            difficulty: gap.difficulty,
+                            url: gap.url,
+                            clicks: gsc?.clicks ?? estimatedClicks,
+                            impressions: gsc?.impressions ?? estimatedImpressions,
+                            ctr: gsc?.ctr ?? estimatedCtr,
+                            dataSource: gsc ? "gsc" : "serp-estimate",
+                        };
+                    }),
+                    skipDuplicates: true,
+                });
+
+                // Prune stale keywords that aren't in the new batch
+                const newKeywords = gaps.map(g => g.keyword);
+                await tx.competitorKeyword.deleteMany({
+                    where: {
                         competitorId,
-                        keyword: gap.keyword,
-                        position: gsc?.position ?? gap.position,
-                        searchVolume: gsc
-                            ? Math.round((gsc.impressions / 90) * 30)
-                            : gap.searchVolume,
-                        difficulty: gap.difficulty,
-                        url: gap.url,
-                        clicks: gsc?.clicks ?? estimatedClicks,
-                        impressions: gsc?.impressions ?? estimatedImpressions,
-                        ctr: gsc?.ctr ?? estimatedCtr,
-                        dataSource: gsc ? "gsc" : "serp-estimate",
-                    };
-                }),
+                        keyword: { notIn: newKeywords },
+                    },
+                });
+
+                return created;
             });
+        } else {
+            // No gaps found — clear old keywords
+            await prisma.competitorKeyword.deleteMany({ where: { competitorId } });
         }
 
         const locationCode = resolveLocationCode(site.localContext ?? null);

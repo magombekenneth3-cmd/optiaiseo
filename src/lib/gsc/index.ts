@@ -25,11 +25,13 @@ const INTERNAL_LINK_MIN_POSITION = 5;
 const INTERNAL_LINK_MAX_POSITION = 15;
 const INTERNAL_LINK_MIN_IMPRESSIONS = 30;
 
-const BASE_CTR_BY_POSITION: Record<number, number> = {
+// Canonical CTR curve — single source of truth.
+// Values are percentages (28 = 28%). competitors/index.ts imports these.
+export const BASE_CTR_BY_POSITION: Record<number, number> = {
     1: 28, 2: 15, 3: 11, 4: 8, 5: 7,
     6: 5, 7: 4, 8: 3, 9: 2.5, 10: 2,
 };
-const BASE_CTR_FALLBACK = 1.5;
+export const BASE_CTR_FALLBACK = 1.5;
 
 const CLUSTER_STOP_WORDS =
     /\b(best|top|vs|versus|review|reviews|compare|comparison|alternatives?|software|tool|tools|platform|service|app|solution|solutions|list|guide|tutorial|how|what|why|when|who)\b/g;
@@ -223,7 +225,7 @@ function escapeRegex(s: string): string {
     return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function clusterKey(keyword: string): string {
+export function clusterKey(keyword: string): string {
     const cleaned = keyword
         .toLowerCase()
         .replace(CLUSTER_STOP_WORDS, " ")
@@ -326,7 +328,11 @@ export async function fetchGSCKeywords(
     options: FetchGSCOptions = {}
 ): Promise<KeywordRow[]> {
     const { includeDevice = false, dataState = "final" } = options;
+    // GSC has a 2-3 day reporting lag: the tail days show 0 impressions,
+    // which skews opportunity scores and triggers false decay alerts.
+    const GSC_LAG_DAYS = 3;
     const endDate = new Date();
+    endDate.setDate(endDate.getDate() - GSC_LAG_DAYS);
     const startDate = new Date();
     startDate.setDate(endDate.getDate() - days);
 
@@ -727,10 +733,19 @@ export function findOpportunities(
     const aggregated = normaliseInput(rows);
     return aggregated
         .filter(
-            (kw) =>
-                kw.impressions >= 10 &&
-                kw.avgPosition > OPPORTUNITY_MIN_POSITION &&
-                kw.impressions > OPPORTUNITY_MIN_IMPRESSIONS
+            (kw) => {
+                if (kw.impressions < 10) return false;
+                // CTR-gap bypass: positions 1-5 with CTR < 50% of expected are
+                // still opportunities (e.g. bad title tag, SERP feature stealing clicks)
+                const expected = expectedCtrForKeyword(kw.avgPosition, kw.intent);
+                const ctrDecimal = kw.ctr / 100;
+                const hasCtrGap = ctrDecimal < (expected / 100) * 0.5 && kw.impressions > 100;
+                if (hasCtrGap) return true;
+                return (
+                    kw.avgPosition > OPPORTUNITY_MIN_POSITION &&
+                    kw.impressions > OPPORTUNITY_MIN_IMPRESSIONS
+                );
+            }
         )
         .map((kw) => {
             const expectedCtr = expectedCtrForKeyword(kw.avgPosition, kw.intent);

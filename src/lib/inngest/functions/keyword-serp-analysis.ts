@@ -60,12 +60,13 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
             return ctx;
         });
 
-        const { userPage, authorityComp, backlinkSummary, serpResults, wordCountAvg } =
+        const { userPage, userPageScrapedOk, authorityComp, backlinkSummary, serpResults, wordCountAvg } =
             await step.run("scrape-authority", async () => {
                 const top10 = serpContext.results.slice(0, 10);
 
+                let userPageScrapedOk = true;
                 const [userPageResult, authorityResult, backlinkResult] = await Promise.all([
-                    scrapePageData(landingPageUrl).catch(() => ({ text: "", headings: [], schemaTypes: [], publishedDate: null })),
+                    scrapePageData(landingPageUrl).catch(() => { userPageScrapedOk = false; return { text: "", headings: [], schemaTypes: [], publishedDate: null }; }),
                     getCompetitorAuthorityComparison(siteId).catch(() => null),
                     getBacklinkSummary(domain, siteId).catch(() => null),
                 ]);
@@ -99,6 +100,7 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
 
                 return {
                     userPage:       userPageResult,
+                    userPageScrapedOk,
                     authorityComp:  authorityResult,
                     backlinkSummary: backlinkResult,
                     serpResults:    mappedResults,
@@ -145,7 +147,7 @@ If rdGap > 100 or drGap > 30, include a HIGH authority fix.
 headingGaps: topics in ≥3/10 top results only.
 
 SERP: ${JSON.stringify(serpResults.slice(0,3).map(r => ({ pos: r.position, domain: r.domain, wordCount: r.wordCount, h2Count: r.h2Count })))}
-Top H2s: ${JSON.stringify(serpContext.results.slice(0,5).flatMap(r => r.scrapedHeadings ?? []).slice(0,30))}
+Top H2s: ${JSON.stringify(serpContext.results.slice(0,5).flatMap(r => r.scrapedHeadings ?? []).filter(h => !/^(table of contents|related (articles|posts)|share this|comments|leave a reply|about the author|newsletter|sidebar|footer|navigation)/i.test(h)).slice(0,30))}
 PAA: ${JSON.stringify(serpContext.peopleAlsoAsk.slice(0,5).map(p => p.question))}
 USER: url=${landingPageUrl} h2s=${JSON.stringify(userH2s)} words=${userWordCount}
 AUTHORITY: clientDR=${clientDR} clientRDs=${clientRDs} pageRDs=${pageBacklinks} toxic=${toxicCount} drGap=${drGap ?? "unknown"} top3AvgDR=${Math.round(top3Avg)}
@@ -189,7 +191,13 @@ AVG_WORDS=${wordCountAvg} YOUR_WORDS=${userWordCount}`;
 
         await step.run("save-and-notify", async () => {
             const drGap         = authorityComp?.competitors[0]?.drGap ?? null;
+            const clientDR      = authorityComp?.yourDr ?? 0;
             const clientRDs     = backlinkSummary?.referringDomains ?? 0;
+            const toxicCount    = backlinkSummary?.toxicCount ?? 0;
+            const topAnchors    = backlinkSummary?.topAnchors ?? [];
+            const newLastWeek   = backlinkSummary?.newLastWeek ?? 0;
+            const lostLastWeek  = backlinkSummary?.lostLastWeek ?? 0;
+            const dofollowRatio = backlinkSummary?.dofollowRatio ?? 0;
             const pageBacklinks = await prisma.backlinkDetail
                 .count({ where: { siteId, targetUrl: { contains: landingPageUrl } } })
                 .catch(() => 0);
@@ -199,8 +207,12 @@ AVG_WORDS=${wordCountAvg} YOUR_WORDS=${userWordCount}`;
             const userWordCount = userPage.text
                 ? userPage.text.split(/\s+/).filter(Boolean).length
                 : 0;
+            const userH2s = userPage.headings ?? [];
 
-            const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+            // Dynamic TTL: shorter when intent mismatch or big DR gap
+            const hasSevereIssue = aiResult.intentMismatch || (drGap !== null && drGap > 30);
+            const ttlDays = hasSevereIssue ? 3 : 7;
+            const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);
 
             await prisma.keywordSerpAnalysis.update({
                 where: { id: analysisId },
@@ -219,6 +231,16 @@ AVG_WORDS=${wordCountAvg} YOUR_WORDS=${userWordCount}`;
                     intentNote:     aiResult.intentNote,
                     contentType:    aiResult.contentTypeTop10,
                     disclaimerNeeded,
+                    // ── Sprint 1: persist backlink/authority fields ──
+                    yourPageH2s:      userH2s as unknown as Prisma.InputJsonValue,
+                    clientDR,
+                    clientRDs,
+                    toxicCount,
+                    topAnchors:       topAnchors as unknown as Prisma.InputJsonValue,
+                    newLastWeek,
+                    lostLastWeek,
+                    dofollowRatio,
+                    userPageScrapedOk,
                     expiresAt,
                     completedAt:    new Date(),
                 },

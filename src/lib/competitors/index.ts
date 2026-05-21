@@ -6,6 +6,7 @@ import { fetchCompetitorPageHtml } from "./page-fetcher";
 import { isSafeUrl } from "@/lib/security/safe-url";
 import { getDomainMetrics, getKeywordMetricsBatch, resolveLocationCode } from "@/lib/keywords/dataforseo";
 import { resolveCountryCode } from "./country";
+import { BASE_CTR_BY_POSITION, BASE_CTR_FALLBACK } from "@/lib/gsc";
 
 
 /**
@@ -17,18 +18,12 @@ import { resolveCountryCode } from "./country";
  * - Uses Gemini AI to estimate domain-level traffic intelligence
  */
 
-export const CTR_CURVE: Record<number, number> = {
-    1: 0.278,
-    2: 0.154,
-    3: 0.113,
-    4: 0.082,
-    5: 0.062,
-    6: 0.048,
-    7: 0.038,
-    8: 0.031,
-    9: 0.025,
-    10: 0.022,
-};
+// Derive decimal CTR from the canonical percentage curve in gsc/index.ts
+// This ensures competitors and GSC pipelines use identical values.
+export const CTR_CURVE: Record<number, number> = Object.fromEntries(
+    Object.entries(BASE_CTR_BY_POSITION).map(([k, v]) => [Number(k), v / 100])
+);
+const CTR_CURVE_FALLBACK = BASE_CTR_FALLBACK / 100;
 
 interface SerpFeatures {
     hasAnswerBox: boolean;
@@ -37,7 +32,7 @@ interface SerpFeatures {
 }
 
 export function getDynamicCtr(position: number, serpFeatures?: Partial<SerpFeatures>): number {
-    let ctr = CTR_CURVE[Math.min(position, 10)] ?? 0.01;
+    let ctr = CTR_CURVE[Math.min(position, 10)] ?? CTR_CURVE_FALLBACK;
     if (serpFeatures?.hasAnswerBox) ctr *= 0.78;
     if (serpFeatures?.hasLocalPack) ctr *= 0.85;
     if (serpFeatures?.hasShopping) ctr *= 0.90;

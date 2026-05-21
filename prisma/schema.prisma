@@ -1275,6 +1275,16 @@ model KeywordSerpAnalysis {
   intentNote       String?
   contentType      String?
   disclaimerNeeded Boolean   @default(false)
+  // ── Sprint 1: persist computed fields (previously hardcoded to 0) ──
+  yourPageH2s      Json      @default("[]")
+  clientDR         Float?
+  clientRDs        Int?
+  toxicCount       Int?
+  topAnchors       Json      @default("[]")
+  newLastWeek      Int?
+  lostLastWeek     Int?
+  dofollowRatio    Float?
+  userPageScrapedOk Boolean  @default(true)
   createdAt        DateTime  @default(now())
   completedAt      DateTime?
   expiresAt        DateTime  @default(now())

@@ -5,7 +5,7 @@ import {
     X, Loader2, AlertTriangle, CheckCircle2, Zap, Target,
     ChevronDown, ChevronUp, Clock, BarChart2, Calendar,
     ArrowUpRight, Bot, User, BookOpen, Link2, ChevronRight,
-    Info, FileText, TrendingUp,
+    Info, FileText, TrendingUp, Layers,
 } from "lucide-react";
 import type { ContentSection, AuthorityStep } from "@/lib/serp-gap/plan-generator";
 
@@ -63,6 +63,11 @@ interface FullAnalysis {
         topCompetitorAvgWordCount: number;
         clientSignals: { wordCount: number };
         rankingTimelineNote: string | null;
+        competitorTopicMap?: {
+            topic: string;
+            competitorUrls: string[];
+            mentionCount: number;
+        }[];
     } | null;
     implementationPlan: ImplementationPlan | null;
     estimatedPositionGain: string | null;
@@ -85,6 +90,12 @@ const SEV_BADGE: Record<string, string> = {
     medium:   "bg-blue-500/10 text-blue-400 border-blue-500/20",
     low:      "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
 };
+
+function getAnalysisMode(position: number): { label: string; color: string } {
+    if (position >= 11) return { label: "Page 2+ Catchup", color: "text-rose-400 bg-rose-500/10 border-rose-500/20" };
+    if (position >= 4) return { label: "Page 1 Climb", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" };
+    return { label: "Top 3 Push", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" };
+}
 
 
 function WeekCard({ week, focus, tasks }: { week: number; focus: string; tasks: PlanTask[] }) {
@@ -281,8 +292,11 @@ export function SerpGapDetail({
                         <p className="text-xs text-muted-foreground mb-0.5">SERP Gap Analysis</p>
                         <h2 className="font-bold text-base leading-snug truncate">{data?.keyword ?? "Loading…"}</h2>
                         {data && (
-                            <p className="text-xs text-muted-foreground mt-0.5">
+                            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
                                 Position #{data.clientPosition} · {data.gapCount ?? 0} gaps found
+                                <span className={`px-1.5 py-0.5 rounded text-xs font-medium border ${getAnalysisMode(data.clientPosition).color}`}>
+                                    {getAnalysisMode(data.clientPosition).label}
+                                </span>
                             </p>
                         )}
                     </div>
@@ -444,7 +458,7 @@ export function SerpGapDetail({
                                 {gaps.length === 0 && (
                                     <div className="p-8 text-center text-muted-foreground text-sm">No gaps data available.</div>
                                 )}
-                                {gaps.map((gap, i) => (
+                            {gaps.map((gap, i) => (
                                     <div key={i} className={`border-l-4 rounded-r-xl px-4 py-4 ${SEV[gap.gap] ?? SEV.low}`}>
                                         <div className="flex items-start justify-between gap-2 mb-2">
                                             <p className="text-sm font-semibold">{gap.dimension}</p>
@@ -487,6 +501,27 @@ export function SerpGapDetail({
                                         ) : null}
                                     </div>
                                 ))}
+
+                                {/* Competitor Topic Coverage */}
+                                {(data.gapReport?.competitorTopicMap?.length ?? 0) > 0 && (
+                                    <div className="rounded-xl border border-border bg-card/50 p-5">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <Layers className="w-4 h-4 text-purple-400" />
+                                            <h3 className="text-sm font-semibold">Competitor Topic Coverage</h3>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground mb-3">Topics covered by competitors but missing from your page:</p>
+                                        <div className="flex flex-col gap-2">
+                                            {data.gapReport!.competitorTopicMap!.slice(0, 10).map((topic, i) => (
+                                                <div key={i} className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-background/60 border border-border">
+                                                    <span className="text-xs font-medium truncate">{topic.topic}</span>
+                                                    <span className="text-xs text-muted-foreground shrink-0">
+                                                        {topic.mentionCount} of {data.gapReport!.competitorTopicMap!.length > 0 ? Math.max(...data.gapReport!.competitorTopicMap!.map(t => t.competitorUrls.length)) : 0} competitors
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

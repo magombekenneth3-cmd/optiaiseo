@@ -1,4 +1,4 @@
-import { fetchGSCKeywords } from "@/lib/gsc";
+import { fetchGSCKeywords, classifyIntent } from "@/lib/gsc";
 import { getUserGscToken } from "@/lib/gsc/token";
 import { logger, formatError } from "@/lib/logger";
 
@@ -12,6 +12,7 @@ export interface GscOpportunity {
     opportunityType: "page-1-push" | "top-3-push" | "featured-snippet" | "low-hanging";
     recommendedAction: string;
     source: "gsc";
+    intent?: string;
 }
 
 export async function getGscOpportunities(
@@ -52,7 +53,15 @@ export async function getGscOpportunities(
             // Convert back to a decimal for score math; keep the percent for display.
             const ctrPercent  = k.ctr;                       // e.g. 3.2
             const ctrDecimal  = k.ctr / 100;                 // e.g. 0.032
-            const opportunityScore = Math.round(k.impressions * Math.max(0, 1 - ctrDecimal));
+
+            // Intent weighting: transactional/commercial keywords convert better
+            const intent = classifyIntent(k.keyword);
+            const intentMultiplier = intent === "transactional" ? 1.5
+                : intent === "commercial" ? 1.3
+                : 1;
+            const opportunityScore = Math.round(
+                k.impressions * Math.max(0, 1 - ctrDecimal) * intentMultiplier
+            );
 
             let opportunityType: GscOpportunity["opportunityType"];
             let recommendedAction: string;
@@ -80,6 +89,7 @@ export async function getGscOpportunities(
                 opportunityScore,
                 opportunityType,
                 recommendedAction,
+                intent,
                 source: "gsc" as const,
             };
         })

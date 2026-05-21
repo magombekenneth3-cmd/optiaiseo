@@ -30,6 +30,7 @@ export async function getKeywordsByPage(
   userId: string,
   domain: string,
   days = 90,
+  keywordsPerPage = 25,
 ): Promise<PageKeywords[]> {
   let token: string;
 
@@ -83,7 +84,7 @@ export async function getKeywordsByPage(
       const sorted = keywords.sort((a, b) => b.impressions - a.impressions);
       return {
         url,
-        keywords:         sorted.slice(0, 10),
+        keywords:         sorted.slice(0, keywordsPerPage),
         totalImpressions: sorted.reduce((s, k) => s + k.impressions, 0),
       };
     })

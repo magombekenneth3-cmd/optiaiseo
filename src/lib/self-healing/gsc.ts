@@ -48,10 +48,14 @@ export async function detectGscAnomalies(siteId: string): Promise<{ dropped: boo
 
         const anomalies = [];
 
+        // Build a Map for O(1) lookups instead of O(n²) .find() inside the loop
+        const prevMap = new Map<string, typeof previousData[0]>();
+        for (const p of previousData) {
+            prevMap.set(`${p.url}||${p.keyword}`, p);
+        }
+
         for (const recent of recentData) {
-            const prev = previousData.find(
-                p => p.url === recent.url && p.keyword === recent.keyword
-            );
+            const prev = prevMap.get(`${recent.url}||${recent.keyword}`);
 
             if (prev && prev.impressions > 50 && recent.impressions < prev.impressions * 0.85) {
                 anomalies.push({

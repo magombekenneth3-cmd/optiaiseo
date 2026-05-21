@@ -15,6 +15,7 @@ import {
   CheckCircle2, AlertCircle, X,
 } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer, Tooltip as RTooltip } from "recharts";
+import { clusterKey as gscClusterKey } from "@/lib/gsc";
 
 
 type Snapshot = { month: string; traffic: number; organicKeywords: number | null };
@@ -76,8 +77,8 @@ type Cluster = { topic: string; keywords: KW[]; vol: number };
 function buildClusters(keywords: KW[]): Cluster[] {
   const map = new Map<string, KW[]>();
   for (const kw of keywords) {
-    const words = kw.keyword.toLowerCase().split(/\s+/);
-    const key = words.slice(0, Math.min(2, words.length)).join(" ");
+    // Use the GSC module's stop-word-aware 3-token clustering
+    const key = gscClusterKey(kw.keyword);
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(kw);
   }

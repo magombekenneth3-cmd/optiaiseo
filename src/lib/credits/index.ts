@@ -171,3 +171,43 @@ export async function addCreditPackCredits(
 
     logger.info("[Credits] Added credit pack credits", { userId, creditsToAdd });
 }
+
+/**
+ * Refund credits for a failed action.
+ * Called when an Inngest job or server action fails after credits were already deducted.
+ * Uses an atomic increment. Writes a negative-cost ledger entry for audit trail.
+ */
+export async function refundCredits(
+    userId: string,
+    action: CreditAction,
+    multiplier = 1,
+): Promise<void> {
+    const cost = CREDIT_COSTS[action] * multiplier;
+    if (cost === 0) return;
+
+    await prisma.$executeRaw`
+        UPDATE "User"
+        SET credits = credits + ${cost}
+        WHERE id = ${userId}
+    `;
+
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { credits: true },
+    });
+
+    // Fire-and-forget ledger write with negative cost
+    prisma.creditHistory.create({
+        data: {
+            userId,
+            action,
+            label: `REFUND: ${ACTION_LABELS[action]}`,
+            cost: -cost,
+            balanceAfter: user?.credits ?? 0,
+        },
+    }).catch((err: unknown) => {
+        logger.warn("[Credits] Failed to write refund ledger:", { error: (err as Error)?.message });
+    });
+
+    logger.info("[Credits] Refunded credits for failed action", { userId, action, refunded: cost });
+}
