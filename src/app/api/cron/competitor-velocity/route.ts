@@ -61,8 +61,8 @@ export async function GET(req: NextRequest) {
 
                     if (currentKws.length === 0 || previousKws.length === 0) continue;
 
-                    const prevMap = new Map(previousKws.map(k => [k.keyword, k.position ?? 100]));
-                    const currMap = new Map(currentKws.map(k => [k.keyword, k.position ?? 100]));
+                    const prevMap = new Map<string, number>(previousKws.map((k: { keyword: string; position: number | null }) => [k.keyword, k.position ?? 100]));
+                    const currMap = new Map<string, number>(currentKws.map((k: { keyword: string; position: number | null }) => [k.keyword, k.position ?? 100]));
 
                     // Find host site's tracked keywords for mutual comparison
                     const siteKeywords = await prisma.rankSnapshot.findMany({
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
                         distinct: ["keyword"],
                         select: { keyword: true, position: true },
                     });
-                    const siteKwSet = new Set(siteKeywords.map(k => k.keyword.toLowerCase()));
+                    const siteKwSet = new Set<string>(siteKeywords.map((k: { keyword: string }) => k.keyword.toLowerCase()));
 
                     // Detect significant gains (position number decreased = rank improved)
                     const significantGains: { keyword: string; oldPos: number; newPos: number; delta: number }[] = [];

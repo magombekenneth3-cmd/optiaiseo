@@ -81,15 +81,15 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
                 const mappedResults = top10.map((r, i) => {
                     const d = extractDomain(r.link);
                     return {
-                        position:    i + 1,
-                        domain:      d,
-                        title:       r.title,
-                        snippet:     r.snippet?.slice(0, 180) ?? "",
-                        url:         r.link,
-                        wordCount:   r.wordCount ?? 0,
-                        h2Count:     (r.scrapedHeadings ?? []).length,
+                        position: i + 1,
+                        domain: d,
+                        title: r.title,
+                        snippet: r.snippet?.slice(0, 180) ?? "",
+                        url: r.link,
+                        wordCount: r.wordCount ?? 0,
+                        h2Count: (r.scrapedHeadings ?? []).length,
                         contentType: "",
-                        dr:          trackedDrMap.get(d) ?? 0,
+                        dr: trackedDrMap.get(d) ?? 0,
                     };
                 });
 
@@ -99,12 +99,12 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
                     : 0;
 
                 return {
-                    userPage:       userPageResult,
+                    userPage: userPageResult,
                     userPageScrapedOk,
-                    authorityComp:  authorityResult,
+                    authorityComp: authorityResult,
                     backlinkSummary: backlinkResult,
-                    serpResults:    mappedResults,
-                    wordCountAvg:   avg,
+                    serpResults: mappedResults,
+                    wordCountAvg: avg,
                 };
             });
 
@@ -117,18 +117,18 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
             const userWordCount = userPage.text
                 ? userPage.text.split(/\s+/).filter(Boolean).length
                 : 0;
-            const userH2s       = userPage.headings ?? [];
-            const clientDR      = authorityComp?.yourDr ?? 0;
-            const clientRDs     = backlinkSummary?.referringDomains ?? 0;
-            const toxicCount    = backlinkSummary?.toxicCount ?? 0;
-            const topAnchors    = backlinkSummary?.topAnchors ?? [];
-            const drGap         = authorityComp?.competitors[0]?.drGap ?? null;
+            const userH2s = userPage.headings ?? [];
+            const clientDR = authorityComp?.yourDr ?? 0;
+            const clientRDs = backlinkSummary?.referringDomains ?? 0;
+            const toxicCount = backlinkSummary?.toxicCount ?? 0;
+            const topAnchors = backlinkSummary?.topAnchors ?? [];
+            const drGap = authorityComp?.competitors[0]?.drGap ?? null;
             const pageBacklinks = await prisma.backlinkDetail
                 .count({ where: { siteId, targetUrl: { contains: landingPageUrl } } })
                 .catch(() => 0);
-            const top3Avg       = authorityComp
+            const top3Avg = authorityComp
                 ? authorityComp.competitors.slice(0, 3).reduce((s, c) => s + (c.dr ?? 0), 0) /
-                  Math.max(1, Math.min(3, authorityComp.competitors.length))
+                Math.max(1, Math.min(3, authorityComp.competitors.length))
                 : 0;
 
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY!, httpOptions: { timeout: 90_000 } });
@@ -146,12 +146,12 @@ Rules: max 7 fixes, ordered high→medium→low, descriptions reference actual n
 If rdGap > 100 or drGap > 30, include a HIGH authority fix.
 headingGaps: topics in ≥3/10 top results only.
 
-SERP: ${JSON.stringify(serpResults.slice(0,3).map(r => ({ pos: r.position, domain: r.domain, wordCount: r.wordCount, h2Count: r.h2Count })))}
-Top H2s: ${JSON.stringify(serpContext.results.slice(0,5).flatMap(r => r.scrapedHeadings ?? []).filter(h => !/^(table of contents|related (articles|posts)|share this|comments|leave a reply|about the author|newsletter|sidebar|footer|navigation)/i.test(h)).slice(0,30))}
-PAA: ${JSON.stringify(serpContext.peopleAlsoAsk.slice(0,5).map(p => p.question))}
+SERP: ${JSON.stringify(serpResults.slice(0, 3).map(r => ({ pos: r.position, domain: r.domain, wordCount: r.wordCount, h2Count: r.h2Count })))}
+Top H2s: ${JSON.stringify(serpContext.results.slice(0, 5).flatMap(r => r.scrapedHeadings ?? []).filter(h => !/^(table of contents|related (articles|posts)|share this|comments|leave a reply|about the author|newsletter|sidebar|footer|navigation)/i.test(h)).slice(0, 30))}
+PAA: ${JSON.stringify(serpContext.peopleAlsoAsk.slice(0, 5).map(p => p.question))}
 USER: url=${landingPageUrl} h2s=${JSON.stringify(userH2s)} words=${userWordCount}
 AUTHORITY: clientDR=${clientDR} clientRDs=${clientRDs} pageRDs=${pageBacklinks} toxic=${toxicCount} drGap=${drGap ?? "unknown"} top3AvgDR=${Math.round(top3Avg)}
-ANCHORS: ${JSON.stringify(topAnchors.slice(0,5))}
+ANCHORS: ${JSON.stringify(topAnchors.slice(0, 5))}
 AVG_WORDS=${wordCountAvg} YOUR_WORDS=${userWordCount}`;
 
             const response = await ai.models.generateContent({
@@ -182,7 +182,7 @@ AVG_WORDS=${wordCountAvg} YOUR_WORDS=${userWordCount}`;
                 const gapReport = await getCompetitorBacklinkGap(domain, topSerpDomain, 20);
                 return {
                     opportunityDoms: gapReport.gap.opportunityDomains,
-                    rdGapRoot:       gapReport.gap.referringDomains > 0 ? gapReport.gap.referringDomains : null,
+                    rdGapRoot: gapReport.gap.referringDomains > 0 ? gapReport.gap.referringDomains : null,
                 };
             } catch {
                 return { opportunityDoms: [] as { domain: string; dr: number }[], rdGapRoot: null as number | null };
@@ -190,13 +190,13 @@ AVG_WORDS=${wordCountAvg} YOUR_WORDS=${userWordCount}`;
         });
 
         await step.run("save-and-notify", async () => {
-            const drGap         = authorityComp?.competitors[0]?.drGap ?? null;
-            const clientDR      = authorityComp?.yourDr ?? 0;
-            const clientRDs     = backlinkSummary?.referringDomains ?? 0;
-            const toxicCount    = backlinkSummary?.toxicCount ?? 0;
-            const topAnchors    = backlinkSummary?.topAnchors ?? [];
-            const newLastWeek   = backlinkSummary?.newLastWeek ?? 0;
-            const lostLastWeek  = backlinkSummary?.lostLastWeek ?? 0;
+            const drGap = authorityComp?.competitors[0]?.drGap ?? null;
+            const clientDR = authorityComp?.yourDr ?? 0;
+            const clientRDs = backlinkSummary?.referringDomains ?? 0;
+            const toxicCount = backlinkSummary?.toxicCount ?? 0;
+            const topAnchors = backlinkSummary?.topAnchors ?? [];
+            const newLastWeek = backlinkSummary?.newLastWeek ?? 0;
+            const lostLastWeek = backlinkSummary?.lostLastWeek ?? 0;
             const dofollowRatio = backlinkSummary?.doFollowRatio ?? 0;
             const pageBacklinks = await prisma.backlinkDetail
                 .count({ where: { siteId, targetUrl: { contains: landingPageUrl } } })
@@ -217,31 +217,31 @@ AVG_WORDS=${wordCountAvg} YOUR_WORDS=${userWordCount}`;
             await prisma.keywordSerpAnalysis.update({
                 where: { id: analysisId },
                 data: {
-                    status:         "COMPLETED",
-                    serpResults:    serpResults    as never,
-                    fixes:          aiResult.fixes as never,
-                    headingGaps:    aiResult.headingGaps as never,
+                    status: "COMPLETED",
+                    serpResults: serpResults as never,
+                    fixes: aiResult.fixes as never,
+                    headingGaps: aiResult.headingGaps as never,
                     wordCountAvg,
-                    wordCountPage:  userWordCount,
-                    drGap:          drGap ?? undefined,
-                    rdGapRoot:      rdGapRoot ?? undefined,
-                    rdGapPage:      pageBacklinks,
+                    wordCountPage: userWordCount,
+                    drGap: drGap ?? undefined,
+                    rdGapRoot: rdGapRoot ?? undefined,
+                    rdGapPage: pageBacklinks,
                     opportunityDoms: opportunityDoms as never,
                     intentMismatch: aiResult.intentMismatch,
-                    intentNote:     aiResult.intentNote,
-                    contentType:    aiResult.contentTypeTop10,
+                    intentNote: aiResult.intentNote,
+                    contentType: aiResult.contentTypeTop10,
                     disclaimerNeeded,
-                    yourPageH2s:      userH2s as never,
+                    yourPageH2s: userH2s as never,
                     clientDR,
                     clientRDs,
                     toxicCount,
-                    topAnchors:       topAnchors as never,
+                    topAnchors: topAnchors as never,
                     newLastWeek,
                     lostLastWeek,
                     dofollowRatio,
                     userPageScrapedOk,
                     expiresAt,
-                    completedAt:    new Date(),
+                    completedAt: new Date(),
                 },
             });
 

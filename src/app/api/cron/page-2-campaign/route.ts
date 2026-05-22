@@ -65,8 +65,8 @@ export async function GET(req: NextRequest) {
 
                 if (page2Keywords.length === 0) { skipped++; continue; }
 
-                // Prioritise by impressions (highest opportunity first)
-                const sorted = page2Keywords.sort((a, b) => (b.searchVolume ?? 0) - (a.searchVolume ?? 0));
+                // Prioritise by search volume (highest opportunity first)
+                const sorted = [...page2Keywords].sort((a: typeof page2Keywords[number], b: typeof page2Keywords[number]) => (b.searchVolume ?? 0) - (a.searchVolume ?? 0));
 
                 // Group by landing URL for efficient content work
                 const urlGroups = new Map<string, typeof sorted>();
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
                         name: `Page-2 Push — ${new Date().toLocaleDateString("en-GB", { month: "short", day: "numeric" })}`,
                         keywordCount: page2Keywords.length,
                         urlCount: urlGroups.size,
-                        keywords: sorted.map(k => ({
+                        keywords: sorted.map((k: typeof sorted[number]) => ({
                             keyword: k.keyword,
                             position: k.position,
                             url: k.url,
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
                 });
 
                 // Fire Inngest event so the AI planner can generate content tasks
-                const { inngest } = await import("@/lib/inngest");
+                const { inngest } = await import("@/lib/inngest/client");
                 await inngest.send({
                     name: "campaign/page-2-push/requested",
                     data: {
@@ -108,9 +108,9 @@ export async function GET(req: NextRequest) {
                             .slice(0, 5)
                             .map(([url, kws]) => ({
                                 url,
-                                keywords: kws.slice(0, 5).map(k => k.keyword),
-                                avgPosition: Math.round(kws.reduce((s, k) => s + (k.position ?? 20), 0) / kws.length),
-                                totalSearchVolume: kws.reduce((s, k) => s + (k.searchVolume ?? 0), 0),
+                                keywords: kws.slice(0, 5).map((k: typeof kws[number]) => k.keyword),
+                                avgPosition: Math.round(kws.reduce((s: number, k: typeof kws[number]) => s + (k.position ?? 20), 0) / kws.length),
+                                totalSearchVolume: kws.reduce((s: number, k: typeof kws[number]) => s + (k.searchVolume ?? 0), 0),
                             })),
                     },
                 });
