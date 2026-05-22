@@ -23,7 +23,6 @@ COPY prisma ./prisma
 RUN NODE_OPTIONS="--max-old-space-size=2048" \
     pnpm install --frozen-lockfile --offline && \
     pnpm exec prisma generate && \
-    cp -rL node_modules/.prisma/client node_modules/@prisma/client/.prisma/client || true && \
     cp -rL node_modules/@prisma/client /tmp/prisma-client-real
 
 FROM fetch AS builder
@@ -52,8 +51,7 @@ COPY . .
 
 RUN rm -f next.config.ts.timestamp || true
 RUN pnpm exec prisma generate
-RUN cp -rL node_modules/.prisma/client node_modules/@prisma/client/.prisma/client || true && \
-    cp -rL node_modules/@prisma/client /tmp/client-real && \
+RUN cp -rL node_modules/@prisma/client /tmp/client-real && \
     rm -rf node_modules/@prisma/client && \
     mv /tmp/client-real node_modules/@prisma/client
 RUN pnpm run build
