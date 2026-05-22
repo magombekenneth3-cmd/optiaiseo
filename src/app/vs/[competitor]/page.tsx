@@ -61,12 +61,12 @@ interface CompetitorData {
 
 // ─── Tool → /vs slug map (tools that have their own comparison page) ──────────
 const TOOL_SLUG_MAP: Record<string, string> = {
-  "Semrush": "semrush",
-  "Ahrefs": "ahrefs",
+  Semrush: "semrush",
+  Ahrefs: "ahrefs",
   "Surfer SEO": "surfer-seo",
-  "Moz": "moz",
-  "Clearscope": "clearscope",
-  "Mangools": "mangools",
+  Moz: "moz",
+  Clearscope: "clearscope",
+  Mangools: "mangools",
   "Screaming Frog": "screaming-frog",
   "Yoast SEO": "yoast",
 };
@@ -82,10 +82,10 @@ interface DimensionScore {
 
 const AI_ERA_DIMENSIONS: DimensionScore[] = [
   {
-    label: "AI visibility coverage",
+    label: "AI search visibility",
     weight: "25%",
     description:
-      "Tracks brand citations in ChatGPT, Claude, Perplexity, and Google AI Overviews (GSoV).",
+      "Tracks how often your brand is mentioned in ChatGPT, Claude, Perplexity, and Google AI Overviews.",
     scores: {
       optiaiseo: 95,
       semrush: 0,
@@ -99,10 +99,10 @@ const AI_ERA_DIMENSIONS: DimensionScore[] = [
     },
   },
   {
-    label: "Fix automation",
+    label: "Automatic fixes",
     weight: "20%",
     description:
-      "Pushes code-level fixes automatically via GitHub PRs — not just surfaces issues.",
+      "Pushes code fixes to GitHub as pull requests — rather than just showing you a list of problems.",
     scores: {
       optiaiseo: 92,
       semrush: 0,
@@ -116,10 +116,10 @@ const AI_ERA_DIMENSIONS: DimensionScore[] = [
     },
   },
   {
-    label: "Data freshness",
+    label: "How current the data is",
     weight: "20%",
     description:
-      "Speed of keyword, backlink, and crawl data updates relative to real-world changes.",
+      "How quickly keyword, backlink, and crawl data reflects real-world changes.",
     scores: {
       optiaiseo: 80,
       semrush: 82,
@@ -133,10 +133,10 @@ const AI_ERA_DIMENSIONS: DimensionScore[] = [
     },
   },
   {
-    label: "Content generation",
+    label: "Content creation",
     weight: "20%",
     description:
-      "Natively generates optimised content vs. only grading/scoring content written elsewhere.",
+      "Writes optimised content for you, versus only scoring content you've already written.",
     scores: {
       optiaiseo: 88,
       semrush: 30,
@@ -150,10 +150,10 @@ const AI_ERA_DIMENSIONS: DimensionScore[] = [
     },
   },
   {
-    label: "Price-to-feature ratio",
+    label: "Value for money",
     weight: "15%",
     description:
-      "Feature depth per dollar at the entry-level paid tier, normalised against the $99/month category median.",
+      "How much you get at the entry-level paid plan, compared to the $99/month category average.",
     scores: {
       optiaiseo: 95,
       semrush: 48,
@@ -173,8 +173,8 @@ function computeOverallScore(slug: string): number {
   return Math.round(
     AI_ERA_DIMENSIONS.reduce(
       (acc, dim, i) => acc + (dim.scores[slug] ?? 0) * weights[i],
-      0
-    )
+      0,
+    ),
   );
 }
 
@@ -196,82 +196,82 @@ const COMPETITORS: Record<string, CompetitorData> = {
   semrush: {
     slug: "semrush",
     name: "Semrush",
-    tagline: "The enterprise keyword & audit suite",
+    tagline: "Big keyword database, high price tag",
     description:
-      "Semrush is the industry's largest keyword and backlink database. It excels at competitor research, rank tracking, and PPC analysis. Founded in 2008, it's the gold standard for traditional SEO.",
-    pricing: "From $139.95/month — no free tier for full features",
+      "Semrush has been around since 2008 and it's genuinely good at what it does. It has one of the largest keyword databases out there, solid backlink tracking, and decent competitor research tools. The problem is it costs $140 a month and it still can't tell you how your brand shows up in ChatGPT or Perplexity.",
+    pricing: "From $139.95/month — no useful free plan",
     strengths: [
-      "Massive keyword database (25B+ keywords)",
-      "Comprehensive backlink analysis",
-      "PPC and advertising research",
-      "Well-established brand with large community",
+      "Huge keyword database — 25 billion+ keywords",
+      "Good backlink analysis",
+      "Solid PPC and competitor ad research",
+      "Well-known brand with a large user community",
     ],
     weaknesses: [
-      "No AI answer engine visibility tracking",
-      "No voice AI assistant",
-      "No automatic GitHub code fixes",
-      "Expensive — starts at $139.95/mo",
-      "No generative AI content engine",
-      "Steep learning curve for beginners",
+      "No way to track how you appear in ChatGPT, Claude, or Perplexity",
+      "No voice assistant",
+      "Can't push fixes to GitHub automatically",
+      "Starts at $140/month — expensive for what most teams actually use",
+      "The AI writing tools feel like an afterthought",
+      "Steep learning curve — 50+ tools with no clear starting point",
     ],
     verdict:
-      "Semrush is the right choice if you need the deepest keyword and backlink database. OptiAISEO is the right choice if you need to win in AI search, automate fixes, and generate content — at a fraction of the price.",
+      "If you run paid search campaigns and need deep PPC data, Semrush is worth the price. If you don't, you're paying $140 a month for tools you'll barely open.",
     honestWinCallout:
-      "Where Semrush genuinely beats every alternative: if paid search accounts for a significant share of your marketing budget, Semrush's PPC intelligence and advertising research are unmatched. Domain Rating and keyword database depth are also legitimately superior. For teams running multi-channel paid + organic campaigns, $139.95/month is defensible. The alternatives in this list are not better for PPC — they're better for different priorities.",
+      "Semrush is genuinely the best tool for paid search research. Its PPC data, ad copy research, and keyword database are hard to beat. If you spend a lot of time on Google Ads alongside SEO, the price makes sense. For teams that only do organic SEO, it's harder to justify.",
     hookIntro:
-      "At $139.95/month, Semrush is genuinely excellent — if you need its PPC intelligence and 25B-keyword database. For teams that don't, that price buys you tools you'll never open. We ran Semrush on three real client sites for 60 days — one SaaS (14,000 pages), one Shopify store (2,400 SKUs), and one content blog (380 posts) — to find out exactly when it's worth it, and when it isn't.",
+      "We ran Semrush on three real client sites for 60 days — a SaaS platform, a Shopify store, and a content blog. Here's what we actually found, including where it was good and where it wasn't worth the money.",
     chooseUs: [
-      "You need to track AI citations across ChatGPT, Claude, Perplexity, and Google AI Overviews",
-      "You want technical issues fixed automatically as GitHub pull requests — not just flagged",
-      "Your budget is under $140/month",
-      "You need AI blog content generation included in your plan",
-      "You're a growing team who wants auditing, content, and AI visibility in one platform",
+      "You want to know how often you show up in ChatGPT, Claude, and Perplexity answers",
+      "You want broken schema and meta tags fixed automatically via GitHub — not just flagged in a report",
+      "Your budget is under $140 a month",
+      "You need AI-written blog content included in your plan",
+      "You want one tool for audits, content, and AI visibility",
     ],
     chooseThem: [
-      "You run paid search campaigns and need deep PPC and advertising intelligence",
-      "Your team has built deep workflows around Semrush's interface and switching cost is high",
-      "You need the absolute largest keyword and backlink database available",
+      "You run paid search campaigns and need detailed PPC and ad intelligence",
+      "Your team has spent years building workflows in Semrush and switching would be painful",
+      "You need the biggest keyword and backlink database available",
     ],
     entityContext: {
-      founded: "2008, originally as SEOquake",
-      category: "Enterprise SEO & PPC intelligence platform",
+      founded: "2008 — started as SEOquake",
+      category: "Enterprise SEO and PPC research platform",
       knownFor:
-        "Largest commercial keyword database (25B+ keywords), competitor traffic analysis, and the Position Tracking tool",
+        "One of the largest keyword databases available, competitor traffic analysis, and position tracking",
       typicalUser:
-        "Enterprise marketing teams, large agencies, and PPC specialists running multi-channel campaigns",
+        "Enterprise marketing teams, large agencies, and PPC specialists",
       marketPosition:
-        "Market leader in traditional SEO tooling — alongside Ahrefs. Dominant in the $100–$500/month enterprise SEO segment.",
+        "One of the two dominant SEO tools alongside Ahrefs. Mostly used by teams with $100–$500/month tool budgets.",
     },
     ourExperience: {
       verdict:
-        "Semrush is genuinely excellent — if you can afford it and need PPC data. For most growing teams in 2026, the price-to-value gap has widened as AI search has grown.",
+        "Semrush is good if you can afford it and you need PPC data. For most growing teams focused on organic in 2026, the price-to-value ratio has gotten harder to justify.",
       specificTestContext:
-        "Tested on three real client sites over 60 days: a SaaS platform (14,000 indexed pages), a Shopify store (2,400 SKUs), and a content blog (380 posts). Semrush's traffic estimates averaged 12.4% deviation against GA4 actuals across 4 monitored competitor domains.",
+        "We tested it on three client sites over 60 days: a SaaS platform with 14,000 pages, a Shopify store with 2,400 products, and a content blog with 380 posts. Traffic estimates were off by about 12% against real GA4 data.",
       whatWorked: [
-        "Keyword Magic Tool surfaced long-tail variants we hadn't considered — genuinely useful",
-        "Competitor traffic estimation was accurate within ~12% against GA4 data across 4 domains in our tests",
-        "Topic Research tool gave solid content cluster ideas for pillar pages",
-        "Position tracking dashboard is clean and reliable for daily rank monitoring",
+        "Keyword Magic Tool found long-tail variations we hadn't thought of — genuinely useful",
+        "Competitor traffic estimates were accurate to within 12% of real GA4 data across four domains",
+        "Topic Research gave solid ideas for content clusters and pillar pages",
+        "The position tracking dashboard is clean and reliable for daily rank checks",
       ],
       whatAnnoyed: [
-        "Onboarding takes days — the interface has 50+ tools and no clear starting point",
-        "The $139.95/month entry plan limits you to 5 projects — we hit that ceiling fast",
-        "Zero visibility into how our brand appears in ChatGPT or Perplexity results",
-        "Technical issues are flagged but you're on your own to fix them — no automation",
-        "AI writing features feel bolted on, not native — content quality was mediocre",
+        "Getting started takes days — the interface has 50+ tools and no obvious place to begin",
+        "The $140/month plan limits you to 5 projects — we hit that limit quickly",
+        "No way to see how our brand appears in ChatGPT or Perplexity",
+        "It finds technical problems but you're on your own to fix them",
+        "The AI writing features felt bolted on — output quality was mediocre",
       ],
       whoItsReallyFor:
-        "Semrush is built for enterprise teams running paid search alongside SEO — where the PPC intelligence and competitor ad research justify the price. If you're an SEO-only team with no PPC budget, you're paying for tools you won't use.",
+        "Semrush makes sense for enterprise teams running paid search alongside SEO, where the PPC intelligence justifies the cost. If you're doing organic SEO only, you're paying for features you won't touch.",
       testNote:
-        "We ran Semrush on three real client sites over 60 days and tracked rankings, crawl coverage, and fix implementation time against OptiAISEO.",
+        "Tested on three real client sites over 60 days. Tracked rankings, crawl coverage, and time-to-fix on technical issues versus OptiAISEO.",
     },
     uniqueAngle: {
       headline:
-        "Semrush was built for a world where Google was the only search engine that mattered",
-      body: "That world is changing fast. In 2026, roughly 1 in 4 searches starts in an AI engine — ChatGPT, Claude, Perplexity, or Google AI Overviews. Semrush has no answer for this. It still tracks 25 billion keywords across traditional SERPs while the traffic conversation is shifting underneath it. Teams that only optimise for Google rankings are already leaving AI-driven traffic on the table. OptiAISEO was built from day one to track both — traditional rankings and AI engine citations — so you don't have to choose which future to optimise for.",
+        "Semrush was built when Google was the only search engine that mattered",
+      body: "That's not really true anymore. Roughly one in four searches in 2026 starts in an AI tool — ChatGPT, Claude, Perplexity, or Google AI Overviews. Semrush tracks 25 billion keywords across Google's index and has nothing for any of those platforms. Teams that only track Google rankings are already missing a growing share of how people find things.",
     },
     quickList: [
-      { name: "OptiAISEO", badge: "Best for AI visibility & auto-fixes" },
+      { name: "OptiAISEO", badge: "Best for AI visibility and auto-fixes" },
       { name: "Ahrefs", badge: "Best for backlinks" },
       { name: "Moz", badge: "Best for Domain Authority" },
       { name: "SE Ranking", badge: "Best value" },
@@ -282,54 +282,54 @@ const COMPETITORS: Record<string, CompetitorData> = {
     whyLeaving: [
       {
         n: "01",
-        title: "No AI visibility tracking",
-        body: "Semrush was built for a world where Google was the only search engine that mattered. In 2026, roughly 1 in 4 searches starts in an AI engine. Semrush has no way to measure this traffic — it doesn't track brand citations in ChatGPT, Claude, or Perplexity.",
+        title: "It doesn't track AI search at all",
+        body: "Semrush was built for Google. In 2026, a lot of searches start in AI tools instead. Semrush can't tell you how often your brand gets mentioned in ChatGPT or Perplexity. That's a real blind spot if AI search is sending traffic to your competitors.",
       },
       {
         n: "02",
-        title: "Issues flagged, never fixed",
-        body: "Semrush surfaces technical SEO issues and stops there. Your developers still need to receive the report, interpret it, prioritise it, and ship the fix. Across 9 issue cycles we tracked manually, median time from Semrush export to deployed fix was 23 days. OptiAISEO opens the GitHub PR automatically.",
+        title: "It finds problems but doesn't fix them",
+        body: "Semrush will tell you what's broken on your site. Then it stops. Your developers still have to read the report, understand it, and ship a fix. In the sites we tracked, that process took an average of 23 days. OptiAISEO opens a GitHub pull request with the fix already written.",
       },
       {
         n: "03",
-        title: "Price-to-value gap is widening",
-        body: "Semrush starts at $139.95/month — one of the most expensive entry points in SEO tooling. As AI search features become table stakes, teams are asking what they're paying for. The tools that grow with them add AI-era capabilities, not just more traditional keyword data.",
+        title: "$140 a month is a lot for organic-only teams",
+        body: "The price made more sense when Semrush covered everything you needed. Now that AI search visibility is a real concern and Semrush doesn't cover it, teams are paying more for less of the picture.",
       },
     ],
     aiVisibilityNote:
-      "Semrush scores 0/100 on AI visibility coverage in our framework. This isn't a slight — it's a product category gap. Semrush was built for Google SERP measurement, and it's excellent at that. AI citation tracking is simply a different problem.",
+      "Semrush scores 0 out of 100 on AI visibility in our framework. That's not a criticism — it just doesn't do this. It was built to measure Google SERP rankings, and it does that well. AI citation tracking is a different problem.",
     faq: [
       {
         q: "Is OptiAISEO better than Semrush?",
-        a: "OptiAISEO is better than Semrush for AI search visibility, automated code fixes, and cost-efficiency. Semrush leads on keyword database size and PPC research. If your primary goal is winning in ChatGPT, Claude, and Perplexity — and having technical issues fixed automatically via GitHub — OptiAISEO is the stronger choice at 72% lower cost than Semrush's entry plan.",
+        a: "It depends on what you need. OptiAISEO is better for tracking how you show up in AI search, getting technical issues fixed automatically via GitHub, and keeping costs down. Semrush is better if you run paid search and need deep PPC data or the largest keyword database available.",
       },
       {
         q: "Does Semrush track AI search visibility?",
-        a: "No. Semrush does not currently offer AI search visibility tracking (also called Generative Search Occupancy or GSoV). OptiAISEO measures how often your brand is cited in ChatGPT, Claude, Perplexity, and Google AI Overviews — a capability Semrush does not provide.",
+        a: "No. Semrush doesn't track how your brand appears in ChatGPT, Claude, Perplexity, or Google AI Overviews. OptiAISEO does — it measures how often you get cited in AI-generated answers.",
       },
       {
         q: "How much does OptiAISEO cost compared to Semrush?",
-        a: "Semrush starts at $139.95/month with no meaningful free tier. OptiAISEO offers a genuinely free tier and Pro plans from $39/month — roughly 72% cheaper than Semrush's entry-level plan. Agency plans are $99/month, still below Semrush Guru pricing.",
+        a: "Semrush starts at $139.95 a month. OptiAISEO has a free plan and a Pro plan at $39 a month — about 72% cheaper than Semrush's entry price.",
       },
       {
         q: "What is cheaper than Semrush?",
-        a: "Several tools are cheaper than Semrush's $139.95/month entry price: Mangools ($49/mo), SE Ranking ($49/mo), Ubersuggest ($29/mo), and OptiAISEO ($39/mo — with a free tier). OptiAISEO is the only cheaper option that also adds AI search visibility tracking and automated GitHub code fixes.",
+        a: "Most SEO tools are cheaper than Semrush. Mangools is $49/month, SE Ranking is $49/month, Ubersuggest is $29/month, and OptiAISEO is $39/month with a free tier. OptiAISEO is the only cheaper option that also tracks AI search visibility and fixes issues via GitHub.",
       },
       {
         q: "Is there a free alternative to Semrush?",
-        a: "Yes. OptiAISEO offers a genuine free tier with full audit features — not just a trial. Google Search Console (free) covers keyword performance. Ubersuggest has a limited free plan. None of the free alternatives include AI visibility tracking across ChatGPT and Perplexity, except OptiAISEO's free tier.",
+        a: "Yes. OptiAISEO has a genuine free plan with full audit features — not a trial that expires. Google Search Console is also free and covers keyword performance. None of the free options include AI visibility tracking except OptiAISEO.",
       },
       {
         q: "Why are people leaving Semrush?",
-        a: "The most common reasons users switch from Semrush: (1) price — at $139.95/month, it's one of the most expensive SEO tools; (2) no AI visibility tracking for ChatGPT, Claude, and Perplexity; (3) no automated code-fix capability — Semrush flags issues but doesn't fix them; (4) steep learning curve for smaller teams; (5) lack of AI content generation built in.",
+        a: "The most common reasons: the price ($140/month) is hard to justify for organic-only teams, it doesn't track AI search visibility, it flags technical issues but doesn't fix them, and the learning curve is steep for smaller teams.",
       },
       {
         q: "Which SEO tools track AI search visibility in 2026?",
-        a: "As of 2026, very few traditional SEO tools track AI search visibility. OptiAISEO is the primary tool built specifically to measure Generative Search Occupancy (GSoV) — how often your brand is cited in ChatGPT, Claude, Perplexity, and Google AI Overviews. Semrush, Ahrefs, Moz, Surfer SEO, Clearscope, and Mangools do not currently offer this capability.",
+        a: "Very few do. OptiAISEO is built specifically to track how often your brand gets cited in AI-generated answers across ChatGPT, Claude, Perplexity, and Google AI Overviews. Semrush, Ahrefs, Moz, and most traditional SEO tools don't offer this.",
       },
       {
         q: "What is Generative Search Occupancy (GSoV)?",
-        a: "Generative Search Occupancy (GSoV) measures how frequently your brand or entity appears in AI-generated search answers across platforms like ChatGPT, Perplexity, Claude, and Google AI Overviews. It is the AI-search equivalent of Share of Voice in traditional SEO — measuring presence vs. absence in AI answers rather than position 1–10 in a SERP.",
+        a: "It's a way of measuring how often your brand shows up in AI-generated answers. Think of it as the AI search version of Share of Voice — instead of tracking your position on page one of Google, you're tracking whether AI tools mention you when someone asks a relevant question. OptiAISEO tracks this continuously.",
       },
     ],
   },
@@ -360,7 +360,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
     honestWinCallout:
       "Where Ahrefs genuinely beats everything else: if link building accounts for more than 40% of your SEO effort, the backlink index gap between Ahrefs and every alternative is real and significant. In our index comparison test, Ahrefs registered 34 new links within 7 days of acquisition — Moz took an average of 19 days on the same set. Domain Rating is also the most trusted authority metric in the industry. For teams whose primary work is link prospecting and competitive backlink analysis, $129/month is justified.",
     hookIntro:
-      "Ahrefs has the best backlink index in the industry. That's not marketing copy — it's what the data consistently shows. The question in 2026 is whether backlink depth is what your team actually needs, or whether you're paying $129/month for a capability you use 20% of the time while AI search quietly reshapes where your traffic comes from.",
+      "Ahrefs has the best backlink index in the industry. That's not marketing — it's what the data consistently shows. The question in 2026 is whether backlink depth is what your team actually needs, or whether you're paying $129/month for a capability you use 20% of the time.",
     chooseUs: [
       "You need to monitor your brand in AI engines like ChatGPT, Claude, and Perplexity",
       "You want code-level fixes pushed automatically as GitHub pull requests",
@@ -439,7 +439,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
     ],
     aiVisibilityNote:
-      "Ahrefs scores 0/100 on AI visibility coverage in our framework — not as criticism, but as a category gap. Ahrefs' crawler architecture is purpose-built for backlink indexing, not AI citation monitoring. These are fundamentally different technical problems.",
+      "Ahrefs scores 0/100 on AI visibility coverage — not as criticism, but as a category gap. Ahrefs' crawler architecture is purpose-built for backlink indexing, not AI citation monitoring. These are fundamentally different technical problems.",
     faq: [
       {
         q: "Is OptiAISEO a better Ahrefs alternative?",
@@ -451,7 +451,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "How much does OptiAISEO cost compared to Ahrefs?",
-        a: "Ahrefs starts at $129/month with very limited free access. OptiAISEO's Pro plan is $39/month with a full free tier — approximately 70% less expensive than Ahrefs Lite.",
+        a: "Ahrefs starts at $129/month with very limited free access. OptiAISEO's Pro plan is $39/month and includes AI visibility tracking, technical SEO auditing, GitHub integration, and AI content generation at less than half the price.",
       },
       {
         q: "What is cheaper than Ahrefs?",
@@ -471,7 +471,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "What is Generative Search Occupancy (GSoV)?",
-        a: "GSoV measures how frequently your brand appears in AI-generated answers across ChatGPT, Claude, Perplexity, and Google AI Overviews. It's the AI-search equivalent of Share of Voice — measuring citation presence rather than SERP position. OptiAISEO tracks this metric continuously.",
+        a: "GSoV measures how frequently your brand appears in AI-generated search answers across platforms like ChatGPT, Perplexity, Claude, and Google AI Overviews. It is the AI-search equivalent of Share of Voice in traditional SEO — measuring presence vs. absence in AI answers rather than position 1–10 in a SERP.",
       },
     ],
   },
@@ -619,16 +619,12 @@ const COMPETITORS: Record<string, CompetitorData> = {
     ],
   },
 
-  // ─── MOZ — fully enriched with Behind Rankings improvements ─────────────────
   moz: {
     slug: "moz",
     name: "Moz",
     tagline: "The Domain Authority pioneer",
-
-    // IMPROVED: Added Rand Fishkin founding heritage and honest history
     description:
       "Founded as SEOmoz in 2004 by Rand Fishkin, whose writing was one of the most trusted SEO education resources in the industry's early years, Moz invented Domain Authority (DA) and Spam Score — two metrics that became industry standards. Its Keyword Explorer and Moz Local tools are well-regarded for foundational SEO research and local business workflows. It's also one of the few SEO tools with a genuinely beginner-friendly interface and a decade of educational content behind it.",
-
     pricing: "From $99/month",
     strengths: [
       "Invented Domain Authority — the most universally cited metric in agency reporting",
@@ -649,15 +645,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
     ],
     verdict:
       "Moz is the go-to for Domain Authority benchmarking and local SEO basics. OptiAISEO wins for teams who need AI search visibility, autonomous code fixes, and AI blog content — all in one platform.",
-
-    // IMPROVED: Added specific agency DA switching cost framing
     honestWinCallout:
       "Where Moz genuinely wins: Domain Authority is the most universally understood authority metric in the industry — it's in every agency report template. If your clients ask about DA and you've built dashboards around it, switching means 2–3 months of client re-education on a different metric (Ahrefs DR, Semrush AS). That has real cost. Moz Local is also genuinely good for multi-location businesses managing listing consistency across directories. For agencies where DA is a billable KPI and local SEO is a core service, Moz's $99/month is defensible.",
-
-    // IMPROVED: Personal testing voice replacing vendor-style opener
     hookIntro:
       "We ran Moz Pro on three agency accounts for six months. By month two, we were doing keyword research in Semrush. By month four, backlink monitoring had moved to Ahrefs. By month five, Moz was open for exactly one thing: pulling DA scores for client reports. That's not a $99/month tool — that's a metric lookup. Here's what we found, including where Moz is genuinely good and where the data gaps hurt.",
-
     chooseUs: [
       "You need AI search visibility tracking across ChatGPT, Claude, and Perplexity",
       "You want technical issues fixed automatically via GitHub pull requests",
@@ -672,7 +663,8 @@ const COMPETITORS: Record<string, CompetitorData> = {
     ],
     entityContext: {
       founded: "2004 as SEOmoz, rebranded to Moz in 2012",
-      category: "SEO research, local SEO, and Domain Authority tracking platform",
+      category:
+        "SEO research, local SEO, and Domain Authority tracking platform",
       knownFor:
         "Inventing Domain Authority (DA) and Page Authority (PA) — metrics still cited in nearly every SEO report in the industry — and the Whiteboard Friday video series",
       typicalUser:
@@ -681,14 +673,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
         "Legacy SEO platform that defined the vocabulary of the industry but has been slower to ship AI-era features than Semrush and Ahrefs. Moz Pro's keyword database (1.25B keywords) is considerably smaller than Semrush (27.9B) and Ahrefs.",
     },
     ourExperience: {
-      // IMPROVED: Sharper, more practitioner verdict
       verdict:
         "We ran Moz Pro on three agency accounts for six months. The data is slower, the keyword database is smaller, and the AI gap is widening. But DA is still the metric clients ask about most — and for that specific use case, Moz remains the authoritative source.",
-
-      // IMPROVED: Hard numbers from Behind Rankings benchmarking
       specificTestContext:
         "Ran Moz Pro on three agency accounts for 6 months. Moz's keyword database has 1.25B keywords — Semrush has 27.9B (22x larger). In a direct backlink index comparison on the same acquired links, Moz registered new links an average of 19 days after Ahrefs. Technical audit covered core issues but missed 34% of schema errors that OptiAISEO surfaced on the same crawl. Organic traffic estimates diverged from real Google Search Console data by an average of 31% across three test domains — one was off by 58%.",
-
       whatWorked: [
         "Domain Authority remains the most universally understood metric for client reporting — clients ask about DA, not DR or AS",
         "Keyword Explorer's difficulty scores are reliable for low-competition keyword targeting",
@@ -696,7 +684,6 @@ const COMPETITORS: Record<string, CompetitorData> = {
         "MozBar Chrome extension is still one of the most useful free SEO tools available",
         "Beginner-friendly interface — non-technical team members could use it without training",
       ],
-      // IMPROVED: Added traffic accuracy caveat (Behind Rankings' most trust-building move)
       whatAnnoyed: [
         "Backlink index updates slowly — in our tests, links appeared in Ahrefs an average of 12 days before Moz registered them",
         "Organic traffic estimates were significantly off — averaging 31% deviation from real GSC data across three test domains, with one domain off by 58%. Don't use Moz traffic estimates for client reporting without cross-referencing Google Search Console",
@@ -745,7 +732,6 @@ const COMPETITORS: Record<string, CompetitorData> = {
     ],
     aiVisibilityNote:
       "Moz scores 0/100 on AI visibility coverage. Moz's core architecture — DA scoring, keyword tracking, local listing management — is optimised for Google's traditional index, not AI model knowledge bases. Where Moz genuinely outperforms on dimensions outside this framework (DA reporting, local SEO), those advantages are noted above.",
-    // IMPROVED: Added "Is Moz worth it in 2026?" high-intent FAQ
     faq: [
       {
         q: "Is Moz worth it in 2026?",
@@ -872,7 +858,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
       body: "Clearscope's NLP precision is real. But in 2026, topical authority belongs to whoever covers the most ground — not whoever writes the most polished individual article. A site with 200 good-enough, well-structured posts beats a site with 50 perfectly-scored ones in the long run. Clearscope optimises the ceiling on individual articles. OptiAISEO raises the floor on total content output — generating entity-dense, schema-tagged posts automatically.",
     },
     quickList: [
-      { name: "OptiAISEO", badge: "Best for AI visibility & content generation" },
+      {
+        name: "OptiAISEO",
+        badge: "Best for AI visibility & content generation",
+      },
       { name: "Surfer SEO", badge: "Best direct Clearscope alternative" },
       { name: "Frase", badge: "Best for content briefs & outlines" },
       { name: "Content Harmony", badge: "Best for SEO agencies" },
@@ -880,7 +869,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
       { name: "Dashword", badge: "Best budget Clearscope replacement" },
       { name: "NeuronWriter", badge: "Best lowest-cost option" },
       { name: "Outranking", badge: "Best for AI-assisted writing" },
-      { name: "Semrush Writing Assistant", badge: "Best for existing Semrush users" },
+      {
+        name: "Semrush Writing Assistant",
+        badge: "Best for existing Semrush users",
+      },
     ],
     whyLeaving: [
       {
@@ -1383,9 +1375,19 @@ const COMPETITORS: Record<string, CompetitorData> = {
 // ─── Comparison table data ────────────────────────────────────────────────────
 
 function getComparisonRows(competitorSlug: string) {
-  const hasTechnical = !["surfer-seo", "clearscope", "mangools", "yoast"].includes(competitorSlug);
+  const hasTechnical = ![
+    "surfer-seo",
+    "clearscope",
+    "mangools",
+    "yoast",
+  ].includes(competitorSlug);
   const hasBacklinks = ["semrush", "ahrefs", "moz"].includes(competitorSlug);
-  const hasRanking = !["surfer-seo", "clearscope", "screaming-frog", "yoast"].includes(competitorSlug);
+  const hasRanking = ![
+    "surfer-seo",
+    "clearscope",
+    "screaming-frog",
+    "yoast",
+  ].includes(competitorSlug);
   const contentPartial = ["surfer-seo", "clearscope"].includes(competitorSlug);
   const noFree = ["clearscope"].includes(competitorSlug);
   const limitedFree = ["screaming-frog", "yoast"].includes(competitorSlug);
@@ -1414,8 +1416,16 @@ function getComparisonRows(competitorSlug: string) {
         : "30–60 minutes for full setup";
 
   return [
-    { feature: "Price / Plans", aiseo: "From $0 (free tier)", competitor: c.pricing },
-    { feature: "Free tier", aiseo: "✓ Yes — full audit features", competitor: freeText },
+    {
+      feature: "Price / Plans",
+      aiseo: "From $0 (free tier)",
+      competitor: c.pricing,
+    },
+    {
+      feature: "Free tier",
+      aiseo: "✓ Yes — full audit features",
+      competitor: freeText,
+    },
     {
       feature: "AI visibility tracking (GSoV)",
       aiseo: "✓ ChatGPT, Claude, Perplexity, Google AI",
@@ -1434,7 +1444,9 @@ function getComparisonRows(competitorSlug: string) {
     {
       feature: "AI blog content engine",
       aiseo: "✓ Entity-dense, schema-tagged posts",
-      competitor: contentPartial ? "Partial — content grader only" : "✗ Not available",
+      competitor: contentPartial
+        ? "Partial — content grader only"
+        : "✗ Not available",
     },
     {
       feature: "Technical SEO audits",
@@ -1464,22 +1476,22 @@ function getComparisonRows(competitorSlug: string) {
 function getTestDataRows(
   competitorSlug: string,
   competitorName: string,
-  competitorPricing: string
+  competitorPricing: string,
 ) {
   const priceThem = competitorPricing.split("—")[0].replace("From ", "").trim();
   return [
     {
-      metric: "Time to first actionable insight",
+      metric: "Time to first useful result",
       us: "< 5 minutes",
       them: "30–60 minutes setup",
     },
     {
-      metric: "Technical issues surfaced (avg site)",
+      metric: "Technical issues found (average site)",
       us: "37 issues found",
       them: "22 issues found",
     },
     {
-      metric: "Time to fix — avg per issue",
+      metric: "Average time to fix an issue",
       us: "2 min (auto PR)",
       them: "Manual — 45 min avg",
     },
@@ -1489,7 +1501,7 @@ function getTestDataRows(
       them: "✗ Not available",
     },
     {
-      metric: "Monthly cost (1 site)",
+      metric: "Monthly cost for one site",
       us: "$39/mo",
       them: priceThem,
     },
@@ -1579,26 +1591,24 @@ const META: Record<
   }
 > = {
   semrush: {
-    title:
-      "We Tested Semrush for 60 Days — Here's What to Use Instead (2026)",
+    title: "We Tested Semrush for 60 Days — Here's What to Use Instead (2026)",
     description:
       "Looking for a Semrush alternative? We tested Semrush on 3 real sites for 60 days. Compare Ahrefs, Moz, SE Ranking, Ubersuggest, Mangools, and OptiAISEO — with honest pricing and who each tool is actually for.",
-    h1: "7 Best Semrush Alternatives in 2026 (Tested on Real Sites)",
+    h1: "7 Semrush Alternatives We Actually Tested (2026)",
     heroIntro:
-      "At $139.95/month, Semrush is genuinely excellent — if you need its PPC intelligence and 25B-keyword database. For teams that don't, that price buys you tools you'll never open. We ran Semrush on three real client sites for 60 days to find out exactly when it's worth it, and when it isn't.",
+      "Semrush costs $140 a month and it's genuinely good if you run paid search. We ran it on three real client sites for 60 days to find out exactly when that price is worth it — and when it isn't.",
     tableVerdict:
       "In practice, Semrush wins for teams that need the deepest PPC intelligence and the largest keyword database. OptiAISEO wins for teams that want AI-search visibility, automated technical fixes, and AI-driven content at 72% lower cost.",
     whyBest:
       "For teams that want to rank well in AI-generated answers — not just traditional SERPs — OptiAISEO is the best Semrush alternative in 2026. It tracks your brand's share-of-voice in ChatGPT, Claude, Perplexity, and Google AI, while automatically fixing broken schema and meta tags via GitHub PRs. All at a fraction of Semrush's $139.95/month entry price.",
     uniquePositioning:
-      "The only Semrush alternative that fixes SEO issues automatically via code — not just reports them.",
+      "The only Semrush alternative that fixes SEO problems automatically via GitHub.",
   },
   ahrefs: {
-    title:
-      "Ahrefs vs 7 Alternatives: Tested on Real Sites — Who Wins in 2026?",
+    title: "Ahrefs vs 7 Alternatives: Tested on Real Sites — Who Wins in 2026?",
     description:
       "Looking for an Ahrefs alternative? We tested Ahrefs for 90 days. Compare Semrush, Moz, Majestic, SE Ranking, Ubersuggest, and OptiAISEO — with honest pros, cons, and who each is best for.",
-    h1: "7 Best Ahrefs Alternatives in 2026 (Tested on Real Sites)",
+    h1: "7 Ahrefs Alternatives: What We Found After 90 Days of Testing",
     heroIntro:
       "Ahrefs has the best backlink index in the industry. That's not marketing — it's what the data consistently shows. The question in 2026 is whether backlink depth is what your team actually needs, or whether you're paying $129/month for a capability you use 20% of the time.",
     tableVerdict:
@@ -1606,14 +1616,14 @@ const META: Record<
     whyBest:
       "For teams focused on winning in AI-generated answers, OptiAISEO is the best Ahrefs alternative in 2026. It tracks your brand's presence in ChatGPT, Claude, Perplexity, and Google AI Overviews, while automatically pushing GitHub PRs to fix broken schema and meta issues. Ahrefs is unmatched for backlink depth; OptiAISEO is unmatched for AI-era SEO at 70% lower cost.",
     uniquePositioning:
-      "The only Ahrefs alternative that fixes SEO issues automatically via GitHub — not just surfaces them.",
+      "The only Ahrefs alternative that fixes issues in code and tracks AI search — not just finds them.",
   },
   "surfer-seo": {
     title:
       "Surfer SEO Alternatives (2026): 6 Tools That Actually Write the Content",
     description:
       "Looking for a Surfer SEO alternative? We tested Surfer on 24 articles over 4 months. Compare Clearscope, Frase, NeuronWriter, MarketMuse, and OptiAISEO — with honest pricing and who each is best for.",
-    h1: "6 Best Surfer SEO Alternatives in 2026 (Tested on Real Articles)",
+    h1: "6 Surfer SEO Alternatives That Actually Write the Content (2026)",
     heroIntro:
       "Surfer SEO solves a real problem: it makes content measurably better. After four months and 24 test articles, Surfer-optimised pieces consistently outranked unoptimised controls on comparable keywords. The problem isn't Surfer's quality — it's that grading content and producing content are two different bottlenecks, and Surfer only solves one.",
     tableVerdict:
@@ -1621,29 +1631,29 @@ const META: Record<
     whyBest:
       "For teams that need more than a content grader, OptiAISEO is the best Surfer SEO alternative in 2026. It generates SEO content automatically rather than scoring content you write, audits your full technical stack, and tracks your brand's presence in ChatGPT, Claude, and Perplexity.",
     uniquePositioning:
-      "The only Surfer SEO alternative that generates content automatically — not just grades what you write.",
+      "The only Surfer SEO alternative that writes the content for you instead of grading what you write.",
   },
   moz: {
     title:
       "7 Moz Alternatives With Fresher Data & AI Search Tracking (Tested 2026)",
     description:
       "Looking for a Moz alternative? We ran Moz Pro for 6 months on 3 agency accounts. Moz's keyword database is 22x smaller than Semrush and traffic estimates diverged 31% from real GSC data. Here's what to use instead — with honest pricing.",
-    h1: "7 Best Moz Alternatives in 2026 (Fresher Data & AI Visibility)",
+    h1: "7 Moz Alternatives With Better Data and AI Search Tracking",
     heroIntro:
-      "We ran Moz Pro on three agency accounts for six months. By month four, it was open for exactly one thing: pulling DA scores. The keyword database (1.25B) is 22x smaller than Semrush's, traffic estimates averaged 31% off real GSC data, and there's no AI visibility tracking at all. Here's what we switched to — and when Moz is still worth keeping.",
+      "We ran Moz Pro on three agency accounts for six months. By month four it was open for exactly one thing: pulling DA scores. The keyword database (1.25B) is 22x smaller than Semrush's, traffic estimates averaged 31% off real GSC data, and there's no AI visibility tracking at all. Here's what we switched to — and when Moz is still worth keeping.",
     tableVerdict:
       "In practice, Moz wins for teams that live and die by Domain Authority and local SEO. OptiAISEO wins for teams that want AI-search visibility, automated technical fixes, and AI-driven content at 60% lower cost.",
     whyBest:
       "For teams that want to rank well in AI-generated answers, OptiAISEO is the best Moz alternative in 2026. It tracks your brand's share-of-voice in ChatGPT, Claude, Perplexity, and Google AI, while automatically fixing broken schema and meta tags via GitHub PRs. Moz's keyword database is 22x smaller than Semrush's — for teams that need current, complete data, the gap is real.",
     uniquePositioning:
-      "The only Moz alternative that fixes SEO automatically via GitHub and tracks your brand in ChatGPT.",
+      "The only Moz alternative that tracks AI search visibility and pushes fixes to GitHub automatically.",
   },
   clearscope: {
     title:
       "$170/Month for a Content Grader? 7 Clearscope Alternatives Tested (2026)",
     description:
       "Looking for a Clearscope alternative? We tested Clearscope on 18 articles against Surfer SEO and OptiAISEO. Compare pricing, NLP accuracy, and who each tool is actually for.",
-    h1: "7 Best Clearscope Alternatives in 2026 (Cheaper & More Capable)",
+    h1: "7 Clearscope Alternatives That Cost Less and Do More (2026)",
     heroIntro:
       "$170/month with no free trial is a significant commitment for a single-purpose content tool. Clearscope earns it for large enterprise editorial teams — but for everyone else, the question worth asking is whether the most precise NLP grader in the market justifies more than Surfer at $99/month or OptiAISEO at $39/month.",
     tableVerdict:
@@ -1651,14 +1661,14 @@ const META: Record<
     whyBest:
       "For teams that need more than NLP content grading, OptiAISEO is the best Clearscope alternative in 2026. It generates optimised content automatically rather than grading content you write, audits your full technical stack, and tracks your brand's presence in ChatGPT, Claude, and Perplexity.",
     uniquePositioning:
-      "The only Clearscope alternative that generates SEO content automatically and tracks AI visibility.",
+      "The only Clearscope alternative that generates optimised content and tracks AI visibility.",
   },
   mangools: {
     title:
       "Outgrown Mangools? 6 Alternatives With More Than Just Keywords (2026)",
     description:
       "Looking for a Mangools or KWFinder alternative? We compared KWFinder against Ahrefs and OptiAISEO on 200 keywords. See which tools go beyond keyword research with honest pricing and real test data.",
-    h1: "6 Best Mangools / KWFinder Alternatives in 2026",
+    h1: "6 Mangools Alternatives for When You Need More Than Keywords",
     heroIntro:
       "Mangools solved the 'Semrush is too expensive' problem cleanly. KWFinder is one of the best keyword research UX experiences in the industry, and at $49/month it's accessible to anyone. The question is what happens when you need more than keywords — and most SEO workflows eventually do.",
     tableVerdict:
@@ -1673,7 +1683,7 @@ const META: Record<
       "7 Screaming Frog Alternatives: Cloud Monitoring + Auto-Fix (No Desktop App)",
     description:
       "Looking for a Screaming Frog alternative? We audited a 340,000-URL site with Screaming Frog and compared it against OptiAISEO's continuous monitoring. See which tools offer cloud access, auto-fix, and ongoing monitoring.",
-    h1: "7 Best Screaming Frog Alternatives in 2026 (Cloud-Based)",
+    h1: "7 Screaming Frog Alternatives With Cloud Monitoring (2026)",
     heroIntro:
       "Screaming Frog is the gold standard for technical SEO audits — and has been for over a decade. Nothing matches it for crawl depth and configuration flexibility on large sites. The problem isn't the tool; it's that finding technical issues and fixing them are two entirely separate problems, and Screaming Frog only solves the first one.",
     tableVerdict:
@@ -1684,11 +1694,10 @@ const META: Record<
       "The only Screaming Frog alternative that monitors continuously and fixes issues via GitHub automatically.",
   },
   yoast: {
-    title:
-      "Yoast SEO Alternatives in 2026: 7 Options for WordPress & Beyond",
+    title: "Yoast SEO Alternatives in 2026: 7 Options for WordPress & Beyond",
     description:
       "Looking for a Yoast alternative? We managed Yoast across 15 client sites for 18 months. Compare Rank Math, All in One SEO, SEOPress, and OptiAISEO — with honest options for WordPress and non-WordPress stacks.",
-    h1: "7 Best Yoast SEO Alternatives in 2026 (WordPress & Any Stack)",
+    h1: "7 Yoast SEO Alternatives for WordPress and Every Other Stack",
     heroIntro:
       "Yoast made SEO accessible to 13 million WordPress sites — that's a genuine contribution to the web. But the web in 2026 is increasingly headless: Next.js, Astro, Webflow, Shopify Hydrogen. Yoast works on exactly one platform. Every team that moves off WordPress loses Yoast entirely.",
     tableVerdict:
@@ -1909,7 +1918,10 @@ export default async function VsPage({ params }: Props) {
         <nav aria-label="Breadcrumb" className="mb-10">
           <ol className="flex items-center gap-2 text-xs text-muted-foreground">
             <li>
-              <Link href="/" className="hover:text-foreground transition-colors">
+              <Link
+                href="/"
+                className="hover:text-foreground transition-colors"
+              >
                 Home
               </Link>
             </li>
@@ -1950,7 +1962,10 @@ export default async function VsPage({ params }: Props) {
                     {i + 1}
                   </span>
                   {vsSlug && vsSlug !== c.slug ? (
-                    <Link href={`/vs/${vsSlug}`} className="font-semibold hover:text-brand hover:underline underline-offset-2 transition-colors">
+                    <Link
+                      href={`/vs/${vsSlug}`}
+                      className="font-semibold hover:text-brand hover:underline underline-offset-2 transition-colors"
+                    >
                       {item.name}
                     </Link>
                   ) : (
@@ -1977,10 +1992,15 @@ export default async function VsPage({ params }: Props) {
                   >
                     <dt className="font-bold shrink-0">
                       {vsSlug && vsSlug !== c.slug ? (
-                        <Link href={`/vs/${vsSlug}`} className="hover:text-brand hover:underline underline-offset-2 transition-colors">
+                        <Link
+                          href={`/vs/${vsSlug}`}
+                          className="hover:text-brand hover:underline underline-offset-2 transition-colors"
+                        >
                           {item.name}
                         </Link>
-                      ) : item.name}
+                      ) : (
+                        item.name
+                      )}
                     </dt>
                     <dd className="text-muted-foreground">— {item.badge}</dd>
                   </div>
@@ -1988,7 +2008,8 @@ export default async function VsPage({ params }: Props) {
               })}
             </dl>
             <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
-              Full breakdown with pricing, real test results, and honest pros/cons below.
+              Full breakdown with pricing, real test results, and honest
+              pros/cons below.
             </p>
           </div>
 
@@ -2004,12 +2025,44 @@ export default async function VsPage({ params }: Props) {
 
           <p className="text-sm text-muted-foreground max-w-2xl mx-auto leading-relaxed">
             Jump to:{" "}
-            <a href="#scoring-framework" className="text-brand font-semibold hover:underline">scoring framework</a>{" "}·{" "}
-            <a href="#alternatives-list" className="text-brand font-semibold hover:underline">all alternatives</a>{" "}·{" "}
-            <a href="#our-experience" className="text-brand font-semibold hover:underline">our experience</a>{" "}·{" "}
-            <a href="#comparison-table" className="text-brand font-semibold hover:underline">feature table</a>{" "}·{" "}
-            <a href="#why-leaving" className="text-brand font-semibold hover:underline">why teams leave</a>{" "}·{" "}
-            <a href="#faq" className="text-brand font-semibold hover:underline">FAQ</a>
+            <a
+              href="#scoring-framework"
+              className="text-brand font-semibold hover:underline"
+            >
+              scoring framework
+            </a>{" "}
+            ·{" "}
+            <a
+              href="#alternatives-list"
+              className="text-brand font-semibold hover:underline"
+            >
+              all alternatives
+            </a>{" "}
+            ·{" "}
+            <a
+              href="#our-experience"
+              className="text-brand font-semibold hover:underline"
+            >
+              our experience
+            </a>{" "}
+            ·{" "}
+            <a
+              href="#comparison-table"
+              className="text-brand font-semibold hover:underline"
+            >
+              feature table
+            </a>{" "}
+            ·{" "}
+            <a
+              href="#why-leaving"
+              className="text-brand font-semibold hover:underline"
+            >
+              why teams leave
+            </a>{" "}
+            ·{" "}
+            <a href="#faq" className="text-brand font-semibold hover:underline">
+              FAQ
+            </a>
           </p>
         </div>
 
@@ -2019,7 +2072,10 @@ export default async function VsPage({ params }: Props) {
             <p className="text-xs font-bold uppercase tracking-widest text-amber-500 mb-3">
               Our take
             </p>
-            <h2 id="unique-angle-heading" className="text-xl font-bold mb-4 leading-snug">
+            <h2
+              id="unique-angle-heading"
+              className="text-xl font-bold mb-4 leading-snug"
+            >
               {c.uniqueAngle.headline}
             </h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
@@ -2040,19 +2096,27 @@ export default async function VsPage({ params }: Props) {
               </p>
               <dl className="space-y-2 text-sm">
                 <div className="flex gap-2">
-                  <dt className="text-muted-foreground shrink-0 w-28">Founded</dt>
+                  <dt className="text-muted-foreground shrink-0 w-28">
+                    Founded
+                  </dt>
                   <dd className="font-medium">{c.entityContext.founded}</dd>
                 </div>
                 <div className="flex gap-2">
-                  <dt className="text-muted-foreground shrink-0 w-28">Category</dt>
+                  <dt className="text-muted-foreground shrink-0 w-28">
+                    Category
+                  </dt>
                   <dd className="font-medium">{c.entityContext.category}</dd>
                 </div>
                 <div className="flex gap-2">
-                  <dt className="text-muted-foreground shrink-0 w-28">Known for</dt>
+                  <dt className="text-muted-foreground shrink-0 w-28">
+                    Known for
+                  </dt>
                   <dd className="font-medium">{c.entityContext.knownFor}</dd>
                 </div>
                 <div className="flex gap-2">
-                  <dt className="text-muted-foreground shrink-0 w-28">Typical user</dt>
+                  <dt className="text-muted-foreground shrink-0 w-28">
+                    Typical user
+                  </dt>
                   <dd className="font-medium">{c.entityContext.typicalUser}</dd>
                 </div>
               </dl>
@@ -2098,8 +2162,11 @@ export default async function VsPage({ params }: Props) {
             <div className="flex items-start gap-3">
               <Info className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
               <div>
-                <h2 id="honest-wins-heading" className="text-sm font-bold uppercase tracking-widest text-emerald-500 mb-3">
-                  Where {c.name} genuinely beats alternatives
+                <h2
+                  id="honest-wins-heading"
+                  className="text-sm font-bold uppercase tracking-widest text-emerald-500 mb-3"
+                >
+                  Where {c.name} is actually better
                 </h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {c.honestWinCallout}
@@ -2110,54 +2177,87 @@ export default async function VsPage({ params }: Props) {
         </section>
 
         {/* ── SECTION 5: AI-Era Scoring Framework ── */}
-        <section id="scoring-framework" aria-labelledby="scoring-heading" className="mb-20">
-          <h2 id="scoring-heading" className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center">
-            How we scored these tools — the AI-Era SEO Index
+        <section
+          id="scoring-framework"
+          aria-labelledby="scoring-heading"
+          className="mb-20"
+        >
+          <h2
+            id="scoring-heading"
+            className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center"
+          >
+            How we compared these tools
           </h2>
           <p className="text-center text-muted-foreground mb-10 max-w-2xl mx-auto text-sm">
-            Traditional comparison pages use feature checkboxes. We scored each tool on five dimensions that matter for SEO in 2026 — weighted by their impact on actual organic traffic outcomes.
+            We scored each tool on five things that actually affect your traffic
+            in 2026. Each one is weighted by how much it matters.
           </p>
 
           <div className="grid md:grid-cols-3 gap-4 mb-8">
             {AI_ERA_DIMENSIONS.map((dim) => (
-              <div key={dim.label} className="card-surface rounded-xl p-5 flex flex-col gap-2">
+              <div
+                key={dim.label}
+                className="card-surface rounded-xl p-5 flex flex-col gap-2"
+              >
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-brand uppercase tracking-widest">
                     {dim.weight} weight
                   </span>
                 </div>
                 <h3 className="text-sm font-bold">{dim.label}</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">{dim.description}</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {dim.description}
+                </p>
               </div>
             ))}
           </div>
 
           <div className="card-surface rounded-2xl p-8">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-6">
-              Overall AI-era SEO score — OptiAISEO vs {c.name}
+              Overall score — OptiAISEO vs {c.name}
             </p>
             <div className="space-y-4">
               {[
-                { label: "OptiAISEO", score: optiScore, color: "bg-brand", note: "(our product)" },
-                { label: c.name, score: competitorScore, color: "bg-muted-foreground", note: "" },
+                {
+                  label: "OptiAISEO",
+                  score: optiScore,
+                  color: "bg-brand",
+                  note: "(our product)",
+                },
+                {
+                  label: c.name,
+                  score: competitorScore,
+                  color: "bg-muted-foreground",
+                  note: "",
+                },
               ].map(({ label, score, color, note }) => (
                 <div key={label}>
                   <div className="flex justify-between text-sm mb-1">
                     <span className="font-semibold">
                       {label}
-                      {note && <span className="text-xs text-muted-foreground ml-2">{note}</span>}
+                      {note && (
+                        <span className="text-xs text-muted-foreground ml-2">
+                          {note}
+                        </span>
+                      )}
                     </span>
                     <span className="font-bold">{score}/100</span>
                   </div>
                   <div className="h-3 bg-muted rounded-full overflow-hidden">
-                    <div className={`h-3 rounded-full ${color} transition-all`} style={{ width: `${score}%` }} />
+                    <div
+                      className={`h-3 rounded-full ${color} transition-all`}
+                      style={{ width: `${score}%` }}
+                    />
                   </div>
                 </div>
               ))}
             </div>
             <p className="text-xs text-muted-foreground mt-5 leading-relaxed">
               <strong className="text-foreground">Methodology note:</strong>{" "}
-              {c.aiVisibilityNote} Where {c.name} genuinely outperforms on dimensions outside this framework (e.g. PPC intelligence, backlink depth, crawl configurability), those advantages are noted in the sections above and below.
+              {c.aiVisibilityNote} Where {c.name} genuinely outperforms on
+              dimensions outside this framework (e.g. PPC intelligence, backlink
+              depth, crawl configurability), those advantages are noted in the
+              sections above and below.
             </p>
           </div>
 
@@ -2165,10 +2265,16 @@ export default async function VsPage({ params }: Props) {
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-card border-b border-border">
-                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Dimension</th>
-                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Weight</th>
+                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">
+                    Dimension
+                  </th>
+                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">
+                    Weight
+                  </th>
                   <th className="text-left px-5 py-3 font-bold">OptiAISEO</th>
-                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">{c.name}</th>
+                  <th className="text-left px-5 py-3 font-semibold text-muted-foreground">
+                    {c.name}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -2176,16 +2282,35 @@ export default async function VsPage({ params }: Props) {
                   const usScore = dim.scores["optiaiseo"] ?? 0;
                   const themScore = dim.scores[competitor] ?? 0;
                   return (
-                    <tr key={dim.label} className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-card/30"}`}>
+                    <tr
+                      key={dim.label}
+                      className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-card/30"}`}
+                    >
                       <td className="px-5 py-3 font-medium">{dim.label}</td>
-                      <td className="px-5 py-3 text-muted-foreground text-xs">{dim.weight}</td>
+                      <td className="px-5 py-3 text-muted-foreground text-xs">
+                        {dim.weight}
+                      </td>
                       <td className="px-5 py-3">
-                        <span className={usScore > themScore ? "text-emerald-500 font-bold" : "text-foreground font-semibold"}>
+                        <span
+                          className={
+                            usScore > themScore
+                              ? "text-emerald-500 font-bold"
+                              : "text-foreground font-semibold"
+                          }
+                        >
                           {usScore}/100
                         </span>
                       </td>
                       <td className="px-5 py-3">
-                        <span className={themScore > usScore ? "text-emerald-500 font-bold" : themScore === 0 ? "text-rose-400" : "text-muted-foreground"}>
+                        <span
+                          className={
+                            themScore > usScore
+                              ? "text-emerald-500 font-bold"
+                              : themScore === 0
+                                ? "text-rose-400"
+                                : "text-muted-foreground"
+                          }
+                        >
                           {themScore}/100
                         </span>
                       </td>
@@ -2202,72 +2327,130 @@ export default async function VsPage({ params }: Props) {
           (() => {
             const alt = ALTERNATIVES[competitor];
             return (
-              <section id="alternatives-list" aria-labelledby="alternatives-heading" className="mb-20">
-                <h2 id="alternatives-heading" className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center">
+              <section
+                id="alternatives-list"
+                aria-labelledby="alternatives-heading"
+                className="mb-20"
+              >
+                <h2
+                  id="alternatives-heading"
+                  className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center"
+                >
                   {alt.heading}
                 </h2>
                 <p className="text-center text-muted-foreground mb-10 max-w-2xl mx-auto">
                   {alt.intro}
                 </p>
                 <div className="space-y-6">
-                  {alt.items.map(({ rank, name, badge, price, verdict, pros, cons, best, href }) => (
-                    <div key={name} className="card-surface rounded-2xl p-8 flex flex-col md:flex-row gap-8">
-                      <div className="shrink-0">
-                        <span className="text-5xl font-black text-brand/15 leading-none">{rank}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-3 mb-2">
-                          <h3 className="text-lg font-bold">{name}</h3>
-                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-brand/10 border border-brand/20 text-brand">{badge}</span>
-                          <span className="text-xs text-muted-foreground font-semibold">{price}</span>
+                  {alt.items.map(
+                    ({
+                      rank,
+                      name,
+                      badge,
+                      price,
+                      verdict,
+                      pros,
+                      cons,
+                      best,
+                      href,
+                    }) => (
+                      <div
+                        key={name}
+                        className="card-surface rounded-2xl p-8 flex flex-col md:flex-row gap-8"
+                      >
+                        <div className="shrink-0">
+                          <span className="text-5xl font-black text-brand/15 leading-none">
+                            {rank}
+                          </span>
                         </div>
-                        <p className="text-sm text-muted-foreground leading-relaxed mb-4">{verdict}</p>
-                        <div className="grid sm:grid-cols-2 gap-4 mb-3">
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-widest text-emerald-500 mb-2">Pros</p>
-                            <ul className="space-y-1">
-                              {pros.map((p) => (
-                                <li key={p} className="flex items-start gap-2 text-xs text-muted-foreground">
-                                  <Check className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" />{p}
-                                </li>
-                              ))}
-                            </ul>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-3 mb-2">
+                            <h3 className="text-lg font-bold">{name}</h3>
+                            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-brand/10 border border-brand/20 text-brand">
+                              {badge}
+                            </span>
+                            <span className="text-xs text-muted-foreground font-semibold">
+                              {price}
+                            </span>
                           </div>
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-widest text-rose-400 mb-2">Cons</p>
-                            <ul className="space-y-1">
-                              {cons.map((con) => (
-                                <li key={con} className="flex items-start gap-2 text-xs text-muted-foreground">
-                                  <X className="w-3.5 h-3.5 text-rose-400 mt-0.5 shrink-0" />{con}
-                                </li>
-                              ))}
-                            </ul>
+                          <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+                            {verdict}
+                          </p>
+                          <div className="grid sm:grid-cols-2 gap-4 mb-3">
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-widest text-emerald-500 mb-2">
+                                Pros
+                              </p>
+                              <ul className="space-y-1">
+                                {pros.map((p) => (
+                                  <li
+                                    key={p}
+                                    className="flex items-start gap-2 text-xs text-muted-foreground"
+                                  >
+                                    <Check className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                                    {p}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-widest text-rose-400 mb-2">
+                                Cons
+                              </p>
+                              <ul className="space-y-1">
+                                {cons.map((con) => (
+                                  <li
+                                    key={con}
+                                    className="flex items-start gap-2 text-xs text-muted-foreground"
+                                  >
+                                    <X className="w-3.5 h-3.5 text-rose-400 mt-0.5 shrink-0" />
+                                    {con}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           </div>
+                          <p className="text-xs text-muted-foreground">
+                            <strong className="text-foreground">
+                              Best for:
+                            </strong>{" "}
+                            {best}
+                          </p>
+                          {href && (
+                            <Link
+                              href={href}
+                              className="inline-flex items-center gap-1.5 mt-4 text-sm font-bold text-brand hover:underline"
+                            >
+                              Try free — no card needed{" "}
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </Link>
+                          )}
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          <strong className="text-foreground">Best for:</strong> {best}
-                        </p>
-                        {href && (
-                          <Link href={href} className="inline-flex items-center gap-1.5 mt-4 text-sm font-bold text-brand hover:underline">
-                            Try free — no card needed <ArrowRight className="w-3.5 h-3.5" />
-                          </Link>
-                        )}
                       </div>
-                    </div>
-                  ))}
+                    ),
+                  )}
                 </div>
               </section>
             );
           })()}
 
         {/* ── SECTION 7: Our experience ── */}
-        <section id="our-experience" aria-labelledby="experience-heading" className="mb-20">
-          <h2 id="experience-heading" className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center">
-            Our experience using {c.name}
+        <section
+          id="our-experience"
+          aria-labelledby="experience-heading"
+          className="mb-20"
+        >
+          <h2
+            id="experience-heading"
+            className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center"
+          >
+            What it was actually like using {c.name}
           </h2>
 
           <div className="card-surface rounded-xl p-5 mb-6 border border-border text-center">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Test methodology</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">
+              How we tested it
+            </p>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl mx-auto">
               {c.ourExperience.specificTestContext}
             </p>
@@ -2289,8 +2472,12 @@ export default async function VsPage({ params }: Props) {
               </div>
               <ul className="space-y-3">
                 {c.ourExperience.whatWorked.map((item) => (
-                  <li key={item} className="flex items-start gap-2.5 text-sm text-muted-foreground">
-                    <Check className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />{item}
+                  <li
+                    key={item}
+                    className="flex items-start gap-2.5 text-sm text-muted-foreground"
+                  >
+                    <Check className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+                    {item}
                   </li>
                 ))}
               </ul>
@@ -2302,8 +2489,12 @@ export default async function VsPage({ params }: Props) {
               </div>
               <ul className="space-y-3">
                 {c.ourExperience.whatAnnoyed.map((item) => (
-                  <li key={item} className="flex items-start gap-2.5 text-sm text-muted-foreground">
-                    <X className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />{item}
+                  <li
+                    key={item}
+                    className="flex items-start gap-2.5 text-sm text-muted-foreground"
+                  >
+                    <X className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
+                    {item}
                   </li>
                 ))}
               </ul>
@@ -2312,22 +2503,28 @@ export default async function VsPage({ params }: Props) {
 
           <div className="card-surface rounded-2xl p-8 mb-6">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-5">
-              60-day test results — OptiAISEO vs {c.name}
+              60-day results — OptiAISEO vs {c.name}
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-border text-left">
-                    <th className="pb-3 font-semibold text-muted-foreground w-1/2">Metric</th>
+                    <th className="pb-3 font-semibold text-muted-foreground w-1/2">
+                      Metric
+                    </th>
                     <th className="pb-3 font-bold w-1/4">OptiAISEO</th>
-                    <th className="pb-3 font-semibold text-muted-foreground w-1/4">{c.name}</th>
+                    <th className="pb-3 font-semibold text-muted-foreground w-1/4">
+                      {c.name}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {testRows.map(({ metric, us, them }) => (
                     <tr key={metric}>
                       <td className="py-3 text-muted-foreground">{metric}</td>
-                      <td className="py-3 font-semibold text-emerald-500">{us}</td>
+                      <td className="py-3 font-semibold text-emerald-500">
+                        {us}
+                      </td>
                       <td className="py-3 text-muted-foreground">{them}</td>
                     </tr>
                   ))}
@@ -2335,7 +2532,8 @@ export default async function VsPage({ params }: Props) {
               </table>
             </div>
             <p className="text-xs text-muted-foreground mt-4">
-              Tested across one SaaS site, one e-commerce site, and one content site over 60 days.
+              Tested across one SaaS site, one e-commerce site, and one content
+              site over 60 days.
             </p>
           </div>
 
@@ -2343,7 +2541,7 @@ export default async function VsPage({ params }: Props) {
             <Star className="w-5 h-5 text-brand shrink-0 mt-0.5" />
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-brand mb-2">
-                Who {c.name} is really for
+                Who should actually use {c.name}
               </p>
               <p className="text-sm text-muted-foreground leading-relaxed">
                 {c.ourExperience.whoItsReallyFor}
@@ -2354,7 +2552,9 @@ export default async function VsPage({ params }: Props) {
 
         {/* ── SECTION 8: TL;DR verdict ── */}
         <div className="card-surface rounded-2xl p-8 mb-16 border-l-4 border-brand">
-          <p className="text-xs font-bold uppercase tracking-widest text-brand mb-2">TL;DR Verdict</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-brand mb-2">
+            Bottom line
+          </p>
           <p className="text-lg leading-relaxed">{c.verdict}</p>
           <Link
             href="/signup"
@@ -2365,37 +2565,67 @@ export default async function VsPage({ params }: Props) {
         </div>
 
         {/* ── SECTION 9: Comparison Table ── */}
-        <section id="comparison-table" aria-labelledby="comparison-heading" className="mb-20">
-          <h2 id="comparison-heading" className="text-2xl md:text-3xl font-bold tracking-tight mb-8 text-center">
-            OptiAISEO vs {c.name}: Feature-by-feature comparison
+        <section
+          id="comparison-table"
+          aria-labelledby="comparison-heading"
+          className="mb-20"
+        >
+          <h2
+            id="comparison-heading"
+            className="text-2xl md:text-3xl font-bold tracking-tight mb-8 text-center"
+          >
+            OptiAISEO vs {c.name}: side-by-side
           </h2>
           <div className="overflow-x-auto rounded-2xl border border-border">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-card border-b border-border">
-                  <th className="text-left px-6 py-4 font-semibold text-muted-foreground w-1/3">Feature</th>
+                  <th className="text-left px-6 py-4 font-semibold text-muted-foreground w-1/3">
+                    Feature
+                  </th>
                   <th className="text-left px-6 py-4 font-bold w-1/3">
                     <div className="flex items-center gap-2">
                       <div className="w-5 h-5 rounded bg-foreground flex items-center justify-center shrink-0">
-                        <span className="font-black text-background text-[8px]">Opti</span>
+                        <span className="font-black text-background text-[8px]">
+                          Opti
+                        </span>
                       </div>
                       OptiAISEO
                     </div>
                   </th>
-                  <th className="text-left px-6 py-4 font-semibold text-muted-foreground w-1/3">{c.name}</th>
+                  <th className="text-left px-6 py-4 font-semibold text-muted-foreground w-1/3">
+                    {c.name}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, i) => (
-                  <tr key={row.feature} className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-card/30"}`}>
-                    <td className="px-6 py-4 font-medium text-muted-foreground">{row.feature}</td>
+                  <tr
+                    key={row.feature}
+                    className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-card/30"}`}
+                  >
+                    <td className="px-6 py-4 font-medium text-muted-foreground">
+                      {row.feature}
+                    </td>
                     <td className="px-6 py-4">
-                      <span className={row.aiseo.startsWith("✓") ? "text-emerald-500 font-semibold" : "text-foreground"}>
+                      <span
+                        className={
+                          row.aiseo.startsWith("✓")
+                            ? "text-emerald-500 font-semibold"
+                            : "text-foreground"
+                        }
+                      >
                         {row.aiseo}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={row.competitor.startsWith("✗") ? "text-rose-400" : "text-muted-foreground"}>
+                      <span
+                        className={
+                          row.competitor.startsWith("✗")
+                            ? "text-rose-400"
+                            : "text-muted-foreground"
+                        }
+                      >
                         {row.competitor}
                       </span>
                     </td>
@@ -2413,27 +2643,48 @@ export default async function VsPage({ params }: Props) {
 
         {/* ── SECTION 10: Use-case sections ── */}
         {useCases && (
-          <section id="use-cases" aria-labelledby="use-cases-heading" className="mb-20">
-            <h2 id="use-cases-heading" className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center">
-              Best {c.name} alternative for your use case
+          <section
+            id="use-cases"
+            aria-labelledby="use-cases-heading"
+            className="mb-20"
+          >
+            <h2
+              id="use-cases-heading"
+              className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center"
+            >
+              Which tool is right for your situation
             </h2>
             <p className="text-center text-muted-foreground mb-10 max-w-2xl mx-auto">
-              The right alternative depends on your team size, budget, and what you actually need.
+              Here's a quick breakdown based on what you're trying to do.
             </p>
             <div className="space-y-6">
               <div className="card-surface rounded-2xl p-8">
-                <h3 className="text-lg font-bold mb-3">Best {c.name} alternative for beginners</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{useCases.beginners}</p>
+                <h3 className="text-lg font-bold mb-3">
+                  If you're just getting started
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {useCases.beginners}
+                </p>
               </div>
               <div className="card-surface rounded-2xl p-8">
-                <h3 className="text-lg font-bold mb-3">Best {c.name} alternative for agencies</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{useCases.agencies}</p>
+                <h3 className="text-lg font-bold mb-3">If you run an agency</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {useCases.agencies}
+                </p>
               </div>
               <div className="card-surface rounded-2xl p-8">
-                <h3 className="text-lg font-bold mb-3">Best free {c.name} alternative</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{useCases.free}</p>
-                <Link href="/signup" className="inline-flex items-center gap-2 mt-4 text-sm font-bold text-brand hover:underline">
-                  Start free on OptiAISEO — no card needed <ArrowRight className="w-3.5 h-3.5" />
+                <h3 className="text-lg font-bold mb-3">
+                  If you need something free
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {useCases.free}
+                </p>
+                <Link
+                  href="/signup"
+                  className="inline-flex items-center gap-2 mt-4 text-sm font-bold text-brand hover:underline"
+                >
+                  Start free on OptiAISEO — no card needed{" "}
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               </div>
             </div>
@@ -2441,20 +2692,32 @@ export default async function VsPage({ params }: Props) {
         )}
 
         {/* ── SECTION 11: Why teams are leaving ── */}
-        <section id="why-leaving" aria-labelledby="leaving-heading" className="mb-20">
-          <h2 id="leaving-heading" className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center">
-            Why teams are leaving {c.name} in 2026
+        <section
+          id="why-leaving"
+          aria-labelledby="leaving-heading"
+          className="mb-20"
+        >
+          <h2
+            id="leaving-heading"
+            className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center"
+          >
+            Why people are switching away from {c.name}
           </h2>
           <p className="text-center text-muted-foreground mb-10 max-w-2xl mx-auto text-sm">
-            Based on conversations with teams that have switched — and our own 60-day tests. Where {c.name} wins is noted above.
+            Based on our own testing and conversations with teams that have
+            switched. We've also noted where {c.name} wins above.
           </p>
           <div className="space-y-4">
             {c.whyLeaving.map(({ n, title, body }) => (
               <div key={n} className="card-surface rounded-2xl p-8 flex gap-6">
-                <span className="text-4xl font-black text-brand/15 leading-none shrink-0">{n}</span>
+                <span className="text-4xl font-black text-brand/15 leading-none shrink-0">
+                  {n}
+                </span>
                 <div>
                   <h3 className="font-bold mb-2">{title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{body}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {body}
+                  </p>
                 </div>
               </div>
             ))}
@@ -2463,19 +2726,24 @@ export default async function VsPage({ params }: Props) {
 
         {/* ── SECTION 12: Who should choose ── */}
         <section aria-labelledby="choose-heading" className="mb-20">
-          <h2 id="choose-heading" className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center">
-            Who should choose OptiAISEO vs {c.name}?
+          <h2
+            id="choose-heading"
+            className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center"
+          >
+            OptiAISEO or {c.name} — which one is for you?
           </h2>
           <p className="text-center text-muted-foreground mb-10 max-w-2xl mx-auto">
-            Both platforms solve real SEO problems — but for different teams and priorities.
+            They're both useful. It depends on what you're trying to do.
           </p>
           <div className="grid md:grid-cols-2 gap-8">
             <div className="card-surface rounded-2xl p-8 ring-2 ring-brand/20">
               <div className="flex items-center gap-3 mb-5">
                 <div className="w-9 h-9 rounded-xl bg-foreground flex items-center justify-center shrink-0">
-                  <span className="font-black text-background text-[9px] tracking-tight">Opti</span>
+                  <span className="font-black text-background text-[9px] tracking-tight">
+                    Opti
+                  </span>
                 </div>
-                <h3 className="text-lg font-bold">Choose OptiAISEO if…</h3>
+                <h3 className="text-lg font-bold">Go with OptiAISEO if…</h3>
               </div>
               <ul className="space-y-3 mb-8">
                 {c.chooseUs.map((reason) => (
@@ -2485,7 +2753,10 @@ export default async function VsPage({ params }: Props) {
                   </li>
                 ))}
               </ul>
-              <Link href="/signup" className="inline-flex items-center gap-2 bg-brand text-white font-bold px-5 py-2.5 rounded-full hover:opacity-90 transition-all text-sm">
+              <Link
+                href="/signup"
+                className="inline-flex items-center gap-2 bg-brand text-white font-bold px-5 py-2.5 rounded-full hover:opacity-90 transition-all text-sm"
+              >
                 <Zap className="w-4 h-4" /> Start free →
               </Link>
             </div>
@@ -2496,7 +2767,7 @@ export default async function VsPage({ params }: Props) {
                     {c.name.slice(0, 3).toUpperCase()}
                   </span>
                 </div>
-                <h3 className="text-lg font-bold">Choose {c.name} if…</h3>
+                <h3 className="text-lg font-bold">Stick with {c.name} if…</h3>
               </div>
               <ul className="space-y-3">
                 {c.chooseThem.map((reason) => (
@@ -2513,12 +2784,20 @@ export default async function VsPage({ params }: Props) {
         {/* ── SECTION 13: Why Best narrative ── */}
         {meta?.whyBest && (
           <section aria-labelledby="why-best-heading" className="mb-20">
-            <h2 id="why-best-heading" className="text-2xl md:text-3xl font-bold tracking-tight mb-6 text-center">
-              Why OptiAISEO is the Best {c.name} Alternative in 2026
+            <h2
+              id="why-best-heading"
+              className="text-2xl md:text-3xl font-bold tracking-tight mb-6 text-center"
+            >
+              Why we think OptiAISEO is the better choice in 2026
             </h2>
             <div className="card-surface rounded-2xl p-8 border-l-4 border-brand">
-              <p className="text-base leading-relaxed text-muted-foreground">{meta.whyBest}</p>
-              <Link href="/signup" className="inline-flex items-center gap-2 mt-6 bg-brand text-white font-bold px-6 py-3 rounded-full hover:opacity-90 transition-all active:scale-95 text-sm">
+              <p className="text-base leading-relaxed text-muted-foreground">
+                {meta.whyBest}
+              </p>
+              <Link
+                href="/signup"
+                className="inline-flex items-center gap-2 mt-6 bg-brand text-white font-bold px-6 py-3 rounded-full hover:opacity-90 transition-all active:scale-95 text-sm"
+              >
                 <Zap className="w-4 h-4" /> Start free — no card needed
               </Link>
             </div>
@@ -2527,57 +2806,73 @@ export default async function VsPage({ params }: Props) {
 
         {/* ── SECTION 14: AI Search Visibility Explainer ── */}
         <section aria-labelledby="ai-search-heading" className="mb-20">
-          <h2 id="ai-search-heading" className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center">
-            What AI search engines see — and why traditional SEO tools miss it
+          <h2
+            id="ai-search-heading"
+            className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center"
+          >
+            Why traditional SEO tools can't track AI search
           </h2>
           <p className="text-center text-muted-foreground mb-10 max-w-2xl mx-auto text-sm">
-            Understanding why {c.name} can't measure AI citation frequency — and what actually drives it.
+            Here's what's actually going on under the hood.
           </p>
           <div className="space-y-4">
             {[
               {
                 signal: "Entity clarity",
-                desc: "AI models cite entities they have strong associations for. Schema markup (Organization, Product, Article) reinforces entity associations during re-training cycles. This is a technical SEO problem — broken schema reduces how reliably AI engines can extract and cite your content.",
-                tracked: "OptiAISEO tracks & auto-fixes via GitHub PR",
+                desc: "AI tools are more likely to mention brands they have clear, consistent information about. Schema markup — the structured data that tells search engines what your site is about — helps. If it's broken, AI tools have a harder time identifying and citing you. That's a technical SEO problem with a direct impact on AI visibility.",
+                tracked: "OptiAISEO tracks this and fixes it via GitHub",
                 notTracked: `${c.name}: not tracked`,
                 link: "/blog/entity-seo-guide",
-                linkText: "Learn about entity SEO for AI search",
+                linkText: "How entity SEO affects AI search",
               },
               {
-                signal: "Third-party citation density",
-                desc: "AI models weight sources they've seen cited across multiple high-authority pages. This overlaps with traditional link building but the mechanism is different — it's about co-occurrence frequency, not PageRank.",
-                tracked: "Partial overlap with traditional backlink data",
-                notTracked: "No tool fully measures co-occurrence in AI training data",
+                signal: "How often others cite you",
+                desc: "AI tools are more likely to mention brands that appear across many trusted sources. This overlaps with traditional link building, but the mechanism is different — it's about how frequently your brand appears together with a topic, not just your PageRank.",
+                tracked: "Partially overlaps with backlink data",
+                notTracked: "No tool fully measures this yet",
                 link: "/blog/ai-citation-guide",
                 linkText: "How AI citations work",
               },
               {
-                signal: "Topical authority",
-                desc: "AI engines favor sources that answer the full range of questions on a topic. Content gap analysis helps here — but only if you're generating coverage, not just identifying gaps.",
-                tracked: "OptiAISEO: generates cluster content automatically",
-                notTracked: `${c.name}: keyword gap identification only`,
+                signal: "Topical coverage",
+                desc: "AI tools tend to prefer sources that answer a full range of questions on a topic, not just one or two. Content gap analysis helps with this — but only if you're actually creating content to fill those gaps.",
+                tracked:
+                  "OptiAISEO generates content for missing topics automatically",
+                notTracked: `${c.name}: finds keyword gaps but doesn't help fill them`,
                 link: "/blog/topical-authority-guide",
-                linkText: "Building topical authority for AI search",
+                linkText: "How to build topical authority for AI search",
               },
               {
-                signal: "Brand mention velocity",
-                desc: "Emerging brands get picked up faster when their AI citation rate is accelerating. This is a longitudinal metric — you need at least 90 days of GSoV data to see a meaningful trend.",
-                tracked: "OptiAISEO GSoV tracking: continuous monitoring",
+                signal: "Brand mention momentum",
+                desc: "Newer brands can gain AI visibility faster when their citation rate is growing. This is a long-term metric — you need at least 90 days of data before you can see a meaningful trend.",
+                tracked: "OptiAISEO tracks this continuously",
                 notTracked: `${c.name}: no equivalent metric`,
                 link: "/blog/gsov-tracking-guide",
                 linkText: "What is Generative Search Occupancy?",
               },
             ].map(({ signal, desc, tracked, notTracked, link, linkText }) => (
-              <div key={signal} className="card-surface rounded-2xl p-6 flex gap-5">
+              <div
+                key={signal}
+                className="card-surface rounded-2xl p-6 flex gap-5"
+              >
                 <div className="w-2 rounded-full bg-brand/20 shrink-0 self-stretch" />
                 <div>
                   <h3 className="font-bold text-sm mb-2">{signal}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed mb-3">{desc}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+                    {desc}
+                  </p>
                   <div className="flex flex-wrap gap-3">
-                    <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 font-semibold">{tracked}</span>
-                    <span className="text-xs px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-500 font-semibold">{notTracked}</span>
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 font-semibold">
+                      {tracked}
+                    </span>
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-500 font-semibold">
+                      {notTracked}
+                    </span>
                   </div>
-                  <Link href={link} className="inline-flex items-center gap-1 mt-3 text-xs font-semibold text-brand hover:underline">
+                  <Link
+                    href={link}
+                    className="inline-flex items-center gap-1 mt-3 text-xs font-semibold text-brand hover:underline"
+                  >
                     {linkText} <ArrowRight className="w-3 h-3" />
                   </Link>
                 </div>
@@ -2588,31 +2883,37 @@ export default async function VsPage({ params }: Props) {
 
         {/* ── SECTION 15: What only OptiAISEO offers ── */}
         <section aria-labelledby="unique-heading" className="mb-20">
-          <h2 id="unique-heading" className="text-2xl md:text-3xl font-bold tracking-tight mb-8 text-center">
-            What only OptiAISEO offers
+          <h2
+            id="unique-heading"
+            className="text-2xl md:text-3xl font-bold tracking-tight mb-8 text-center"
+          >
+            Three things you won't find anywhere else
           </h2>
           <div className="grid md:grid-cols-3 gap-6">
             {[
               {
                 icon: Mic,
-                title: "Aria — Voice SEO Agent",
-                desc: `Ask Aria to audit your site, find keyword gaps, and push GitHub fixes — all by voice. ${c.name} has nothing like this.`,
-                badge: "Unique to OptiAISEO",
+                title: "Aria — ask questions out loud",
+                desc: `Talk to Aria like you'd talk to a colleague. Ask it to audit your site, find keyword gaps, or push a GitHub fix. ${c.name} doesn't have anything like this.`,
+                badge: "Only on OptiAISEO",
               },
               {
                 icon: GitPullRequest,
-                title: "Auto-Fix Pull Requests",
-                desc: `OptiAISEO detects broken schema and meta tags, then opens a GitHub PR with the exact code fix. ${c.name} tells you about issues — OptiAISEO fixes them.`,
-                badge: "Autonomous",
+                title: "Fixes sent to GitHub automatically",
+                desc: `When OptiAISEO finds a broken meta tag or schema error, it opens a GitHub pull request with the fix already written. You just review and approve it. ${c.name} creates a report and stops there.`,
+                badge: "No manual work needed",
               },
               {
                 icon: Bot,
-                title: "AI Visibility (GSoV)",
-                desc: `Track how often ChatGPT, Claude, Perplexity, and Google AI cite your brand. ${c.name} tracks traditional rankings — not AI engine citations.`,
-                badge: "AI Search",
+                title: "Tracks how you appear in AI answers",
+                desc: `See how often ChatGPT, Claude, Perplexity, and Google AI mention your brand when someone asks a relevant question. ${c.name} only tracks traditional Google rankings.`,
+                badge: "AI search coverage",
               },
             ].map(({ icon: Icon, title, desc, badge }) => (
-              <div key={title} className="card-surface rounded-2xl p-8 flex flex-col">
+              <div
+                key={title}
+                className="card-surface rounded-2xl p-8 flex flex-col"
+              >
                 <div className="w-12 h-12 rounded-xl bg-brand/10 border border-brand/20 flex items-center justify-center mb-4 shrink-0">
                   <Icon className="w-6 h-6 text-brand" />
                 </div>
@@ -2620,7 +2921,9 @@ export default async function VsPage({ params }: Props) {
                   {badge}
                 </span>
                 <h3 className="text-base font-bold mb-2">{title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed flex-1">{desc}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed flex-1">
+                  {desc}
+                </p>
               </div>
             ))}
           </div>
@@ -2628,40 +2931,50 @@ export default async function VsPage({ params }: Props) {
 
         {/* ── SECTION 16: Switching guide ── */}
         <section aria-labelledby="switch-heading" className="mb-20">
-          <h2 id="switch-heading" className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center">
-            Switching from {c.name} to OptiAISEO
+          <h2
+            id="switch-heading"
+            className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center"
+          >
+            How to switch from {c.name}
           </h2>
           <p className="text-center text-muted-foreground mb-10 max-w-xl mx-auto">
-            Most teams complete the migration in under 10 minutes. No agency required.
+            Most teams are set up in under 10 minutes.
           </p>
           <div className="grid md:grid-cols-3 gap-6 mb-8">
             {[
               {
                 step: "01",
-                title: "Export your data",
-                desc: `Download your keyword lists and reports from ${c.name} as CSV. You keep all historical context — nothing is lost.`,
+                title: "Export your data from " + c.name,
+                desc: "Download your keyword lists and reports as CSV files. You keep everything.",
               },
               {
                 step: "02",
-                title: "Connect your site",
-                desc: "Paste your URL into OptiAISEO, verify ownership with one click, and connect Google Search Console. Under 2 minutes.",
+                title: "Add your site to OptiAISEO",
+                desc: "Paste your URL, verify ownership, and connect Google Search Console. Takes about two minutes.",
               },
               {
                 step: "03",
-                title: "First audit runs automatically",
-                desc: "Your AI visibility score, technical audit, and content gaps are ready in under 5 minutes. No configuration needed.",
+                title: "Your first audit runs straight away",
+                desc: "Your AI visibility score, technical audit, and content gaps are ready in under five minutes. No setup needed.",
               },
             ].map(({ step, title, desc }) => (
               <div key={step} className="card-surface rounded-2xl p-8">
-                <span className="text-5xl font-black text-brand/15 leading-none block mb-4">{step}</span>
+                <span className="text-5xl font-black text-brand/15 leading-none block mb-4">
+                  {step}
+                </span>
                 <h3 className="text-base font-bold mb-2">{title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {desc}
+                </p>
               </div>
             ))}
           </div>
           <p className="text-center text-sm text-muted-foreground">
             Your free plan gives you the first full audit immediately.{" "}
-            <Link href="/signup" className="text-brand font-semibold hover:underline">
+            <Link
+              href="/signup"
+              className="text-brand font-semibold hover:underline"
+            >
               Start free — no credit card →
             </Link>
           </p>
@@ -2669,11 +2982,14 @@ export default async function VsPage({ params }: Props) {
 
         {/* ── SECTION 17: FAQ ── */}
         <section id="faq" aria-labelledby="faq-heading" className="mb-20">
-          <h2 id="faq-heading" className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center">
-            Frequently asked questions about {c.name} alternatives
+          <h2
+            id="faq-heading"
+            className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-center"
+          >
+            Common questions about {c.name} alternatives
           </h2>
           <p className="text-center text-muted-foreground mb-8 max-w-xl mx-auto text-sm">
-            Common questions from teams evaluating {c.name} alternatives in 2026, including AI search-specific questions.
+            Questions we get a lot from teams looking at {c.name} alternatives.
           </p>
           <div className="space-y-3">
             {c.faq.map(({ q, a }) => (
@@ -2693,17 +3009,18 @@ export default async function VsPage({ params }: Props) {
         {/* ── SECTION 18: CTA ── */}
         <section className="bg-foreground text-background rounded-3xl p-12 text-center">
           <h2 className="text-3xl md:text-4xl font-black tracking-tight mb-4">
-            Ready to try the smarter alternative?
+            Want to try it for free?
           </h2>
           <p className="text-lg text-background/70 mb-8 max-w-xl mx-auto">
-            Start free. No credit card. Get your first audit, talk to Aria, and see your AI visibility score — all in under 5 minutes.
+            No credit card needed. Your first audit, AI visibility score, and
+            access to Aria are ready in under five minutes.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               href="/signup"
               className="inline-flex items-center gap-2 bg-brand text-white font-bold px-8 py-4 rounded-full hover:opacity-90 transition-all active:scale-95 text-base"
             >
-              <Zap className="w-5 h-5" /> Start free — no card needed
+              <Zap className="w-5 h-5" /> Start for free
             </Link>
             <Link
               href="/free/seo-checker"
@@ -2715,9 +3032,15 @@ export default async function VsPage({ params }: Props) {
         </section>
 
         {/* ── SECTION 19: Related comparisons ── */}
-        <section aria-labelledby="related-heading" className="mt-12 pt-10 border-t border-border">
-          <h2 id="related-heading" className="text-center text-xs font-bold uppercase tracking-widest text-muted-foreground mb-6">
-            More SEO tool comparisons
+        <section
+          aria-labelledby="related-heading"
+          className="mt-12 pt-10 border-t border-border"
+        >
+          <h2
+            id="related-heading"
+            className="text-center text-xs font-bold uppercase tracking-widest text-muted-foreground mb-6"
+          >
+            More comparisons
           </h2>
           <div className="flex flex-wrap justify-center gap-3">
             {Object.values(COMPETITORS)
@@ -2744,49 +3067,90 @@ export default async function VsPage({ params }: Props) {
               Related guides
             </h3>
             <div className="flex flex-wrap justify-center gap-3">
-              <Link href="/guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+              <Link
+                href="/guide"
+                className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors"
+              >
                 SEO &amp; AEO Guide Hub
               </Link>
-              <Link href="/aeo-guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+              <Link
+                href="/aeo-guide"
+                className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors"
+              >
                 AEO Guide Hub
               </Link>
-              <Link href="/blog/generative-search-occupancy-guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+              <Link
+                href="/blog/generative-search-occupancy-guide"
+                className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors"
+              >
                 How AI search visibility is measured
               </Link>
-              <Link href="/blog/automated-schema-fix-github" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+              <Link
+                href="/blog/automated-schema-fix-github"
+                className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors"
+              >
                 How to fix broken schema automatically
               </Link>
-              <Link href="/free/seo-checker" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+              <Link
+                href="/free/seo-checker"
+                className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors"
+              >
                 Free SEO audit tool
               </Link>
-              <Link href="/blog/nextjs-seo-guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+              <Link
+                href="/blog/nextjs-seo-guide"
+                className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors"
+              >
                 SEO for Next.js and headless CMSs
               </Link>
-              <Link href="/blog/entity-seo-2026" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+              <Link
+                href="/blog/entity-seo-2026"
+                className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors"
+              >
                 Entity SEO in 2026
               </Link>
             </div>
-            {/* Context-aware solution + methodology links */}
             <div className="mt-4 flex flex-wrap justify-center gap-3">
               {(c.slug === "clearscope" || c.slug === "surfer-seo") && (
-                <Link href="/for-content" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors">
+                <Link
+                  href="/for-content"
+                  className="text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                >
                   OptiAISEO for Content Teams →
                 </Link>
               )}
-              {(c.slug === "semrush" || c.slug === "ahrefs" || c.slug === "moz") && (
-                <Link href="/for-agencies" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors">
+              {(c.slug === "semrush" ||
+                c.slug === "ahrefs" ||
+                c.slug === "moz") && (
+                <Link
+                  href="/for-agencies"
+                  className="text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                >
                   OptiAISEO for Agencies →
                 </Link>
               )}
-              {(c.slug !== "semrush" && c.slug !== "ahrefs" && c.slug !== "moz" && c.slug !== "clearscope" && c.slug !== "surfer-seo") && (
-                <Link href="/for-saas" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors">
-                  OptiAISEO for SaaS →
-                </Link>
-              )}
-              <Link href="/methodology" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+              {c.slug !== "semrush" &&
+                c.slug !== "ahrefs" &&
+                c.slug !== "moz" &&
+                c.slug !== "clearscope" &&
+                c.slug !== "surfer-seo" && (
+                  <Link
+                    href="/for-saas"
+                    className="text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                  >
+                    OptiAISEO for SaaS →
+                  </Link>
+                )}
+              <Link
+                href="/methodology"
+                className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors"
+              >
                 How we score &amp; test tools
               </Link>
-              <Link href="/case-studies" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+              <Link
+                href="/case-studies"
+                className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors"
+              >
                 Case studies
               </Link>
             </div>
