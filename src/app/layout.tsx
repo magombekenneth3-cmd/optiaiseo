@@ -37,12 +37,16 @@ function getSiteOrigin(): URL {
   }
 }
 const SITE_ORIGIN = getSiteOrigin();
-const SITE_DESC = "Free AI SEO audit tool — scan your website for technical issues, get instant fixes, and rank higher on Google. Automates SEO audits, schema fixes, and AI-optimised content.";
+
+// ── Updated: aligned with H1 theme (ChatGPT citation / AI visibility) ──────
+const SITE_TITLE = "OptiAISEO: AI SEO for ChatGPT Citation & Visibility";
+const SITE_DESC =
+  "Boost your online presence and ensure your brand is cited by ChatGPT. OptiAISEO is an AI SEO platform designed to fix visibility issues and improve search rankings.";
 
 export const metadata: Metadata = {
   metadataBase: SITE_ORIGIN,
   title: {
-    default: "Free AI SEO Audit Tool & Website SEO Checker | OptiAISEO",
+    default: SITE_TITLE,
     template: "%s | OptiAISEO",
   },
   description: SITE_DESC,
@@ -77,19 +81,19 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "OptiAISEO",
-    title: "Free AI SEO Audit Tool & Website SEO Checker | OptiAISEO",
+    title: SITE_TITLE,
     description: SITE_DESC,
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "OptiAISEO — Free AI SEO Audit Tool" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "OptiAISEO — AI SEO for ChatGPT Citation & Visibility" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Free AI SEO Audit Tool & Website SEO Checker | OptiAISEO",
+    title: SITE_TITLE,
     description: SITE_DESC,
     images: ["/og-image.png"],
   },
   icons: {
     icon: [
-      { url: "/logo.svg",    type: "image/svg+xml" },
+      { url: "/logo.svg", type: "image/svg+xml" },
       { url: "/favicon.png", type: "image/png", sizes: "any" },
       { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
       { url: "/icon-512.png", type: "image/png", sizes: "512x512" },
