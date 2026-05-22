@@ -9,6 +9,7 @@ import { GoogleGenAI } from "@google/genai";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { z } from "zod";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { buildGroundedContext } from "@/lib/prompt-context/build-site-context";
 
 const ImproveSchema = z.object({
     issues: z
@@ -78,6 +79,8 @@ export async function POST(
         });
         if (!blog) return NextResponse.json({ error: "Blog not found" }, { status: 404 });
 
+        const groundedCtx = await buildGroundedContext(blog.siteId);
+
         const issueList = issues.length > 0
             ? issues.map((issue, i) => `${i + 1}. ${issue}`).join("\n")
             : "No specific issues provided — generally improve quality, readability, and SEO.";
@@ -91,7 +94,10 @@ Current content score context:
 - Missing headings: ${scoreData.missingHeadings?.join(", ") || "none"}
 ` : "";
 
-        const prompt = `You are an expert SEO content editor. Your task is to improve the following HTML blog post to better meet SEO content scoring requirements.
+        const prompt = `You are an expert SEO content editor${groundedCtx ? ` working for ${groundedCtx.data.domain}` : ""}.
+${groundedCtx?.contextBlock ?? ""}
+
+Your task is to improve the following HTML blog post to better meet SEO content scoring requirements.
 
 TARGET KEYWORD: ${blog.targetKeywords?.[0] || "not specified"}
 

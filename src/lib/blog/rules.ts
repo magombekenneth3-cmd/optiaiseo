@@ -1,12 +1,12 @@
 import type { PromptContext } from "./prompt-context";
 import IORedis from "ioredis";
-import { Queue, Worker } from "bullmq";
+
 import { callGeminiJson } from "@/lib/gemini";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import type { Blog, Site } from "@prisma/client";
 
-// Redis — lazy, safe, never blocks import
+// Redis — lazy, safe, never blocks import (triggered re-parse)
 
 let _redis: IORedis | null = null;
 
@@ -643,90 +643,6 @@ export async function repurposeBlog(
     return result;
 }
 
-// ─── BullMQ queue + worker ────────────────────────────────────────────────────
-//
-// Use enqueueRepurposeJob() from your API route instead of calling
-// repurposeBlog() directly. The HTTP response returns immediately with
-// a jobId. The worker picks up the job, runs repurposeBlog(), and writes
-// the result to RepurposedResult. The client polls getRepurposeStatus()
-// or receives a webhook.
-//
-// Only one worker instance should be started per process — import
-// startRepurposeWorker() in your server entry point (e.g. worker.ts).
-
-function getQueue(): Queue {
-    const redis = getRedis();
-    if (!redis) throw new Error("REDIS_URL is required for the repurpose queue");
-
-    return new Queue("repurpose", {
-        connection: redis,
-        defaultJobOptions: {
-            attempts: 3,
-            backoff: { type: "exponential", delay: 2000 },
-            removeOnComplete: 100,
-            removeOnFail: 500,
-        },
-    });
-}
-
-// Lazily created so tests that never call enqueue don't require Redis.
-let _queue: Queue | null = null;
-
-export async function enqueueRepurposeJob(
-    data: RepurposeJobData
-): Promise<{ jobId: string }> {
-    if (!_queue) _queue = getQueue();
-
-    const job = await _queue.add("repurpose-blog", data);
-
-    return { jobId: job.id! };
-}
-
-export function startRepurposeWorker(): Worker {
-    const redis = getRedis();
-    if (!redis) throw new Error("REDIS_URL is required for the repurpose worker");
-
-    return new Worker(
-        "repurpose",
-        async (job) => {
-            const { blogId, formats } = job.data as RepurposeJobData;
-
-            const blog = await prisma.blog.findUnique({
-                where: { id: blogId },
-                include: { site: true },
-            });
-
-            if (!blog) throw new Error(`Blog not found: ${blogId}`);
-
-            const repurposed = await repurposeBlog(blog, formats);
-
-            await prisma.repurposedResult.upsert({
-                where: { blogId },
-                create: {
-                    blogId,
-                    siteId: blog.siteId,
-                    data: repurposed as object,
-                    status: "completed",
-                },
-                update: {
-                    data: repurposed as object,
-                    status: "completed",
-                    updatedAt: new Date(),
-                },
-            });
-
-            return repurposed;
-        },
-        {
-            connection: redis,
-            concurrency: 5,
-        }
-    );
-}
-
-export async function getRepurposeStatus(blogId: string) {
-    return prisma.repurposedResult.findUnique({ where: { blogId } });
-}
 
 // ─── Prompt rule exports (used by blog/index.ts) ──────────────────────────────
 

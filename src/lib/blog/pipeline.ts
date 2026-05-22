@@ -21,6 +21,7 @@ import type { SerpContext } from "./serp";
 import { classifySerpFormat } from "./serp";
 import type { AuthorProfile } from "./index";
 import { getClaimRules, getToneRules, getScopeRules, getStructureRules } from "./rules";
+import type { GroundedSiteContext } from "@/lib/prompt-context/build-site-context";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -244,6 +245,17 @@ export async function runResearchBrain(
             ).join("\n")}`
         : "No SERP data available.";
 
+    const competitorSaturation = serpContext?.results
+        .slice(0, 5)
+        .flatMap(r => r.scrapedHeadings ?? [])
+        .filter(h => h.length > 5)
+        .slice(0, 14)
+        .join(" | ") ?? "";
+
+    const contentGapsInstruction = competitorSaturation
+        ? `topic or angle genuinely absent from current SERP results — MUST NOT overlap with saturated competitor angles: ${competitorSaturation}`
+        : "topic or angle not covered by current top results";
+
     const prompt = `You are an editorial research analyst. Your job is NOT to write content — it is to produce a structured research brief that a writer will use.
 
 KEYWORD: "${keyword}"
@@ -252,14 +264,18 @@ RISK LEVEL: ${ctx.riskTier}
 
 ${serpSummary}
 
+DIFFERENTIATION MANDATE:
+- "contentGaps" MUST NOT duplicate these saturated competitor angles: ${competitorSaturation || "Not available"}
+- "contrarianAngles" must challenge or reframe a saturated angle, not repeat it.
+
 Produce a research brief as a JSON object with these exact keys:
 
 {
   "intent": "One sentence describing exactly what the searcher wants to accomplish",
   "searcherMindset": "What emotional state or urgency does the searcher have? What do they already know?",
-  "contentGaps": ["topic or angle not covered by current top results", "..."],
+  "contentGaps": ["${contentGapsInstruction}", "..."],
   "entities": ["specific named tools, people, companies, frameworks, studies to reference", "..."],
-  "contrarianAngles": ["a counterintuitive or surprising truth about this topic that experts know but articles avoid", "..."],
+  "contrarianAngles": ["a counterintuitive or surprising truth about this topic that experts know but articles avoid — must challenge a saturated angle, not repeat it", "..."],
   "examplesNeeded": ["type of real-world example that would make this concrete", "..."],
   "faqTargets": ["actual question a searcher types, answered directly", "..."],
   "commonMisconceptions": ["a widespread belief that is partially or fully wrong", "..."],
@@ -272,23 +288,6 @@ Rules:
 - "contentGaps" should name actual topics, not vague descriptions.
 - "entities" should be real named things (e.g. "Ahrefs", "E-E-A-T", "John Mueller").
 - Return ONLY the JSON object. No commentary, no markdown fences.`;
-
-    const competitorSaturation = serpContext?.results
-        .slice(0, 5)
-        .flatMap(r => r.scrapedHeadings ?? [])
-        .filter(h => h.length > 5)
-        .slice(0, 14)
-        .join(" | ") ?? "";
-
-    const saturationBlock = `
-SATURATED ANGLES — every top competitor already covers these topics:
-${competitorSaturation || "Not available"}
-
-DIFFERENTIATION MANDATE:
-- Your "contentGaps" must NOT overlap with the saturated angles above.
-- Your "contrarianAngles" must challenge or reframe one of the saturated angles, not repeat it.
-- Ask: what does every result cover shallowly that deserves a full treatment?
-  What does every result avoid saying because it's uncomfortable or counterintuitive?`;
 
     const fallback: ResearchBrain = {
         intent: `Help the searcher understand and act on "${keyword}"`,
@@ -305,7 +304,7 @@ DIFFERENTIATION MANDATE:
 
     try {
         return await generateWithFallbackJson<ResearchBrain>({
-            prompt: prompt + saturationBlock,
+            prompt,
             model: AI_MODELS.GEMINI_FLASH,
             maxTokens: 2048,
         });
@@ -542,6 +541,15 @@ export async function runSectionWriter(
         throw new Error("[Pipeline] All sections failed.");
     }
 
+    const totalWords = goodSections.join(" ").split(/\s+/).length;
+    if (totalWords < outline.estimatedTotal * 0.7) {
+        logger.warn("[Pipeline] Final article significantly underweight", {
+            target: outline.estimatedTotal,
+            actual: totalWords,
+            ratio: (totalWords / outline.estimatedTotal).toFixed(2),
+        });
+    }
+
     return `# ${outline.title}\n\n${sections.join("\n\n")}`;
 }
 
@@ -557,6 +565,18 @@ async function writeSingleSection(
 ): Promise<string> {
     const isIntro = section.isIntro ?? false;
     const isFaq = section.evidenceType === "faq";
+
+    const mythNote = brain.industryMyths.length > 0
+        ? `INDUSTRY MYTHS TO CHALLENGE (weave into contrarian sections): ${brain.industryMyths.slice(0, 2).join("; ")}`
+        : "";
+
+    const misconceptionNote = brain.commonMisconceptions.length > 0
+        ? `MISCONCEPTIONS TO CORRECT (one per article, frames your authority): ${brain.commonMisconceptions.slice(0, 2).join("; ")}`
+        : "";
+
+    const introSnippetNote = isIntro && outline.quickAnswer
+        ? `FEATURED SNIPPET TARGET: The intro paragraph must contain or closely mirror this answer:\n"${outline.quickAnswer}"\nThis is what Google will extract for Position 0.`
+        : "";
 
     const authorNote = author.realExperience
         ? `AUTHOR VOICE: Weave in naturally \u2014 "${author.realExperience.slice(0, 200)}"`
@@ -638,6 +658,9 @@ ${memoryNote}
 ${entityNote}
 ${openerNote}
 ${authorNote}
+${mythNote}
+${misconceptionNote}
+${introSnippetNote}
 
 ${getClaimRules(ctx)}
 ${getToneRules(ctx)}
@@ -725,6 +748,7 @@ Output: ONLY the section in Markdown including the ## heading. No commentary.`;
 export async function runEditorialRewrite(
     draft: string,
     ctx: PromptContext,
+    groundedCtx?: GroundedSiteContext,
 ): Promise<{ content: string; truncated: boolean }> {
     const CHUNK_SIZE = 18_000;
 
@@ -739,10 +763,15 @@ export async function runEditorialRewrite(
             ? `CONTINUITY: The previous section ended with: "${previousSummary}". Do not re-introduce topics already covered.`
             : "";
 
+        const authorVoiceNote = groundedCtx?.data.authorName
+            ? `AUTHOR: ${groundedCtx.data.authorName}${groundedCtx.data.authorRole ? ` (${groundedCtx.data.authorRole})` : ""}. Voice should reflect their expertise level.`
+            : "";
+
         const prompt = `You are a senior editor at a trade publication. Rewrite the article section below so it reads like a confident practitioner wrote it — not an AI, and not a content marketer.
 
 KEYWORD: "${ctx.keyword}"
 ${continuityNote}
+${authorVoiceNote}
 
 EDITORIAL INSTRUCTIONS — apply every one:
 
@@ -847,8 +876,9 @@ export async function runFullPipeline(params: {
     ctx: PromptContext;
     author: AuthorProfile;
     tone?: string;
+    groundedCtx?: GroundedSiteContext;
 }): Promise<PipelineResult> {
-    const { keyword, serpContext, ctx, author, tone } = params;
+    const { keyword, serpContext, ctx, author, tone, groundedCtx } = params;
 
     logger.debug("[Pipeline] Stage 1 — Research Brain", { keyword });
     const brain = await runResearchBrain(keyword, serpContext, ctx);
@@ -860,7 +890,7 @@ export async function runFullPipeline(params: {
     const rawDraft = await runSectionWriter(outline, brain, author, ctx, serpContext);
 
     logger.debug("[Pipeline] Stage 4 — Editorial Rewrite", { keyword, chunks: Math.ceil(rawDraft.length / 18000) });
-    const { content: polishedMarkdown, truncated } = await runEditorialRewrite(rawDraft, ctx);
+    const { content: polishedMarkdown, truncated } = await runEditorialRewrite(rawDraft, ctx, groundedCtx);
     if (truncated) {
         logger.warn("[Pipeline] Editorial rewrite was truncated", { keyword });
     }

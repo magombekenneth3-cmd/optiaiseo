@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import type { Blog, Site } from "@prisma/client";
 
-// Redis — lazy, safe, never blocks import
+// Redis — lazy, safe, never blocks import (triggered re-parse)
 
 let _redis: IORedis | null = null;
 

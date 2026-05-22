@@ -15,6 +15,12 @@ function classifySnippet(text: string): SnippetFormat {
     return "paragraph";
 }
 
+function inferFormatFromKeyword(keyword: string): SnippetFormat {
+    if (/\b(steps|ways|tips|types|examples|list|how many|reasons)\b/i.test(keyword)) return "list";
+    if (/\b(vs|versus|compare|difference|comparison|between)\b/i.test(keyword)) return "table";
+    return "paragraph";
+}
+
 const PROMPTS: Record<SnippetFormat, (kw: string, current: string) => string> = {
     paragraph: (kw, current) =>
         `Write a featured snippet paragraph for the keyword "${kw}".
@@ -63,7 +69,7 @@ export async function POST(
     const serp = await fetchSerp(keyword);
     const answerBox = serp?.answerBox as Record<string, string> | undefined;
     const currentSnippet = answerBox?.answer ?? answerBox?.snippet ?? "";
-    const format = classifySnippet(currentSnippet);
+    const format = currentSnippet ? classifySnippet(currentSnippet) : inferFormatFromKeyword(keyword);
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
     const prompt = PROMPTS[format](keyword, currentSnippet);

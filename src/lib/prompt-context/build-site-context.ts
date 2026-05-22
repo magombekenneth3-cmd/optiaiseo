@@ -65,13 +65,13 @@ export async function buildGroundedContext(siteId: string): Promise<GroundedSite
                 take: 10,
                 select: { factType: true, value: true },
             }),
-            prisma.rankSnapshot.findMany({
-                where: { siteId, device: "desktop" },
-                orderBy: { recordedAt: "desc" },
-                take: 20,
-                distinct: ["keyword"],
-                select: { keyword: true, position: true },
-            }),
+            prisma.$queryRaw<Array<{ keyword: string; position: number }>>`
+                SELECT DISTINCT ON (keyword) keyword, position
+                FROM "RankSnapshot"
+                WHERE "siteId" = ${siteId} AND device = 'desktop'
+                ORDER BY keyword, "recordedAt" DESC
+                LIMIT 20
+            `,
             prisma.audit.findFirst({
                 where: { siteId },
                 orderBy: { runTimestamp: "desc" },

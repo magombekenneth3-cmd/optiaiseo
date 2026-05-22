@@ -32,10 +32,11 @@ const PROBE_TTL_S = 48 * 3600; // 48 hours
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface CitationProbeResult {
-    /** 1–5 (5 = highly citable by AI search engines) */
     score: number;
     wouldCite: boolean;
     missingSignals: string[];
+    wouldCiteIf: string;
+    engineDifference: string;
     reasoning: string;
     cachedAt: string;
 }
@@ -96,7 +97,9 @@ Return ONLY valid JSON with this exact shape:
 {
   "score": <integer 1-5>,
   "wouldCite": <boolean>,
-  "missingSignals": [<up to 2 most important missing signals as short strings>],
+  "missingSignals": [<up to 4 signals, each formatted as: "WHAT is missing | HOW to fix it in one sentence">],
+  "wouldCiteIf": "<one specific, concrete change that would flip wouldCite to true>",
+  "engineDifference": "<if this page would be cited by Perplexity but not ChatGPT or vice versa, explain why; otherwise write 'No significant difference'>",
   "reasoning": "<1-2 sentence explanation>"
 }
 
@@ -110,11 +113,13 @@ Score guide: 5=strong citation candidate, 4=likely, 3=possible, 2=unlikely, 1=wo
         const parsed = JSON.parse(clean) as Partial<CitationProbeResult>;
 
         const result: CitationProbeResult = {
-            score:          Math.max(1, Math.min(5, Number(parsed.score) || 1)),
-            wouldCite:      Boolean(parsed.wouldCite),
-            missingSignals: Array.isArray(parsed.missingSignals) ? parsed.missingSignals.slice(0, 2) : [],
-            reasoning:      String(parsed.reasoning ?? ""),
-            cachedAt:       new Date().toISOString(),
+            score:            Math.max(1, Math.min(5, Number(parsed.score) || 1)),
+            wouldCite:        Boolean(parsed.wouldCite),
+            missingSignals:   Array.isArray(parsed.missingSignals) ? parsed.missingSignals.slice(0, 4) : [],
+            wouldCiteIf:      String(parsed.wouldCiteIf ?? ""),
+            engineDifference: String(parsed.engineDifference ?? ""),
+            reasoning:        String(parsed.reasoning ?? ""),
+            cachedAt:         new Date().toISOString(),
         };
 
         if (r) {
@@ -135,6 +140,8 @@ function fallback(url: string): CitationProbeResult {
         score: 0,
         wouldCite: false,
         missingSignals: [],
+        wouldCiteIf: "",
+        engineDifference: "",
         reasoning: "Citation probe could not complete (API unavailable).",
         cachedAt: new Date().toISOString(),
     };
