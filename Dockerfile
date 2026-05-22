@@ -50,6 +50,12 @@ COPY . .
 
 RUN rm -f next.config.ts.timestamp || true
 RUN pnpm exec prisma generate
+RUN set -eux; \
+    realdir=$(ls -d node_modules/.pnpm/@prisma+client@* 2>/dev/null | head -n1 || true); \
+    if [ -n "$realdir" ] && [ -d "$realdir/node_modules/@prisma/client/.prisma/client" ]; then \
+        mkdir -p node_modules/@prisma/client; \
+        cp -rL "$realdir/node_modules/@prisma/client/.prisma" node_modules/@prisma/client/; \
+    fi
 RUN pnpm run build
 
 FROM builder AS agent-bundle
