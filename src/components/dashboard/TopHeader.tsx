@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { ReactNode, useState, useRef, useEffect, useCallback } from "react";
 import {
     Bell, Zap, ClipboardList, CheckCircle, AlertCircle, Info,
@@ -387,12 +387,13 @@ function getSiteIdFromPath(path: string): string | null {
 
 export function TopHeader({ mobileSidebar }: { mobileSidebar?: ReactNode }) {
     const pathname = usePathname();
+    const searchParams = useSearchParams();
     const [notifOpen, setNotifOpen] = useState(false);
     const [queryOpen, setQueryOpen] = useState(false);
     const notifRef = useRef<HTMLDivElement>(null);
     const { notifications, unreadCount, loading, markAllRead, markRead } = useNotifications();
     const credits = useCredits();
-    const siteId = getSiteIdFromPath(pathname);
+    const siteId = getSiteIdFromPath(pathname) ?? (searchParams?.get?.("siteId") ?? null);
 
     useEffect(() => {
         if (!notifOpen) return;
