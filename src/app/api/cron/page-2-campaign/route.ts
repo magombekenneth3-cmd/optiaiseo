@@ -84,6 +84,9 @@ export async function GET(req: NextRequest) {
                         type: "PAGE_2_PUSH",
                         status: "PENDING",
                         name: `Page-2 Push — ${new Date().toLocaleDateString("en-GB", { month: "short", day: "numeric" })}`,
+                        keyword: sorted[0].keyword,
+                        clientUrl: sorted[0].url ?? `https://${site.domain}`,
+                        initialPosition: sorted[0].position,
                         keywordCount: page2Keywords.length,
                         urlCount: urlGroups.size,
                         keywords: sorted.map((k: typeof sorted[number]) => ({
