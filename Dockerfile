@@ -86,8 +86,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/scripts          ./scripts
 COPY --from=deps    --chown=nextjs:nodejs /app/prisma           ./prisma
 COPY --from=agent-bundle --chown=nextjs:nodejs /app/livekit-agent.js ./livekit-agent.js
 
-RUN mkdir -p ./node_modules/.prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/.prisma/client  ./node_modules/.prisma/client
+RUN mkdir -p ./node_modules/@prisma
 COPY --from=deps /tmp/prisma-client-real           ./node_modules/@prisma/client
 
 COPY --from=deps --chown=nextjs:nodejs /root/.cache/puppeteer /app/.cache/puppeteer
