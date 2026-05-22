@@ -240,10 +240,11 @@ export function CmsConfigForm({ siteId, siteDomain }: Props) {
                 {hashnodeOpen && (
                     <div className="px-5 pb-5 flex flex-col gap-4 border-t border-indigo-500/20 pt-4">
                         <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                <KeyRound className="w-3.5 h-3.5" /> Personal Access Token
+                            <label htmlFor="hashnode-token" className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                <KeyRound className="w-3.5 h-3.5" aria-hidden="true" /> Personal Access Token
                             </label>
                             <input
+                                id="hashnode-token"
                                 type="password"
                                 placeholder={hashnode.isConfigured ? "Enter new token to update" : "Your Hashnode PAT"}
                                 value={hashnode.hashnodeToken}
@@ -255,10 +256,11 @@ export function CmsConfigForm({ siteId, siteDomain }: Props) {
                             </p>
                         </div>
                         <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                <Link2 className="w-3.5 h-3.5" /> Publication ID
+                            <label htmlFor="hashnode-publication-id" className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                <Link2 className="w-3.5 h-3.5" aria-hidden="true" /> Publication ID
                             </label>
                             <input
+                                id="hashnode-publication-id"
                                 type="text"
                                 placeholder="e.g. 64a1b2c3d4e5f6a7b8c9d0e1"
                                 value={hashnode.hashnodePublicationId}
@@ -310,10 +312,11 @@ export function CmsConfigForm({ siteId, siteDomain }: Props) {
                     <div className="px-5 pb-5 flex flex-col gap-4 border-t border-border pt-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                    <Link2 className="w-3.5 h-3.5" /> WordPress Site URL
+                                <label htmlFor="wp-site-url" className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                    <Link2 className="w-3.5 h-3.5" aria-hidden="true" /> WordPress Site URL
                                 </label>
                                 <input
+                                    id="wp-site-url"
                                     type="url"
                                     placeholder="https://yourblog.com"
                                     value={wp.wpUrl}
@@ -322,10 +325,11 @@ export function CmsConfigForm({ siteId, siteDomain }: Props) {
                                 />
                             </div>
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                    <User className="w-3.5 h-3.5" /> WordPress Username
+                                <label htmlFor="wp-username" className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                    <User className="w-3.5 h-3.5" aria-hidden="true" /> WordPress Username
                                 </label>
                                 <input
+                                    id="wp-username"
                                     type="text"
                                     placeholder="admin"
                                     value={wp.wpUser}
@@ -335,10 +339,11 @@ export function CmsConfigForm({ siteId, siteDomain }: Props) {
                             </div>
                         </div>
                         <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                <KeyRound className="w-3.5 h-3.5" /> Application Password
+                            <label htmlFor="wp-app-password" className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                <KeyRound className="w-3.5 h-3.5" aria-hidden="true" /> Application Password
                             </label>
                             <input
+                                id="wp-app-password"
                                 type="password"
                                 placeholder={wp.isConfigured ? "Enter new password to update" : "xxxx xxxx xxxx xxxx xxxx xxxx"}
                                 value={wp.wpAppPassword}
@@ -389,10 +394,11 @@ export function CmsConfigForm({ siteId, siteDomain }: Props) {
                 {ghostOpen && (
                     <div className="px-5 pb-5 flex flex-col gap-4 border-t border-border pt-4">
                         <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                <Link2 className="w-3.5 h-3.5" /> Ghost Site URL
+                            <label htmlFor="ghost-site-url" className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                <Link2 className="w-3.5 h-3.5" aria-hidden="true" /> Ghost Site URL
                             </label>
                             <input
+                                id="ghost-site-url"
                                 type="url"
                                 placeholder="https://yourblog.ghost.io"
                                 value={ghost.ghostUrl}
@@ -401,10 +407,11 @@ export function CmsConfigForm({ siteId, siteDomain }: Props) {
                             />
                         </div>
                         <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                <KeyRound className="w-3.5 h-3.5" /> Admin API Key
+                            <label htmlFor="ghost-admin-key" className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                <KeyRound className="w-3.5 h-3.5" aria-hidden="true" /> Admin API Key
                             </label>
                             <input
+                                id="ghost-admin-key"
                                 type="password"
                                 placeholder={ghost.isConfigured ? "Enter new key to update" : "id:secret"}
                                 value={ghost.ghostAdminKey}
