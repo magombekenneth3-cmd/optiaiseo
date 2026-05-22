@@ -50,10 +50,6 @@ COPY . .
 
 RUN rm -f next.config.ts.timestamp || true
 RUN pnpm exec prisma generate
-RUN cp -rL node_modules/.prisma/client node_modules/@prisma/client/.prisma/client && \
-    cp -rL node_modules/@prisma/client /tmp/client-real && \
-    rm -rf node_modules/@prisma/client && \
-    mv /tmp/client-real node_modules/@prisma/client
 RUN pnpm run build
 
 FROM builder AS agent-bundle
