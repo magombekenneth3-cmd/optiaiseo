@@ -22,8 +22,7 @@ COPY .npmrc package.json pnpm-lock.yaml ./
 COPY prisma ./prisma
 RUN NODE_OPTIONS="--max-old-space-size=2048" \
     pnpm install --frozen-lockfile --offline && \
-    pnpm exec prisma generate && \
-    cp -rL node_modules/@prisma/client /tmp/prisma-client-real
+    pnpm exec prisma generate
 
 FROM fetch AS builder
 WORKDIR /app
@@ -87,7 +86,7 @@ COPY --from=deps    --chown=nextjs:nodejs /app/prisma           ./prisma
 COPY --from=agent-bundle --chown=nextjs:nodejs /app/livekit-agent.js ./livekit-agent.js
 
 RUN mkdir -p ./node_modules/@prisma
-COPY --from=deps /tmp/prisma-client-real           ./node_modules/@prisma/client
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 COPY --from=deps --chown=nextjs:nodejs /root/.cache/puppeteer /app/.cache/puppeteer
 
