@@ -7,6 +7,7 @@ import { useFocusTrap } from "@/hooks/use-focus-trap";
 interface OnboardingWizardProps {
     show: boolean;
     userName: string;
+    hasSites?: boolean;
 }
 
 const STEPS = ["welcome", "add_site", "connect_gsc", "ready"] as const;
@@ -19,8 +20,8 @@ const STEP_TITLES: Record<Step, string> = {
     ready:       "You're all set",
 };
 
-export function OnboardingWizard({ show, userName }: OnboardingWizardProps) {
-    const [step, setStep] = useState<Step>("welcome");
+export function OnboardingWizard({ show, userName, hasSites = false }: OnboardingWizardProps) {
+    const [step, setStep] = useState<Step>(hasSites ? "connect_gsc" : "welcome");
     const [dismissed, setDismissed] = useState(false);
     const router = useRouter();
 
@@ -75,7 +76,7 @@ export function OnboardingWizard({ show, userName }: OnboardingWizardProps) {
                             Perplexity, and Google AI. Setup takes under 2 minutes.
                         </p>
                         <button
-                            onClick={() => setStep("add_site")}
+                            onClick={() => setStep(hasSites ? "connect_gsc" : "add_site")}
                             className="w-full py-3 rounded-xl bg-foreground text-background font-semibold text-sm hover:opacity-90 transition-opacity"
                         >
                             Get started →
