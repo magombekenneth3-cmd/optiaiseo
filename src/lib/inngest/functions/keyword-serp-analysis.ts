@@ -1,4 +1,3 @@
-
 import { inngest } from "../client";
 import { NonRetriableError } from "inngest";
 import { prisma } from "@/lib/prisma";
@@ -133,7 +132,28 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
 
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY!, httpOptions: { timeout: 90_000 } });
 
-            const prompt = `You are an SEO analyst. Return ONLY valid JSON with this exact shape — no markdown:
+            // FIX 1: Sample ALL 10 SERP results for headings so the ≥3/10 frequency
+            // threshold is actually computable. Previously only 5 were sampled, making
+            // it impossible to reliably reach the 3-occurrence bar.
+            const allSerpH2s = serpContext.results
+                .slice(0, 10)
+                .flatMap(r => r.scrapedHeadings ?? [])
+                .filter(h => !/^(table of contents|related (articles|posts)|share this|comments|leave a reply|about the author|newsletter|sidebar|footer|navigation)/i.test(h))
+                .slice(0, 60);
+
+            // FIX 2: When the user's page couldn't be scraped, note that explicitly so
+            // the AI can still generate content suggestions based on competitor data.
+            const userPageNote = !userPageScrapedOk
+                ? "NOTE: user page could not be scraped. Generate content suggestions based on SERP data and heading gaps alone — do NOT skip content fixes because of missing user data."
+                : "";
+
+            const wordGap = wordCountAvg > 0 && userWordCount > 0
+                ? `Your page is ${userWordCount < wordCountAvg ? Math.round(wordCountAvg - userWordCount) + " words SHORT of" : Math.round(userWordCount - wordCountAvg) + " words ABOVE"} the top-10 average (${wordCountAvg} words).`
+                : wordCountAvg > 0
+                    ? `Top-10 average is ${wordCountAvg} words. User page word count unavailable — suggest word-count target as a content fix.`
+                    : "";
+
+            const prompt = `You are an SEO content strategist. Return ONLY valid JSON with this exact shape — no markdown, no code fences:
 {
   "fixes": [{"title":string,"description":string,"priority":"high"|"medium"|"low","category":"content"|"structure"|"intent"|"links"|"authority"|"schema","linkToTab":"heading-gaps"|"link-authority"|null}],
   "headingGaps": [{"topic":string,"freqInTop10":number,"coveredOnYourPage":boolean}],
@@ -142,17 +162,24 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
   "contentTypeTop10": string
 }
 
-Rules: max 7 fixes, ordered high→medium→low, descriptions reference actual numbers.
-If rdGap > 100 or drGap > 30, include a HIGH authority fix.
-headingGaps: topics in ≥3/10 top results only.
+MANDATORY RULES (all must be followed):
+1. Always produce 5–7 fixes. Never return an empty fixes array.
+2. At least 2 fixes MUST be content-improvement fixes (category "content" or "structure") that explain how to improve the page copy to beat competitors — e.g. missing topics, word count gap, intro quality, FAQ sections, schema, E-E-A-T signals.
+3. If the heading gaps list has uncovered topics (coveredOnYourPage=false), include a HIGH content fix telling the user to add those sections, with linkToTab "heading-gaps".
+4. If drGap > 30 OR pageRDs < 5, include ONE authority fix (category "authority") with linkToTab "link-authority". Do not add more than one authority fix.
+5. Fixes ordered: high → medium → low priority.
+6. headingGaps: include every topic that appears in ≥2 of the 10 SERP H2s (lower bar since we can't always get all 10); set coveredOnYourPage=true only if the exact topic appears in userH2s.
+7. All descriptions must reference specific numbers from the data (e.g. word counts, DR scores, heading frequencies).
+${userPageNote}
 
-SERP: ${JSON.stringify(serpResults.slice(0, 3).map(r => ({ pos: r.position, domain: r.domain, wordCount: r.wordCount, h2Count: r.h2Count })))}
-Top H2s: ${JSON.stringify(serpContext.results.slice(0, 5).flatMap(r => r.scrapedHeadings ?? []).filter(h => !/^(table of contents|related (articles|posts)|share this|comments|leave a reply|about the author|newsletter|sidebar|footer|navigation)/i.test(h)).slice(0, 30))}
-PAA: ${JSON.stringify(serpContext.peopleAlsoAsk.slice(0, 5).map(p => p.question))}
-USER: url=${landingPageUrl} h2s=${JSON.stringify(userH2s)} words=${userWordCount}
+KEYWORD: "${keyword}"
+${wordGap}
+SERP TOP 5: ${JSON.stringify(serpResults.slice(0, 5).map(r => ({ pos: r.position, domain: r.domain, wordCount: r.wordCount, h2Count: r.h2Count })))}
+ALL SERP H2s (from top 10): ${JSON.stringify(allSerpH2s)}
+PAA questions: ${JSON.stringify(serpContext.peopleAlsoAsk.slice(0, 8).map(p => p.question))}
+USER PAGE: url=${landingPageUrl} h2s=${JSON.stringify(userH2s.length > 0 ? userH2s : ["(none detected — page could not be scraped)"])} words=${userWordCount || "(unknown)"}
 AUTHORITY: clientDR=${clientDR} clientRDs=${clientRDs} pageRDs=${pageBacklinks} toxic=${toxicCount} drGap=${drGap ?? "unknown"} top3AvgDR=${Math.round(top3Avg)}
-ANCHORS: ${JSON.stringify(topAnchors.slice(0, 5))}
-AVG_WORDS=${wordCountAvg} YOUR_WORDS=${userWordCount}`;
+ANCHORS: ${JSON.stringify(topAnchors.slice(0, 5))}`;
 
             const response = await ai.models.generateContent({
                 model: AI_MODELS.GEMINI_PRO,
@@ -160,16 +187,54 @@ AVG_WORDS=${wordCountAvg} YOUR_WORDS=${userWordCount}`;
                 config: { responseMimeType: "application/json", temperature: 0.3, maxOutputTokens: 3000 },
             });
 
+            // FIX 3: Log the raw response before parsing so failures are diagnosable,
+            // and strip any accidental markdown fences Gemini might still emit.
+            const rawText = (response.text ?? "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
             try {
-                return JSON.parse(response.text ?? "{}") as {
+                const parsed = JSON.parse(rawText) as {
                     fixes: unknown[];
                     headingGaps: unknown[];
                     intentMismatch: boolean;
                     intentNote: string | null;
                     contentTypeTop10: string;
                 };
-            } catch {
-                return { fixes: [], headingGaps: [], intentMismatch: false, intentNote: null, contentTypeTop10: "" };
+                // FIX 4: Guard against an AI returning an empty fixes array despite the
+                // mandatory rules — surface an error so we can retry rather than silently
+                // showing "Fix Suggestions (0)".
+                if (!Array.isArray(parsed.fixes) || parsed.fixes.length === 0) {
+                    logger.warn("[KeywordSerpAnalysis] AI returned 0 fixes — raw response logged", { analysisId, rawText: rawText.slice(0, 500) });
+                }
+                return parsed;
+            } catch (parseErr) {
+                logger.error("[KeywordSerpAnalysis] Failed to parse Gemini JSON", { analysisId, parseErr, rawText: rawText.slice(0, 500) });
+                // Return a minimal set of content fixes so the user always sees something useful.
+                const fallbackFixes = [
+                    {
+                        title: "Improve content depth to match top competitors",
+                        description: wordCountAvg > 0
+                            ? `Top-10 pages average ${wordCountAvg} words. Expand your content to cover missing topics surfaced in the Heading Gaps tab.`
+                            : "Expand your content to cover the topics that appear most frequently in top-ranking competitor pages (see Heading Gaps tab).",
+                        priority: "high",
+                        category: "content",
+                        linkToTab: "heading-gaps",
+                    },
+                    {
+                        title: "Add FAQ section targeting People Also Ask questions",
+                        description: serpContext.peopleAlsoAsk.length > 0
+                            ? `Competitors are capturing PAA boxes. Add an FAQ section answering: "${serpContext.peopleAlsoAsk.slice(0, 3).map(p => p.question).join('", "')}".`
+                            : "Add an FAQ section targeting common questions for this keyword to capture People Also Ask SERP features.",
+                        priority: "medium",
+                        category: "structure",
+                        linkToTab: null,
+                    },
+                ];
+                return {
+                    fixes: fallbackFixes,
+                    headingGaps: [],
+                    intentMismatch: false,
+                    intentNote: null,
+                    contentTypeTop10: "",
+                };
             }
         });
 
