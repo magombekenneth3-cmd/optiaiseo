@@ -262,8 +262,14 @@ export function SerpGapDetail({
         (async () => {
             try {
                 const res = await fetch(`/api/sites/${siteId}/serp-gap/${analysisId}`);
-                if (!res.ok) throw new Error("Failed to load analysis");
-                setData(await res.json());
+                // attempt to parse JSON body (if any) for better error messages
+                let parsed: any = null;
+                try { parsed = await res.json(); } catch { /* ignore non-json */ }
+                if (!res.ok) {
+                    const msg = parsed?.error ?? parsed?.message ?? `Failed to load analysis (status ${res.status})`;
+                    throw new Error(msg);
+                }
+                setData(parsed ?? null);
             } catch (e) {
                 setError(e instanceof Error ? e.message : "Error loading analysis");
             } finally { setLoading(false); }
