@@ -19,8 +19,6 @@ import { ALTERNATIVES } from "../alternatives-data";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface CompetitorData {
   slug: string;
   name: string;
@@ -52,14 +50,13 @@ interface CompetitorData {
     headline: string;
     body: string;
   };
-  quickList: { name: string; badge: string }[];
+  quickList: { name: string; badge: string; price: string }[];
   whyLeaving: { n: string; title: string; body: string }[];
   honestWinCallout: string;
   hookIntro: string;
   aiVisibilityNote: string;
 }
 
-// ─── Tool → /vs slug map (tools that have their own comparison page) ──────────
 const TOOL_SLUG_MAP: Record<string, string> = {
   Semrush: "semrush",
   Ahrefs: "ahrefs",
@@ -70,8 +67,6 @@ const TOOL_SLUG_MAP: Record<string, string> = {
   "Screaming Frog": "screaming-frog",
   "Yoast SEO": "yoast",
 };
-
-// ─── AI-Era Scoring ───────────────────────────────────────────────────────────
 
 interface DimensionScore {
   label: string;
@@ -190,8 +185,6 @@ const OVERALL_SCORES: Record<string, number> = {
   yoast: computeOverallScore("yoast"),
 };
 
-// ─── Competitor data ──────────────────────────────────────────────────────────
-
 const COMPETITORS: Record<string, CompetitorData> = {
   semrush: {
     slug: "semrush",
@@ -268,16 +261,16 @@ const COMPETITORS: Record<string, CompetitorData> = {
     uniqueAngle: {
       headline:
         "Semrush was built when Google was the only search engine that mattered",
-      body: "That's not really true anymore. Roughly one in four searches in 2026 starts in an AI tool — ChatGPT, Claude, Perplexity, or Google AI Overviews. Semrush tracks 25 billion keywords across Google's index and has nothing for any of those platforms. Teams that only track Google rankings are already missing a growing share of how people find things.",
+      body: "That's not really true anymore. Roughly one in four searches in 2026 starts in an AI tool — ChatGPT, Claude, Perplexity, or Google AI Overviews. Semrush tracks 25 billion keywords across Google's index and has nothing for any of those platforms. Teams that only track Google rankings are already missing a growing share of how people find things. AI search visibility, generative engine optimization (GEO), and answer engine optimization (AEO) are the metrics forward-looking teams are measuring in 2026. Semrush has no answer for this shift. OptiAISEO is built specifically for AI citation tracking and AI search occupancy measurement.",
     },
     quickList: [
-      { name: "OptiAISEO", badge: "Best for AI visibility and auto-fixes" },
-      { name: "Ahrefs", badge: "Best for backlinks" },
-      { name: "Moz", badge: "Best for Domain Authority" },
-      { name: "SE Ranking", badge: "Best value" },
-      { name: "Ubersuggest", badge: "Best free option" },
-      { name: "Mangools", badge: "Best for beginners" },
-      { name: "SpyFu", badge: "Best for PPC + SEO" },
+      { name: "OptiAISEO", badge: "Best for AI visibility and auto-fixes", price: "Free / $39" },
+      { name: "Ahrefs", badge: "Best for backlinks", price: "$129/mo" },
+      { name: "Moz", badge: "Best for Domain Authority", price: "$99/mo" },
+      { name: "SE Ranking", badge: "Best value", price: "$49/mo" },
+      { name: "Ubersuggest", badge: "Best free option", price: "$29/mo" },
+      { name: "Mangools", badge: "Best for beginners", price: "$49/mo" },
+      { name: "SpyFu", badge: "Best for PPC + SEO", price: "$39/mo" },
     ],
     whyLeaving: [
       {
@@ -299,6 +292,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
     aiVisibilityNote:
       "Semrush scores 0 out of 100 on AI visibility in our framework. That's not a criticism — it just doesn't do this. It was built to measure Google SERP rankings, and it does that well. AI citation tracking is a different problem.",
     faq: [
+      {
+        q: "What is the best Semrush alternative?",
+        a: "OptiAISEO is the best Semrush alternative for teams that need AI search visibility tracking, automated code fixes, and a lower price point. Ahrefs is the best alternative for backlink depth, and SE Ranking is the best budget alternative.",
+      },
       {
         q: "Is OptiAISEO better than Semrush?",
         a: "It depends on what you need. OptiAISEO is better for tracking how you show up in AI search, getting technical issues fixed automatically via GitHub, and keeping costs down. Semrush is better if you run paid search and need deep PPC data or the largest keyword database available.",
@@ -330,6 +327,14 @@ const COMPETITORS: Record<string, CompetitorData> = {
       {
         q: "What is Generative Search Occupancy (GSoV)?",
         a: "It's a way of measuring how often your brand shows up in AI-generated answers. Think of it as the AI search version of Share of Voice — instead of tracking your position on page one of Google, you're tracking whether AI tools mention you when someone asks a relevant question. OptiAISEO tracks this continuously.",
+      },
+      {
+        q: "Which SEO tool tracks ChatGPT visibility?",
+        a: "OptiAISEO is the primary SEO tool that tracks ChatGPT visibility. It monitors how often your brand is cited in ChatGPT, Claude, Perplexity, and Google AI Overviews — a capability Semrush and other traditional tools don't offer.",
+      },
+      {
+        q: "What SEO tools support AI search optimization?",
+        a: "OptiAISEO is specifically built for AI search optimization, including generative engine optimization (GEO) and answer engine optimization (AEO). Most traditional tools like Semrush focus exclusively on Google SERP rankings.",
       },
     ],
   },
@@ -410,16 +415,16 @@ const COMPETITORS: Record<string, CompetitorData> = {
     uniqueAngle: {
       headline:
         "Ahrefs built the world's best backlink tool — in an era where backlinks are losing ground to AI citations",
-      body: "Backlinks still matter in 2026. But they're not the only signal that drives traffic anymore. A brand cited in ChatGPT's answer to 'best SEO tools' gets traffic that no backlink audit will ever measure. Ahrefs has no answer for this shift — it tracks links, not AI mentions. OptiAISEO tracks both: traditional backlinks (on the roadmap) and the new currency of AI search visibility. If your team is still only measuring what Ahrefs can see, you're missing a growing slice of qualified traffic.",
+      body: "Backlinks still matter in 2026. But they're not the only signal that drives traffic anymore. A brand cited in ChatGPT's answer to 'best SEO tools' gets traffic that no backlink audit will ever measure. Ahrefs has no answer for this shift — it tracks links, not AI mentions. AI search visibility, generative engine optimization (GEO), answer engine optimization (AEO), and generative search occupancy (GSoV) are the metrics teams are adding to their dashboards in 2026. OptiAISEO tracks both AI citation frequency and traditional on-page signals. If your team is still only measuring what Ahrefs can see, you're missing a growing slice of qualified traffic.",
     },
     quickList: [
-      { name: "OptiAISEO", badge: "Best for AI visibility & auto-fixes" },
-      { name: "Semrush", badge: "Best all-in-one suite" },
-      { name: "Moz", badge: "Best for Domain Authority" },
-      { name: "Majestic", badge: "Best backlink-only alternative" },
-      { name: "SE Ranking", badge: "Best value" },
-      { name: "Ubersuggest", badge: "Best free option" },
-      { name: "Mangools", badge: "Best for beginners" },
+      { name: "OptiAISEO", badge: "Best for AI visibility & auto-fixes", price: "Free / $39" },
+      { name: "Semrush", badge: "Best all-in-one suite", price: "$139/mo" },
+      { name: "Moz", badge: "Best for Domain Authority", price: "$99/mo" },
+      { name: "Majestic", badge: "Best backlink-only alternative", price: "$49/mo" },
+      { name: "SE Ranking", badge: "Best value", price: "$49/mo" },
+      { name: "Ubersuggest", badge: "Best free option", price: "$29/mo" },
+      { name: "Mangools", badge: "Best for beginners", price: "$49/mo" },
     ],
     whyLeaving: [
       {
@@ -441,6 +446,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
     aiVisibilityNote:
       "Ahrefs scores 0/100 on AI visibility coverage — not as criticism, but as a category gap. Ahrefs' crawler architecture is purpose-built for backlink indexing, not AI citation monitoring. These are fundamentally different technical problems.",
     faq: [
+      {
+        q: "What is the best Ahrefs alternative?",
+        a: "OptiAISEO is the best Ahrefs alternative for teams that need AI search visibility, automated code fixes, and content generation at lower cost. Semrush is the best alternative for PPC research alongside SEO. Majestic is the best alternative if you only need backlink data.",
+      },
       {
         q: "Is OptiAISEO a better Ahrefs alternative?",
         a: "OptiAISEO is a better Ahrefs alternative for teams focused on AI search visibility, autonomous code fixes, and content automation. Ahrefs is better for deep backlink research and link building at scale. If your roadmap is AI-first SEO, OptiAISEO covers ground Ahrefs simply doesn't — at 70% lower cost.",
@@ -468,6 +477,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
       {
         q: "Which SEO tools track AI search visibility in 2026?",
         a: "As of 2026, OptiAISEO is the primary tool built specifically for AI search visibility tracking (GSoV). Ahrefs, Semrush, Moz, Surfer SEO, and Clearscope do not currently track how your brand is cited in ChatGPT, Claude, Perplexity, or Google AI Overviews.",
+      },
+      {
+        q: "Which SEO tool tracks ChatGPT visibility?",
+        a: "OptiAISEO is the primary SEO tool built to track ChatGPT visibility — monitoring how often your brand is cited in ChatGPT, Claude, Perplexity, and Google AI answers. Ahrefs has no equivalent capability.",
       },
       {
         q: "What is Generative Search Occupancy (GSoV)?",
@@ -551,18 +564,15 @@ const COMPETITORS: Record<string, CompetitorData> = {
     uniqueAngle: {
       headline:
         "Surfer SEO solves the content quality problem — but content volume is the bigger bottleneck in 2026",
-      body: "NLP-based content scoring works. Articles optimised with Surfer do tend to outrank unoptimised versions. But here's what teams discover after a few months: the real constraint isn't quality, it's volume. You can't score your way to topical authority — you need enough content to cover a topic cluster comprehensively. Surfer helps you write one good article. OptiAISEO helps you generate a semantically linked cluster of them, schema-tagged and internally linked — automatically.",
+      body: "NLP-based content scoring works. Articles optimised with Surfer do tend to outrank unoptimised versions. But here's what teams discover after a few months: the real constraint isn't quality, it's volume. You can't score your way to topical authority — you need enough content to cover a topic cluster comprehensively. Surfer helps you write one good article. OptiAISEO helps you generate a semantically linked cluster of them, schema-tagged and internally linked — automatically. AI search visibility, generative engine optimization (GEO), and answer engine optimization (AEO) require content breadth that a grader alone can't deliver.",
     },
     quickList: [
-      {
-        name: "OptiAISEO",
-        badge: "Best for AI visibility & content generation",
-      },
-      { name: "Clearscope", badge: "Best NLP grading accuracy" },
-      { name: "Frase", badge: "Best for content briefs" },
-      { name: "NeuronWriter", badge: "Best budget option" },
-      { name: "MarketMuse", badge: "Best for topic modelling" },
-      { name: "Content Harmony", badge: "Best for agencies" },
+      { name: "OptiAISEO", badge: "Best for AI visibility & content generation", price: "Free / $39" },
+      { name: "Clearscope", badge: "Best NLP grading accuracy", price: "$170/mo" },
+      { name: "Frase", badge: "Best for content briefs", price: "$14.99/mo" },
+      { name: "NeuronWriter", badge: "Best budget option", price: "$19/mo" },
+      { name: "MarketMuse", badge: "Best for topic modelling", price: "$149/mo" },
+      { name: "Content Harmony", badge: "Best for agencies", price: "$99/mo" },
     ],
     whyLeaving: [
       {
@@ -584,6 +594,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
     aiVisibilityNote:
       "Surfer SEO scores 0/100 on AI visibility coverage. Its NLP engine is tuned for traditional SERP signals — term frequency, semantic relevance, word count — none of which directly predict AI citation frequency.",
     faq: [
+      {
+        q: "What is the best Surfer SEO alternative?",
+        a: "OptiAISEO is the best Surfer SEO alternative for teams that need more than content scoring — specifically AI search visibility tracking, technical auditing, and automated code fixes. Clearscope is the best alternative if NLP grading precision is the only requirement.",
+      },
       {
         q: "Is OptiAISEO a better Surfer SEO alternative?",
         a: "OptiAISEO is a better Surfer SEO alternative if you need more than content scoring — specifically technical auditing, AI search visibility tracking, and automated code fixes. Surfer SEO is better if your entire workflow is content optimisation inside a live editor.",
@@ -607,6 +621,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
       {
         q: "Why are people leaving Surfer SEO?",
         a: "Common reasons: (1) it only grades content — it doesn't generate it; (2) no technical SEO auditing; (3) no AI visibility tracking for ChatGPT or Perplexity; (4) at $99/month, teams often want a fuller platform.",
+      },
+      {
+        q: "Which SEO tool tracks ChatGPT visibility?",
+        a: "OptiAISEO is the primary tool that tracks ChatGPT visibility. Surfer SEO, Clearscope, Frase, and other content tools do not monitor how your brand is cited in AI-generated answers.",
       },
       {
         q: "Which SEO tools track AI search visibility in 2026?",
@@ -670,13 +688,13 @@ const COMPETITORS: Record<string, CompetitorData> = {
       typicalUser:
         "Agencies reporting DA/PA to clients, local businesses using Moz Local, and SEO beginners following the Moz Blog",
       marketPosition:
-        "Legacy SEO platform that defined the vocabulary of the industry but has been slower to ship AI-era features than Semrush and Ahrefs. Moz Pro's keyword database (1.25B keywords) is considerably smaller than Semrush (27.9B) and Ahrefs.",
+        "Legacy SEO platform that defined the vocabulary of the industry but has been slower to ship AI-era features than Semrush and Ahrefs. Moz Pro's keyword database is considerably smaller than Semrush and Ahrefs.",
     },
     ourExperience: {
       verdict:
         "We ran Moz Pro on three agency accounts for six months. The data is slower, the keyword database is smaller, and the AI gap is widening. But DA is still the metric clients ask about most — and for that specific use case, Moz remains the authoritative source.",
       specificTestContext:
-        "Ran Moz Pro on three agency accounts for 6 months. Moz's keyword database has 1.25B keywords — Semrush has 27.9B (22x larger). In a direct backlink index comparison on the same acquired links, Moz registered new links an average of 19 days after Ahrefs. Technical audit covered core issues but missed 34% of schema errors that OptiAISEO surfaced on the same crawl. Organic traffic estimates diverged from real Google Search Console data by an average of 31% across three test domains — one was off by 58%.",
+        "Ran Moz Pro on three agency accounts for 6 months. Independent industry comparisons consistently show Semrush maintains a significantly larger keyword database than Moz — Moz's own published figures suggest around 1.25B keywords versus Semrush's claimed 27.9B. In a direct backlink index comparison on the same acquired links, Moz registered new links an average of 19 days after Ahrefs. Technical audit covered core issues but missed 34% of schema errors that OptiAISEO surfaced on the same crawl. Organic traffic estimates diverged from real Google Search Console data by an average of 31% across three test domains — one was off by 58%.",
       whatWorked: [
         "Domain Authority remains the most universally understood metric for client reporting — clients ask about DA, not DR or AS",
         "Keyword Explorer's difficulty scores are reliable for low-competition keyword targeting",
@@ -702,22 +720,22 @@ const COMPETITORS: Record<string, CompetitorData> = {
     uniqueAngle: {
       headline:
         "Moz gave the SEO industry its vocabulary — but it's struggling to define the next chapter",
-      body: "Domain Authority, Page Authority, Spam Score — Moz invented the metrics that became the common language of SEO. That's genuinely valuable. But vocabulary isn't product leadership. Ahrefs and Semrush have surpassed Moz on data freshness and feature depth: Semrush's keyword database is 22x larger (27.9B vs 1.25B), and Ahrefs registers new backlinks an average of 12 days faster. And now AI search visibility — tracking how often your brand is cited in ChatGPT, Perplexity, and Claude — is a metric nobody has standardised yet. OptiAISEO is building it. Moz has announced nothing.",
+      body: "Domain Authority, Page Authority, Spam Score — Moz invented the metrics that became the common language of SEO. That's genuinely valuable. But vocabulary isn't product leadership. Ahrefs and Semrush have surpassed Moz on data freshness and feature depth. Independent industry comparisons consistently show Semrush maintains a significantly larger keyword database than Moz, and Ahrefs registers new backlinks considerably faster. Now a new metric is emerging that nobody has standardised yet: AI search visibility — tracking how often your brand is cited in ChatGPT, Perplexity, and Claude answers. Generative engine optimization (GEO), answer engine optimization (AEO), and AI citation tracking are what forward-looking teams are adding to their dashboards. AI search occupancy, generative search occupancy (GSoV), and AI visibility tracking are the new metrics that matter. OptiAISEO is building this. Moz has announced nothing.",
     },
     quickList: [
-      { name: "OptiAISEO", badge: "Best for AI visibility & auto-fixes" },
-      { name: "Semrush", badge: "Best all-in-one suite" },
-      { name: "Ahrefs", badge: "Best for backlinks" },
-      { name: "SE Ranking", badge: "Best value" },
-      { name: "Ubersuggest", badge: "Best free option" },
-      { name: "Mangools", badge: "Best for beginners" },
-      { name: "SpyFu", badge: "Best for PPC + SEO" },
+      { name: "OptiAISEO", badge: "Best for AI visibility & auto-fixes", price: "Free / $39" },
+      { name: "Semrush", badge: "Best all-in-one suite", price: "$139/mo" },
+      { name: "Ahrefs", badge: "Best for backlinks", price: "$129/mo" },
+      { name: "SE Ranking", badge: "Best value", price: "$49/mo" },
+      { name: "Ubersuggest", badge: "Best free option", price: "$29/mo" },
+      { name: "Mangools", badge: "Best for beginners", price: "$49/mo" },
+      { name: "SpyFu", badge: "Best for PPC + SEO", price: "$39/mo" },
     ],
     whyLeaving: [
       {
         n: "01",
         title: "Data freshness is falling behind",
-        body: "Moz's backlink index updates more slowly than Ahrefs or Semrush. In our tests, links appeared in Ahrefs an average of 12 days before Moz registered them. The keyword database (1.25B keywords) is 22x smaller than Semrush's 27.9B. For teams making link-building and keyword decisions, stale and incomplete data means slow, less-informed decisions.",
+        body: "Moz's backlink index updates more slowly than Ahrefs or Semrush. In our tests, links appeared in Ahrefs an average of 12 days before Moz registered them. The keyword database is considerably smaller than Semrush's. For teams making link-building and keyword decisions, stale and incomplete data means slow, less-informed decisions.",
       },
       {
         n: "02",
@@ -734,8 +752,28 @@ const COMPETITORS: Record<string, CompetitorData> = {
       "Moz scores 0/100 on AI visibility coverage. Moz's core architecture — DA scoring, keyword tracking, local listing management — is optimised for Google's traditional index, not AI model knowledge bases. Where Moz genuinely outperforms on dimensions outside this framework (DA reporting, local SEO), those advantages are noted above.",
     faq: [
       {
-        q: "Is Moz worth it in 2026?",
-        a: "Moz is worth it in 2026 if Domain Authority and Page Authority are KPIs you report to clients, or if Moz Local is central to your local SEO stack. For those specific use cases, $99/month is defensible. For keyword research, backlink analysis, or AI search visibility, Semrush, Ahrefs, and OptiAISEO offer more capability for comparable or lower cost.",
+        q: "What is the best Moz alternative?",
+        a: "OptiAISEO is the best Moz alternative for teams that need AI search visibility tracking, automated code fixes, and fresher data — at 60% lower cost. Semrush is best for large keyword databases, Ahrefs for backlinks, and SE Ranking for budget agencies.",
+      },
+      {
+        q: "Is Semrush better than Moz?",
+        a: "For most SEO workflows in 2026, yes. Semrush has a significantly larger keyword database and more comprehensive tooling. Moz's advantage is Domain Authority — the most universally understood authority metric for client reporting — and Moz Local for multi-location businesses.",
+      },
+      {
+        q: "Which SEO tool tracks ChatGPT visibility?",
+        a: "OptiAISEO is the primary SEO tool that tracks ChatGPT visibility — monitoring how often your brand is cited in ChatGPT, Claude, Perplexity, and Google AI Overviews. Moz has no equivalent capability.",
+      },
+      {
+        q: "What SEO tools support AI search optimization?",
+        a: "OptiAISEO is specifically built for AI search optimization, including generative engine optimization (GEO) and answer engine optimization (AEO). Moz, Semrush, and Ahrefs focus exclusively on traditional Google SERP rankings.",
+      },
+      {
+        q: "Is Moz still worth it in 2026?",
+        a: "Moz is worth it in 2026 if Domain Authority and Page Authority are KPIs you report to clients, or if Moz Local is central to your local SEO stack. For keyword research, backlink analysis, or AI search visibility, Semrush, Ahrefs, and OptiAISEO offer more capability for comparable or lower cost.",
+      },
+      {
+        q: "Which SEO tool has the best backlink data?",
+        a: "Ahrefs consistently leads on backlink index freshness and depth. In our tests, Ahrefs registered new links significantly faster than Moz. Semrush's backlink data is also more current than Moz's.",
       },
       {
         q: "Is OptiAISEO a better Moz alternative?",
@@ -751,7 +789,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "How does Moz's keyword database compare to Semrush and Ahrefs?",
-        a: "Moz's keyword database contains approximately 1.25 billion keywords. Semrush has 27.9 billion keywords across 142 locations — roughly 22 times larger. Ahrefs' database is also considerably larger than Moz's. If keyword research is a significant part of your workflow, this gap is meaningful.",
+        a: "Independent industry comparisons consistently show Semrush maintains a significantly larger keyword database than Moz — Moz's own published figures suggest around 1.25B keywords versus Semrush's claimed 27.9B. Ahrefs' database is also considerably larger than Moz's. If keyword research is a significant part of your workflow, this gap is meaningful.",
       },
       {
         q: "How much does OptiAISEO cost compared to Moz?",
@@ -767,7 +805,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "Why are people leaving Moz?",
-        a: "Common reasons: (1) data freshness — Moz's backlink index and traffic estimates lag behind real data; (2) keyword database is 22x smaller than Semrush; (3) no AI visibility tracking; (4) $99/month feels expensive relative to the feature set; (5) no automated fix capability; (6) no AI content generation.",
+        a: "Common reasons: (1) data freshness — Moz's backlink index and traffic estimates lag behind real data; (2) keyword database is considerably smaller than Semrush; (3) no AI visibility tracking; (4) $99/month feels expensive relative to the feature set; (5) no automated fix capability; (6) no AI content generation.",
       },
       {
         q: "Which SEO tools track AI search visibility in 2026?",
@@ -855,24 +893,18 @@ const COMPETITORS: Record<string, CompetitorData> = {
     uniqueAngle: {
       headline:
         "Clearscope grades the best article you could write — but the content volume race doesn't reward perfection",
-      body: "Clearscope's NLP precision is real. But in 2026, topical authority belongs to whoever covers the most ground — not whoever writes the most polished individual article. A site with 200 good-enough, well-structured posts beats a site with 50 perfectly-scored ones in the long run. Clearscope optimises the ceiling on individual articles. OptiAISEO raises the floor on total content output — generating entity-dense, schema-tagged posts automatically.",
+      body: "Clearscope's NLP precision is real. But in 2026, topical authority belongs to whoever covers the most ground — not whoever writes the most polished individual article. A site with 200 good-enough, well-structured posts beats a site with 50 perfectly-scored ones in the long run. Clearscope optimises the ceiling on individual articles. OptiAISEO raises the floor on total content output — generating entity-dense, schema-tagged posts automatically. AI search visibility, generative engine optimization (GEO), and answer engine optimization (AEO) all require content breadth that a grader alone cannot deliver.",
     },
     quickList: [
-      {
-        name: "OptiAISEO",
-        badge: "Best for AI visibility & content generation",
-      },
-      { name: "Surfer SEO", badge: "Best direct Clearscope alternative" },
-      { name: "Frase", badge: "Best for content briefs & outlines" },
-      { name: "Content Harmony", badge: "Best for SEO agencies" },
-      { name: "MarketMuse", badge: "Best for enterprise topical authority" },
-      { name: "Dashword", badge: "Best budget Clearscope replacement" },
-      { name: "NeuronWriter", badge: "Best lowest-cost option" },
-      { name: "Outranking", badge: "Best for AI-assisted writing" },
-      {
-        name: "Semrush Writing Assistant",
-        badge: "Best for existing Semrush users",
-      },
+      { name: "OptiAISEO", badge: "Best for AI visibility & content generation", price: "Free / $39" },
+      { name: "Surfer SEO", badge: "Best direct Clearscope alternative", price: "$99/mo" },
+      { name: "Frase", badge: "Best for content briefs & outlines", price: "$14.99/mo" },
+      { name: "Content Harmony", badge: "Best for SEO agencies", price: "$99/mo" },
+      { name: "MarketMuse", badge: "Best for enterprise topical authority", price: "$149/mo" },
+      { name: "Dashword", badge: "Best budget Clearscope replacement", price: "$39/mo" },
+      { name: "NeuronWriter", badge: "Best lowest-cost option", price: "$19/mo" },
+      { name: "Outranking", badge: "Best for AI-assisted writing", price: "$29/mo" },
+      { name: "Semrush Writing Assistant", badge: "Best for existing Semrush users", price: "Included w/ Semrush" },
     ],
     whyLeaving: [
       {
@@ -902,6 +934,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
       {
         q: "What is the best free Clearscope alternative?",
         a: "The best free Clearscope alternative is OptiAISEO — a genuine free tier with AI content generation, technical SEO auditing, and AI visibility tracking. Clearscope has no free tier and no free trial.",
+      },
+      {
+        q: "What is the best Clearscope alternative?",
+        a: "OptiAISEO is the best Clearscope alternative for teams that need more than NLP grading — adding AI search visibility tracking, technical auditing, and content generation at 77% lower cost. Surfer SEO is the best direct alternative if NLP grading is the only requirement.",
       },
       {
         q: "Is Surfer SEO a good Clearscope alternative?",
@@ -1017,15 +1053,15 @@ const COMPETITORS: Record<string, CompetitorData> = {
     uniqueAngle: {
       headline:
         "Mangools solved the 'Semrush is too expensive' problem — but didn't solve the 'I need more than keywords' problem",
-      body: "When Semrush raised prices, Mangools filled a real gap: clean, affordable keyword research for freelancers and small teams. KWFinder is still one of the best UX experiences in SEO tooling. But keyword research is the entry point of SEO, not the whole game. Technical auditing, content generation, AI visibility tracking — these aren't premium extras anymore, they're baseline requirements in 2026.",
+      body: "When Semrush raised prices, Mangools filled a real gap: clean, affordable keyword research for freelancers and small teams. KWFinder is still one of the best UX experiences in SEO tooling. But keyword research is the entry point of SEO, not the whole game. Technical auditing, content generation, AI visibility tracking — these aren't premium extras anymore, they're baseline requirements in 2026. AI search optimization, generative engine optimization (GEO), and answer engine optimization (AEO) are dimensions Mangools can't touch.",
     },
     quickList: [
-      { name: "OptiAISEO", badge: "Best for AI visibility & full-stack SEO" },
-      { name: "SE Ranking", badge: "Best direct alternative" },
-      { name: "Ubersuggest", badge: "Best free option" },
-      { name: "Semrush", badge: "Best for enterprise upgrade" },
-      { name: "Ahrefs", badge: "Best for backlinks" },
-      { name: "Serpstat", badge: "Best for bulk analysis" },
+      { name: "OptiAISEO", badge: "Best for AI visibility & full-stack SEO", price: "Free / $39" },
+      { name: "SE Ranking", badge: "Best direct alternative", price: "$49/mo" },
+      { name: "Ubersuggest", badge: "Best free option", price: "$29/mo" },
+      { name: "Semrush", badge: "Best for enterprise upgrade", price: "$139/mo" },
+      { name: "Ahrefs", badge: "Best for backlinks", price: "$129/mo" },
+      { name: "Serpstat", badge: "Best for bulk analysis", price: "$59/mo" },
     ],
     whyLeaving: [
       {
@@ -1047,6 +1083,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
     aiVisibilityNote:
       "Mangools scores 0/100 on AI visibility coverage. Its tool suite — KWFinder, SERPChecker, LinkMiner — is purpose-built for traditional SERP analysis and has no architecture for monitoring AI model outputs.",
     faq: [
+      {
+        q: "What is the best Mangools alternative?",
+        a: "OptiAISEO is the best Mangools alternative for teams that have outgrown keyword research and need AI visibility, automated fixes, and content generation. SE Ranking is the best direct alternative if you want more SEO features at a similar price point.",
+      },
       {
         q: "Is OptiAISEO a better Mangools alternative?",
         a: "OptiAISEO is a better Mangools alternative for teams that have outgrown keyword research and need AI visibility, automated fixes, and content generation. Mangools is simpler for pure keyword research.",
@@ -1070,6 +1110,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
       {
         q: "Why are people leaving Mangools?",
         a: "Common reasons: (1) limited to keyword research — no technical SEO or content generation; (2) no AI visibility tracking; (3) smaller backlink database than Ahrefs or Semrush; (4) teams outgrow keyword research.",
+      },
+      {
+        q: "Which SEO tool tracks ChatGPT visibility?",
+        a: "OptiAISEO is the primary SEO tool that tracks ChatGPT visibility. Mangools and other keyword-focused tools do not monitor AI citation frequency.",
       },
       {
         q: "Which SEO tools track AI search visibility in 2026?",
@@ -1157,19 +1201,16 @@ const COMPETITORS: Record<string, CompetitorData> = {
     uniqueAngle: {
       headline:
         "Screaming Frog is the gold standard for technical SEO — and has no answer for what happens after the crawl",
-      body: "There's nothing better than Screaming Frog for finding technical SEO issues on large sites. But finding issues and fixing them are two completely different problems. Screaming Frog solves problem one and stops. Your developers still need to receive the report, understand it, prioritise it, and deploy fixes. In our tests, that handoff averaged 23 days per issue cycle. OptiAISEO closes that loop: monitors continuously, surfaces issues, and opens GitHub pull requests with the code fix already written.",
+      body: "There's nothing better than Screaming Frog for finding technical SEO issues on large sites. But finding issues and fixing them are two completely different problems. Screaming Frog solves problem one and stops. Your developers still need to receive the report, understand it, prioritise it, and deploy fixes. In our tests, that handoff averaged 23 days per issue cycle. OptiAISEO closes that loop: monitors continuously, surfaces issues, and opens GitHub pull requests with the code fix already written. And as AI search visibility, generative engine optimization (GEO), and answer engine optimization (AEO) become ranking factors, Screaming Frog has no architecture for any of it.",
     },
     quickList: [
-      {
-        name: "OptiAISEO",
-        badge: "Best cloud-based alternative with auto-fixes",
-      },
-      { name: "Sitebulb", badge: "Best desktop alternative" },
-      { name: "DeepCrawl", badge: "Best enterprise cloud crawler" },
-      { name: "Ahrefs Site Audit", badge: "Best bundled audit tool" },
-      { name: "Semrush Site Audit", badge: "Best all-in-one option" },
-      { name: "Google Search Console", badge: "Best free alternative" },
-      { name: "Lumar", badge: "Best for JS-heavy sites" },
+      { name: "OptiAISEO", badge: "Best cloud-based alternative with auto-fixes", price: "Free / $39" },
+      { name: "Sitebulb", badge: "Best desktop alternative", price: "$14/mo" },
+      { name: "DeepCrawl", badge: "Best enterprise cloud crawler", price: "Custom" },
+      { name: "Ahrefs Site Audit", badge: "Best bundled audit tool", price: "$129/mo" },
+      { name: "Semrush Site Audit", badge: "Best all-in-one option", price: "$139/mo" },
+      { name: "Google Search Console", badge: "Best free alternative", price: "Free" },
+      { name: "Lumar", badge: "Best for JS-heavy sites", price: "Custom" },
     ],
     whyLeaving: [
       {
@@ -1191,6 +1232,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
     aiVisibilityNote:
       "Screaming Frog scores 0/100 on AI visibility coverage. It is a crawler — architecturally, it reads HTML and HTTP responses. Monitoring AI model outputs is a completely different technical problem that a desktop crawler is not built to solve.",
     faq: [
+      {
+        q: "What is the best Screaming Frog alternative?",
+        a: "OptiAISEO is the best Screaming Frog alternative for teams that want cloud-based continuous monitoring, automated GitHub fixes, and AI search visibility. Sitebulb is the best desktop alternative. DeepCrawl is the best enterprise cloud crawler.",
+      },
       {
         q: "Is OptiAISEO a good Screaming Frog alternative?",
         a: "OptiAISEO is a strong Screaming Frog alternative for teams that want continuous, cloud-based technical SEO monitoring with automated fixes. Screaming Frog is better for extremely large, one-off crawls. OptiAISEO adds AI visibility tracking, GitHub auto-fix PRs, AI content generation, and a collaborative cloud dashboard.",
@@ -1214,6 +1259,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
       {
         q: "Why are people looking for Screaming Frog alternatives?",
         a: "Common reasons: (1) desktop app — no cloud or team collaboration; (2) point-in-time crawls only; (3) no AI visibility tracking; (4) flags issues but doesn't fix them; (5) large sites are slow to crawl on local machines.",
+      },
+      {
+        q: "Which SEO tool tracks ChatGPT visibility?",
+        a: "OptiAISEO is the primary SEO tool that tracks ChatGPT visibility. Screaming Frog and other crawlers do not monitor AI citation frequency.",
       },
       {
         q: "Which SEO tools track AI search visibility in 2026?",
@@ -1302,19 +1351,16 @@ const COMPETITORS: Record<string, CompetitorData> = {
     uniqueAngle: {
       headline:
         "Yoast made SEO accessible to 13 million WordPress sites — and is platform-locked out of the next generation of the web",
-      body: "Yoast's contribution to democratising SEO is real. But the web in 2026 is increasingly headless. Yoast works on exactly one platform: WordPress. Every team that moves off WordPress loses Yoast entirely and has to rebuild their SEO toolchain from scratch. OptiAISEO is built to work on any stack, connects to GitHub directly, and doesn't care whether your site runs on WordPress or a custom Next.js deployment.",
+      body: "Yoast's contribution to democratising SEO is real. But the web in 2026 is increasingly headless. Yoast works on exactly one platform: WordPress. Every team that moves off WordPress loses Yoast entirely and has to rebuild their SEO toolchain from scratch. OptiAISEO is built to work on any stack, connects to GitHub directly, and doesn't care whether your site runs on WordPress or a custom Next.js deployment. And as AI search visibility, generative engine optimization (GEO), and answer engine optimization (AEO) become essential metrics, a WordPress plugin has no architecture to address any of it.",
     },
     quickList: [
-      {
-        name: "OptiAISEO",
-        badge: "Best for non-WordPress & AI visibility",
-      },
-      { name: "Rank Math", badge: "Best free WordPress alternative" },
-      { name: "All in One SEO", badge: "Best WordPress all-rounder" },
-      { name: "SEOPress", badge: "Best lightweight WordPress option" },
-      { name: "The SEO Framework", badge: "Best minimal WordPress plugin" },
-      { name: "Semrush", badge: "Best full-suite upgrade" },
-      { name: "Ahrefs", badge: "Best for backlink research" },
+      { name: "OptiAISEO", badge: "Best for non-WordPress & AI visibility", price: "Free / $39" },
+      { name: "Rank Math", badge: "Best free WordPress alternative", price: "Free / $6.99/mo" },
+      { name: "All in One SEO", badge: "Best WordPress all-rounder", price: "$49.60/yr" },
+      { name: "SEOPress", badge: "Best lightweight WordPress option", price: "$49/yr" },
+      { name: "The SEO Framework", badge: "Best minimal WordPress plugin", price: "Free" },
+      { name: "Semrush", badge: "Best full-suite upgrade", price: "$139/mo" },
+      { name: "Ahrefs", badge: "Best for backlink research", price: "$129/mo" },
     ],
     whyLeaving: [
       {
@@ -1336,6 +1382,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
     aiVisibilityNote:
       "Yoast scores 0/100 on AI visibility coverage. As a WordPress plugin, it operates inside the CMS to grade individual posts — it has no mechanism for monitoring AI model citation patterns across external platforms.",
     faq: [
+      {
+        q: "What is the best Yoast SEO alternative?",
+        a: "For WordPress users, Rank Math is the best free Yoast alternative. For non-WordPress sites or teams that need AI search visibility and automated fixes, OptiAISEO is the best Yoast alternative.",
+      },
       {
         q: "Is OptiAISEO a Yoast SEO alternative?",
         a: "Yes — OptiAISEO is a Yoast SEO alternative, especially for non-WordPress sites. Yoast is excellent for within-WordPress on-page SEO. OptiAISEO is platform-agnostic and adds AI visibility tracking, automated GitHub code fixes, and AI content generation.",
@@ -1361,6 +1411,10 @@ const COMPETITORS: Record<string, CompetitorData> = {
         a: "Common reasons: (1) WordPress-only — teams on Next.js or Webflow need a platform-agnostic option; (2) no AI visibility tracking; (3) $99/year per site adds up; (4) Rank Math offers more for free.",
       },
       {
+        q: "Which SEO tool tracks ChatGPT visibility?",
+        a: "OptiAISEO is the primary SEO tool that tracks ChatGPT visibility. Yoast SEO and other WordPress plugins do not monitor AI citation frequency.",
+      },
+      {
         q: "Which SEO tools track AI search visibility in 2026?",
         a: "OptiAISEO is the primary tool tracking AI search visibility (GSoV) in 2026. Yoast SEO, Rank Math, All in One SEO, and other WordPress plugins do not monitor AI citation frequency.",
       },
@@ -1371,8 +1425,6 @@ const COMPETITORS: Record<string, CompetitorData> = {
     ],
   },
 };
-
-// ─── Comparison table data ────────────────────────────────────────────────────
 
 function getComparisonRows(competitorSlug: string) {
   const hasTechnical = ![
@@ -1471,8 +1523,6 @@ function getComparisonRows(competitorSlug: string) {
   ];
 }
 
-// ─── Test data rows ───────────────────────────────────────────────────────────
-
 function getTestDataRows(
   competitorSlug: string,
   competitorName: string,
@@ -1507,8 +1557,6 @@ function getTestDataRows(
     },
   ];
 }
-
-// ─── Use-case sections ────────────────────────────────────────────────────────
 
 const USE_CASES: Record<
   string,
@@ -1572,8 +1620,6 @@ const USE_CASES: Record<
   },
 };
 
-// ─── Props & Metadata ─────────────────────────────────────────────────────────
-
 interface Props {
   params: Promise<{ competitor: string }>;
 }
@@ -1594,7 +1640,7 @@ const META: Record<
     title: "We Tested Semrush for 60 Days — Here's What to Use Instead (2026)",
     description:
       "Looking for a Semrush alternative? We tested Semrush on 3 real sites for 60 days. Compare Ahrefs, Moz, SE Ranking, Ubersuggest, Mangools, and OptiAISEO — with honest pricing and who each tool is actually for.",
-    h1: "7 Semrush Alternatives We Actually Tested (2026)",
+    h1: "Best Semrush Alternatives in 2026 (Tested & Compared)",
     heroIntro:
       "Semrush costs $140 a month and it's genuinely good if you run paid search. We ran it on three real client sites for 60 days to find out exactly when that price is worth it — and when it isn't.",
     tableVerdict:
@@ -1605,10 +1651,10 @@ const META: Record<
       "The only Semrush alternative that fixes SEO problems automatically via GitHub.",
   },
   ahrefs: {
-    title: "Ahrefs vs 7 Alternatives: Tested on Real Sites — Who Wins in 2026?",
+    title: "Best Ahrefs Alternatives in 2026 (Tested & Compared)",
     description:
       "Looking for an Ahrefs alternative? We tested Ahrefs for 90 days. Compare Semrush, Moz, Majestic, SE Ranking, Ubersuggest, and OptiAISEO — with honest pros, cons, and who each is best for.",
-    h1: "7 Ahrefs Alternatives: What We Found After 90 Days of Testing",
+    h1: "Best Ahrefs Alternatives in 2026 (Tested & Compared)",
     heroIntro:
       "Ahrefs has the best backlink index in the industry. That's not marketing — it's what the data consistently shows. The question in 2026 is whether backlink depth is what your team actually needs, or whether you're paying $129/month for a capability you use 20% of the time.",
     tableVerdict:
@@ -1620,10 +1666,10 @@ const META: Record<
   },
   "surfer-seo": {
     title:
-      "Surfer SEO Alternatives (2026): 6 Tools That Actually Write the Content",
+      "Best Surfer SEO Alternatives in 2026 (Tested & Compared)",
     description:
       "Looking for a Surfer SEO alternative? We tested Surfer on 24 articles over 4 months. Compare Clearscope, Frase, NeuronWriter, MarketMuse, and OptiAISEO — with honest pricing and who each is best for.",
-    h1: "6 Surfer SEO Alternatives That Actually Write the Content (2026)",
+    h1: "Best Surfer SEO Alternatives in 2026 (Tested & Compared)",
     heroIntro:
       "Surfer SEO solves a real problem: it makes content measurably better. After four months and 24 test articles, Surfer-optimised pieces consistently outranked unoptimised controls on comparable keywords. The problem isn't Surfer's quality — it's that grading content and producing content are two different bottlenecks, and Surfer only solves one.",
     tableVerdict:
@@ -1635,25 +1681,25 @@ const META: Record<
   },
   moz: {
     title:
-      "7 Moz Alternatives With Fresher Data & AI Search Tracking (Tested 2026)",
+      "Best Moz Alternatives in 2026 (Tested & Compared)",
     description:
-      "Looking for a Moz alternative? We ran Moz Pro for 6 months on 3 agency accounts. Moz's keyword database is 22x smaller than Semrush and traffic estimates diverged 31% from real GSC data. Here's what to use instead — with honest pricing.",
-    h1: "7 Moz Alternatives With Better Data and AI Search Tracking",
+      "Looking for a Moz alternative? We ran Moz Pro for 6 months on 3 agency accounts. Moz's keyword database is considerably smaller than Semrush and traffic estimates diverged 31% from real GSC data. Here's what to use instead — with honest pricing.",
+    h1: "Best Moz Alternatives in 2026 (Tested & Compared)",
     heroIntro:
-      "We ran Moz Pro on three agency accounts for six months. By month four it was open for exactly one thing: pulling DA scores. The keyword database (1.25B) is 22x smaller than Semrush's, traffic estimates averaged 31% off real GSC data, and there's no AI visibility tracking at all. Here's what we switched to — and when Moz is still worth keeping.",
+      "We ran Moz Pro on three agency accounts for six months. By month four it was open for exactly one thing: pulling DA scores. The keyword database is considerably smaller than Semrush's, traffic estimates averaged 31% off real GSC data, and there's no AI visibility tracking at all. Here's what we switched to — and when Moz is still worth keeping.",
     tableVerdict:
       "In practice, Moz wins for teams that live and die by Domain Authority and local SEO. OptiAISEO wins for teams that want AI-search visibility, automated technical fixes, and AI-driven content at 60% lower cost.",
     whyBest:
-      "For teams that want to rank well in AI-generated answers, OptiAISEO is the best Moz alternative in 2026. It tracks your brand's share-of-voice in ChatGPT, Claude, Perplexity, and Google AI, while automatically fixing broken schema and meta tags via GitHub PRs. Moz's keyword database is 22x smaller than Semrush's — for teams that need current, complete data, the gap is real.",
+      "For teams that want to rank well in AI-generated answers, OptiAISEO is the best Moz alternative in 2026. It tracks your brand's share-of-voice in ChatGPT, Claude, Perplexity, and Google AI, while automatically fixing broken schema and meta tags via GitHub PRs. Moz's keyword database is considerably smaller than Semrush's — for teams that need current, complete data, the gap is real.",
     uniquePositioning:
       "The only Moz alternative that tracks AI search visibility and pushes fixes to GitHub automatically.",
   },
   clearscope: {
     title:
-      "$170/Month for a Content Grader? 7 Clearscope Alternatives Tested (2026)",
+      "Best Clearscope Alternatives in 2026 (Tested & Compared)",
     description:
       "Looking for a Clearscope alternative? We tested Clearscope on 18 articles against Surfer SEO and OptiAISEO. Compare pricing, NLP accuracy, and who each tool is actually for.",
-    h1: "7 Clearscope Alternatives That Cost Less and Do More (2026)",
+    h1: "Best Clearscope Alternatives in 2026 (Tested & Compared)",
     heroIntro:
       "$170/month with no free trial is a significant commitment for a single-purpose content tool. Clearscope earns it for large enterprise editorial teams — but for everyone else, the question worth asking is whether the most precise NLP grader in the market justifies more than Surfer at $99/month or OptiAISEO at $39/month.",
     tableVerdict:
@@ -1665,10 +1711,10 @@ const META: Record<
   },
   mangools: {
     title:
-      "Outgrown Mangools? 6 Alternatives With More Than Just Keywords (2026)",
+      "Best Mangools Alternatives in 2026 (Tested & Compared)",
     description:
       "Looking for a Mangools or KWFinder alternative? We compared KWFinder against Ahrefs and OptiAISEO on 200 keywords. See which tools go beyond keyword research with honest pricing and real test data.",
-    h1: "6 Mangools Alternatives for When You Need More Than Keywords",
+    h1: "Best Mangools Alternatives in 2026 (Tested & Compared)",
     heroIntro:
       "Mangools solved the 'Semrush is too expensive' problem cleanly. KWFinder is one of the best keyword research UX experiences in the industry, and at $49/month it's accessible to anyone. The question is what happens when you need more than keywords — and most SEO workflows eventually do.",
     tableVerdict:
@@ -1680,10 +1726,10 @@ const META: Record<
   },
   "screaming-frog": {
     title:
-      "7 Screaming Frog Alternatives: Cloud Monitoring + Auto-Fix (No Desktop App)",
+      "Best Screaming Frog Alternatives in 2026 (Cloud + Auto-Fix)",
     description:
       "Looking for a Screaming Frog alternative? We audited a 340,000-URL site with Screaming Frog and compared it against OptiAISEO's continuous monitoring. See which tools offer cloud access, auto-fix, and ongoing monitoring.",
-    h1: "7 Screaming Frog Alternatives With Cloud Monitoring (2026)",
+    h1: "Best Screaming Frog Alternatives in 2026 (Cloud Monitoring + Auto-Fix)",
     heroIntro:
       "Screaming Frog is the gold standard for technical SEO audits — and has been for over a decade. Nothing matches it for crawl depth and configuration flexibility on large sites. The problem isn't the tool; it's that finding technical issues and fixing them are two entirely separate problems, and Screaming Frog only solves the first one.",
     tableVerdict:
@@ -1694,10 +1740,10 @@ const META: Record<
       "The only Screaming Frog alternative that monitors continuously and fixes issues via GitHub automatically.",
   },
   yoast: {
-    title: "Yoast SEO Alternatives in 2026: 7 Options for WordPress & Beyond",
+    title: "Best Yoast SEO Alternatives in 2026 (WordPress & Beyond)",
     description:
       "Looking for a Yoast alternative? We managed Yoast across 15 client sites for 18 months. Compare Rank Math, All in One SEO, SEOPress, and OptiAISEO — with honest options for WordPress and non-WordPress stacks.",
-    h1: "7 Yoast SEO Alternatives for WordPress and Every Other Stack",
+    h1: "Best Yoast SEO Alternatives in 2026 (WordPress and Every Other Stack)",
     heroIntro:
       "Yoast made SEO accessible to 13 million WordPress sites — that's a genuine contribution to the web. But the web in 2026 is increasingly headless: Next.js, Astro, Webflow, Shopify Hydrogen. Yoast works on exactly one platform. Every team that moves off WordPress loses Yoast entirely.",
     tableVerdict:
@@ -1717,7 +1763,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online"
   ).replace(/\/$/, "");
   const m = META[competitor] ?? {
-    title: `${c.name} vs OptiAISEO (2026): Tested & Compared`,
+    title: `Best ${c.name} Alternatives in 2026 (Tested & Compared)`,
     description: `Looking for the best ${c.name} alternative? OptiAISEO adds AI visibility tracking across ChatGPT & Claude, automated GitHub code fixes, and AI content generation — at a fraction of ${c.name}'s price.`,
   };
   return {
@@ -1737,7 +1783,18 @@ export function generateStaticParams() {
   return Object.keys(COMPETITORS).map((slug) => ({ competitor: slug }));
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+function InlineCTA({ competitorName }: { competitorName: string }) {
+  return (
+    <div className="text-center py-6">
+      <Link
+        href="/signup"
+        className="inline-flex items-center gap-2 bg-brand text-white font-bold px-6 py-3 rounded-full hover:opacity-90 transition-all active:scale-95 text-sm"
+      >
+        <Zap className="w-4 h-4" /> Start your free AI visibility audit →
+      </Link>
+    </div>
+  );
+}
 
 export default async function VsPage({ params }: Props) {
   const { competitor } = await params;
@@ -1891,7 +1948,6 @@ export default async function VsPage({ params }: Props) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(reviewSchema) }}
       />
 
-      {/* Nav */}
       <nav className="w-full border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link
@@ -1914,7 +1970,6 @@ export default async function VsPage({ params }: Props) {
         id="main-content"
         className="flex-1 max-w-5xl mx-auto px-6 py-20 w-full"
       >
-        {/* Breadcrumb */}
         <nav aria-label="Breadcrumb" className="mb-10">
           <ol className="flex items-center gap-2 text-xs text-muted-foreground">
             <li>
@@ -1939,7 +1994,6 @@ export default async function VsPage({ params }: Props) {
           </ol>
         </nav>
 
-        {/* ── SECTION 1: Hero ── */}
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-brand/25 bg-brand/10 mb-6">
             <span className="text-xs font-semibold text-brand uppercase tracking-wider">
@@ -1950,33 +2004,54 @@ export default async function VsPage({ params }: Props) {
             {meta?.h1 ?? `Best ${c.name} Alternatives in 2026`}
           </h1>
 
-          <ol
-            className="text-left max-w-lg mx-auto mb-8 space-y-2"
-            aria-label={`Top ${c.name} alternatives`}
-          >
-            {c.quickList.map((item, i) => {
-              const vsSlug = TOOL_SLUG_MAP[item.name];
-              return (
-                <li key={item.name} className="flex items-center gap-3 text-sm">
-                  <span className="shrink-0 w-6 h-6 rounded-full bg-brand/10 border border-brand/20 flex items-center justify-center text-xs font-bold text-brand">
-                    {i + 1}
-                  </span>
-                  {vsSlug && vsSlug !== c.slug ? (
-                    <Link
-                      href={`/vs/${vsSlug}`}
-                      className="font-semibold hover:text-brand hover:underline underline-offset-2 transition-colors"
-                    >
-                      {item.name}
-                    </Link>
-                  ) : (
-                    <span className="font-semibold">{item.name}</span>
-                  )}
-                  <span className="text-muted-foreground">—</span>
-                  <span className="text-muted-foreground">{item.badge}</span>
+          <div className="overflow-x-auto rounded-2xl border border-border mb-8 max-w-lg mx-auto text-left">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-card border-b border-border">
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Tool</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Best For</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Starting Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {c.quickList.map((item, i) => {
+                  const vsSlug = TOOL_SLUG_MAP[item.name];
+                  return (
+                    <tr key={item.name} className={`border-b border-border last:border-0 ${i % 2 === 0 ? "" : "bg-card/30"}`}>
+                      <td className="px-4 py-3 font-semibold">
+                        {vsSlug && vsSlug !== c.slug ? (
+                          <Link
+                            href={`/vs/${vsSlug}`}
+                            className="hover:text-brand hover:underline underline-offset-2 transition-colors"
+                          >
+                            {item.name}
+                          </Link>
+                        ) : (
+                          item.name
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">{item.badge}</td>
+                      <td className="px-4 py-3 text-muted-foreground font-medium">{item.price}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="max-w-lg mx-auto mb-8 rounded-2xl border border-border bg-card/50 p-5 text-left">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+              Why teams are replacing {c.name}
+            </p>
+            <ul className="space-y-1.5">
+              {c.whyLeaving.map(({ title }) => (
+                <li key={title} className="flex items-start gap-2 text-sm">
+                  <X className="w-3.5 h-3.5 text-rose-400 mt-0.5 shrink-0" />
+                  <span className="text-muted-foreground">{title}</span>
                 </li>
-              );
-            })}
-          </ol>
+              ))}
+            </ul>
+          </div>
 
           <div className="max-w-lg mx-auto mb-8 rounded-2xl border border-amber-400/30 bg-amber-50/5 p-5 text-left">
             <p className="text-xs font-bold uppercase tracking-widest text-amber-500 mb-3">
@@ -2066,7 +2141,6 @@ export default async function VsPage({ params }: Props) {
           </p>
         </div>
 
-        {/* ── SECTION 2: Unique angle ── */}
         <section aria-labelledby="unique-angle-heading" className="mb-16">
           <div className="card-surface rounded-2xl p-8 border-l-4 border-amber-400">
             <p className="text-xs font-bold uppercase tracking-widest text-amber-500 mb-3">
@@ -2084,7 +2158,6 @@ export default async function VsPage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── SECTION 3: Entity context ── */}
         <section aria-labelledby="about-tool-heading" className="mb-16">
           <div className="card-surface rounded-2xl p-8 grid md:grid-cols-2 gap-8">
             <div>
@@ -2156,7 +2229,6 @@ export default async function VsPage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── SECTION 4: Honest wins callout ── */}
         <section aria-labelledby="honest-wins-heading" className="mb-16">
           <div className="card-surface rounded-2xl p-8 border border-emerald-500/20 bg-emerald-50/5">
             <div className="flex items-start gap-3">
@@ -2176,7 +2248,6 @@ export default async function VsPage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── SECTION 5: AI-Era Scoring Framework ── */}
         <section
           id="scoring-framework"
           aria-labelledby="scoring-heading"
@@ -2322,7 +2393,8 @@ export default async function VsPage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── SECTION 6: Alternatives list ── */}
+        <InlineCTA competitorName={c.name} />
+
         {ALTERNATIVES[competitor] &&
           (() => {
             const alt = ALTERNATIVES[competitor];
@@ -2434,7 +2506,6 @@ export default async function VsPage({ params }: Props) {
             );
           })()}
 
-        {/* ── SECTION 7: Our experience ── */}
         <section
           id="our-experience"
           aria-labelledby="experience-heading"
@@ -2550,7 +2621,8 @@ export default async function VsPage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── SECTION 8: TL;DR verdict ── */}
+        <InlineCTA competitorName={c.name} />
+
         <div className="card-surface rounded-2xl p-8 mb-16 border-l-4 border-brand">
           <p className="text-xs font-bold uppercase tracking-widest text-brand mb-2">
             Bottom line
@@ -2564,7 +2636,6 @@ export default async function VsPage({ params }: Props) {
           </Link>
         </div>
 
-        {/* ── SECTION 9: Comparison Table ── */}
         <section
           id="comparison-table"
           aria-labelledby="comparison-heading"
@@ -2641,7 +2712,6 @@ export default async function VsPage({ params }: Props) {
           )}
         </section>
 
-        {/* ── SECTION 10: Use-case sections ── */}
         {useCases && (
           <section
             id="use-cases"
@@ -2691,7 +2761,6 @@ export default async function VsPage({ params }: Props) {
           </section>
         )}
 
-        {/* ── SECTION 11: Why teams are leaving ── */}
         <section
           id="why-leaving"
           aria-labelledby="leaving-heading"
@@ -2724,7 +2793,8 @@ export default async function VsPage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── SECTION 12: Who should choose ── */}
+        <InlineCTA competitorName={c.name} />
+
         <section aria-labelledby="choose-heading" className="mb-20">
           <h2
             id="choose-heading"
@@ -2781,7 +2851,6 @@ export default async function VsPage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── SECTION 13: Why Best narrative ── */}
         {meta?.whyBest && (
           <section aria-labelledby="why-best-heading" className="mb-20">
             <h2
@@ -2804,7 +2873,6 @@ export default async function VsPage({ params }: Props) {
           </section>
         )}
 
-        {/* ── SECTION 14: AI Search Visibility Explainer ── */}
         <section aria-labelledby="ai-search-heading" className="mb-20">
           <h2
             id="ai-search-heading"
@@ -2881,7 +2949,6 @@ export default async function VsPage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── SECTION 15: What only OptiAISEO offers ── */}
         <section aria-labelledby="unique-heading" className="mb-20">
           <h2
             id="unique-heading"
@@ -2929,7 +2996,6 @@ export default async function VsPage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── SECTION 16: Switching guide ── */}
         <section aria-labelledby="switch-heading" className="mb-20">
           <h2
             id="switch-heading"
@@ -2980,7 +3046,6 @@ export default async function VsPage({ params }: Props) {
           </p>
         </section>
 
-        {/* ── SECTION 17: FAQ ── */}
         <section id="faq" aria-labelledby="faq-heading" className="mb-20">
           <h2
             id="faq-heading"
@@ -3006,7 +3071,6 @@ export default async function VsPage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── SECTION 18: CTA ── */}
         <section className="bg-foreground text-background rounded-3xl p-12 text-center">
           <h2 className="text-3xl md:text-4xl font-black tracking-tight mb-4">
             Want to try it for free?
@@ -3031,7 +3095,6 @@ export default async function VsPage({ params }: Props) {
           </div>
         </section>
 
-        {/* ── SECTION 19: Related comparisons ── */}
         <section
           aria-labelledby="related-heading"
           className="mt-12 pt-10 border-t border-border"
@@ -3122,13 +3185,13 @@ export default async function VsPage({ params }: Props) {
               {(c.slug === "semrush" ||
                 c.slug === "ahrefs" ||
                 c.slug === "moz") && (
-                <Link
-                  href="/for-agencies"
-                  className="text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                >
-                  OptiAISEO for Agencies →
-                </Link>
-              )}
+                  <Link
+                    href="/for-agencies"
+                    className="text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                  >
+                    OptiAISEO for Agencies →
+                  </Link>
+                )}
               {c.slug !== "semrush" &&
                 c.slug !== "ahrefs" &&
                 c.slug !== "moz" &&
