@@ -13,6 +13,7 @@ export const AI_MODELS = {
     OPENAI_EMBEDDING:  'text-embedding-3-small',
 
     // Anthropic — full model strings with date stamps as required by the API
+    ANTHROPIC_PRIMARY: 'claude-sonnet-4-5-20251022',
     ANTHROPIC_HAIKU:   'claude-haiku-4-5-20251001',
     ANTHROPIC_SONNET:  'claude-sonnet-4-5-20251022',
     ANTHROPIC_OPUS:    'claude-opus-4-5-20251101',
@@ -24,4 +25,4 @@ export const GEMINI_2_0_FLASH = AI_MODELS.GEMINI_FLASH_2_0;
 
 export type GeminiModel = typeof AI_MODELS.GEMINI_FLASH | typeof AI_MODELS.GEMINI_FLASH_LITE | typeof AI_MODELS.GEMINI_LIVE | string;
 export type OpenAIModel = typeof AI_MODELS.OPENAI_PRIMARY | typeof AI_MODELS.OPENAI_EMBEDDING;
-export type AnthropicModel = typeof AI_MODELS.ANTHROPIC_HAIKU | typeof AI_MODELS.ANTHROPIC_SONNET | typeof AI_MODELS.ANTHROPIC_OPUS;
+export type AnthropicModel = typeof AI_MODELS.ANTHROPIC_PRIMARY | typeof AI_MODELS.ANTHROPIC_HAIKU | typeof AI_MODELS.ANTHROPIC_SONNET | typeof AI_MODELS.ANTHROPIC_OPUS;

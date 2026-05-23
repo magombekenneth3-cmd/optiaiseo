@@ -6,10 +6,11 @@ import type { RepurposeJobData } from "@/lib/blog/rules";
 export const repurposeBlogFn = inngest.createFunction(
     {
         id: "blog-repurpose",
+        name: "Repurpose Blog Post",
         retries: 3,
         throttle: { limit: 5, period: "1m" },
+        triggers: [{ event: "blog/repurpose" }],
     },
-    { event: "blog/repurpose" as const },
     async ({ event }) => {
         const { blogId, formats } = event.data as RepurposeJobData;
 
