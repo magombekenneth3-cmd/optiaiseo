@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { getAllSitesWithMentions, checkLlmMentions, type AeoCategoryScore } from "@/app/actions/llmMentions";
 import { GsiMetrics } from "@/components/dashboard/GsiMetrics";
 import { PromptSimulator } from "@/components/aeo/PromptSimulator";
@@ -29,6 +29,7 @@ import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { PdfDownloadButton } from "@/components/PdfDownloadButton";
 import { CreditGate } from "@/components/ui/CreditGate";
 import { AasCard } from "@/components/aeo/AasCard";
+import { ProofTimeline } from "@/components/aeo/ProofTimeline";
 
 // ─── Score utilities ──────────────────────────────────────────────────────────
 
@@ -303,6 +304,7 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
     const [result, setResult] = useState<any>(latest);
     const [expanded, setExpanded] = useState(false);
     const [innerTab, setInnerTab] = useState<"trend" | "insights" | "raw">("trend");
+    const [currentStep, setCurrentStep] = useState<number>(0);
 
     useEffect(() => { setResult(latest); }, [latest]);
 
@@ -336,6 +338,10 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                     setResult(status.report); router.refresh();
                     setTimeout(() => setPollingStatus("idle"), 3000);
                     return;
+                } else if (!status.done) {
+                    if (typeof status.currentStep === "number") {
+                        setCurrentStep(status.currentStep);
+                    }
                 } else if (status.done && !status.report) {
                     setPollingStatus("timeout");
                     setScanError("Audit failed — please try again.");
@@ -515,9 +521,55 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
 
             {/* ── Polling progress banner ── */}
             {isPolling && !scanError && (
-                <div className="mx-5 mb-4 px-4 py-3 rounded-xl bg-blue-500/8 border border-blue-500/20 text-blue-300 text-sm flex items-center gap-2.5">
-                    <SpinnerSvg className="w-4 h-4 shrink-0" />
-                    <span>Scan running — usually 1–3 minutes. Results will appear automatically.</span>
+                <div className="mx-5 mb-4 px-5 py-4 rounded-2xl bg-[#0d1117] border border-[#30363d] flex flex-col gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400 font-semibold animate-pulse">⟳</div>
+                        <div>
+                            <div className="text-sm font-semibold text-foreground">AEO Audit Running</div>
+                            <div className="text-xs text-muted-foreground">Step {Math.max(1, currentStep)} of 7 · ~45 seconds remaining</div>
+                        </div>
+                        <div className="ml-auto text-sm font-bold text-[#818cf8]">
+                            {Math.round((Math.max(1, currentStep) / 7) * 100)}%
+                        </div>
+                    </div>
+
+                    <div className="h-1 rounded-full bg-muted overflow-hidden">
+                        <div
+                            className="h-full bg-gradient-to-r from-blue-500 to-[#818cf8] rounded-full transition-all duration-500"
+                            style={{ width: `${(Math.max(1, currentStep) / 7) * 100}%` }}
+                        />
+                    </div>
+
+                    <div className="flex flex-col gap-2.5 mt-1">
+                        {[
+                            { label: "Fetching site pages", sub: "Discovered pages via sitemap" },
+                            { label: "Schema gap detection", sub: "Checking JSON-LD on all pages" },
+                            { label: "Checking Gemini citations", sub: "Verifying brand presence" },
+                            { label: "Checking Perplexity citations", sub: "Verifying citation links" },
+                            { label: "Checking ChatGPT mentions", sub: "Verifying response text" },
+                            { label: "Semantic vector analysis", sub: "Calculating concept relevance" },
+                            { label: "Building report", sub: "Building final insights" },
+                        ].map((s, i) => {
+                            const done = currentStep > i + 1;
+                            const active = currentStep === i + 1 || (currentStep === 0 && i === 0);
+                            const pending = currentStep < i + 1 && !(currentStep === 0 && i === 0);
+                            return (
+                                <div key={i} className={`flex items-center gap-3 transition-opacity duration-300 ${pending ? "opacity-40" : "opacity-100"}`}>
+                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] border font-bold shrink-0 ${
+                                        done ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" :
+                                        active ? "bg-blue-500/10 text-blue-400 border-blue-500/25" :
+                                        "bg-muted/30 text-muted-foreground border-border"
+                                    }`}>
+                                        {done ? "✓" : i + 1}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className={`text-xs ${active ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{s.label}</p>
+                                        {(done || active) && <p className="text-[10px] text-muted-foreground/60">{s.sub}</p>}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
             )}
 
@@ -566,7 +618,7 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                         </>)}
 
                         {/* ── TAB 2: Insights ── */}
-                        {innerTab === "insights" && (<>
+        {innerTab === "insights" && (<>
 
                         {/* Semantic Gap */}
                         {result?.semanticGaps && result.semanticGaps.length > 0 && (
@@ -575,6 +627,26 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
 
                         {/* Prompt Simulator */}
                         <PromptSimulator siteId={siteId} domain={domain} />
+
+                        {/* Benchmark strip — industry comparison */}
+                        {rate !== null && (
+                            <section>
+                                <SectionLabel icon={BarChart2} label="Industry Benchmark" accent="blue" />
+                                <div className="mt-4 grid grid-cols-3 gap-3">
+                                    {[
+                                        { label: "Your Score", value: rate, color: rate >= 65 ? "text-emerald-400" : rate >= 40 ? "text-amber-400" : "text-rose-400", bg: rate >= 65 ? "bg-emerald-500/10" : rate >= 40 ? "bg-amber-500/10" : "bg-rose-500/10" },
+                                        { label: "Industry Avg", value: 42, color: "text-blue-400", bg: "bg-blue-500/10" },
+                                        { label: "Top 10%", value: 78, color: "text-purple-400", bg: "bg-purple-500/10" },
+                                    ].map(item => (
+                                        <div key={item.label} className={`p-3 rounded-xl border border-border/60 ${item.bg} flex flex-col gap-1 text-center`}>
+                                            <span className={`text-2xl font-black tabular-nums ${item.color}`}>{item.value}%</span>
+                                            <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{item.label}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className="text-[10px] text-muted-foreground/50 mt-2">Industry averages based on aggregate scan data across all OptiAISEO sites.</p>
+                            </section>
+                        )}
 
                         {/* Recommendations */}
                         {recommendations.length > 0 && (
@@ -807,6 +879,7 @@ function SectionLabel({
 const INTEL_TABS = [
     { id: "brand", label: "Brand Entity" },
     { id: "citations", label: "Citation Gaps" },
+    { id: "proof", label: "Proof Timeline" },
     { id: "sov", label: "Share of Voice" },
     { id: "queries", label: "Query Library" },
     { id: "backlinks", label: "Backlinks" },
@@ -827,7 +900,16 @@ function IntelligenceTabs({
     competitorDomains: string[];
     hasCompetitors: boolean;
 }) {
-    const [activeTab, setActiveTab] = useState<IntelTabId>("brand");
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+    const tabParam = searchParams.get("tab");
+    const defaultTab = pathname.endsWith("/proofs") ? "proof" : pathname.endsWith("/entity") ? "brand" : (tabParam && INTEL_TABS.some(t => t.id === tabParam) ? tabParam as IntelTabId : "brand");
+    const [activeTab, setActiveTab] = useState<IntelTabId>(defaultTab);
+
+    useEffect(() => {
+        const currentTab = pathname.endsWith("/proofs") ? "proof" : pathname.endsWith("/entity") ? "brand" : (tabParam && INTEL_TABS.some(t => t.id === tabParam) ? tabParam as IntelTabId : "brand");
+        setActiveTab(currentTab);
+    }, [pathname, tabParam]);
 
     return (
         <div className="card-surface overflow-hidden">
@@ -865,6 +947,11 @@ function IntelligenceTabs({
                 {activeTab === "citations" && (
                     <PanelErrorBoundary fallbackTitle="Citation Gap panel failed to load">
                         <CitationGapPanel siteId={siteId} hasCompetitors={hasCompetitors} />
+                    </PanelErrorBoundary>
+                )}
+                {activeTab === "proof" && (
+                    <PanelErrorBoundary fallbackTitle="Proof Timeline failed to load">
+                        <ProofTimeline siteId={siteId} domain={domain} />
                     </PanelErrorBoundary>
                 )}
                 {activeTab === "sov" && (
@@ -1128,6 +1215,9 @@ function AeoRankPageInner() {
                         <SummaryHero sites={sites} scannedSites={scannedSites} avgRate={avgRate} topGrade={topGrade} />
                     </div>
                     <div>
+                        {activeSite && activeSiteEntry?.latest?.score !== undefined && (
+                            <BenchmarkBanner yourScore={activeSiteEntry.latest.score} siteId={activeSite.id} />
+                        )}
                         {activeSite && <AasCard siteId={activeSite.id} />}
                     </div>
                 </div>
@@ -1194,6 +1284,111 @@ function AeoRankPageInner() {
                     </div>
                 </section>
             )}
+        </div>
+    );
+}
+
+interface BenchmarkBannerProps {
+    yourScore: number;
+    siteId: string;
+}
+
+function BenchmarkBanner({ yourScore, siteId }: BenchmarkBannerProps) {
+    const [dismissed, setDismissed] = useState(true);
+    const [stats, setStats] = useState<{ average: number; topTenPercent: number } | null>(null);
+
+    useEffect(() => {
+        const isDismissed = localStorage.getItem(`benchmark-dismissed-${siteId}`) === "true";
+        setDismissed(isDismissed);
+
+        fetch("/api/aeo/benchmark")
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    setStats({ average: data.average, topTenPercent: data.topTenPercent });
+                }
+            })
+            .catch(() => {});
+    }, [siteId]);
+
+    const handleDismiss = () => {
+        localStorage.setItem(`benchmark-dismissed-${siteId}`, "true");
+        setDismissed(true);
+    };
+
+    const handleShow = () => {
+        localStorage.removeItem(`benchmark-dismissed-${siteId}`);
+        setDismissed(false);
+    };
+
+    if (dismissed) {
+        return (
+            <div
+                className="text-[10px] text-muted-foreground/60 border border-dashed border-[#30363d] rounded-xl py-2 px-3 text-center cursor-pointer hover:text-muted-foreground transition-colors mb-4"
+                onClick={handleShow}
+            >
+                Show industry benchmark comparison
+            </div>
+        );
+    }
+
+    const average = stats?.average ?? 38;
+    const topTen = stats?.topTenPercent ?? 71;
+
+    return (
+        <div className="bg-[#818cf8]/5 border border-[#818cf8]/20 rounded-2xl p-5 relative mb-4">
+            <button
+                onClick={handleDismiss}
+                className="absolute top-3 right-3 text-muted-foreground/60 hover:text-foreground transition-colors text-sm"
+            >
+                ✕
+            </button>
+            <div className="flex items-center gap-2 mb-3">
+                <span className="text-brand text-sm">◈</span>
+                <span className="text-xs font-bold text-foreground">Industry Comparison — SaaS Tools</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#818cf8]/10 text-[#818cf8] border border-[#818cf8]/20 font-bold uppercase tracking-wider">
+                    First Audit
+                </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5 mb-3.5">
+                <div className="bg-white/[0.02] border border-[#21262d] rounded-xl p-2.5 text-center">
+                    <div className="text-lg font-black text-[#818cf8]">{yourScore}</div>
+                    <div className="text-[10px] font-semibold text-muted-foreground/80 mt-0.5">Your score</div>
+                    <div className="text-[9px] text-muted-foreground/50 mt-0.5">Just audited</div>
+                </div>
+                <div className="bg-white/[0.02] border border-[#21262d] rounded-xl p-2.5 text-center">
+                    <div className="text-lg font-black text-muted-foreground">{average}</div>
+                    <div className="text-[10px] font-semibold text-muted-foreground/80 mt-0.5">Category avg</div>
+                    <div className="text-[9px] text-muted-foreground/50 mt-0.5">Global benchmark</div>
+                </div>
+                <div className="bg-white/[0.02] border border-[#21262d] rounded-xl p-2.5 text-center">
+                    <div className="text-lg font-black text-[#f59e0b]">{topTen}</div>
+                    <div className="text-[10px] font-semibold text-muted-foreground/80 mt-0.5">Top 10%</div>
+                    <div className="text-[9px] text-muted-foreground/50 mt-0.5">Target to aim for</div>
+                </div>
+            </div>
+
+            <div className="h-1.5 rounded-full bg-muted/40 relative overflow-visible mb-2">
+                <div
+                    className="absolute top-[-3px] w-0.5 h-3 bg-muted-foreground/50 rounded-full"
+                    style={{ left: `${Math.min(average, 100)}%` }}
+                />
+                <div
+                    className="h-full bg-gradient-to-r from-blue-500 to-[#818cf8] rounded-full"
+                    style={{ width: `${Math.min(yourScore, 100)}%` }}
+                />
+                <div
+                    className="absolute top-[-3px] w-0.5 h-3 bg-[#f59e0b] rounded-full"
+                    style={{ left: `${Math.min(topTen, 100)}%` }}
+                />
+            </div>
+            <div className="flex justify-between text-[9px] text-muted-foreground/50 font-mono">
+                <span>0</span>
+                <span>Category avg {average}</span>
+                <span className="text-[#f59e0b]">Top 10% → {topTen}</span>
+                <span>100</span>
+            </div>
         </div>
     );
 }

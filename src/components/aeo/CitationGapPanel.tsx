@@ -53,10 +53,11 @@ function CopyButton({ text }: { text: string }) {
 function GapCard({ gap }: { gap: CitationGap }) {
   const [expanded, setExpanded] = useState(false);
   const topComp = gap.topCompetitorCiting;
+  const yourPos = gap.yourPosition;
+  const compPos = topComp?.citationPosition ?? null;
 
   return (
     <div className="border border-border rounded-xl overflow-hidden">
-      {/* Header row */}
       <button
         onClick={() => setExpanded((p) => !p)}
         className="w-full text-left flex items-start gap-3 p-4 hover:bg-muted/40 transition-colors"
@@ -68,14 +69,28 @@ function GapCard({ gap }: { gap: CitationGap }) {
             {topComp && (
               <span className="text-xs text-muted-foreground shrink-0">
                 — {topComp.domain} cited
-                {topComp.citationPosition ? ` at #${topComp.citationPosition}` : ""}
+                {compPos ? ` at #${compPos}` : ""}
               </span>
             )}
           </div>
-          <div className="flex gap-1.5 flex-wrap mt-1.5">
+          <div className="flex gap-1.5 flex-wrap mt-1.5 items-center">
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
               {REASON_LABELS[gap.gapReason]}
             </span>
+            {yourPos !== null ? (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-semibold">
+                You #{yourPos}
+              </span>
+            ) : (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 font-semibold">
+                Not cited
+              </span>
+            )}
+            {compPos !== null && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 font-semibold">
+                {topComp?.domain} #{compPos}
+              </span>
+            )}
           </div>
         </div>
         <span className="text-muted-foreground text-xs shrink-0 mt-0.5">
@@ -120,38 +135,33 @@ function GapCard({ gap }: { gap: CitationGap }) {
             </div>
           )}
 
-          {/* Top competitor */}
+          {/* Gap Evidence — competitor citation context */}
           {topComp && (
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">
-                Top competitor cited for this keyword
-              </p>
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-2">
+              <p className="text-xs font-semibold text-amber-400">Gap Evidence</p>
               <div className="flex items-center justify-between text-xs">
-                <span className="font-medium">{topComp.domain}</span>
+                <span className="font-medium text-foreground">{topComp.domain}</span>
                 <div className="flex items-center gap-2">
-                  {topComp.citationPosition && (
-                    <span className="text-muted-foreground">Position #{topComp.citationPosition}</span>
+                  {compPos && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 text-[10px] font-bold">#{compPos} in AI answer</span>
                   )}
                   {topComp.citedUrl && (
-                    <a
-                      href={topComp.citedUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-400 hover:underline"
-                    >
-                      View page →
-                    </a>
+                    <a href={topComp.citedUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline text-[10px]">View page →</a>
                   )}
                 </div>
               </div>
+              {yourPos !== null ? (
+                <p className="text-[11px] text-emerald-400">✓ You appear at position #{yourPos} — but this competitor ranks higher.</p>
+              ) : (
+                <p className="text-[11px] text-rose-400">✗ You are absent — AI cited {topComp.domain} instead of you for this query.</p>
+              )}
             </div>
           )}
 
-          {/* Citation status */}
           <div className="text-xs text-muted-foreground">
-            {gap.yourPosition !== null ? (
+            {yourPos !== null ? (
               <span className="text-emerald-500">
-                ✓ You appear at position #{gap.yourPosition} — but competitors rank higher.
+                ✓ You appear at position #{yourPos} — but competitors rank higher.
               </span>
             ) : (
               <span className="text-rose-400">

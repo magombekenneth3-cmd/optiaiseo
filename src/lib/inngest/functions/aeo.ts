@@ -72,8 +72,7 @@ export const runAeoAuditJob = inngest.createFunction(
         });
         if (!allowed) return { skipped: true, reason: "rate_limit" };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = await step.run("run-audit", async () => await runAeoAudit(site.domain, site.coreServices, false, site.brandName ?? null)) as any;
+        const result = await step.run("run-audit", async () => await runAeoAudit(site.domain, site.coreServices, false, site.brandName ?? null, reportId)) as any;
 
         await step.run("save-report", async () => {
             await prisma.aeoReport.update({

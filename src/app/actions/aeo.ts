@@ -28,7 +28,7 @@ type RunAeoReportResult =
     | ActionError;
 
 type AeoReportStatusResult =
-    | { done: false }
+    | { done: false; currentStep?: number }
     | {
         done: true;
         failed?: boolean;
@@ -281,7 +281,11 @@ export async function getAeoReportStatus(
             };
         }
 
-        if (report.status === "PENDING") return { done: false };
+        if (report.status === "PENDING") {
+            const checksObj = report.checks as any;
+            const currentStep = typeof checksObj?.currentStep === "number" ? checksObj.currentStep : 0;
+            return { done: false, currentStep };
+        }
 
         return { done: true, report };
     } catch (error: unknown) {

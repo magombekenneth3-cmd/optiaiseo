@@ -369,17 +369,20 @@ const predictCitationLikelihood = (checks: AeoCheck[]): number => {
 // MAIN AEO AUDIT
 // =============================================================================
 
-export const runAeoAudit = async (domain: string, coreServices?: string | null, lite = false, brandNameOverride?: string | null): Promise<AeoResult> => {
+export const runAeoAudit = async (domain: string, coreServices?: string | null, lite = false, brandNameOverride?: string | null, reportId?: string): Promise<AeoResult> => {
     const url = domain.startsWith("http") ? domain : `https://${domain}`
     const checks: AeoCheck[] = []
     const schemaTypes: string[] = []
 
-    
-    // Use extractBrandIdentity so the display name matches everywhere else in the app
-    // and respects the user's brandNameOverride (e.g. "OptiAISEO" not "Opti AI SEO")
+    if (reportId) {
+        await prisma.aeoReport.update({
+            where: { id: reportId },
+            data: { checks: { status: "Fetching site pages", currentStep: 1 } }
+        }).catch(() => {});
+    }
+
     const rawBrand = extractBrandIdentity(domain, brandNameOverride).displayName
 
-    // Discover all site pages via sitemap for comprehensive multi-page auditing
     const sitePages = await discoverPagesFromSitemap(url)
     logger.debug(`[AEO] Discovered ${sitePages.length} pages for ${domain} via sitemap`)
 
@@ -404,6 +407,13 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
         : []
     // Combine homepage + extra pages into one big text for content checks
     const allPagesHtml = [html, ...extraHtmlPages.filter((h): h is string => h !== null)].join(' ')
+
+    if (reportId) {
+        await prisma.aeoReport.update({
+            where: { id: reportId },
+            data: { checks: { status: "Schema gap detection", currentStep: 2 } }
+        }).catch(() => {});
+    }
 
     const foundSchemaTypes = extractSchemaTypes(html)
     schemaTypes.push(...foundSchemaTypes)
@@ -1228,11 +1238,30 @@ ${cleanText}
     let googleAioResult = { score: 0 };
 
     if (!lite) {
+        if (reportId) {
+            await prisma.aeoReport.update({
+                where: { id: reportId },
+                data: { checks: { status: "Checking Gemini citations", currentStep: 3 } }
+            }).catch(() => {});
+        }
         multiModelResults = await auditMultiModelMentions(domain, coreServices, brandNameOverride);
 
-        // We check the top keyword or just the brand name for Google AIO
+        if (reportId) {
+            await prisma.aeoReport.update({
+                where: { id: reportId },
+                data: { checks: { status: "Checking Perplexity citations", currentStep: 4 } }
+            }).catch(() => {});
+        }
+
         const aioKeyword = coreServices ? `${domain.split('.')[0]} ${coreServices}` : domain.split('.')[0]
         googleAioResult = await checkGoogleAIOverview(domain, aioKeyword)
+
+        if (reportId) {
+            await prisma.aeoReport.update({
+                where: { id: reportId },
+                data: { checks: { status: "Checking ChatGPT mentions", currentStep: 5 } }
+            }).catch(() => {});
+        }
     }
 
     const multiEngineScore = {
@@ -1373,6 +1402,12 @@ ${cleanText}
     // Each keyword is analysed independently; failures are non-fatal (empty gaps).
     let semanticGaps: SemanticGapResult[] | undefined = undefined;
     if (!lite && html && process.env.GEMINI_API_KEY) {
+        if (reportId) {
+            await prisma.aeoReport.update({
+                where: { id: reportId },
+                data: { checks: { status: "Semantic vector analysis", currentStep: 6 } }
+            }).catch(() => {});
+        }
         try {
             const userContent = html
                 .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
@@ -1411,6 +1446,13 @@ ${cleanText}
                 error: (err as Error)?.message ?? String(err),
             });
         }
+    }
+
+    if (reportId) {
+        await prisma.aeoReport.update({
+            where: { id: reportId },
+            data: { checks: { status: "Building report", currentStep: 7 } }
+        }).catch(() => {});
     }
 
     const result: AeoResult = {

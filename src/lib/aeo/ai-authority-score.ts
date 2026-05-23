@@ -5,6 +5,7 @@ export interface AIAuthorityScoreResult {
     gemini: number;
     openai: number;
     anthropic: number;
+    perplexity: number;
     capturedAt: Date | null;
 }
 
@@ -14,11 +15,12 @@ export interface AASTrendPoint {
     gemini: number;
     openai: number;
     anthropic: number;
+    perplexity: number;
 }
 
 /**
  * Calculates the latest proprietary AI Authority Score (AAS) for a given site.
- * Formula: (Gemini * 40%) + (OpenAI * 40%) + (Anthropic * 20%)
+ * Formula: (Gemini * 35%) + (OpenAI * 35%) + (Anthropic * 20%) + (Perplexity * 10%)
  */
 export async function calculateLatestAAS(siteId: string): Promise<AIAuthorityScoreResult> {
     const latest = await prisma.aeoSnapshot.findFirst({
@@ -32,19 +34,20 @@ export async function calculateLatestAAS(siteId: string): Promise<AIAuthoritySco
             gemini: 0,
             openai: 0,
             anthropic: 0,
+            perplexity: 0,
             capturedAt: null,
         };
     }
 
-    // Try to extract Gemini confidence score if googleAioScore is 0
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pb = (latest.platformBreakdown ?? {}) as Record<string, any>;
     const geminiScore = latest.googleAioScore || pb["Gemini"]?.confidence || 0;
     const openaiScore = latest.chatgptScore || 0;
     const anthropicScore = latest.claudeScore || 0;
+    const perplexityScore = pb["Perplexity"]?.confidence || pb["perplexity"]?.score || 0;
 
     const weightedScore = Math.round(
-        (geminiScore * 0.4) + (openaiScore * 0.4) + (anthropicScore * 0.2)
+        (geminiScore * 0.35) + (openaiScore * 0.35) + (anthropicScore * 0.2) + (perplexityScore * 0.1)
     );
 
     return {
@@ -52,6 +55,7 @@ export async function calculateLatestAAS(siteId: string): Promise<AIAuthoritySco
         gemini: geminiScore,
         openai: openaiScore,
         anthropic: anthropicScore,
+        perplexity: perplexityScore,
         capturedAt: latest.createdAt,
     };
 }
@@ -81,9 +85,10 @@ export async function getAASTrend(siteId: string, days = 30): Promise<AASTrendPo
         const geminiScore = s.googleAioScore || pb["Gemini"]?.confidence || 0;
         const openaiScore = s.chatgptScore || 0;
         const anthropicScore = s.claudeScore || 0;
+        const perplexityScore = pb["Perplexity"]?.confidence || pb["perplexity"]?.score || 0;
 
         const weightedScore = Math.round(
-            (geminiScore * 0.4) + (openaiScore * 0.4) + (anthropicScore * 0.2)
+            (geminiScore * 0.35) + (openaiScore * 0.35) + (anthropicScore * 0.2) + (perplexityScore * 0.1)
         );
 
         return {
@@ -92,6 +97,7 @@ export async function getAASTrend(siteId: string, days = 30): Promise<AASTrendPo
             gemini: geminiScore,
             openai: openaiScore,
             anthropic: anthropicScore,
+            perplexity: perplexityScore,
         };
     });
 }

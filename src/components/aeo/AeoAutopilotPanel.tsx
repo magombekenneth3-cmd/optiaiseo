@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Zap, Clock, Mail, RefreshCw } from "lucide-react";
 import { updateAutopilotConfig, generatePublicBadgeToken } from "@/app/actions/aeoAutopilot";
 
@@ -29,6 +29,17 @@ export function AeoAutopilotPanel({ siteId, initialEnabled, initialSchedule, ini
   const [badgeToken, setBadgeToken] = useState<string | null>(initialBadgeToken);
   const [generatingBadge, setGeneratingBadge] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [fixLog, setFixLog] = useState<{ action: string; appliedAt: string; status: string }[]>([]);
+  const [logLoading, setLogLoading] = useState(false);
+
+  useEffect(() => {
+    setLogLoading(true);
+    fetch(`/api/aeo/autopilot-log?siteId=${siteId}`)
+      .then(r => r.ok ? r.json() : { entries: [] })
+      .then(d => setFixLog(d.entries ?? []))
+      .catch(() => {})
+      .finally(() => setLogLoading(false));
+  }, [siteId]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -150,6 +161,36 @@ export function AeoAutopilotPanel({ siteId, initialEnabled, initialSchedule, ini
           >
             {generatingBadge ? "Generating…" : "Generate badge"}
           </button>
+        )}
+      </div>
+
+      <div className="p-5 rounded-2xl border border-border bg-card">
+        <p className="text-sm font-bold text-foreground mb-1">Autopilot Fix Log</p>
+        <p className="text-xs text-muted-foreground mb-4">Recent automated actions applied to your site.</p>
+        {logLoading ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+            <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />
+            Loading log…
+          </div>
+        ) : fixLog.length === 0 ? (
+          <p className="text-xs text-muted-foreground/60 italic">No automated fixes applied yet. Enable Autopilot above to get started.</p>
+        ) : (
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {fixLog.map((entry, i) => (
+              <div key={i} className="flex items-start gap-2.5 text-xs px-3 py-2.5 rounded-xl border border-border bg-muted/20">
+                <span className={`mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 ${entry.status === "applied" ? "bg-emerald-400" : entry.status === "failed" ? "bg-rose-400" : "bg-amber-400"}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground truncate">{entry.action}</p>
+                  <p className="text-muted-foreground/60 text-[10px] mt-0.5">{new Date(entry.appliedAt).toLocaleString()}</p>
+                </div>
+                <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                  entry.status === "applied" ? "bg-emerald-500/10 text-emerald-400" :
+                  entry.status === "failed" ? "bg-rose-500/10 text-rose-400" :
+                  "bg-amber-500/10 text-amber-400"
+                }`}>{entry.status}</span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

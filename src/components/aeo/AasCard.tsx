@@ -9,6 +9,7 @@ interface AasData {
         gemini: number;
         openai: number;
         anthropic: number;
+        perplexity: number;
         capturedAt: string | null;
     };
     trend: Array<{
@@ -17,6 +18,7 @@ interface AasData {
         gemini: number;
         openai: number;
         anthropic: number;
+        perplexity: number;
     }>;
 }
 
@@ -74,7 +76,7 @@ export function AasCard({ siteId }: Props) {
         );
     }
 
-    const { score, gemini, openai, anthropic, capturedAt } = data.latest;
+    const { score, gemini, openai, anthropic, perplexity, capturedAt } = data.latest;
     const trend = data.trend || [];
 
     // Calculate delta if trend exists
@@ -138,16 +140,13 @@ export function AasCard({ siteId }: Props) {
                 )}
             </div>
 
-            {/* Info Overlay */}
             {showInfo && (
                 <div className="p-3 text-[11px] text-muted-foreground bg-muted/40 border border-border rounded-xl leading-relaxed animate-in fade-in slide-in-from-top-1">
-                    AI Authority Score is a proprietary model evaluating your search footprint in AI query citations.
-                    It computes a weighted average: <strong className="text-foreground">Gemini (40%)</strong>, <strong className="text-foreground">OpenAI (40%)</strong>, and <strong className="text-foreground">Anthropic/Claude (20%)</strong>.
+                    Weighted average: <strong className="text-foreground">Gemini 35%</strong> · <strong className="text-foreground">ChatGPT 35%</strong> · <strong className="text-foreground">Perplexity 20%</strong> · <strong className="text-foreground">Claude 10%</strong>. Perplexity now included — it drives the highest-intent commercial AI searches.
                 </div>
             )}
 
             <div className="flex flex-col md:flex-row gap-6 items-center">
-                {/* Score Circle Gauge */}
                 <div className="flex items-center gap-4 shrink-0">
                     <div className="relative w-20 h-20 flex items-center justify-center">
                         <svg className="-rotate-90 w-20 h-20" viewBox="0 0 80 80">
@@ -157,7 +156,7 @@ export function AasCard({ siteId }: Props) {
                             />
                             <circle
                                 cx="40" cy="40" r="32"
-                                fill="none" stroke="#10b981" strokeWidth="6"
+                                fill="none" stroke="#818cf8" strokeWidth="6"
                                 strokeLinecap="round"
                                 strokeDasharray={`${Math.min(score / 100, 1) * 201} 201`}
                                 className="transition-all duration-1000 ease-out"
@@ -174,14 +173,12 @@ export function AasCard({ siteId }: Props) {
                     </div>
                 </div>
 
-                {/* Weighted breakdowns */}
                 <div className="flex-1 w-full flex flex-col gap-3">
-                    {/* Gemini */}
                     <div className="flex flex-col gap-1.5">
                         <div className="flex justify-between items-center text-xs">
                             <span className="text-muted-foreground flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                                Google Gemini <span className="text-[9px] text-muted-foreground/50">(40%)</span>
+                                Google Gemini <span className="text-[9px] text-muted-foreground/50">(35%)</span>
                             </span>
                             <span className="font-bold text-foreground">{gemini}%</span>
                         </div>
@@ -190,12 +187,11 @@ export function AasCard({ siteId }: Props) {
                         </div>
                     </div>
 
-                    {/* OpenAI */}
                     <div className="flex flex-col gap-1.5">
                         <div className="flex justify-between items-center text-xs">
                             <span className="text-muted-foreground flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                                OpenAI ChatGPT <span className="text-[9px] text-muted-foreground/50">(40%)</span>
+                                OpenAI ChatGPT <span className="text-[9px] text-muted-foreground/50">(35%)</span>
                             </span>
                             <span className="font-bold text-foreground">{openai}%</span>
                         </div>
@@ -204,17 +200,30 @@ export function AasCard({ siteId }: Props) {
                         </div>
                     </div>
 
-                    {/* Anthropic */}
                     <div className="flex flex-col gap-1.5">
                         <div className="flex justify-between items-center text-xs">
                             <span className="text-muted-foreground flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-                                Anthropic Claude <span className="text-[9px] text-muted-foreground/50">(20%)</span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                Perplexity AI <span className="text-[9px] text-muted-foreground/50">(20%)</span>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">NEW</span>
+                            </span>
+                            <span className="font-bold text-foreground">{perplexity}%</span>
+                        </div>
+                        <div className="h-1 rounded-full bg-muted overflow-hidden">
+                            <div className="h-full bg-amber-500 rounded-full transition-all duration-1000" style={{ width: `${perplexity}%` }} />
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                            <span className="text-muted-foreground flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                                Anthropic Claude <span className="text-[9px] text-muted-foreground/50">(10%)</span>
                             </span>
                             <span className="font-bold text-foreground">{anthropic}%</span>
                         </div>
                         <div className="h-1 rounded-full bg-muted overflow-hidden">
-                            <div className="h-full bg-indigo-500 rounded-full transition-all duration-1000" style={{ width: `${anthropic}%` }} />
+                            <div className="h-full bg-violet-500 rounded-full transition-all duration-1000" style={{ width: `${anthropic}%` }} />
                         </div>
                     </div>
                 </div>
@@ -228,12 +237,12 @@ export function AasCard({ siteId }: Props) {
                         <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="overflow-visible">
                             <path d={areaD} fill="url(#grad-aas)" />
                             <linearGradient id="grad-aas" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#10b981" stopOpacity="0.15" />
-                                <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                                <stop offset="0%" stopColor="#818cf8" stopOpacity="0.15" />
+                                <stop offset="100%" stopColor="#818cf8" stopOpacity="0" />
                             </linearGradient>
-                            <path d={pathD} fill="none" stroke="#10b981" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                            <path d={pathD} fill="none" stroke="#818cf8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
                             {points.map((p, i) => (
-                                <circle key={i} cx={p.x} cy={p.y} r={2.5} fill="#10b981" opacity={i === points.length - 1 ? 1 : 0.3} />
+                                <circle key={i} cx={p.x} cy={p.y} r={2.5} fill="#818cf8" opacity={i === points.length - 1 ? 1 : 0.3} />
                             ))}
                         </svg>
                     </div>

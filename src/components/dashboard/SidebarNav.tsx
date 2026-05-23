@@ -28,6 +28,7 @@ import {
     PanelLeftOpen,
     BarChart3,
     Gift,
+    History,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -44,13 +45,15 @@ function buildHref(base: string, siteId: string | null): string {
 }
 
 const NAV_ITEMS = [
-    { name: "Dashboard",      href: "/dashboard",                 icon: LayoutDashboard,  exact: true,  contextSiteId: false },
-    { name: "My Sites",       href: "/dashboard/sites",           icon: Globe,            exact: false, contextSiteId: false },
-    { name: "SEO Audits",     href: "/dashboard/audits",          icon: ClipboardList,    exact: false, contextSiteId: true  },
-    { name: "Keywords",       href: "/dashboard/keywords",        icon: TrendingUp,       exact: false, contextSiteId: true  },
-    { name: "Competitors",    href: "/dashboard/competitors",     icon: Crosshair,        exact: false, contextSiteId: true  },
-    { name: "AI Visibility",  href: "/dashboard/aeo",             icon: MonitorSmartphone,exact: true,  contextSiteId: true  },
-    { name: "AI Content",     href: "/dashboard/blogs",           icon: FileText,         exact: false, contextSiteId: false },
+    { name: "Dashboard",        href: "/dashboard",                 icon: LayoutDashboard,  exact: true,  contextSiteId: false },
+    { name: "My Sites",         href: "/dashboard/sites",           icon: Globe,            exact: false, contextSiteId: false },
+    { name: "SEO Audits",       href: "/dashboard/audits",          icon: ClipboardList,    exact: false, contextSiteId: true  },
+    { name: "Keywords",         href: "/dashboard/keywords",        icon: TrendingUp,       exact: false, contextSiteId: true  },
+    { name: "Competitors",      href: "/dashboard/competitors",     icon: Crosshair,        exact: false, contextSiteId: true  },
+    { name: "AI Visibility",    href: "/dashboard/aeo",             icon: MonitorSmartphone,exact: true,  contextSiteId: true  },
+    { name: "Citation History", href: "/dashboard/aeo/proofs",      icon: History,          exact: false, contextSiteId: true, indent: true },
+    { name: "Wikidata Entity",  href: "/dashboard/aeo/entity",      icon: Globe,            exact: false, contextSiteId: true, indent: true },
+    { name: "AI Content",       href: "/dashboard/blogs",           icon: FileText,         exact: false, contextSiteId: false },
 ];
 
 const ACCOUNT_ITEMS = [
@@ -384,7 +387,11 @@ function SidebarNavInner({
 
                 {/* Analyse group */}
                 {!isCollapsed && <NavSectionLabel>Analyse</NavSectionLabel>}
-                {NAV_ITEMS.filter(i => ["SEO Audits", "Keywords", "Competitors", "AI Visibility"].includes(i.name)).map((item) => {
+                {NAV_ITEMS.filter(i => {
+                    const baseMatch = ["SEO Audits", "Keywords", "Competitors", "AI Visibility"].includes(i.name);
+                    if (isCollapsed) return baseMatch;
+                    return baseMatch || ["Citation History", "Wikidata Entity"].includes(i.name);
+                }).map((item) => {
                     const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
                     const isActive = item.href === "/dashboard/aeo"
                         ? (pathname === "/dashboard/aeo" || /\/dashboard\/sites\/[^/]+\/aeo/.test(pathname))

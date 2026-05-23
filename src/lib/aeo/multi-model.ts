@@ -31,12 +31,13 @@ export interface MentionResult {
      * The regex may have matched a co-mention or partial token rather than a clean
      * citation. Surface these rows in the tracker UI for human review.
      */
-    lowConfidence?: boolean;
+    positionInResponse?: number;
     quality?: {
         positionScore: number;
         isAuthoritative: boolean;
         mentionCount: number;
         context: string | null;
+        positionInResponse?: number;
     };
     citation?: {
         cited: boolean;
@@ -78,7 +79,19 @@ function analyzeCitationQuality(content: string, domainOrIdentity: string | Bran
         );
     }
 
-    return { positionScore, isAuthoritative, mentionCount, context };
+    const paragraphs = content.split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
+    let positionInResponse = -1;
+    const lowerDisplay = identity.displayName.toLowerCase();
+    const lowerDomain = identity.domain.toLowerCase();
+    for (let i = 0; i < paragraphs.length; i++) {
+        const pLower = paragraphs[i].toLowerCase();
+        if (pLower.includes(lowerDisplay) || pLower.includes(lowerDomain) || identity.variants.some(v => pLower.includes(v.toLowerCase()))) {
+            positionInResponse = i + 1;
+            break;
+        }
+    }
+
+    return { positionScore, isAuthoritative, mentionCount, context, positionInResponse };
 }
 
 export { analyzeCitationQuality };
@@ -182,6 +195,7 @@ export async function checkGeminiMention(
             details: description,
             quality,
             lowConfidence,
+            positionInResponse: quality?.positionInResponse !== -1 ? quality?.positionInResponse : undefined,
         };
     } catch (error: unknown) {
         logger.error("[Multi-Model] Gemini mention check failed:", {
@@ -235,6 +249,7 @@ export async function checkPerplexityMention(
                     ? `Mentioned in response text but NOT in Perplexity's source Citations. Competitors cited: ${result.competitorsCited.slice(0, 3).join(", ") || "none"}`
                     : `Not cited. Perplexity retrieved: ${result.competitorsCited.slice(0, 3).join(", ") || "no competitors identified"}`,
             quality,
+            positionInResponse: quality?.positionInResponse !== -1 ? quality?.positionInResponse : (result.citationPosition ?? undefined),
             citation: {
                 cited: result.cited,
                 citationPosition: result.citationPosition,
