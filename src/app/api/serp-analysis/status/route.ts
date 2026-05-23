@@ -35,6 +35,16 @@ export async function GET(req: NextRequest) {
             disclaimerNeeded: true,
             completedAt: true,
             expiresAt: true,
+            // ── fields added by the Inngest worker ──────────────────────────
+            yourPageH2s: true,   // was returning []
+            clientDR: true,      // was returning 0
+            clientRDs: true,     // was returning 0
+            toxicCount: true,    // was returning 0
+            topAnchors: true,    // was returning []
+            newLastWeek: true,   // was returning 0
+            lostLastWeek: true,  // was returning 0
+            dofollowRatio: true, // was returning 0
+            // ────────────────────────────────────────────────────────────────
             site: { select: { userId: true } },
         },
     });
@@ -54,29 +64,29 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
         status: record.status,
         data: {
-            fixes:            record.fixes,
-            headingGaps:      record.headingGaps,
-            serpResults:      record.serpResults,
+            fixes:             record.fixes,
+            headingGaps:       record.headingGaps,
+            serpResults:       record.serpResults,
             wordCountAvgTop10: record.wordCountAvg,
             wordCountYourPage: record.wordCountPage,
-            yourPageH2s:      [],
-            drGap:            record.drGap,
-            rdGapRoot:        record.rdGapRoot,
-            rdGapPage:        record.rdGapPage,
-            clientDR:         0,
-            clientRDs:        0,
-            pageRDs:          record.rdGapPage ?? 0,
-            toxicCount:       0,
-            topAnchors:       [],
-            newLastWeek:      0,
-            lostLastWeek:     0,
-            dofollowRatio:    0,
-            opportunityDoms:  record.opportunityDoms,
-            intentMismatch:   record.intentMismatch,
-            intentNote:       record.intentNote ?? null,
-            contentTypeTop10: record.contentType ?? "",
-            disclaimerNeeded: record.disclaimerNeeded,
-            cachedAt:         (record.completedAt ?? new Date()).toISOString(),
+            yourPageH2s:       (record.yourPageH2s ?? []) as string[],
+            drGap:             record.drGap,
+            rdGapRoot:         record.rdGapRoot,
+            rdGapPage:         record.rdGapPage,
+            clientDR:          record.clientDR   ?? 0,
+            clientRDs:         record.clientRDs  ?? 0,
+            pageRDs:           record.rdGapPage  ?? 0,
+            toxicCount:        record.toxicCount  ?? 0,
+            topAnchors:        (record.topAnchors ?? []) as { anchor: string; count: number }[],
+            newLastWeek:       record.newLastWeek  ?? 0,
+            lostLastWeek:      record.lostLastWeek ?? 0,
+            dofollowRatio:     record.dofollowRatio ?? 0,
+            opportunityDoms:   record.opportunityDoms as { domain: string; dr: number }[],
+            intentMismatch:    record.intentMismatch,
+            intentNote:        record.intentNote ?? null,
+            contentTypeTop10:  record.contentType ?? "",
+            disclaimerNeeded:  record.disclaimerNeeded,
+            cachedAt:          (record.completedAt ?? new Date()).toISOString(),
         },
     });
 }

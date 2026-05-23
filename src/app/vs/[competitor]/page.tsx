@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   Check,
-  X,
+  X as XIcon,
   ArrowRight,
   Zap,
   Mic,
@@ -2046,7 +2046,7 @@ export default async function VsPage({ params }: Props) {
             <ul className="space-y-1.5">
               {c.whyLeaving.map(({ title }) => (
                 <li key={title} className="flex items-start gap-2 text-sm">
-                  <X className="w-3.5 h-3.5 text-rose-400 mt-0.5 shrink-0" />
+                  <XIcon className="w-3.5 h-3.5 text-rose-400 mt-0.5 shrink-0" />
                   <span className="text-muted-foreground">{title}</span>
                 </li>
               ))}
@@ -2219,7 +2219,7 @@ export default async function VsPage({ params }: Props) {
                 <ul className="space-y-2">
                   {c.weaknesses.slice(0, 4).map((w) => (
                     <li key={w} className="flex items-start gap-2 text-sm">
-                      <X className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
+                      <XIcon className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
                       {w}
                     </li>
                   ))}
@@ -2475,7 +2475,7 @@ export default async function VsPage({ params }: Props) {
                                     key={con}
                                     className="flex items-start gap-2 text-xs text-muted-foreground"
                                   >
-                                    <X className="w-3.5 h-3.5 text-rose-400 mt-0.5 shrink-0" />
+                                    <XIcon className="w-3.5 h-3.5 text-rose-400 mt-0.5 shrink-0" />
                                     {con}
                                   </li>
                                 ))}
@@ -2564,7 +2564,7 @@ export default async function VsPage({ params }: Props) {
                     key={item}
                     className="flex items-start gap-2.5 text-sm text-muted-foreground"
                   >
-                    <X className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
+                    <XIcon className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
                     {item}
                   </li>
                 ))}

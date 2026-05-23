@@ -18,6 +18,39 @@ interface SerpAnalysisPayload {
     domain: string;
 }
 
+/**
+ * Returns a 0-1 diversity score for an anchor text profile.
+ * 1.0 = perfectly diverse (every anchor is unique brand/generic).
+ * 0.0 = all anchors are exact keyword matches (over-optimised).
+ *
+ * Logic: compute the % of total anchors that are exact- or partial-keyword
+ * matches, then invert it. A score < 0.4 triggers an advisory fix.
+ */
+export function computeAnchorDiversityScore(
+    anchors: { anchor: string; count: number }[],
+    keyword: string,
+): number {
+    if (anchors.length === 0) return 1;
+
+    const kw = keyword.toLowerCase().trim();
+    const kwWords = kw.split(/\s+/).filter(Boolean);
+
+    const totalLinks = anchors.reduce((s, a) => s + a.count, 0);
+    if (totalLinks === 0) return 1;
+
+    const keywordMatchLinks = anchors
+        .filter((a) => {
+            const text = (a.anchor ?? "").toLowerCase().trim();
+            if (!text) return false;
+            // Exact or partial keyword match
+            return kwWords.length > 0 && kwWords.every((w) => text.includes(w));
+        })
+        .reduce((s, a) => s + a.count, 0);
+
+    const keywordMatchRatio = keywordMatchLinks / totalLinks;
+    return Math.max(0, 1 - keywordMatchRatio);
+}
+
 function extractDomain(url: string): string {
     try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
 }
@@ -274,6 +307,26 @@ ANCHORS: ${JSON.stringify(topAnchors.slice(0, 5))}`;
                 : 0;
             const userH2s = userPage.headings ?? [];
 
+            // ── Anchor diversity check (new) ──────────────────────────────────────
+            const anchorScore = computeAnchorDiversityScore(topAnchors, keyword);
+            const enrichedFixes = [...aiResult.fixes] as any[];
+
+            if (topAnchors.length >= 5 && anchorScore < 0.4) {
+                const keywordMatchPct = Math.round((1 - anchorScore) * 100);
+                // Only add the fix if no authority fix already exists to avoid duplication
+                const hasLinkFix = enrichedFixes.some((f) => (f as { category: string }).category === "links");
+                if (!hasLinkFix) {
+                    enrichedFixes.push({
+                        title: "Diversify anchor text to reduce over-optimisation risk",
+                        description: `${keywordMatchPct}% of your inbound anchors are exact or partial matches for "${keyword}". Google's Penguin algorithm flags unnatural anchor profiles. Aim for < 30% exact-match anchors — request branded anchors (e.g. "${domain}", "learn more on ${domain}") or natural phrase variants in future outreach.`,
+                        priority: "medium",
+                        category: "links",
+                        linkToTab: "link-authority",
+                    });
+                }
+            }
+            // ── End anchor diversity check ─────────────────────────────────────────
+
             // Dynamic TTL: shorter when intent mismatch or big DR gap
             const hasSevereIssue = aiResult.intentMismatch || (drGap !== null && drGap > 30);
             const ttlDays = hasSevereIssue ? 3 : 7;
@@ -284,7 +337,7 @@ ANCHORS: ${JSON.stringify(topAnchors.slice(0, 5))}`;
                 data: {
                     status: "COMPLETED",
                     serpResults: serpResults as never,
-                    fixes: aiResult.fixes as never,
+                    fixes: enrichedFixes as any,
                     headingGaps: aiResult.headingGaps as never,
                     wordCountAvg,
                     wordCountPage: userWordCount,

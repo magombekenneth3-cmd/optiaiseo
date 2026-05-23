@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Microscope, RefreshCw, X, AlertTriangle, CheckCircle, XCircle, TrendingUp, TrendingDown, Link, FileText, Target, Layers } from "lucide-react";
+import { Microscope, RefreshCw, X, AlertTriangle, CheckCircle, XCircle, TrendingUp, TrendingDown, Link, FileText, Target, Layers, Clock } from "lucide-react";
 import { analyseKeywordVsSerp, forceRefreshSerpAnalysis, type SerpAnalysisResult, type SerpFix } from "@/app/actions/serp-analysis";
 
 type TabId = "serp" | "fixes" | "headings" | "authority";
@@ -37,6 +37,97 @@ function classifyAnchor(anchor: string, keyword: string): { label: string; amber
   if (kwWords.length > 0 && kwWords.some(w => a.includes(w))) return { label: "partial match", amber: false };
   if (/^(click here|read more|learn more|here|this|this article|this page|more|source|link|visit|check this)$/i.test(a)) return { label: "generic", amber: true };
   return { label: "brand", amber: false };
+}
+
+/** 0-1 diversity score. < 0.4 = risky. */
+function anchorDiversityScore(anchors: { anchor: string; count: number }[], keyword: string): number {
+  if (anchors.length === 0) return 1;
+  const kw = keyword.toLowerCase().trim();
+  const kwWords = kw.split(/\s+/).filter(Boolean);
+  const total = anchors.reduce((s, a) => s + a.count, 0);
+  if (total === 0) return 1;
+  const kwLinks = anchors
+      .filter((a) => {
+          const t = (a.anchor ?? "").toLowerCase().trim();
+          return kwWords.length > 0 && kwWords.every((w) => t.includes(w));
+      })
+      .reduce((s, a) => s + a.count, 0);
+  return Math.max(0, 1 - kwLinks / total);
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins  = Math.floor(diff / 60_000);
+  const hours = Math.floor(diff / 3_600_000);
+  const days  = Math.floor(diff / 86_400_000);
+  if (mins < 2)   return "just now";
+  if (mins < 60)  return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
+}
+
+function AnchorDiversityBar({ anchors, keyword }: {
+  anchors: { anchor: string; count: number }[];
+  keyword: string;
+}) {
+  if (anchors.length === 0) return null;
+
+  const score = anchorDiversityScore(anchors, keyword);
+  const kwPct = Math.round((1 - score) * 100);
+  const isRisky = score < 0.4;
+  const isWarning = score >= 0.4 && score < 0.6;
+
+  const barColor = isRisky
+      ? "bg-red-500"
+      : isWarning
+          ? "bg-amber-500"
+          : "bg-emerald-500";
+
+  const labelColor = isRisky
+      ? "text-red-400"
+      : isWarning
+          ? "text-amber-400"
+          : "text-emerald-400";
+
+  return (
+      <div className="rounded-xl border border-border bg-card/40 p-4 space-y-2.5">
+          <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Anchor diversity
+              </p>
+              <span className={`text-sm font-bold ${labelColor}`}>
+                  {kwPct}% keyword-match
+              </span>
+          </div>
+
+          {/* Segmented bar */}
+          <div className="h-2 rounded-full bg-muted/30 overflow-hidden">
+              <div
+                  className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                  style={{ width: `${Math.min(kwPct, 100)}%` }}
+              />
+          </div>
+
+          {/* Threshold markers */}
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>0%</span>
+              <span className="text-amber-400/70">⚠ 40% threshold</span>
+              <span>100%</span>
+          </div>
+
+          {isRisky && (
+              <p className="text-xs text-red-300/90 leading-relaxed">
+                  {kwPct}% of your inbound anchors are exact-match for &quot;{keyword}&quot;.
+                  Request branded or natural anchors in future outreach to reduce over-optimisation risk.
+              </p>
+          )}
+          {isWarning && (
+              <p className="text-xs text-amber-300/90 leading-relaxed">
+                  Anchor profile is approaching the risk threshold. Monitor and diversify during new link building.
+              </p>
+          )}
+      </div>
+  );
 }
 
 function PriorityBadge({ priority }: { priority: SerpFix["priority"] }) {
@@ -182,8 +273,12 @@ export function KeywordSerpPanel({ keyword, position, impressions, clicks, landi
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {data && (
-            <span className="text-xs text-muted-foreground">
-              Cached · {new Date(data.cachedAt).toLocaleDateString()}
+            <span
+              className="flex items-center gap-1 text-xs text-muted-foreground"
+              title={new Date(data.cachedAt).toLocaleString()}
+            >
+              <Clock className="w-3 h-3" />
+              {relativeTime(data.cachedAt)}
             </span>
           )}
           <button onClick={() => run(true)} disabled={loading}
@@ -338,42 +433,61 @@ export function KeywordSerpPanel({ keyword, position, impressions, clicks, landi
           )}
 
           {activeTab === "headings" && (
-            <div className="overflow-x-auto rounded-xl border border-border">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-card/50 text-xs font-semibold text-muted-foreground uppercase border-b border-border">
-                  <tr>
-                    <th className="px-4 py-3">Topic / H2 Heading</th>
-                    <th className="px-4 py-3 text-center">Freq in Top 10</th>
-                    <th className="px-4 py-3 text-center">Your Page</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {data.headingGaps.sort((a, b) => b.freqInTop10 - a.freqInTop10).map((gap, i) => (
-                    <tr key={i} className="hover:bg-card/30 transition-colors">
-                      <td className="px-4 py-3 font-medium">{gap.topic}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`text-xs font-semibold ${gap.freqInTop10 >= 7 ? "text-red-400" : gap.freqInTop10 >= 4 ? "text-amber-400" : "text-muted-foreground"}`}>
-                          {gap.freqInTop10}/10
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {gap.coveredOnYourPage
-                          ? <CheckCircle className="w-4 h-4 text-emerald-400 mx-auto" />
-                          : <XCircle className="w-4 h-4 text-red-400 mx-auto" />
-                        }
-                      </td>
+            <div className="space-y-4">
+              {data.yourPageH2s && data.yourPageH2s.length > 0 && (
+                <div className="rounded-xl border border-border bg-card/40 p-4">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">
+                    Your Page H2s ({data.yourPageH2s.length})
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {data.yourPageH2s.map((h2, i) => (
+                      <span key={i} className="px-2 py-1 rounded bg-muted/40 border border-border text-xs text-muted-foreground">
+                        {h2}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="overflow-x-auto rounded-xl border border-border">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-card/50 text-xs font-semibold text-muted-foreground uppercase border-b border-border">
+                    <tr>
+                      <th className="px-4 py-3">Topic / H2 Heading</th>
+                      <th className="px-4 py-3 text-center">Freq in Top 10</th>
+                      <th className="px-4 py-3 text-center">Your Page</th>
                     </tr>
-                  ))}
-                  {data.headingGaps.length === 0 && (
-                    <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground text-sm">No heading gap data.</td></tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {data.headingGaps.sort((a, b) => b.freqInTop10 - a.freqInTop10).map((gap, i) => (
+                      <tr key={i} className="hover:bg-card/30 transition-colors">
+                        <td className="px-4 py-3 font-medium">{gap.topic}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`text-xs font-semibold ${gap.freqInTop10 >= 7 ? "text-red-400" : gap.freqInTop10 >= 4 ? "text-amber-400" : "text-muted-foreground"}`}>
+                            {gap.freqInTop10}/10
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {gap.coveredOnYourPage
+                            ? <CheckCircle className="w-4 h-4 text-emerald-400 mx-auto" />
+                            : <XCircle className="w-4 h-4 text-red-400 mx-auto" />
+                          }
+                        </td>
+                      </tr>
+                    ))}
+                    {data.headingGaps.length === 0 && (
+                      <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground text-sm">No heading gap data.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
           {activeTab === "authority" && (
             <div className="space-y-6">
+              <AnchorDiversityBar anchors={data.topAnchors} keyword={keyword} />
+
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Authority Comparison</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
