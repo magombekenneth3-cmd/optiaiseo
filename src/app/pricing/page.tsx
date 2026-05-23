@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { Plus } from "lucide-react";
 import PricingClient from "./PricingClient";
+import { PLANS } from "@/lib/stripe/plans";
 
 export const metadata: Metadata = {
   title: "OptiAISEO Pricing — Start Free, Scale as You Grow",
@@ -25,19 +26,19 @@ export const metadata: Metadata = {
 };
 
 
-const PLANS = [
+const PRICING_PLANS = [
     {
         name: "Free",
         slug: "free",
-        price: { monthly: 0, annual: 0 },
-        credits: 50,
+        price: { monthly: PLANS.FREE.price, annual: PLANS.FREE.price },
+        credits: PLANS.FREE.monthlyCredits,
         desc: "Explore the platform with no commitment. No credit card needed.",
         features: [
-            "50 credits / month",
+            `${PLANS.FREE.monthlyCredits} credits / month`,
             "1 website",
-            "5 audits / month",
-            "3 AI blog posts / month",
-            "5 AEO checks / month",
+            `${PLANS.FREE.limits.auditsPerMonth} audits / month`,
+            `${PLANS.FREE.limits.blogsPerMonth} AI blog posts / month`,
+            `${PLANS.FREE.limits.aeoAuditsPerMonth} AEO checks / month`,
             "Google Search Console",
             "Basic AI visibility check",
         ],
@@ -49,15 +50,15 @@ const PLANS = [
     {
         name: "Starter",
         slug: "starter",
-        price: { monthly: 19, annual: 15 },
-        credits: 150,
+        price: PLANS.STARTER.price,
+        credits: PLANS.STARTER.monthlyCredits,
         desc: "For solo creators and small sites ready to grow in AI search.",
         features: [
-            "150 credits / month",
+            `${PLANS.STARTER.monthlyCredits} credits / month`,
             "3 websites",
-            "15 audits / month",
-            "30 AI blog posts / month",
-            "10 AEO checks / month",
+            `${PLANS.STARTER.limits.auditsPerMonth} audits / month`,
+            `${PLANS.STARTER.limits.blogsPerMonth} AI blog posts / month`,
+            `${PLANS.STARTER.limits.aeoAuditsPerMonth} AEO checks / month`,
             "Google Search Console",
             "Ubersuggest keyword data",
             "On-page optimisation",
@@ -72,15 +73,15 @@ const PLANS = [
     {
         name: "Pro",
         slug: "pro",
-        price: { monthly: 49, annual: 39 },
-        credits: 500,
+        price: PLANS.PRO.price,
+        credits: PLANS.PRO.monthlyCredits,
         desc: "Full automation for growing teams who want to win in AI search.",
         features: [
-            "500 credits / month",
+            `${PLANS.PRO.monthlyCredits} credits / month`,
             "10 websites",
-            "30 audits / month",
+            `${PLANS.PRO.limits.auditsPerMonth} audits / month`,
             "Unlimited AI blog posts",
-            "50 AEO checks / month",
+            `${PLANS.PRO.limits.aeoAuditsPerMonth} AEO checks / month`,
             "Everything in Starter",
             "Ahrefs backlink data",
             "GitHub auto-fix PRs",
@@ -98,15 +99,15 @@ const PLANS = [
     {
         name: "Agency",
         slug: "agency",
-        price: { monthly: 149, annual: 119 },
-        credits: 2000,
+        price: PLANS.AGENCY.price,
+        credits: PLANS.AGENCY.monthlyCredits,
         desc: "For agencies managing multiple clients at scale.",
         features: [
-            "2,000 credits / month",
+            `${PLANS.AGENCY.monthlyCredits.toLocaleString()} credits / month`,
             "Unlimited websites",
-            "300 audits / month",
+            "Unlimited audits",
             "Unlimited AI blog posts",
-            "100 AEO checks / month",
+            "Unlimited AEO checks",
             "Everything in Pro",
             "White-label PDF exports",
             "Priority support",
@@ -121,13 +122,13 @@ const PLANS = [
 ] as const;
 
 const FEATURE_ROWS = [
-    { label: "Monthly credits",        free: "50",        starter: "150",       pro: "500",        agency: "2,000" },
-    { label: "Websites",               free: "1",         starter: "3",         pro: "10",         agency: "Unlimited" },
-    { label: "Audits / month",         free: "5",         starter: "15",        pro: "30",         agency: "300" },
-    { label: "AI blog posts / month",  free: "3",         starter: "30",        pro: "Unlimited",  agency: "Unlimited" },
-    { label: "AEO checks / month",     free: "5",         starter: "10",        pro: "50",         agency: "100" },
-    { label: "Keyword tracking",       free: "10",        starter: "100",       pro: "500",        agency: "Unlimited" },
-    { label: "Competitors per site",   free: false,       starter: "2",         pro: "5",          agency: "Unlimited" },
+    { label: "Monthly credits",        free: String(PLANS.FREE.monthlyCredits),        starter: String(PLANS.STARTER.monthlyCredits),       pro: String(PLANS.PRO.monthlyCredits),        agency: String(PLANS.AGENCY.monthlyCredits) },
+    { label: "Websites",               free: String(PLANS.FREE.limits.sites),         starter: String(PLANS.STARTER.limits.sites),         pro: String(PLANS.PRO.limits.sites),         agency: "Unlimited" },
+    { label: "Audits / month",         free: String(PLANS.FREE.limits.auditsPerMonth),         starter: String(PLANS.STARTER.limits.auditsPerMonth),        pro: String(PLANS.PRO.limits.auditsPerMonth),        agency: "Unlimited" },
+    { label: "AI blog posts / month",  free: String(PLANS.FREE.limits.blogsPerMonth),         starter: String(PLANS.STARTER.limits.blogsPerMonth),        pro: "Unlimited",  agency: "Unlimited" },
+    { label: "AEO checks / month",     free: String(PLANS.FREE.limits.aeoAuditsPerMonth),         starter: String(PLANS.STARTER.limits.aeoAuditsPerMonth),        pro: String(PLANS.PRO.limits.aeoAuditsPerMonth),        agency: "Unlimited" },
+    { label: "Keyword tracking",       free: String(PLANS.FREE.limits.keywordsTracked),        starter: String(PLANS.STARTER.limits.keywordsTracked),       pro: String(PLANS.PRO.limits.keywordsTracked),        agency: "Unlimited" },
+    { label: "Competitors per site",   free: false,       starter: String(PLANS.STARTER.limits.competitorsPerSite),         pro: String(PLANS.PRO.limits.competitorsPerSite),          agency: "Unlimited" },
     { label: "Google Search Console",  free: true,        starter: true,        pro: true,         agency: true },
     { label: "Ubersuggest data",       free: false,       starter: true,        pro: true,         agency: true },
     { label: "On-page optimisation",   free: false,       starter: true,        pro: true,         agency: true },
@@ -249,7 +250,7 @@ export default function PublicPricingPage() {
                     </div>
                 </section>
 
-                <PricingClient plans={PLANS} featureRows={[...FEATURE_ROWS]} faqs={FAQS} />
+                <PricingClient plans={PRICING_PLANS} featureRows={[...FEATURE_ROWS]} faqs={FAQS} />
 
                 {/* ── What credits actually buy you ────────────────────────────────── */}
                 <section className="max-w-5xl mx-auto px-6 py-16">

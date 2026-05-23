@@ -18,6 +18,7 @@ import {
     publishBlogToCmsJob,
     analyseCompetitorPageJob,
     drSnapshotJob,
+    repurposeBlogFn,
 } from "@/lib/inngest/functions";
 import { freshnessDecayCron } from "@/lib/inngest/freshness-decay";
 import { computeBenchmarksJob } from "@/lib/inngest/functions/benchmarks";
@@ -228,5 +229,6 @@ export const { GET, POST, PUT } = serve({
         serpFeatureWeeklyCron,
         serpFeatureSiteJob,
         purgeExpiredSerpAnalysisJob,
+        repurposeBlogFn,
     ],
 });

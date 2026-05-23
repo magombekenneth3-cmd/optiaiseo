@@ -12,7 +12,7 @@ import { KeywordSiteSwitcher } from "@/components/dashboard/KeywordSiteSwitcher"
 import { getTrackedKeywords } from "@/app/actions/trackedKeywords";
 import { estimateKeywordRoi } from "@/lib/keywords/roi";
 import { getVisibilityScore } from "@/lib/keywords/visibility-score";
-import { hasFeature } from "@/lib/stripe/plans";
+import { hasFeature, getPlan } from "@/lib/stripe/plans";
 import { CtrDiagnosisBanner } from "@/components/dashboard/CtrDiagnosisBanner";
 import { KeywordTabPanels } from "./KeywordTabPanels";
 import { CollapsibleAnalytics } from "./CollapsibleAnalytics";
@@ -32,8 +32,6 @@ type TrackedKwRow = {
     opportunityGapUsd: number;
 };
 type VisibilityRow = { score: number; trend: string; top10Pct: number } | null;
-
-const MAX_TRACKED_MAP: Record<string, number> = { FREE: 0, STARTER: 10, PRO: 100, AGENCY: -1 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -160,7 +158,7 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
 
     let trackedKeywordsData: TrackedKwRow[] = [];
     let visibilityScore: VisibilityRow = null;
-    const maxTracked = MAX_TRACKED_MAP[userTier] ?? 0;
+    const maxTracked = getPlan(userTier).limits.keywordsTracked;
 
     if (siteId) {
         const [tkRes, visRes] = await Promise.allSettled([

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 
 import { generateAeoFixInternal as generateAeoFix, validateFixInternal as validateFixWithQA } from "@/lib/aeo/fix-engine";
 import { z } from "zod";
+import { scoreHealingActions } from "./confidence";
+import { measureFixImpact } from "./measure-impact";
 
 const ModelResultSchema = z.object({
     model: z.string(),
@@ -131,9 +133,18 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
     const site = await prisma.site.findUnique({ where: { id: siteId } });
     if (!site || site.operatingMode !== "AUTOPILOT") return;
 
-    for (const action of actions) {
+    const scoredActions = await scoreHealingActions(siteId, actions);
+
+    for (const action of scoredActions) {
         try {
-            // QA Agent Validation Step
+            if (action.type === "PR" && action.confidenceDecision === "DROP") {
+                logger.warn(`[Self-Healing] Skipping PR action — confidence too low (${action.confidence})`, {
+                    siteId, description: action.description, reasons: action.confidenceReasons,
+                });
+                action.type = "ALERT";
+                action.description += ` (Auto-fix withheld — confidence ${action.confidence}%. Manual review recommended.)`;
+            }
+
             if (action.fix) {
                 const qaResult = await validateFixWithQA(action.fix, action.description);
                 if (!qaResult.valid) {
@@ -142,6 +153,8 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
                     action.description += ` (QA Failed: ${qaResult.feedback}. Fix requires manual review.)`;
                 }
             }
+
+            let logRecord: any = null;
 
             if (action.type === "PR" && site.githubRepoUrl && action.fix && action.filePath) {
                 const { pushFixToGitHub } = await import("@/app/actions/aeoFix");
@@ -153,7 +166,7 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
                     siteId,
                 });
 
-                await prisma.selfHealingLog.create({
+                logRecord = await prisma.selfHealingLog.create({
                     data: {
                         siteId,
                         issueType: "GSOV_DROP",
@@ -162,46 +175,42 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
                         impactScore: 15,
                         status: res.success ? "COMPLETED" : "FAILED",
                         metadata: (res.success
-                             
                             ? { prUrl: res.url }
                             : { error: res.error }
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         ) as any,
                     }
                 });
             } else if (action.type === "CONTENT" || action.type === "SCHEMA") {
-                await prisma.selfHealingLog.create({
+                logRecord = await prisma.selfHealingLog.create({
                     data: {
                         siteId,
                         issueType: "GSOV_DROP",
                         description: action.description,
-                         
                         actionTaken: "GENERATED_MANUAL_FIX",
                         impactScore: 10,
                         status: "PENDING",
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         metadata: { fix: action.fix, filePath: action.filePath } as any,
                     }
                 });
             } else if (action.type === "ALERT") {
-                await prisma.selfHealingLog.create({
+                logRecord = await prisma.selfHealingLog.create({
                     data: {
                         siteId,
                         issueType: "GSOV_DROP",
-                         
                         description: action.description,
                         actionTaken: "LOGGED_ALERT",
                         impactScore: 5,
                         status: "COMPLETED",
-                         
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         metadata: { fix: action.fix } as any,
                     }
                 });
             }
-         
+
+            if (logRecord && action.type !== "ALERT") {
+                await measureFixImpact(logRecord.id, siteId);
+            }
         } catch (error: unknown) {
-        logger.error(`[Self-Healing] Execution failed for site ${siteId}:`, { error: (error as Error)?.message || String(error) });
+            logger.error(`[Self-Healing] Execution failed for site ${siteId}:`, { error: (error as Error)?.message || String(error) });
         }
     }
 }

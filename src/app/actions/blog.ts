@@ -12,6 +12,7 @@ import { getEffectiveTier } from "@/lib/stripe/guards";
 import { getUserGscToken } from "@/lib/gsc/token";
 import { consumeCredits } from "@/lib/credits";
 import { requireUser } from "@/lib/auth/require-user";
+import { Prisma } from "@prisma/client";
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -28,10 +29,22 @@ type AuthorInput = {
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
+const SITE_AUTHOR_SELECT = {
+    id: true,
+    domain: true,
+    authorName: true,
+    authorRole: true,
+    authorBio: true,
+    realExperience: true,
+    realNumbers: true,
+    localContext: true,
+} as const;
+
+type SiteAuthorFields = Prisma.SiteGetPayload<{ select: typeof SITE_AUTHOR_SELECT }>;
+
 function buildAuthorProfile(
     authorInput: AuthorInput | undefined,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    site: any,
+    site: SiteAuthorFields,
     userName: string | null | undefined
 ): AuthorProfile {
     return {

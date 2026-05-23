@@ -4,7 +4,7 @@
 > 
 > **Challenge Categories Tackled:**
 > 1. **🗣️ Live Agents:** Native voice-in/voice-out utilizing Gemini 2.5 Flash Native Audio Preview + LiveKit. Sub-second latency, barge-in support.
-> 2. **☸️ UI Navigators:** Integrated Multimodal Vision. Aria can independently use Playwright to take screenshots of live URLs and use `gemini-3.1-pro-view` to evaluate visual UX complexity, accessibility, and design conversion. 
+> 2. **☸️ UI Navigators:** Integrated Multimodal Vision. Aria can independently use Playwright to take screenshots of live URLs and use `gemini-2.5-pro` to evaluate visual UX complexity, accessibility, and design conversion. 
 
 AISEO is a real-time, voice-driven AI platform that turns SEO from a manual grind into a live, interrupted conversation. Talk to **Aria**, your AI SEO strategist: she audits your site, visually critiques your design, checks your visibility in AI search engines (ChatGPT, Perplexity, Claude), and even stages GitHub Pull Requests to fix issues automatically.
 
@@ -177,7 +177,7 @@ gcloud run services update aiseo-frontend \
 | **AI Voice**        | Gemini 2.0 Flash Realtime (via `@livekit/agents-plugin-google`) |
 | **AI Text/Audit**   | `@google/genai` SDK — Gemini Flash                              |
 | **WebRTC**          | LiveKit Cloud (room management, VAD, barge-in)                  |
-| **Frontend**        | Next.js 16, React 18, TailwindCSS                               |
+| **Frontend**        | Next.js 15, React 19, TailwindCSS                               |
 | **Backend**         | Node.js custom server with WebSocket                            |
 | **Database**        | PostgreSQL + Prisma ORM                                         |
 | **Cloud**           | Google Cloud Run, Google Cloud Firestore, Google Cloud Build    |
@@ -217,11 +217,7 @@ MIT © 2026 — Built with ❤️ for the Google Gemini Live Agent Challenge
 
 ---
 
-## Devpost Submission Checklist
+## Contributing
 
-- **Text Description:** Use `DEVPOST_SUBMISSION.md` as the canonical submission text and copy into Devpost.
-- **Public Repo:** Push this repository to a public GitHub repo and include the URL in your Devpost entry.
-- **Spin-up Instructions:** Point judges to this README's "Local Setup" and the `deploy.sh` script for Cloud Run.
-- **GCP Proof:** Record a short screencast showing the Cloud Run service and logs (or include a link to a service YAML/Cloud Build step in the repo). See `DEVPOST_SUBMISSION.md` for suggested screenshots/recording steps.
-- **Architecture Diagram:** The system diagram is in `docs/architecture.mmd` — include it in the Devpost file upload.
-- **Demo Video:** Keep it under 4 minutes and show live interaction (voice + screenshot analysis + tool calls). Use the demo script in `DEVPOST_SUBMISSION.md`.
+Pull requests welcome. Please run `pnpm lint` and `pnpm test` before submitting.
+See `.github/workflows/deploy.yml` for the CI pipeline configuration.

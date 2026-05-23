@@ -44,10 +44,6 @@ type DeleteAuditResult =
   | { success: true }
   | { success: false; error: string };
 
-function isPaidTier(tier: string): boolean {
-  return ["PRO", "AGENCY", "ENTERPRISE"].includes(tier?.toUpperCase());
-}
-
 export async function getUserAudits(
   cursor?: string,
   pageSize = 20,
@@ -103,7 +99,7 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
 
   try {
     const auth = await requireUser();
-    if (!auth.ok) return auth.error;
+    if (!auth.ok) return { success: false as const, error: auth.error.error };
     const { user } = auth;
 
     const site = await prisma.site.findUnique({ where: { id: siteId, userId: user.id } });
@@ -208,19 +204,8 @@ export async function getPageAudits(auditId: string): Promise<GetPageAuditsResul
 
   try {
     const auth = await requireUser();
-    if (!auth.ok) return { ...auth.error, pages: [] };
+    if (!auth.ok) return { success: false, error: auth.error.error, pages: [] };
     const { user } = auth;
-
-    const creditResult = await consumeCredits(user.id, "full_site_audit");
-    if (!creditResult.allowed) {
-        return {
-            success: false,
-            error: creditResult.reason === "credits_locked"
-                ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
-                : `Not enough credits (${creditResult.remaining} remaining, need 10). Buy a credit pack or upgrade your plan.`,
-            pages: [], upsell: true,
-        };
-    }
 
     const audit = await prisma.audit.findFirst({
       where: { id: auditId, site: { userId: user.id } },
@@ -233,6 +218,17 @@ export async function getPageAudits(auditId: string): Promise<GetPageAuditsResul
       },
     });
     if (!audit) return { success: false, error: "Audit not found", pages: [] };
+
+    const creditResult = await consumeCredits(user.id, "full_site_audit");
+    if (!creditResult.allowed) {
+        return {
+            success: false,
+            error: creditResult.reason === "credits_locked"
+                ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
+                : `Not enough credits (${creditResult.remaining} remaining, need 10). Buy a credit pack or upgrade your plan.`,
+            pages: [], upsell: true,
+        };
+    }
 
     return { success: true, pages: audit.pageAudits };
   } catch (error: unknown) {
@@ -248,7 +244,7 @@ export async function deleteAudit(auditId: string): Promise<DeleteAuditResult> {
 
   try {
     const auth = await requireUser();
-    if (!auth.ok) return auth.error;
+    if (!auth.ok) return { success: false as const, error: auth.error.error };
     const { user } = auth;
 
     const audit = await prisma.audit.findFirst({

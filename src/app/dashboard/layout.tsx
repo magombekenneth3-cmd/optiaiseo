@@ -1,13 +1,9 @@
 import Link from "next/link";
 import { ReactNode } from "react";
-import { prisma } from "@/lib/prisma";
 import { CollapsibleSidebar } from "@/components/dashboard/CollapsibleSidebar";
 import { TopHeader } from "@/components/dashboard/TopHeader";
 import { MobileSidebar } from "@/components/dashboard/MobileSidebar";
 import { MobileBottomNav } from "@/components/dashboard/MobileBottomNav";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { redirect } from "next/navigation";
 import { ChatOpsTerminal } from "@/components/dashboard/ChatOps";
 import { OnboardingWizard } from "@/components/dashboard/OnboardingWizard";
 import { CommandPalette } from "@/components/dashboard/CommandPalette";
@@ -15,6 +11,7 @@ import { CommandPalette } from "@/components/dashboard/CommandPalette";
 import { SiteContextCallout } from "@/components/dashboard/SiteContextCallout";
 import { VoiceDiscoveryButtonClient } from "@/components/dashboard/VoiceDiscoveryButtonClient";
 import type { Metadata } from "next";
+import { getDashboardUser } from "@/lib/auth/dashboard-context";
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
@@ -25,43 +22,7 @@ export default async function DashboardLayout({
 }: {
   children: ReactNode;
 }) {
-  const session = await getServerSession(authOptions);
-
-  if (!session || !session.user || !session.user.email) {
-    redirect("/login");
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { email: session.user.email },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      subscriptionTier: true,
-      onboardingDone: true,
-      trialEndsAt: true,
-      role: true,
-      credits: true,
-      creditsLockedAt: true,
-      sites: {
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          domain: true,
-          aeoReports: {
-            where: { status: "COMPLETED", NOT: { grade: { in: ["Pending", "-"] } } },
-            orderBy: { createdAt: "desc" },
-            take: 1,
-            select: { grade: true },
-          },
-        },
-      },
-    },
-  });
-
-  if (!user) {
-    redirect("/login");
-  }
+  const user = await getDashboardUser();
 
   const userSites: { id: string; domain: string; grade: string | null }[] = user.sites.map((s) => ({
     id: s.id,

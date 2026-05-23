@@ -26,7 +26,7 @@ function buildCsp(nonce: string): string {
         `style-src 'self' 'unsafe-inline'`,
         "img-src 'self' data: blob: https://images.unsplash.com https://lh3.googleusercontent.com https://avatars.githubusercontent.com https://cdn.hashnode.com",
         "font-src 'self' data:",
-        "connect-src 'self' https://api.stripe.com https://*.livekit.cloud wss://*.livekit.cloud https://generativelanguage.googleapis.com https://api.anthropic.com https://api.openai.com https://inn.gs https://*.inngest.com https://*.upstash.io https://api.resend.com https://api.serper.dev https://serpapi.com",
+        "connect-src 'self' https://api.stripe.com https://*.livekit.cloud wss://*.livekit.cloud https://generativelanguage.googleapis.com https://api.anthropic.com https://api.openai.com https://inn.gs https://*.inngest.com https://*.upstash.io https://api.resend.com https://api.serper.dev https://serpapi.com https://*.sentry.io https://o*.ingest.sentry.io",
         "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
         "object-src 'none'",
         "base-uri 'self'",

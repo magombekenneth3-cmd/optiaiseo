@@ -1,8 +1,5 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   TrendingUp,
@@ -41,6 +38,7 @@ import {
   WinCelebrationToast,
   ReAuditNudge,
 } from "@/components/dashboard/DashboardClientWidgets";
+import { getDashboardUser } from "@/lib/auth/dashboard-context";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -50,14 +48,7 @@ export const metadata: Metadata = {
 
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) redirect("/login");
-
-  const user = await prisma.user.findUnique({
-    where: { email: session.user.email },
-    include: { sites: { select: { id: true, githubRepoUrl: true } } },
-  });
-  if (!user) redirect("/login");
+  const user = await getDashboardUser();
 
   const siteIds = user.sites.map((s) => s.id);
 
