@@ -101,7 +101,24 @@ HARD CONSTRAINTS — NEVER VIOLATE:
 5. All JSON-LD must be valid JSON — parseable by JSON.parse() with no errors
 6. Return ONLY the code for the target file. No explanation, no markdown fences, no comments outside the code.
 7. CODE QUALITY & NORMS: The generated code MUST be perfectly formatted, follow well-known web and accessibility norms, and NEVER break the user's application logic or build process.
-8. PRESERVATION OF UI/UX: Do NOT alter, add, or remove any structural layouts, component styling (CSS/Tailwind classes), visual design schemas, core application logic, or user experience (UX) elements. Focus strictly on SEO, AEO, headings, alt text, and semantic content updates without changing the page's visual appearance or core functionality.`;
+8. PRESERVATION OF UI/UX: Do NOT alter, add, or remove any structural layouts, component styling (CSS/Tailwind classes), visual design schemas, core application logic, or user experience (UX) elements. Focus strictly on SEO, AEO, headings, alt text, and semantic content updates without changing the page's visual appearance or core functionality.
+9. SELF-CHECK BEFORE OUTPUT: Before returning your response, silently verify each of these:
+   - Does the output contain "example.com", "yourdomain.com", or "Your Business Name"? → Replace with the real brand/domain from CONTEXT.
+   - Is the title tag under 60 characters? Count the characters explicitly.
+   - Is the meta description between 120–160 characters? Count the characters explicitly.
+   - Does any JSON-LD field contain undefined, null, or a placeholder string? → Remove the field entirely.
+   - Does the output contain any import statements that weren't in the original file when SURGICAL_LAYOUT_RULES apply? → Remove them.`;
+
+const FABRICATION_STOP_LIST = `
+FABRICATION STOP LIST — scan your output for these patterns before returning.
+If you find any, switch to Pattern B (insight without number) instead:
+- Any percentage ("73% of...", "4 in 5...") without a specific named source
+- "Studies show..." or "Research indicates..." without naming the study title and year
+- "According to industry data..." — not a source
+- Any dollar figure without a named data source (not "analysts estimate")
+- "Most experts agree..." without naming at least one expert by name
+- Invented company names as sources (e.g. "DataInsight 2024" — if you made it up, it's fabricated)
+If in doubt: omit the number. A strong claim without a fake number is more credible than a precise claim with a made-up source.`;
 
 
 const SURGICAL_LAYOUT_RULES = `
@@ -144,20 +161,47 @@ COMMERCIAL INVESTIGATION (best X, X vs Y, X review, X alternatives):
 Detect the intent from the page content in CONTEXT below and apply the matching pattern.
 Do not apply an informational pattern to a transactional page or vice versa.`.trim();
 
+function detectPageType(ctx: PromptContext): string {
+    const path = ctx.filePath.toLowerCase();
+    if (path.includes("blog") || path.includes("post") || path.includes("article")) return "blog-post";
+    if (path.includes("pricing"))  return "pricing";
+    if (path.includes("about"))    return "about";
+    if (path.includes("contact"))  return "contact";
+    if (path.includes("layout"))   return "site-layout";
+    if (path.includes("privacy"))  return "legal";
+    if (path.includes("terms"))    return "legal";
+    return "general";
+}
+
 function buildContext(ctx: PromptContext): string {
     const brand = ctx.content.title || ctx.domain.replace(/^www\./, "").split(".")[0];
     const lines = [
         `SITE DOMAIN: ${ctx.domain}`,
         `BRAND NAME: ${brand}`,
         `PAGE TITLE: ${ctx.content.title}`,
-        ctx.content.description ? `SITE DESCRIPTION: ${ctx.content.description}` : "",
-        ctx.content.headings.length ? `PAGE HEADINGS: ${ctx.content.headings.slice(0, 8).join(" | ")}` : "",
-        ctx.content.paragraphs.length ? `SAMPLE CONTENT: ${ctx.content.paragraphs.slice(0, 3).join(" ... ")}` : "",
-        ctx.content.keywords.length ? `META KEYWORDS: ${ctx.content.keywords.join(", ")}` : "",
+        ctx.content.description
+            ? `SITE DESCRIPTION: ${ctx.content.description}`
+            : "",
+        // Increased from 8 → 12 headings. Headings are cheap tokens, high signal.
+        ctx.content.headings.length
+            ? `PAGE HEADINGS: ${ctx.content.headings.slice(0, 12).join(" | ")}`
+            : "",
+        // Increased from 3 → 5 paragraphs, each trimmed to 300 chars.
+        // Gives depth without blowing the context window.
+        ctx.content.paragraphs.length
+            ? `SAMPLE CONTENT:\n${ctx.content.paragraphs
+                  .slice(0, 5)
+                  .map((p) => p.slice(0, 300))
+                  .join("\n---\n")}`
+            : "",
+        ctx.content.keywords.length
+            ? `META KEYWORDS: ${ctx.content.keywords.join(", ")}`
+            : "",
+        // NEW: Page type so every prompt can self-adapt without guessing.
+        `PAGE TYPE: ${detectPageType(ctx)}`,
         `TARGET FILE: ${ctx.filePath}`,
     ];
 
-    // Append user-provided context fields
     if (ctx.userContext) {
         for (const [key, val] of Object.entries(ctx.userContext)) {
             if (val?.trim()) lines.push(`${key.toUpperCase()}: ${val.trim().slice(0, 500)}`);
@@ -234,25 +278,42 @@ TASK: Optimize the heading hierarchy (H1 → H2 → H3) to boost SERP clicks and
 - Never skip from H1 to H3.
 - Do not change the overall visible text meaning, just the heading phrasing and structure.
 
-CANNIBALIZATION GUARD — apply before choosing H1 keyword:
-- The H1 must target a keyword with intent that is UNIQUE to this page.
-- If the detected site already has a dedicated page for a topic (e.g. a /pricing
-  page owns "pricing"), do not assign "pricing" as the H1 keyword on any other page.
-- For pages that cover an overlapping topic, use a more specific long-tail variant
-  that adds a qualifying modifier: audience, location, use case, or year.
-  Bad:  H1 = "SEO Tools" (if a dedicated /seo-tools page exists)
-  Good: H1 = "SEO Tools for SaaS Companies" (qualified, non-competing intent)
-- Check the PAGE HEADINGS in CONTEXT below for existing coverage signals.
-  If the existing H1 appears generic or already used elsewhere, differentiate it.
+KEYWORD CANNIBALIZATION PROTOCOL:
+You cannot see all pages on this site, so you cannot confirm whether a keyword is
+already owned by another page. Instead, follow this rule:
+
+1. For the proposed H1 keyword, end your output with a CANNIBALIZATION CHECK block:
+   ## ⚠ Cannibalization Check (manual verification required)
+   - Proposed H1 keyword: "[your proposed H1 keyword]"
+   - Risk: [HIGH / MEDIUM / LOW] — explain in one sentence why
+   - Recommended GSC check: Go to Google Search Console → Performance → Queries,
+     filter for this keyword, and check whether another URL on this domain ranks
+     for it. If yes, consolidate or redirect rather than publishing a competing H1.
+
+2. If the page type (from PAGE TYPE in CONTEXT) is "site-layout", use a brand-level
+   H1 ("Brand Name — Primary Category") rather than a keyword-targeted H1, to avoid
+   cannibalizing inner pages.
+
+3. For "blog-post" page types, always use a long-tail, question-based, or
+   year-qualified H1 to avoid competing with the site's pillar pages.
 
 CONTEXT:
 ${buildContext(ctx)}
 
-Return ONLY the corrected ${ctx.filePath} content.`,
+Return ONLY the corrected ${ctx.filePath} content, followed by the Cannibalization Check block.`,
 
-    "internal-linking-assistant": (ctx) => `You are a senior SEO architecture engineer.
+    "internal-linking-assistant": (ctx) => {
+    const sitemapBlock = ctx.userContext?.sitemapUrls
+        ? `\nKNOWN SITE PAGES — use ONLY these as internal link targets (from sitemap):\n${ctx.userContext.sitemapUrls
+              .split("\n")
+              .slice(0, 30)
+              .join("\n")}`
+        : "\n⚠ No sitemap pages provided. Infer realistic internal pages from the brand name and existing headings only. Do not invent /pricing or /about unless the page headings suggest they exist.";
+
+    return `You are a senior SEO architecture engineer.
 ${FRAMEWORK_RULES[ctx.framework]}
 ${HARD_CONSTRAINTS}
+${sitemapBlock}
 
 TASK: Identify and implement 5–8 internal links to maximise link equity flow.
 
@@ -281,7 +342,8 @@ LINK EQUITY RULES — apply in this exact order:
 CONTEXT:
 ${buildContext(ctx)}
 
-Return ONLY the updated component or navigation snippet for ${ctx.filePath}.`,
+Return ONLY the updated component or navigation snippet for ${ctx.filePath}.`;
+},
 
     "image-alt-tags": (ctx) => `You are a senior SEO engineer.
 ${FRAMEWORK_RULES[ctx.framework]}
@@ -391,6 +453,12 @@ that the current content doesn't cover. Base this on the existing headings in CO
 - Is there an author byline? If not, flag it.
 - Are there expert citations or primary sources? If not, flag specific claims to source.
 - Are there first-person experience signals ("in practice", "we tested")? If not, flag.
+
+## AI Overview & Featured Snippet Eligibility
+- Does the page open with a direct 40–60 word answer to the implied query? If not, recommend adding one above the first H2.
+- Does the page have an FAQ section with schema? If not, flag — FAQ schema is the highest-correlation factor for PAA inclusion.
+- Is the page's primary H2 structure question-based? If not, suggest rewriting 2–3 H2s as direct questions to compete for PAA boxes.
+- Verdict: rate this page's AI Overview eligibility as HIGH / MEDIUM / LOW and give one sentence explaining why.
 
 ## Suggested Re-publish Timeline
 Based on the severity of decay signals: immediate / within 30 days / next quarter.
@@ -669,6 +737,7 @@ Return ONLY the complete ${ctx.filePath} content.`,
     "schema-review": (ctx) => `You are a senior schema.org expert.
 ${FRAMEWORK_RULES[ctx.framework]}
 ${HARD_CONSTRAINTS}
+${FABRICATION_STOP_LIST}
 
 TASK: Generate an AggregateRating JSON-LD schema TEMPLATE for this site.
 
@@ -872,6 +941,7 @@ Return ONLY the HTML <section> block:
 
     "statistics-citations": (ctx) => `You are a senior AEO content strategist.
 ${HARD_CONSTRAINTS}
+${FABRICATION_STOP_LIST}
 
 TASK: Generate a statistics and claims block for this brand's content.
 
@@ -1149,21 +1219,31 @@ export function buildPrompt(ctx: PromptContext): string {
         return templateFn(ctx);
     }
 
-    // Generic fallback prompt
     logger.warn(`[seo-prompts] No template for issue: ${ctx.issueId} — using generic fallback`);
+
+    // IMPROVED FALLBACK — structured output rules + issue-specific instruction
     return `You are a senior SEO engineer.
 ${FRAMEWORK_RULES[ctx.framework]}
 ${HARD_CONSTRAINTS}
 
-TASK: Fix the following SEO issue on a ${ctx.framework} site.
+TASK: Fix the following SEO issue in this ${ctx.framework} codebase.
+
+ISSUE ID: ${ctx.issueId}
 ISSUE: ${ctx.issueLabel}
-${ctx.issueDetail ? `DETAIL: ${ctx.issueDetail}` : ""}
-${ctx.issueRecommendation ? `RECOMMENDATION: ${ctx.issueRecommendation}` : ""}
+${ctx.issueDetail        ? `DETAIL:\n${ctx.issueDetail}` : ""}
+${ctx.issueRecommendation ? `RECOMMENDED FIX:\n${ctx.issueRecommendation}` : ""}
+
+IMPLEMENTATION RULES:
+- Follow the FRAMEWORK SYNTAX RULES above exactly for ${ctx.framework}.
+- Make the minimum change necessary to fix this specific issue.
+- Do NOT touch unrelated code, styles, or logic.
+- If the fix requires a JSON-LD script block, validate it would pass JSON.parse() before outputting.
+- If the fix is in layout.tsx, apply SURGICAL OUTPUT RULES: output only the metadata block, nothing else.
 
 CONTEXT:
 ${buildContext(ctx)}
 
-Return ONLY the complete file content for ${ctx.filePath}. No explanation.`;
+Return ONLY the complete file content for ${ctx.filePath}. No explanation, no markdown fences.`;
 }
 
 /** List of all issue IDs that have prompt templates. */

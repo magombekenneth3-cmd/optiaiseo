@@ -242,7 +242,7 @@ function buildFallbackAuthorityRoadmap(keyword: string): AuthorityStep[] {
 function buildFallbackPlan(report: GapReport): ImplementationPlan {
     const tasks: PlanTask[] = report.gaps.slice(0, 8).map((gap: ContentGap, i: number) => ({
         id: `task-${i + 1}`,
-        week: (Math.min(Math.floor(i / 2) + 1, 4)) as 1 | 2 | 3 | 4,
+        week: ([1, 2, 3, 4, 1, 2, 3, 4][i % 8]) as 1 | 2 | 3 | 4,
         priority: gap.gap,
         category: gap.dimension.toLowerCase().includes("schema") ? "schema"
             : gap.dimension.toLowerCase().includes("content") || gap.dimension.toLowerCase().includes("word") ? "content"
@@ -257,6 +257,46 @@ function buildFallbackPlan(report: GapReport): ImplementationPlan {
         expectedOutcome: `Closes the ${gap.dimension} gap vs. top competitors`,
         sourceGap: gap.dimension,
     }));
+
+    // Add guaranteed week-4 monitoring task so the plan never ends without a next step
+    tasks.push({
+        id: "task-monitor",
+        week: 4,
+        priority: "medium",
+        category: "technical",
+        title: "Monitor ranking movement & validate indexing",
+        description: `Check position for "${report.keyword}" in Google Search Console and your rank tracker after all changes are deployed. Confirm Google has re-crawled the updated page.`,
+        manualSteps: [
+            "Open Google Search Console → Performance → Queries",
+            `Filter for the keyword "${report.keyword}"`,
+            "Compare clicks and average position vs the previous 28-day period",
+            "Use URL Inspection to confirm the updated page has been indexed",
+            "Log baseline metrics now so you can attribute gains to specific changes",
+        ],
+        ariaCanAutomate: false,
+        estimatedTimeMinutes: 20,
+        expectedOutcome: "Confirms whether Google has picked up the changes and ranking is moving in the right direction",
+        sourceGap: "Monitoring",
+    });
+
+    tasks.push({
+        id: "task-internal-links",
+        week: 4,
+        priority: "medium",
+        category: "technical",
+        title: "Add internal links from high-authority pages",
+        description: `Find your 3 highest-traffic pages and add a contextual link from each to the "${report.keyword}" page using partial-match anchor text. Internal PageRank passes immediately on next crawl.`,
+        manualSteps: [
+            "Open Google Search Console → Performance → Pages, sort by clicks",
+            "Identify the top 3 pages with content relevant to this keyword",
+            "Add a contextual in-paragraph link from each using keyword-adjacent anchor text",
+            "Avoid exact-match anchors — use natural variants",
+        ],
+        ariaCanAutomate: false,
+        estimatedTimeMinutes: 30,
+        expectedOutcome: "Boosts internal PageRank to the target page; can lift position within 2-4 weeks",
+        sourceGap: "Internal authority",
+    });
 
     return {
         keyword: report.keyword,
