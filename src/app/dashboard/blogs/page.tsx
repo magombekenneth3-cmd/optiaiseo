@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { Suspense } from "react";
 import { getUserBlogs } from "@/app/actions/blog";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -155,7 +156,15 @@ export default async function BlogsPage({
                     )}
                 </div>
             ) : (
-                <BlogList blogs={blogs} success={success} initialReviewId={initialReviewId} />
+                <Suspense fallback={
+                    <div className="space-y-4 animate-pulse">
+                        <div className="h-10 bg-muted rounded-lg w-full" />
+                        <div className="h-32 bg-muted rounded-xl w-full" />
+                        <div className="h-32 bg-muted rounded-xl w-full" />
+                    </div>
+                }>
+                    <BlogList blogs={blogs} success={success} initialReviewId={initialReviewId} />
+                </Suspense>
             )}
 
             {subscriptionTier === "FREE" && totalCount > 0 && (

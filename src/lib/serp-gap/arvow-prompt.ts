@@ -1,9 +1,4 @@
-/**
- * src/lib/serp-gap/arvow-prompt.ts
- *
- * Converts a GapReport into a fully populated Arvow customPrompt.
- * Eliminates manual [PLACEHOLDER] filling in the Arvow API workflow.
- */
+
 
 import type { GapReport } from "./analyser";
 
@@ -39,8 +34,7 @@ function buildStructure(report: GapReport): Array<{ h2: string; h3s: string[] }>
     const topics = report.competitorTopicMap.slice(0, 10);
     return topics.map((t) => ({
         h2: t.topic,
-        // Generate generic H3s if we don't have richer data.
-        // Replace with real competitor H3s if you scrape them.
+
         h3s: [
             `What is ${t.topic.toLowerCase()}?`,
             `How to use ${t.topic.toLowerCase()}`,
@@ -49,20 +43,13 @@ function buildStructure(report: GapReport): Array<{ h2: string; h3s: string[] }>
     }));
 }
 
-/**
- * Main export: converts a GapReport + business description
- * into a fully populated ArvowArticlePayload.
- *
- * Usage:
- *   const payload = buildArvowPayload(report, "OptiAISEO, an AI-powered SEO audit platform for SaaS teams");
- *   // Pass payload fields into your Arvow POST /api/v0.1/batch body
- */
+
 export function buildArvowPayload(
     report: GapReport,
     businessDesc: string,
     titleOverride?: string
 ): ArvowArticlePayload {
-    // Split competitor topics by coverage frequency
+   
     const allOk     = report.topResults.filter((r) => r.fetchedOk).length;
     const common    = report.competitorTopicMap
         .filter((t) => t.mentionCount >= Math.ceil(allOk * 0.6))

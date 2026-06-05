@@ -46,14 +46,20 @@ export async function getGscOpportunities(
     if (!keywords?.length) return [];
 
     return keywords
-        .filter((k) => k.position >= 4 && k.position <= 30 && k.impressions >= 10)
+        .filter((k) =>
+            k.position >= 8 &&
+            k.position <= 20 &&
+            k.impressions >= 50 &&
+            !isLikelyBranded(k.keyword) &&
+            hasCommercialOrTransactionalIntent(k.keyword)
+        )
         .map((k) => {
             // k.ctr is already a percentage (e.g. 3.2 means 3.2%) — it was
             // multiplied ×100 inside rowToKeyword in src/lib/gsc/index.ts.
             // Convert back to a decimal for score math; keep the percent for display.
             const ctrPercent  = k.ctr;                       // e.g. 3.2
             const ctrDecimal  = k.ctr / 100;                 // e.g. 0.032
-
+ 
             // Intent weighting: transactional/commercial keywords convert better
             const intent = classifyIntent(k.keyword);
             const intentMultiplier = intent === "transactional" ? 1.5
@@ -62,10 +68,10 @@ export async function getGscOpportunities(
             const opportunityScore = Math.round(
                 k.impressions * Math.max(0, 1 - ctrDecimal) * intentMultiplier
             );
-
+ 
             let opportunityType: GscOpportunity["opportunityType"];
             let recommendedAction: string;
-
+ 
             if (k.position <= 5) {
                 opportunityType = "top-3-push";
                 recommendedAction = `Ranking #${Math.round(k.position)} — add internal links from high-authority pages and improve title tag to include exact query.`;
@@ -79,7 +85,7 @@ export async function getGscOpportunities(
                 opportunityType = "low-hanging";
                 recommendedAction = `Position #${Math.round(k.position)} — refresh the page content, update the title tag to match the query intent more precisely.`;
             }
-
+ 
             return {
                 keyword: k.keyword,
                 position: Math.round(k.position * 10) / 10,
@@ -95,4 +101,18 @@ export async function getGscOpportunities(
         })
         .sort((a, b) => b.opportunityScore - a.opportunityScore)
         .slice(0, 50);
+}
+
+function isLikelyBranded(keyword: string): boolean {
+    return keyword.split(" ").length === 1 && keyword.length < 8;
+}
+
+function hasCommercialOrTransactionalIntent(keyword: string): boolean {
+    const signals = [
+        "best", "top", "review", "vs", "compare", "near me",
+        "hire", "cost", "price", "cheap", "service", "company",
+        "agency", "how to", "what is", "near", "local",
+    ];
+    const lower = keyword.toLowerCase();
+    return signals.some((t) => lower.includes(t));
 }

@@ -818,37 +818,109 @@ ${_ctx.userContext?.address ? `ADDRESS: ${_ctx.userContext.address}` : "⚠ No a
 
 Return ONLY the HTML iframe snippet.`,
 
-    "google-business-profile": (_ctx) => `You are a senior local SEO strategist.
+    "google-business-profile": (ctx) => {
+        const domain = ctx.domain;
+        const brand = ctx.content.title || domain;
+        return `You are a senior local SEO strategist specialising in Google Business Profile optimisation.
 
-TASK: Provide a step-by-step checklist for setting up and optimizing a Google Business Profile for this site. Include:
-1. Claim/verify the profile
-2. Add business categories
-3. Upload photos (logo, cover, interior)
-4. Add services and products
-5. Enable messaging
-6. Set up post schedule
-7. Request review strategy
+${HARD_CONSTRAINTS}
 
-Format as a numbered markdown checklist with checkboxes. Return ONLY the checklist.`,
+BUSINESS CONTEXT:
+DOMAIN: ${domain}
+BRAND: ${brand}
+${ctx.userContext?.businessType ? `BUSINESS TYPE: ${ctx.userContext.businessType}` : ""}
+${ctx.userContext?.city ? `CITY: ${ctx.userContext.city}` : ""}
+${ctx.userContext?.competitors ? `COMPETITOR GBP URLS:\n${ctx.userContext.competitors}` : ""}
 
-    "local-directories": (_ctx) => `You are a senior local SEO strategist.
+TASK — GBP CATEGORY AUDIT (5 phases):
 
-TASK: Generate a prioritized directory submission checklist. For each directory, provide the submission URL and importance level (High/Medium).
+PHASE 1 — CURRENT STATE
+Identify the likely primary category for this business type.
+List the most common secondary categories used in this vertical.
 
-Directories to include:
-- Google Business Profile (High)
-- Bing Places (High)
-- Apple Maps (High)
-- Yelp Business (High)
-- Facebook Business (High)
-- Yellow Pages (Medium)
-- Foursquare (Medium)
-- Angi (Medium, for service businesses)
-- BBB (Medium)
-- Manta (Low)
-- Hotfrog (Low)
+PHASE 2 — COMPETITOR CATEGORY REVERSE-ENGINEERING
+Analyse the competitor GBP URLs/names provided. For each competitor extract (or infer from business type):
+- Primary category
+- All secondary categories
+Build a category frequency table:
+Category | # of competitors using it | Search volume correlation (High/Med/Low)
 
-Return ONLY the formatted markdown checklist.`,
+PHASE 3 — CATEGORY GAP MATRIX
+Category | Competitors Using It | You Have It? | Priority | Suspension Risk
+
+PHASE 4 — STAGGERED ROLLOUT PLAN
+Google penalises rapid bulk changes. Output:
+- ADD TODAY (max 3): highest impact, lowest suspension risk
+- ADD NEXT WEEK (2–3): medium priority
+- ADD WEEK 3 (remaining): lower priority
+- NEVER ADD: categories that risk suspension or are clearly off-category
+
+PHASE 5 — STRATEGIC REASONING
+One paragraph per recommended category explaining why it wins for this business.
+
+Return as structured markdown with tables. No placeholder values.`;
+    },
+
+    "local-directories": (ctx) => {
+        const nap = {
+            name: ctx.userContext?.businessName || ctx.content.title || ctx.domain,
+            address: ctx.userContext?.address || "Address not provided",
+            phone: ctx.userContext?.phone || "Phone not provided",
+            website: ctx.domain,
+            industry: ctx.userContext?.businessType || "General business",
+            city: ctx.userContext?.city || "",
+        };
+
+        return `You are a local SEO citation specialist.
+
+${HARD_CONSTRAINTS}
+${FABRICATION_STOP_LIST}
+
+CANONICAL NAP (all listings must match this exactly):
+Business Name: ${nap.name}
+Address: ${nap.address}
+Phone: ${nap.phone}
+Website: https://${nap.website}
+Industry: ${nap.industry}
+${nap.city ? `City: ${nap.city}` : ""}
+
+TASK — 4 PHASES:
+
+PHASE 1 — DIRECTORY COVERAGE CHECK
+For each directory, state whether a listing likely exists and flag common NAP inconsistencies:
+
+Universal (all businesses):
+- Google Business Profile | CRITICAL
+- Bing Places | High
+- Apple Maps | High
+- Yelp | High
+- Facebook Business | High
+- Yellow Pages | Medium
+- Foursquare | Medium
+- BBB | Medium
+
+Industry-specific for ${nap.industry}:
+List the top 5 most relevant directories for this business type with their submission URLs.
+
+PHASE 2 — COMMON DISCREPANCY PATTERNS
+For a ${nap.industry} business, the most common NAP inconsistencies are:
+Discrepancy Type | Wrong Version Example | Correct Version | Fix Instructions
+
+PHASE 3 — AUDIT ACTION PLAN
+HIGH PRIORITY (fix this week): discrepancies that directly harm local rankings
+MEDIUM PRIORITY (fix this month): inconsistencies with lower ranking impact
+MISSING LISTINGS: for each missing high-value directory —
+  - Directory name
+  - Submission URL
+  - Domain authority (High / Medium)
+  - Step-by-step submission instructions (3–5 steps)
+
+PHASE 4 — NAP CONSISTENCY CODE
+- JSON-LD LocalBusiness schema with correct NAP
+- Plain HTML footer markup with consistent formatting
+
+Return as structured markdown. No invented statistics.`;
+    },
 
 
     "ai-overview-optimizer": (ctx) => `You are a highly specialized AEO (Answer Engine Optimization) expert.
@@ -1207,6 +1279,237 @@ CONTEXT:
 ${buildContext(ctx)}
 
 Return ONLY the complete updated ${ctx.filePath} content.`,
+
+    "review-sentiment-mining": (ctx) => {
+        const competitors = ctx.userContext?.competitors || "No competitors provided";
+        const city = ctx.userContext?.city || "";
+        return `You are a conversion copywriter and local SEO strategist.
+
+${HARD_CONSTRAINTS}
+${FABRICATION_STOP_LIST}
+
+MY BUSINESS: ${ctx.domain}
+BRAND: ${ctx.content.title || ctx.domain}
+${city ? `CITY: ${city}` : ""}
+
+COMPETITOR BUSINESSES TO ANALYSE:
+${competitors}
+
+TASK — 4 PHASES:
+
+PHASE 1 — SENTIMENT EXTRACTION
+Extract and organise the typical language customers use in this business vertical:
+
+a) EMOTIONAL VOCABULARY — exact words used in 5-star reviews
+b) BEFORE-STATE FEARS — top 10 fears/objections customers have BEFORE booking
+   Format: "I was worried about [X]" / "I didn't know if [Y]"
+c) OUTCOME PHRASES — top 15 specific results customers mention
+   Format: "[Specific measurable outcome] after [timeframe]"
+d) RECOMMENDATION LANGUAGE — exact phrases used when referring others
+e) TRUST TRIGGERS — language gap between 5-star and 3-star reviews
+   5-star says: ... | 3-star says: ... | Biggest trust differentiator: ...
+
+PHASE 2 — GAP ANALYSIS
+What positive themes appear in competitor reviews that a generic homepage in this niche would typically be missing?
+What trust signals are most commonly absent?
+
+PHASE 3 — COPY REWRITES (using extracted customer language throughout)
+Deliver ALL of the following:
+
+A) GOOGLE BUSINESS PROFILE DESCRIPTION (3 versions)
+   Version A: Pain-first (leads with the before-state fear)
+   Version B: Outcome-first (leads with the result customers get)
+   Version C: Trust-first (leads with the biggest trust trigger from Phase 1)
+
+B) HOMEPAGE HEADLINE + SUBHEADLINE (3 variations each)
+   Use customer outcome language, not business-centric language
+
+C) SOCIAL PROOF STATEMENTS (5 options)
+   Written in the exact style real customers use — not corporate speak
+
+D) FAQ ENTRIES (5 questions)
+   Use the exact phrasing of the fears from Phase 1 as the questions.
+   Answer each using outcome language from Phase 1c.
+
+E) REVIEW REQUEST SCRIPT
+   A short text/email to send clients after service, using language that
+   prompts them to write about the specific outcomes from Phase 1c.
+
+PHASE 4 — PRIORITY ACTION LIST
+Top 5 immediate copy changes, ranked by expected conversion impact.
+
+Return as structured markdown. No placeholder values. No invented statistics.`;
+    },
+
+    "gsc-sprint-audit": (ctx) => {
+        const keywords = ctx.userContext?.gscKeywords || "No keywords provided";
+        return `You are a senior SEO strategist running a 30-day keyword sprint.
+
+${HARD_CONSTRAINTS}
+
+DOMAIN: ${ctx.domain}
+BRAND: ${ctx.content.title || ctx.domain}
+
+PAGE-2 GOLD MINE KEYWORDS (position 8–20, sorted by impressions):
+${keywords}
+
+TASK — 3 PHASES:
+
+PHASE 1 — FORENSIC AUDIT (per keyword)
+For each keyword, audit the page currently ranking for it:
+- Is the keyword in the title tag? (Yes / No / Partial)
+- Is it in the H1? (Yes / No / Partial)
+- Is it in the first 100 words? (Yes / No)
+- Estimated word count vs. typical top-5 competitor pages for this query
+- Does the page have FAQ schema? (Yes / No)
+- Internal links pointing to this page (Low / Medium / High)
+
+Output as a table:
+Keyword | Position | Impressions | Title ✓ | H1 ✓ | First 100 ✓ | Schema | Internal Links | Priority Score
+
+PHASE 2 — REWRITES
+For the top 10 keywords by priority score, output:
+- New title tag (under 60 chars, keyword-prominent)
+- New meta description (120–160 chars, includes keyword, has CTA)
+- New H1 suggestion
+- One-sentence rewrite rationale
+
+PHASE 3 — 30-DAY SPRINT PLAN
+Week 1: Title + meta rewrites only (quick wins)
+Week 2: H1 + first-paragraph rewrites + internal link additions
+Week 3: Content expansion — add FAQ schema, increase word count to match competitors
+Week 4: Monitor + iterate — note which pages moved, double down on movers
+
+For each task: Current State → New State → Expected Position Gain
+
+Return as structured markdown.`;
+    },
+
+    "service-city-page-builder": (ctx) => {
+        const services = ctx.userContext?.services || "Services not provided";
+        const primaryCity = ctx.userContext?.city || "City not provided";
+        const surroundingAreas = ctx.userContext?.surroundingAreas || "Surrounding areas not provided";
+        const existingPages = ctx.userContext?.existingPages || "No existing pages listed";
+
+        return `You are a local SEO specialist building a location page stack.
+
+${HARD_CONSTRAINTS}
+
+DOMAIN: ${ctx.domain}
+BRAND: ${ctx.content.title || ctx.domain}
+PRIMARY CITY: ${primaryCity}
+SERVICES OFFERED: ${services}
+SURROUNDING CITIES/NEIGHBOURHOODS: ${surroundingAreas}
+EXISTING LOCATION PAGES ON SITE: ${existingPages}
+
+TASK — 5 PHASES:
+
+PHASE 1 — GAP MATRIX
+Build a complete table of every Service + City combination:
+Service | City/Area | Page Exists? | Priority Score (1–10) | Estimated Monthly Searches
+Flag each missing combo as a ranking opportunity. Count total missing pages.
+
+PHASE 2 — PUBLISHING ORDER
+Rank missing pages by: (search volume × proximity to primary city × competition level)
+List page 1, 2, 3... with a one-line reason for each position.
+
+PHASE 3 — FULL PAGE COPY (top 5 priority pages)
+For each page write a complete, publish-ready draft:
+
+─── PAGE: [Service] in [City] ───
+SEO Title: (under 60 chars)
+Meta Description: (120–160 chars)
+H1: (keyword-rich, location-specific)
+URL slug: /[service]-[city] (lowercase, hyphenated)
+
+INTRO PARAGRAPH (100–150 words):
+[Locally relevant — mention neighbourhood, local landmark or context]
+
+SERVICE DESCRIPTION (200–300 words):
+[Detail the service with local angle woven in]
+
+LOCAL TRUST SIGNALS:
+[3–5 bullet points: years serving city, local team, local testimonial placeholder]
+
+FAQ SECTION (5 questions + answers using real local questions):
+
+FAQ SCHEMA (JSON-LD — valid, parseable):
+
+CALL TO ACTION:
+[Location-specific — reference the city]
+
+INTERNAL LINKING PLAN:
+- Link FROM this page TO: [3 related pages]
+- Link TO this page FROM: [3 pages that should link here]
+
+IMAGE ALT TEXT (3 suggestions — descriptive, keyword-rich, location-specific):
+
+─── (repeat for each of top 5 pages) ───
+
+PHASE 4 — SCHEMA BLOCK
+LocalBusiness JSON-LD for the primary business with areaServed listing all cities.
+
+PHASE 5 — SUPPLEMENTAL NOTES
+- Local angle verification per page (flag thin/templated pages)
+- Duplicate content risk assessment
+- Recommended internal silo structure (text diagram)
+
+Return as structured markdown. No placeholder values.`;
+    },
+
+    "content-cluster-strategy": (ctx) => {
+        const services = ctx.userContext?.services || "";
+        const competitors = ctx.userContext?.competitors || "";
+        const city = ctx.userContext?.city || "";
+
+        return `You are a local SEO content strategist building a full cluster architecture.
+
+${HARD_CONSTRAINTS}
+${FABRICATION_STOP_LIST}
+
+DOMAIN: ${ctx.domain}
+BRAND: ${ctx.content.title || ctx.domain}
+${city ? `PRIMARY CITY: ${city}` : ""}
+${services ? `SERVICES: ${services}` : ""}
+${competitors ? `COMPETITORS: ${competitors}` : ""}
+EXISTING CONTENT: ${ctx.content.headings.slice(0, 10).join(" | ")}
+
+TASK — 4 PHASES:
+
+PHASE 1 — COMPETITIVE CONTENT GAP
+What content are competitors ranking for that this site is not covering?
+List top 10 missing content opportunities ranked by commercial value.
+
+PHASE 2 — CONTENT CLUSTER MAP
+For each of 3–4 pillar topics relevant to this business:
+
+PILLAR: [Topic]
+Target keyword: [primary keyword]
+Intent: [informational / commercial / local]
+URL: /[slug]
+Supporting articles (6–8 per pillar):
+  - Title | Target keyword | Intent | Links to money page | Priority
+
+Master table:
+Cluster | Article Title | Target Keyword | Intent | Internal Links To | Est. Searches | Priority
+
+PHASE 3 — ARTICLE BRIEFS (top 10 by priority)
+For each article:
+- SEO Title (under 60 chars)
+- Meta Description (120–160 chars)
+- H1
+- H2 outline (5–7 sections)
+- Target word count
+- Internal links to include (with anchor text)
+- CTA recommendation
+
+PHASE 4 — 90-DAY PUBLISHING CALENDAR
+Month 1: [Which articles, in which order, and why]
+Month 2: [Next batch]
+Month 3: [Final batch + pillar page refresh]
+
+Return as structured markdown with tables. No placeholder values.`;
+    },
 };
 
 /**

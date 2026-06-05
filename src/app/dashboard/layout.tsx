@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ReactNode } from "react";
+import { ReactNode, Suspense } from "react";
 import { CollapsibleSidebar } from "@/components/dashboard/CollapsibleSidebar";
 import { TopHeader } from "@/components/dashboard/TopHeader";
 import { MobileSidebar } from "@/components/dashboard/MobileSidebar";
@@ -109,27 +109,33 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
-      <CollapsibleSidebar
-        defaultSiteId={defaultSiteId}
-        sites={userSites}
-        isSuperAdmin={user.role === "SUPER_ADMIN"}
-        user={{ name: userName, email: user.email || "", tier: userPlan, credits: user.credits ?? 0, creditsLocked: !!user.creditsLockedAt }}
-      />
+      <Suspense fallback={<div className="w-64 shrink-0 bg-background border-r" />}>
+        <CollapsibleSidebar
+          defaultSiteId={defaultSiteId}
+          sites={userSites}
+          isSuperAdmin={user.role === "SUPER_ADMIN"}
+          user={{ name: userName, email: user.email || "", tier: userPlan, credits: user.credits ?? 0, creditsLocked: !!user.creditsLockedAt }}
+        />
+      </Suspense>
 
       {/* ── Main Content ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-h-screen min-w-0">
         {/* Header */}
-        <TopHeader
-          mobileSidebar={
-            <MobileSidebar
-              userName={userName}
-              userTier={userPlan}
-              defaultSiteId={defaultSiteId}
-              sites={userSites}
-              isSuperAdmin={user.role === "SUPER_ADMIN"}
-            />
-          }
-        />
+        <Suspense fallback={<div className="h-16 bg-background border-b" />}>
+          <TopHeader
+            mobileSidebar={
+              <Suspense fallback={null}>
+                <MobileSidebar
+                  userName={userName}
+                  userTier={userPlan}
+                  defaultSiteId={defaultSiteId}
+                  sites={userSites}
+                  isSuperAdmin={user.role === "SUPER_ADMIN"}
+                />
+              </Suspense>
+            }
+          />
+        </Suspense>
 
         {/* Trial banner — flush full-width between header and main */}
         {trialBanner}

@@ -29,6 +29,7 @@ import {
     BarChart3,
     Gift,
     History,
+    Target,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -45,35 +46,36 @@ function buildHref(base: string, siteId: string | null): string {
 }
 
 const NAV_ITEMS = [
-    { name: "Dashboard",        href: "/dashboard",                 icon: LayoutDashboard,  exact: true,  contextSiteId: false },
-    { name: "My Sites",         href: "/dashboard/sites",           icon: Globe,            exact: false, contextSiteId: false },
-    { name: "SEO Audits",       href: "/dashboard/audits",          icon: ClipboardList,    exact: false, contextSiteId: true  },
-    { name: "Keywords",         href: "/dashboard/keywords",        icon: TrendingUp,       exact: false, contextSiteId: true  },
-    { name: "Competitors",      href: "/dashboard/competitors",     icon: Crosshair,        exact: false, contextSiteId: true  },
-    { name: "AI Visibility",    href: "/dashboard/aeo",             icon: MonitorSmartphone,exact: true,  contextSiteId: true  },
-    { name: "Citation History", href: "/dashboard/aeo/proofs",      icon: History,          exact: false, contextSiteId: true, indent: true },
-    { name: "Wikidata Entity",  href: "/dashboard/aeo/entity",      icon: Globe,            exact: false, contextSiteId: true, indent: true },
-    { name: "AI Content",       href: "/dashboard/blogs",           icon: FileText,         exact: false, contextSiteId: false },
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true, contextSiteId: false },
+    { name: "My Sites", href: "/dashboard/sites", icon: Globe, exact: false, contextSiteId: false },
+    { name: "SEO Audits", href: "/dashboard/audits", icon: ClipboardList, exact: false, contextSiteId: true },
+    { name: "Keywords", href: "/dashboard/keywords", icon: TrendingUp, exact: false, contextSiteId: true },
+    { name: "Competitors", href: "/dashboard/competitors", icon: Crosshair, exact: false, contextSiteId: true },
+    { name: "AI Visibility", href: "/dashboard/aeo", icon: MonitorSmartphone, exact: true, contextSiteId: true },
+    { name: "Citation History", href: "/dashboard/aeo/proofs", icon: History, exact: false, contextSiteId: true, indent: true },
+    { name: "Wikidata Entity", href: "/dashboard/aeo/entity", icon: Globe, exact: false, contextSiteId: true, indent: true },
+    { name: "AI Content", href: "/dashboard/blogs", icon: FileText, exact: false, contextSiteId: false },
 ];
 
 const ACCOUNT_ITEMS = [
-    { name: "Billing",       href: "/dashboard/billing",  icon: CreditCard, exact: false, contextSiteId: false },
-    { name: "Refer & Earn",  href: "/dashboard/referral", icon: Gift,       exact: false, contextSiteId: false },
-    { name: "Settings",      href: "/dashboard/settings", icon: Settings,   exact: false, contextSiteId: false },
-    { name: "Talk to Aria",  href: "/dashboard/voice",    icon: Mic,        exact: false, contextSiteId: false },
+    { name: "Billing", href: "/dashboard/billing", icon: CreditCard, exact: false, contextSiteId: false },
+    { name: "Refer & Earn", href: "/dashboard/referral", icon: Gift, exact: false, contextSiteId: false },
+    { name: "Settings", href: "/dashboard/settings", icon: Settings, exact: false, contextSiteId: false },
+    { name: "Talk to Aria", href: "/dashboard/voice", icon: Mic, exact: false, contextSiteId: false },
 ];
 
 const SECONDARY_ITEMS = [
-    { name: "Recommendations", href: "/dashboard/recommendations", icon: Lightbulb,    contextSiteId: false, group: "strategy" },
-    { name: "SERP Gap Analysis",href: "/dashboard/serp-gap",       icon: BarChart3,    contextSiteId: true,  group: "strategy" },
-    { name: "Content Editor",  href: "/dashboard/editor",          icon: Highlighter,  contextSiteId: false, group: "content" },
-    { name: "Content Planner", href: "/dashboard/planner",         icon: Calendar,     contextSiteId: true,  group: "content" },
-    { name: "Re-Optimize",     href: "/dashboard/refresh",         icon: ClipboardList,contextSiteId: true,  group: "content" },
-    { name: "Content Decay",   href: "/dashboard/content-decay",   icon: TrendingDown, contextSiteId: true,  group: "content" },
-    { name: "Backlinks",       href: "/dashboard/backlinks",       icon: Link2,        contextSiteId: true,  group: "technical" },
-    { name: "Auto Indexer",    href: "/dashboard/indexing",        icon: Zap,          contextSiteId: false, group: "technical" },
-    { name: "Auto-Heal Log",   href: "/dashboard/healing",         icon: Zap,          contextSiteId: true,  group: "technical" },
-    { name: "Team",            href: "/dashboard/team",            icon: Users,        contextSiteId: false, group: "strategy" },
+    { name: "Recommendations", href: "/dashboard/recommendations", icon: Lightbulb, contextSiteId: false, group: "strategy" },
+    { name: "SERP Gap Analysis", href: "/dashboard/serp-gap", icon: BarChart3, contextSiteId: true, group: "strategy" },
+    { name: "Campaigns", href: "/dashboard/campaigns", icon: Target, contextSiteId: true, group: "strategy" },
+    { name: "Content Editor", href: "/dashboard/editor", icon: Highlighter, contextSiteId: false, group: "content" },
+    { name: "Content Planner", href: "/dashboard/planner", icon: Calendar, contextSiteId: true, group: "content" },
+    { name: "Re-Optimize", href: "/dashboard/refresh", icon: ClipboardList, contextSiteId: true, group: "content" },
+    { name: "Content Decay", href: "/dashboard/content-decay", icon: TrendingDown, contextSiteId: true, group: "content" },
+    { name: "Backlinks", href: "/dashboard/backlinks", icon: Link2, contextSiteId: true, group: "technical" },
+    { name: "Auto Indexer", href: "/dashboard/indexing", icon: Zap, contextSiteId: false, group: "technical" },
+    { name: "Auto-Heal Log", href: "/dashboard/healing", icon: Zap, contextSiteId: true, group: "technical" },
+    { name: "Team", href: "/dashboard/team", icon: Users, contextSiteId: false, group: "strategy" },
 ];
 
 interface Site { id: string; domain: string; grade?: string | null; }
@@ -108,6 +110,7 @@ function SitePickerDropdown({ sites, activeSiteId }: { sites: Site[]; activeSite
             "/dashboard/backlinks",
             "/dashboard/competitors",
             "/dashboard/serp-gap",
+            "/dashboard/campaigns",
             "/dashboard/content-decay",
             "/dashboard/planner",
             "/dashboard/indexing",
@@ -140,13 +143,12 @@ function SitePickerDropdown({ sites, activeSiteId }: { sites: Site[]; activeSite
 
                 {/* Grade indicator */}
                 {activeSite?.grade && (
-                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${
-                        activeSite.grade === "A" || activeSite.grade === "B"
+                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${activeSite.grade === "A" || activeSite.grade === "B"
                             ? "text-emerald-400 bg-emerald-500/10"
                             : activeSite.grade === "C"
                                 ? "text-amber-400 bg-amber-500/10"
                                 : "text-rose-400 bg-rose-500/10"
-                    }`}>
+                        }`}>
                         {activeSite.grade}
                     </span>
                 )}
@@ -176,9 +178,8 @@ function SitePickerDropdown({ sites, activeSiteId }: { sites: Site[]; activeSite
                                 role="option"
                                 aria-selected={site.id === activeSiteId}
                                 onClick={() => switchSite(site.id)}
-                                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-colors hover:bg-accent ${
-                                    site.id === activeSiteId ? "bg-accent/60" : ""
-                                }`}
+                                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-colors hover:bg-accent ${site.id === activeSiteId ? "bg-accent/60" : ""
+                                    }`}
                             >
                                 <div className="w-5 h-5 rounded-md bg-muted border border-border flex items-center justify-center shrink-0">
                                     <span className="text-[9px] font-black text-muted-foreground leading-none">
@@ -257,9 +258,8 @@ function NavLink({
 
             {/* Icon */}
             <Icon
-                className={`shrink-0 transition-colors ${
-                    isCollapsed ? "w-5 h-5" : "w-4 h-4"
-                } ${isActive ? "text-brand" : "text-muted-foreground/70 group-hover:text-foreground"}`}
+                className={`shrink-0 transition-colors ${isCollapsed ? "w-5 h-5" : "w-4 h-4"
+                    } ${isActive ? "text-brand" : "text-muted-foreground/70 group-hover:text-foreground"}`}
                 aria-hidden="true"
             />
 
@@ -347,12 +347,12 @@ function SidebarNavInner({
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger
-                                    onClick={onToggleCollapse}
-                                    aria-label="Expand sidebar"
-                                    className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
-                                >
-                                    <PanelLeftOpen className="w-4 h-4" aria-hidden="true" />
-                                </TooltipTrigger>
+                                onClick={onToggleCollapse}
+                                aria-label="Expand sidebar"
+                                className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
+                            >
+                                <PanelLeftOpen className="w-4 h-4" aria-hidden="true" />
+                            </TooltipTrigger>
                             <TooltipContent side="right" className="text-xs">Expand sidebar</TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
@@ -455,15 +455,15 @@ function SidebarNavInner({
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger
-                                    onClick={() => setMoreOpen(o => !o)}
-                                    aria-expanded={moreOpen}
-                                    className="p-2 rounded-lg text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors"
-                                >
-                                    <ChevronDown
-                                        className={`w-4 h-4 transition-transform duration-200 ${moreOpen ? "rotate-180" : ""}`}
-                                        aria-hidden="true"
-                                    />
-                                </TooltipTrigger>
+                                onClick={() => setMoreOpen(o => !o)}
+                                aria-expanded={moreOpen}
+                                className="p-2 rounded-lg text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors"
+                            >
+                                <ChevronDown
+                                    className={`w-4 h-4 transition-transform duration-200 ${moreOpen ? "rotate-180" : ""}`}
+                                    aria-hidden="true"
+                                />
+                            </TooltipTrigger>
                             <TooltipContent side="right" className="text-xs">{moreOpen ? "Hide tools" : "More tools"}</TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
@@ -561,11 +561,10 @@ function SidebarNavInner({
                     <NavSectionLabel>Admin</NavSectionLabel>
                     <Link
                         href="/admin"
-                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all relative ${
-                            pathname.startsWith("/admin")
+                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all relative ${pathname.startsWith("/admin")
                                 ? "bg-violet-500/10 text-violet-300"
                                 : "text-violet-400/60 hover:bg-violet-500/10 hover:text-violet-300"
-                        }`}
+                            }`}
                     >
                         {pathname.startsWith("/admin") && (
                             <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-r-full bg-violet-500" />

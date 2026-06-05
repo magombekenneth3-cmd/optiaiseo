@@ -20,6 +20,7 @@ import {
     drSnapshotJob,
     repurposeBlogFn,
 } from "@/lib/inngest/functions";
+import { socialRepurposeJob } from "@/lib/inngest/functions/social-repurpose";
 import { freshnessDecayCron } from "@/lib/inngest/freshness-decay";
 import { computeBenchmarksJob } from "@/lib/inngest/functions/benchmarks";
 import { measureHealingOutcomesJob } from "@/lib/inngest/functions/healing-outcomes";
@@ -230,5 +231,6 @@ export const { GET, POST, PUT } = serve({
         serpFeatureSiteJob,
         purgeExpiredSerpAnalysisJob,
         repurposeBlogFn,
+        socialRepurposeJob,
     ],
 });

@@ -96,17 +96,18 @@ export async function POST(req: NextRequest) {
         }
         const validTier = tier as AllowedTier;
 
-        const plan = getPlan(validTier) as typeof getPlan extends (...a: any[]) => infer R ? R : never & {
-            annualPriceId?: string | null;
-        };
+        const plan = getPlan(validTier);
 
         // Pick annual price when requested and configured; fall back to monthly silently.
         const resolvedPriceId = isAnnual
-            ? ((plan as Record<string, unknown>).annualPriceId as string | null | undefined) ?? plan.priceId
+            ? ((plan as any).annualPriceId ?? plan.priceId)
             : plan.priceId;
 
         if (!resolvedPriceId) {
-            return NextResponse.json({ error: "No price configured for this tier" }, { status: 400 });
+            return NextResponse.json(
+                { error: `No price configured for ${validTier}${isAnnual ? " annual" : ""}` },
+                { status: 503 }
+            );
         }
 
         const dbUser = await prisma.user.findUnique({

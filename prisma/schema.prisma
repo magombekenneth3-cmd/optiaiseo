@@ -210,6 +210,10 @@ model Site {
   repurposedResults      RepurposedResult[]
   aeoAutopilotEnabled    Boolean                  @default(false)
   aeoAutopilotSchedule   String                   @default("weekly")
+  rssFeedUrl              String?
+  socialRepurposeEnabled  Boolean                  @default(false)
+  socialRepurposeSchedule String                   @default("weekly")
+  rssSocialPosts          RssSocialPost[]
   aeoPublicToken         String?                  @unique
   aeoDigestEnabled       Boolean                  @default(true)
   aeoProofs              AeoProof[]
@@ -1355,4 +1359,17 @@ model Campaign {
   @@index([siteId, status])
   @@index([siteId, type])
   @@index([userId])
+}
+
+model RssSocialPost {
+  id           String   @id @default(cuid())
+  siteId       String
+  articleUrl   String
+  articleTitle String
+  posts        Json     // Store the generated SocialPost[] JSON array
+  createdAt    DateTime @default(now())
+  site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, articleUrl])
+  @@index([siteId])
 }

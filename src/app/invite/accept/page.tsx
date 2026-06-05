@@ -61,7 +61,11 @@ function AcceptInviteContent() {
 
 export default function AcceptInvitePage() {
     return (
-        <Suspense>
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center">
+                <p className="text-muted-foreground animate-pulse">Loading...</p>
+            </div>
+        }>
             <AcceptInviteContent />
         </Suspense>
     );

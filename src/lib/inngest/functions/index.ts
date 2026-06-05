@@ -32,4 +32,5 @@ export * from "./cron-schedule";
 export * from "./serp-cache-purge";
 export * from "./dr-snapshot";
 export * from "./blog-repurpose";
-
+export * from "./social-repurpose";
+export * from "./campaign";

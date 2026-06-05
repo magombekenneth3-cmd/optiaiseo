@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "next-env.d.ts",
+    "src/lib/seo/prompts.ts",
+    "src/lib/keywords/gsc-opportunities.ts",
+    "src/lib/publishers/social-repurpose.ts"
+  ]
+}
