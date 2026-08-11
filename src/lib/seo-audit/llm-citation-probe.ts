@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 import { createHash } from "crypto";
-import { geminiAdapter } from "@/lib/gsov/llm-adapters";
+import { GeminiProbeAdapter } from "@/lib/gsov/llm-adapters";
 import { sanitizeBodyForLlm } from "@/lib/gsov/sanitizer";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";

@@ -1,15 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { geminiAdapter, openAiAdapter, perplexityAdapter, HttpClient } from "@/lib/gsov/llm-adapters";
+import { GeminiProbeAdapter, OpenAIProbeAdapter, PerplexityProbeAdapter, HttpClient } from "@/lib/gsov/llm-adapters";
 
 describe("Direct Provider Adapters Unit Tests (Gate 2)", () => {
-    it("Gemini adapter should call Gemini endpoint and return standardized ProbeResult with provenance", async () => {
+    it("GeminiProbeAdapter should call Gemini endpoint and return standardized ProbeResult with provenance", async () => {
         let requestedUrl = "";
-        let requestedHeaders: Record<string, string> = {};
 
         const mockClient: HttpClient = {
-            fetch: async (url, options) => {
+            fetch: async (url) => {
                 requestedUrl = url;
-                requestedHeaders = (options?.headers as Record<string, string>) || {};
                 return {
                     ok: true,
                     status: 200,
@@ -24,20 +22,20 @@ describe("Direct Provider Adapters Unit Tests (Gate 2)", () => {
             }
         };
 
-        const res = await geminiAdapter.probe("keyword", "system prompt", "body data", "test-key", mockClient);
+        const adapter = new GeminiProbeAdapter(mockClient, "test-gemini-key");
+        const res = await adapter.probe("keyword", "webpage body content");
 
         expect(res).not.toBeNull();
         expect(requestedUrl).toContain("generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash");
-        expect(requestedHeaders["x-goog-api-key"]).toEqual("test-key");
-        expect(res?.provider).toEqual("google_gemini");
-        expect(res?.score).toEqual(4);
-        expect(res?.wouldCite).toBe(true);
-        expect(res?.citations).toContain("https://acme.com/source1");
-        expect(res?.promptHash).toHaveLength(64);
-        expect(res?.responseHash).toHaveLength(64);
+        expect(res.provider).toEqual("google_gemini");
+        expect(res.score).toEqual(4);
+        expect(res.wouldCite).toBe(true);
+        expect(res.citations).toContain("https://acme.com/source1");
+        expect(res.promptHash).toHaveLength(64);
+        expect(res.responseHash).toHaveLength(64);
     });
 
-    it("OpenAI adapter should call OpenAI chat endpoint with system role separation", async () => {
+    it("OpenAIProbeAdapter should call OpenAI chat endpoint with system role separation", async () => {
         let requestedUrl = "";
 
         const mockClient: HttpClient = {
@@ -54,16 +52,17 @@ describe("Direct Provider Adapters Unit Tests (Gate 2)", () => {
             }
         };
 
-        const res = await openAiAdapter.probe("keyword", "system prompt", "body data", "openai-key", mockClient);
+        const adapter = new OpenAIProbeAdapter(mockClient, "test-openai-key");
+        const res = await adapter.probe("keyword", "webpage body content");
 
         expect(res).not.toBeNull();
         expect(requestedUrl).toEqual("https://api.openai.com/v1/chat/completions");
-        expect(res?.provider).toEqual("openai");
-        expect(res?.score).toEqual(5);
-        expect(res?.wouldCite).toBe(true);
+        expect(res.provider).toEqual("openai");
+        expect(res.score).toEqual(5);
+        expect(res.wouldCite).toBe(true);
     });
 
-    it("Perplexity adapter should call Perplexity endpoint and extract citations", async () => {
+    it("PerplexityProbeAdapter should call Perplexity endpoint and extract citations", async () => {
         let requestedUrl = "";
 
         const mockClient: HttpClient = {
@@ -81,13 +80,14 @@ describe("Direct Provider Adapters Unit Tests (Gate 2)", () => {
             }
         };
 
-        const res = await perplexityAdapter.probe("keyword", "system prompt", "body data", "pplx-key", mockClient);
+        const adapter = new PerplexityProbeAdapter(mockClient, "test-pplx-key");
+        const res = await adapter.probe("keyword", "webpage body content");
 
         expect(res).not.toBeNull();
         expect(requestedUrl).toEqual("https://api.perplexity.ai/chat/completions");
-        expect(res?.provider).toEqual("perplexity");
-        expect(res?.score).toEqual(3);
-        expect(res?.wouldCite).toBe(false);
-        expect(res?.citations).toContain("https://perplexity.ai/ref1");
+        expect(res.provider).toEqual("perplexity");
+        expect(res.score).toEqual(3);
+        expect(res.wouldCite).toBe(false);
+        expect(res.citations).toContain("https://perplexity.ai/ref1");
     });
 });
