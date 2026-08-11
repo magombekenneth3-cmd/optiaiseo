@@ -13,6 +13,9 @@ export interface RankerSnapshot {
     checksum: string;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const db = prisma as any;
+
 const withTimeout = <T>(promise: Promise<T>, ms = 400): Promise<T> =>
     Promise.race([
         promise,
@@ -60,22 +63,25 @@ const memoryRegistry = new Map<string, RankerSnapshot>([
  */
 export async function getActiveRanker(): Promise<RankerSnapshot> {
     try {
-        const dbActive = await withTimeout(prisma.rankerSnapshot.findFirst({
-            where: { status: "ACTIVE" }
-        }));
+        if (db.rankerSnapshot) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const dbActive: any = await withTimeout(db.rankerSnapshot.findFirst({
+                where: { status: "ACTIVE" }
+            }));
 
-        if (dbActive) {
-            return {
-                rankerVersion: dbActive.rankerVersion,
-                weightsVersion: dbActive.weightsVersion,
-                featureSetVersion: dbActive.featureSetVersion,
-                configuration: dbActive.configuration as Record<string, number>,
-                createdAt: dbActive.createdAt.toISOString(),
-                createdBy: dbActive.createdBy,
-                status: dbActive.status as "ACTIVE",
-                parentVersion: dbActive.parentVersion ?? undefined,
-                checksum: dbActive.checksum,
-            };
+            if (dbActive) {
+                return {
+                    rankerVersion: dbActive.rankerVersion,
+                    weightsVersion: dbActive.weightsVersion,
+                    featureSetVersion: dbActive.featureSetVersion,
+                    configuration: dbActive.configuration as Record<string, number>,
+                    createdAt: new Date(dbActive.createdAt).toISOString(),
+                    createdBy: dbActive.createdBy,
+                    status: dbActive.status as "ACTIVE",
+                    parentVersion: dbActive.parentVersion ?? undefined,
+                    checksum: dbActive.checksum,
+                };
+            }
         }
     } catch { }
 
@@ -103,35 +109,39 @@ export async function rollbackRanker(targetVersion?: string): Promise<{ success:
     }
 
     try {
-        const targetDb = await withTimeout(prisma.rankerSnapshot.findUnique({
-            where: { rankerVersion: rollbackTarget }
-        }));
+        if (db.rankerSnapshot) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const targetDb: any = await withTimeout(db.rankerSnapshot.findUnique({
+                where: { rankerVersion: rollbackTarget }
+            }));
 
-        if (targetDb && targetDb.status === "DEPRECATED") {
-            throw new Error(`Cannot rollback to deprecated ranker version '${rollbackTarget}'.`);
+            if (targetDb && targetDb.status === "DEPRECATED") {
+                throw new Error(`Cannot rollback to deprecated ranker version '${rollbackTarget}'.`);
+            }
+
+            // Atomic DB transaction
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await withTimeout(prisma.$transaction(async (tx: any) => {
+                await tx.rankerSnapshot.updateMany({
+                    where: { status: "ACTIVE" },
+                    data: { status: "INACTIVE" }
+                });
+
+                await tx.rankerSnapshot.upsert({
+                    where: { rankerVersion: rollbackTarget },
+                    update: { status: "ACTIVE" },
+                    create: {
+                        rankerVersion: rollbackTarget,
+                        weightsVersion: "weights-v1.0.0",
+                        featureSetVersion: "gsc-lh-aeo-v1",
+                        configuration: defaultV1.configuration,
+                        createdBy: "system-rollback",
+                        status: "ACTIVE",
+                        checksum: defaultV1.checksum,
+                    }
+                });
+            }));
         }
-
-        // Atomic DB transaction
-        await withTimeout(prisma.$transaction(async (tx) => {
-            await tx.rankerSnapshot.updateMany({
-                where: { status: "ACTIVE" },
-                data: { status: "INACTIVE" }
-            });
-
-            await tx.rankerSnapshot.upsert({
-                where: { rankerVersion: rollbackTarget },
-                update: { status: "ACTIVE" },
-                create: {
-                    rankerVersion: rollbackTarget,
-                    weightsVersion: "weights-v1.0.0",
-                    featureSetVersion: "gsc-lh-aeo-v1",
-                    configuration: defaultV1.configuration,
-                    createdBy: "system-rollback",
-                    status: "ACTIVE",
-                    checksum: defaultV1.checksum,
-                }
-            });
-        }));
     } catch { }
 
     // Update memory registry state atomically

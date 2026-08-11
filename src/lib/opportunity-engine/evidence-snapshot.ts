@@ -15,6 +15,10 @@ export interface EvidenceSnapshot {
 // In-memory process fallback cache for speed
 const processCache = new Map<string, EvidenceSnapshot>();
 
+// Untyped helper to safely access Prisma models created in recent schema migrations
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const db = prisma as any;
+
 const withTimeout = <T>(promise: Promise<T>, ms = 400): Promise<T> =>
     Promise.race([
         promise,
@@ -72,21 +76,23 @@ export async function createEvidenceSnapshot(
 
     // 2. Persist to Prisma DB (create-only if missing)
     try {
-        const existing = await withTimeout(prisma.evidenceSnapshot.findUnique({
-            where: { evidenceSnapshotId }
-        }));
-
-        if (!existing) {
-            await withTimeout(prisma.evidenceSnapshot.create({
-                data: {
-                    evidenceSnapshotId,
-                    siteId,
-                    inputHash,
-                    canonicalPayload: JSON.parse(canonicalPayload),
-                    featureSetVersion,
-                    checksum,
-                }
+        if (db.evidenceSnapshot) {
+            const existing = await withTimeout(db.evidenceSnapshot.findUnique({
+                where: { evidenceSnapshotId }
             }));
+
+            if (!existing) {
+                await withTimeout(db.evidenceSnapshot.create({
+                    data: {
+                        evidenceSnapshotId,
+                        siteId,
+                        inputHash,
+                        canonicalPayload: JSON.parse(canonicalPayload),
+                        featureSetVersion,
+                        checksum,
+                    }
+                }));
+            }
         }
     } catch {
         // Fallback for isolated test environments without database connection
@@ -105,24 +111,27 @@ export async function getEvidenceSnapshot(evidenceSnapshotId: string): Promise<E
     }
 
     try {
-        const dbRecord = await withTimeout(prisma.evidenceSnapshot.findUnique({
-            where: { evidenceSnapshotId }
-        }));
+        if (db.evidenceSnapshot) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const dbRecord: any = await withTimeout(db.evidenceSnapshot.findUnique({
+                where: { evidenceSnapshotId }
+            }));
 
-        if (dbRecord) {
-            const canonicalPayload = JSON.stringify(dbRecord.canonicalPayload);
-            const snapshot: EvidenceSnapshot = {
-                evidenceSnapshotId: dbRecord.evidenceSnapshotId,
-                siteId: dbRecord.siteId,
-                createdAt: dbRecord.createdAt.toISOString(),
-                inputHash: dbRecord.inputHash,
-                canonicalPayload,
-                featureSetVersion: dbRecord.featureSetVersion,
-                features: dbRecord.canonicalPayload as Record<string, unknown>,
-                checksum: dbRecord.checksum,
-            };
-            processCache.set(evidenceSnapshotId, Object.freeze(snapshot));
-            return snapshot;
+            if (dbRecord) {
+                const canonicalPayload = JSON.stringify(dbRecord.canonicalPayload);
+                const snapshot: EvidenceSnapshot = {
+                    evidenceSnapshotId: dbRecord.evidenceSnapshotId,
+                    siteId: dbRecord.siteId,
+                    createdAt: new Date(dbRecord.createdAt).toISOString(),
+                    inputHash: dbRecord.inputHash,
+                    canonicalPayload,
+                    featureSetVersion: dbRecord.featureSetVersion,
+                    features: dbRecord.canonicalPayload as Record<string, unknown>,
+                    checksum: dbRecord.checksum,
+                };
+                processCache.set(evidenceSnapshotId, Object.freeze(snapshot));
+                return snapshot;
+            }
         }
     } catch { }
 
