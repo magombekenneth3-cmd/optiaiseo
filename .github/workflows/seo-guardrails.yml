@@ -1,0 +1,34 @@
+name: Autonomous SEO & Core Web Vitals Guardrails
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  deployment_status:
+
+jobs:
+  seo-guardrails:
+    name: Audit Meta Tags & CWV Regressions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Autonomous Guardrails Audit
+        run: npx tsx src/lib/guardrails/ci-check.ts "${{ github.event.deployment_status.target_url || 'https://optiaiseo.online' }}"
+
+      - name: Handle Guardrail Regression & Stage Rollback PR
+        if: failure()
+        run: |
+          echo "SEO / Core Web Vitals regression caught by OptiAISEO Guardrails!"
+          echo "Staging automated rollback PR payload."

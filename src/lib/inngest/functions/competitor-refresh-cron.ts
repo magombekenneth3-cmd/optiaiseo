@@ -24,7 +24,7 @@ export const weeklyCompetitorRefreshJob = inngest.createFunction(
     name: "Weekly Competitor Keyword Gap Refresh",
     concurrency: { limit: CONCURRENCY.competitors },
     retries: 1,
-    triggers: [{ cron: "0 5 * * 2" }], // Every Tuesday 05:00 UTC
+    triggers: [{ cron: "0 5 * * 2" }],
   },
   async ({ step }) => {
     // Only refresh paid sites — free tier gets manual-only refresh

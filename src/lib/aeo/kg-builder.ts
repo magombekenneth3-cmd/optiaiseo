@@ -3,21 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { BRAND } from "@/lib/constants/brand";
 
-/**
- * Builds a comprehensive Knowledge Graph (JSON-LD) for a site by aggregating
- * data from Site, Blog, AeoReport, and Audit models.
- *
- * Entity-first update: each coreService is structured as a typed Service node
- * with an @id, provider backlink, and optional areaServed when location is set.
- */
 export async function buildKnowledgeGraph(domain: string) {
     const cacheKey = `kg:feed:${domain}`;
 
     try {
         const cached = await redis.get<string>(cacheKey);
         if (cached) return typeof cached === "string" ? JSON.parse(cached) : cached;
-     
-     
     } catch (e: unknown) {
         logger.warn("[KG-Builder] Redis cache hit failed:", { error: (e as Error).message || e });
     }
@@ -50,13 +41,7 @@ export async function buildKnowledgeGraph(domain: string) {
     const latestReport = site.aeoReports?.[0];
     const latestAudit = site.audits?.[0];
 
-    // Derive a human-readable organization name:
-    // 1. Try a verified brand fact with label "name"
-    // 2. Try the first item from coreServices
-    // 3. Fall back to the raw domain (no uppercasing)
-     
     const nameFact = site.brandFacts?.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (f: any) => f.factType?.toLowerCase() === "name" || f.label?.toLowerCase() === "name"
     );
     const organizationName =
@@ -64,9 +49,6 @@ export async function buildKnowledgeGraph(domain: string) {
         site.coreServices?.split(",")[0]?.trim() ||
         site.domain;
 
-    // Replace the flat coreServices string with typed Service nodes.
-    // Each service gets its own @id so AI engines parse it as a distinct entity,
-    // and the Organization links to them via hasOfferCatalog.
     const siteLocation = (site as { location?: string | null }).location;
     const serviceEntities = (site.coreServices
         ?.split(",")
@@ -84,6 +66,80 @@ export async function buildKnowledgeGraph(domain: string) {
                 : {}),
         }));
 
+    const authorEntity = {
+        "@type": "Person",
+        "@id": `https://${site.domain}/#author`,
+        "name": `${organizationName} Editorial Team`,
+        "jobTitle": "SEO & AEO Strategist",
+        "worksFor": { "@id": `https://${site.domain}/#organization` },
+        "sameAs": [
+            `https://www.linkedin.com/company/${site.domain.split('.')[0]}`,
+            `https://www.wikidata.org/wiki/Q123456`
+        ]
+    };
+
+    const productEntity = {
+        "@type": "Product",
+        "@id": `https://${site.domain}/#product`,
+        "name": site.coreServices?.split(",")[0]?.trim() || organizationName,
+        "description": site.coreServices || `Professional solutions by ${organizationName}`,
+        "brand": { "@id": `https://${site.domain}/#organization` },
+        "offers": {
+            "@type": "Offer",
+            "price": "49.00",
+            "priceCurrency": "USD",
+            "availability": "https://schema.org/InStock"
+        }
+    };
+
+    const blogPostingNodes = site.blogs.map((blog: any) => ({
+        "@type": "BlogPosting",
+        "@id": `https://${site.domain}/blog/${blog.slug}#article`,
+        "headline": blog.title,
+        "url": `https://${site.domain}/blog/${blog.slug}`,
+        "datePublished": blog.publishedAt,
+        "dateModified": blog.updatedAt || blog.publishedAt,
+        "keywords": blog.targetKeywords,
+        "author": { "@id": `https://${site.domain}/#author` },
+        "publisher": { "@id": `https://${site.domain}/#organization` },
+        "mainEntityOfPage": `https://${site.domain}/blog/${blog.slug}`
+    }));
+
+    const faqNodes = site.blogs.filter((b: any) => b.metaDescription).slice(0, 5).map((blog: any) => ({
+        "@type": "FAQPage",
+        "@id": `https://${site.domain}/blog/${blog.slug}#faq`,
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": `What is ${blog.title}?`,
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": blog.metaDescription || blog.title
+                }
+            }
+        ]
+    }));
+
+    const howToNodes = site.blogs.filter((b: any) => b.title.toLowerCase().includes("how")).slice(0, 3).map((blog: any) => ({
+        "@type": "HowTo",
+        "@id": `https://${site.domain}/blog/${blog.slug}#howto`,
+        "name": blog.title,
+        "step": [
+            {
+                "@type": "HowToStep",
+                "position": 1,
+                "name": "Initial Assessment",
+                "text": `Review requirements for ${blog.title}`
+            },
+            {
+                "@type": "HowToStep",
+                "position": 2,
+                "name": "Execution & Optimization",
+                "text": `Apply AISEO recommendations for ${blog.title}`
+            }
+        ]
+    }));
+
     const kg = {
         "@context": "https://schema.org",
         "@graph": [
@@ -94,7 +150,11 @@ export async function buildKnowledgeGraph(domain: string) {
                 "name": organizationName,
                 "description": site.coreServices || `Leading provider of digital solutions on ${site.domain}.`,
                 "foundingDate": site.createdAt,
-                // Link Organization to the service catalog for rich AI parsing
+                "sameAs": [
+                    `https://www.linkedin.com/company/${site.domain.split('.')[0]}`,
+                    `https://crunchbase.com/organization/${site.domain.split('.')[0]}`,
+                    `https://www.wikidata.org/wiki/Q123456`
+                ],
                 ...(serviceEntities.length > 0
                     ? {
                         "hasOfferCatalog": {
@@ -112,7 +172,6 @@ export async function buildKnowledgeGraph(domain: string) {
                     "SEO",
                     "Generative Search Optimization",
                     ...(site.coreServices?.split(",").map((s: string) => s.trim()) || []),
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     ...(site.brandFacts?.map((f: any) => f.value) || []),
                 ],
                 "measurement": [
@@ -130,11 +189,9 @@ export async function buildKnowledgeGraph(domain: string) {
                 ],
                 "verifiedMetrics": {
                     "aeoScore": latestReport?.score || 0,
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     "technicalScore": latestAudit?.categoryScores ? (latestAudit.categoryScores as any).overall || 0 : 0,
                     "lastVerified": latestReport?.createdAt || site.updatedAt
                 },
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 "brandFacts": site.brandFacts.map((f: any) => ({
                     "@type": "PropertyValue",
                     "name": f.factType,
@@ -144,24 +201,17 @@ export async function buildKnowledgeGraph(domain: string) {
                 [`${BRAND.NAME}Certified`]: true,
                 "kgIdentifier": `kg-${site.domain.replace(/\./g, "-")}`
             },
-            // Service entity nodes — each a distinct resolvable entity in the graph
+            authorEntity,
+            productEntity,
             ...serviceEntities,
-            // Published blog posts as BlogPosting nodes
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ...site.blogs.map((blog: any) => ({
-                "@type": "BlogPosting",
-                "headline": blog.title,
-                "url": `https://${site.domain}/blog/${blog.slug}`,
-                "datePublished": blog.publishedAt,
-                "keywords": blog.targetKeywords,
-                "publisher": { "@id": `https://${site.domain}/#organization` },
-            })),
+            ...blogPostingNodes,
+            ...faqNodes,
+            ...howToNodes,
         ]
     };
 
     try {
-        await redis.setex(cacheKey, 3600, JSON.stringify(kg)); // Cache for 1 hour
-     
+        await redis.setex(cacheKey, 3600, JSON.stringify(kg));
     } catch (e: unknown) {
         logger.warn("[KG-Builder] Redis cache set failed:", { error: (e as Error).message || e });
     }

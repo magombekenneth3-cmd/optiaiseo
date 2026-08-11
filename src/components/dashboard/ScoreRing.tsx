@@ -17,6 +17,11 @@ export function ScoreRing({ score, title, size = 64 }: ScoreRingProps) {
         if (animatedRef.current) return;
         animatedRef.current = true;
 
+        if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            setDisplayScore(score);
+            return;
+        }
+
         const start = performance.now();
         const duration = 600;
 

@@ -67,13 +67,74 @@ export async function requireUser(): Promise<AuthResult> {
 }
 
 
+export type PermissionLevel = "VIEW" | "EDIT" | "MANAGE";
+
+/**
+ * assertSiteAccess(siteId, userId, permission)
+ *
+ * Enforces role-based permissions across Site resources:
+ * - MANAGE: Delete site, change API keys/tokens, billing settings (Owner, Team ADMIN, Super Admin)
+ * - EDIT:   Generate blogs, run audits, trigger auto-fixes (Owner, Team ADMIN/EDITOR, Super Admin)
+ * - VIEW:   Read reports, view dashboard metrics (Owner, Team Member, Shared Viewer, Super Admin)
+ */
+export async function assertSiteAccess(
+    siteId: string,
+    userId: string,
+    permission: PermissionLevel = "VIEW"
+) {
+    if (!siteId || siteId.length > 50) return null;
+
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true },
+    });
+
+    if (user?.role === "SUPER_ADMIN") {
+        return prisma.site.findUnique({ where: { id: siteId } });
+    }
+
+    const site = await prisma.site.findUnique({
+        where: { id: siteId },
+        include: {
+            user: {
+                include: {
+                    ownedTeamMembers: { where: { userId } }
+                }
+            }
+        }
+    });
+
+    if (!site) return null;
+
+    const isOwner = site.userId === userId;
+    const isViewer = site.viewerId === userId;
+    const teamMember = site.user?.ownedTeamMembers?.[0];
+    const teamRole = teamMember?.role ?? null; // "ADMIN", "EDITOR", "VIEWER"
+
+    if (permission === "MANAGE") {
+        if (isOwner || teamRole === "ADMIN") return site;
+        return null;
+    }
+
+    if (permission === "EDIT") {
+        if (isOwner || teamRole === "ADMIN" || teamRole === "EDITOR") return site;
+        return null;
+    }
+
+    if (permission === "VIEW") {
+        if (isOwner || isViewer || teamMember) return site;
+        return null;
+    }
+
+    return null;
+}
+
 /**
  * assertSiteOwnership(siteId, userId)
  *
- * Returns the site if the given user owns it, or null.
- * Centralised here so every action enforces the same length guard.
+ * Backwards-compatible site ownership helper (requires MANAGE permission).
  */
 export async function assertSiteOwnership(siteId: string, userId: string) {
-    if (!siteId || siteId.length > 50) return null;
-    return prisma.site.findFirst({ where: { id: siteId, userId } });
+    return assertSiteAccess(siteId, userId, "MANAGE");
 }
+

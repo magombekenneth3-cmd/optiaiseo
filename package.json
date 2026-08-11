@@ -23,6 +23,8 @@
     "start:custom": "NODE_ENV=production tsx server.ts",
     "start:voice": "NODE_ENV=production tsx server.ts",
     "lint": "eslint",
+    "dev:demo": "DEMO_MODE=1 pnpm dev",
+    "dev:all": "docker-compose -f docker-compose.dev.yml up --build",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

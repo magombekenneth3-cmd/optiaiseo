@@ -17,6 +17,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+import { JobProvider } from "@/context/JobProvider";
+
 export default async function DashboardLayout({
   children,
 }: {
@@ -108,7 +110,8 @@ export default async function DashboardLayout({
   })();
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <JobProvider>
+      <div className="flex min-h-screen bg-background text-foreground">
       <Suspense fallback={<div className="w-64 shrink-0 bg-background border-r" />}>
         <CollapsibleSidebar
           defaultSiteId={defaultSiteId}
@@ -178,5 +181,6 @@ export default async function DashboardLayout({
       {/* Voice AI discovery — floating bottom-right for PRO/AGENCY */}
       <VoiceDiscoveryButtonClient userTier={effectiveTier} />
     </div>
+    </JobProvider>
   );
 }

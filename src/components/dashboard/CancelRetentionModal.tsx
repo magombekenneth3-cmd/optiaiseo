@@ -22,6 +22,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { X, AlertTriangle, Pause, Calendar, Sparkles, ArrowRight, MessageSquare } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 export type ChurnReason =
     | "too_expensive"
@@ -290,13 +291,8 @@ export function CancelRetentionModal({ targetTier, lostFeatures, onProceed, onDi
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-            <div
-                className="bg-card border border-border rounded-2xl p-7 max-w-md w-full shadow-2xl"
-                role="dialog"
-                aria-modal="true"
-                aria-label="Cancellation retention dialog"
-            >
+        <Dialog open onOpenChange={(open) => { if (!open) onDismiss(); }}>
+            <DialogContent className="bg-card border border-border rounded-2xl p-7 max-w-md w-full shadow-2xl">
                 {/* Feature losses strip — always visible */}
                 {lostFeatures.length > 0 && step === 1 && (
                     <div className="mb-5 p-3 rounded-xl bg-amber-500/5 border border-amber-500/15">
@@ -342,7 +338,7 @@ export function CancelRetentionModal({ targetTier, lostFeatures, onProceed, onDi
                         onPause={onPause}
                     />
                 )}
-            </div>
-        </div>
+            </DialogContent>
+        </Dialog>
     );
 }

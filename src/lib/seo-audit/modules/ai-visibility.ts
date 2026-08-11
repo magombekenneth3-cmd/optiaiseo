@@ -317,27 +317,48 @@ export const AiVisibilityModule: AuditModule = {
                         : probe.score === 0 ? 'Info'   // API unavailable
                         : 'Fail';
 
+                    const perEngineLines: string[] = [];
+                    if (probe.geminiScore != null)     perEngineLines.push(`Gemini Search: ${probe.geminiScore}/5`);
+                    if (probe.perplexityScore != null) perEngineLines.push(`Perplexity: ${probe.perplexityScore}/5`);
+                    if (probe.chatGptScore != null)    perEngineLines.push(`ChatGPT Search: ${probe.chatGptScore}/5`);
+                    const perEngineSuffix = perEngineLines.length > 0
+                        ? ` Per-engine: ${perEngineLines.join(', ')}.`
+                        : '';
+
+                    const groundingSuffix = probe.groundingUsed
+                        ? ` (scored against live web search results)${probe.groundingSources?.length ? ` — grounded on ${probe.groundingSources.length} real-time source(s)` : ''}.`
+                        : ' (scored against model training data — add PAGESPEED_API_KEY and ensure Google Search grounding is enabled for live results).';
+
                     items.push({
                         id: 'aeo-llm-citation-probe',
-                        label: 'AI Citation Probe (Gemini)',
+                        label: `AI Citation Probe (Gemini${probe.groundingUsed ? ' + Live Web' : ''})`,
                         status: probeStatus,
                         finding: probe.score === 0
                             ? 'Citation probe skipped (API unavailable).'
                             : probe.wouldCite
-                            ? `Gemini would cite this page (score ${probe.score}/5): ${probe.reasoning}`
-                            : `Gemini would NOT cite this page (score ${probe.score}/5): ${probe.reasoning}`,
+                            ? `AI engines would cite this page (score ${probe.score}/5): ${probe.reasoning}${perEngineSuffix}${groundingSuffix}`
+                            : `AI engines would NOT cite this page (score ${probe.score}/5): ${probe.reasoning}${perEngineSuffix}${groundingSuffix}`,
                         recommendation: !probe.wouldCite && probe.missingSignals.length > 0 ? {
-                            text: `Top missing citation signals:\n${probe.missingSignals.map(s => `• ${s}`).join('\n')}`,
+                            text: [
+                                `Top missing citation signals:\n${probe.missingSignals.map(s => `• ${s}`).join('\n')}`,
+                                probe.wouldCiteIf ? `\nQuick win: ${probe.wouldCiteIf}` : '',
+                                probe.engineDifference && probe.engineDifference !== 'No significant difference'
+                                    ? `\nEngine difference: ${probe.engineDifference}` : '',
+                            ].filter(Boolean).join(''),
                             priority: probe.score <= 2 ? 'High' : 'Medium',
                         } : undefined,
                         roiImpact: 90,
                         aiVisibilityImpact: 100,
                         details: {
-                            probeScore:     probe.score,
-                            wouldCite:      probe.wouldCite,
-                            missingSignals: probe.missingSignals.join('; '),
-                            cachedAt:       probe.cachedAt,
-                        },
+                            probeScore:       probe.score,
+                            wouldCite:        probe.wouldCite,
+                            groundingUsed:    probe.groundingUsed,
+                            missingSignals:   probe.missingSignals.join('; '),
+                            geminiScore:      probe.geminiScore ?? 0,
+                            perplexityScore:  probe.perplexityScore ?? 0,
+                            chatGptScore:     probe.chatGptScore ?? 0,
+                            cachedAt:         probe.cachedAt,
+                        } as Record<string, string | number | boolean>,
                     });
                 } catch {
                     items.push({
@@ -350,6 +371,265 @@ export const AiVisibilityModule: AuditModule = {
                     });
                 }
             }
+            // Semantic Entity Authority: Google KG + Wikidata + sameAs + Topic Entities
+            const kgApiKey = process.env.GOOGLE_KG_API_KEY;
+
+            const allSchemaBlocks = root.querySelectorAll('script[type="application/ld+json"]')
+                .map(s => { try { return JSON.parse(s.text) as Record<string, unknown>; } catch { return null; } })
+                .filter((b): b is Record<string, unknown> => b !== null);
+
+            const orgBlock = allSchemaBlocks.find(b =>
+                b['@type'] === 'Organization' || b['@type'] === 'LocalBusiness'
+            );
+
+            const brandName = (() => {
+                if (orgBlock?.name) return String(orgBlock.name).trim();
+                return root.querySelector('meta[property="og:site_name"]')?.getAttribute('content')?.trim()
+                    ?? root.querySelector('title')?.text?.split(/[|\-\u2013]/)[0]?.trim()
+                    ?? '';
+            })();
+
+            const declaredSameAs: string[] = (() => {
+                const raw = orgBlock?.sameAs;
+                if (!raw) return [];
+                return (Array.isArray(raw) ? raw : [raw]).map(String).filter(Boolean);
+            })();
+
+            const hasDeclaredWikidata   = declaredSameAs.some(u => u.includes('wikidata.org'));
+            const hasDeclaredWikipedia  = declaredSameAs.some(u => u.includes('wikipedia.org'));
+            const hasDeclaredLinkedIn   = declaredSameAs.some(u => u.includes('linkedin.com'));
+            const hasDeclaredCrunchbase = declaredSameAs.some(u => u.includes('crunchbase.com'));
+
+            const headingTexts = root.querySelectorAll('h1, h2, h3')
+                .map(h => h.text.trim())
+                .filter(t => t.length > 3)
+                .slice(0, 12);
+
+            const candidateTopics = Array.from(new Set([
+                ...headingTexts.flatMap(t =>
+                    t.split(/[\s,\u2013\-:]+/).filter(w => w.length > 4 && /^[A-Z]/.test(w))
+                ),
+            ])).filter(t => t !== brandName).slice(0, 4);
+
+            type KgResponse = {
+                itemListElement?: Array<{
+                    result?: {
+                        name?: string;
+                        '@type'?: string[];
+                        description?: string;
+                        detailedDescription?: { articleBody?: string; url?: string };
+                        '@id'?: string;
+                        url?: string;
+                    };
+                    resultScore?: number;
+                }>;
+            };
+            type WdResponse = {
+                search?: Array<{ id?: string; label?: string; description?: string; concepturi?: string }>;
+            };
+
+            const [kgResult, wikidataResult] = await Promise.all([
+                (async (): Promise<KgResponse | null> => {
+                    if (!kgApiKey || !brandName) return null;
+                    try {
+                        const res = await fetch(
+                            `https://kgsearch.googleapis.com/v1/entities:search?query=${encodeURIComponent(brandName)}&key=${kgApiKey}&limit=3&types=Organization,Person,Product,SoftwareApplication,Brand`,
+                            { signal: AbortSignal.timeout(8000) }
+                        );
+                        if (!res.ok) return null;
+                        return await res.json() as KgResponse;
+                    } catch { return null; }
+                })(),
+                (async (): Promise<WdResponse | null> => {
+                    if (!brandName) return null;
+                    try {
+                        const res = await fetch(
+                            `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(brandName)}&language=en&limit=3&format=json&type=item`,
+                            { headers: { 'User-Agent': 'SEOAuditBot/1.0' }, signal: AbortSignal.timeout(8000) }
+                        );
+                        if (!res.ok) return null;
+                        return await res.json() as WdResponse;
+                    } catch { return null; }
+                })(),
+            ]);
+
+            type TopicEntity = { topic: string; qid: string; label: string; description: string };
+            const topicEntityResults = await Promise.all(
+                candidateTopics.map(async (topic): Promise<TopicEntity | null> => {
+                    try {
+                        const res = await fetch(
+                            `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(topic)}&language=en&limit=1&format=json&type=item`,
+                            { headers: { 'User-Agent': 'SEOAuditBot/1.0' }, signal: AbortSignal.timeout(5000) }
+                        );
+                        if (!res.ok) return null;
+                        const data = await res.json() as WdResponse;
+                        const hit = data.search?.[0];
+                        return hit?.id ? { topic, qid: hit.id, label: hit.label ?? topic, description: hit.description ?? '' } : null;
+                    } catch { return null; }
+                })
+            );
+            const foundTopicEntities = topicEntityResults.filter((r): r is TopicEntity => r !== null);
+
+            const kgTop    = kgResult?.itemListElement?.[0]?.result;
+            const kgScore  = kgResult?.itemListElement?.[0]?.resultScore ?? 0;
+            const hasGoogleKgEntity = !!kgTop;
+            const kgId          = kgTop?.['@id'] ?? '';
+            const kgTypes       = (kgTop?.['@type'] ?? []).join(', ');
+            const kgDescription = kgTop?.description ?? kgTop?.detailedDescription?.articleBody ?? '';
+            const kgWikipediaUrl = kgTop?.detailedDescription?.url ?? '';
+
+            const wdTop = wikidataResult?.search?.[0];
+            const hasWikidataEntity = !!wdTop;
+            const wikidataQid  = wdTop?.id ?? '';
+            const wikidataUrl  = wdTop?.concepturi ?? (wikidataQid ? `https://www.wikidata.org/wiki/${wikidataQid}` : '');
+            const hasWikipedia = !!kgWikipediaUrl || hasDeclaredWikipedia;
+
+            const sameAsIssues: string[] = [];
+            if (hasGoogleKgEntity && kgId && !declaredSameAs.some(u => kgId && u.includes(kgId.replace('kg:/g/', '')))) {
+                sameAsIssues.push(`Add Google KG ID "${kgId}" as a sameAs entry in your Organization schema.`);
+            }
+            if (hasWikidataEntity && wikidataQid && !hasDeclaredWikidata) {
+                sameAsIssues.push(`Add Wikidata URL "https://www.wikidata.org/wiki/${wikidataQid}" as sameAs in your Organization schema.`);
+            }
+            if (!hasDeclaredWikipedia && hasWikipedia) {
+                sameAsIssues.push('Add your Wikipedia article URL as sameAs — strongest LLM training signal available.');
+            }
+            if (!hasDeclaredLinkedIn) {
+                sameAsIssues.push('Add your LinkedIn company URL as sameAs to reinforce entity signals in business knowledge graphs.');
+            }
+            if (!hasDeclaredCrunchbase) {
+                sameAsIssues.push('Add your Crunchbase URL as sameAs — indexed by Perplexity and ChatGPT Search as an authoritative org source.');
+            }
+
+            const authoritySignals = [
+                hasGoogleKgEntity,
+                hasWikidataEntity,
+                hasWikipedia,
+                hasDeclaredWikidata,
+                hasDeclaredLinkedIn,
+                declaredSameAs.length >= 3,
+            ].filter(Boolean).length;
+
+            const entityStatus: 'Pass' | 'Warning' | 'Fail' =
+                authoritySignals >= 4 ? 'Pass'
+                : authoritySignals >= 2 ? 'Warning'
+                : 'Fail';
+
+            const entityFindings: string[] = [
+                `Entity authority: ${authoritySignals}/6 signals.`,
+                hasGoogleKgEntity
+                    ? `Google KG: "${kgTop?.name ?? brandName}" found (${kgTypes}, relevance=${Math.round(kgScore)}${kgId ? `, mid=${kgId}` : ''}).`
+                    : kgApiKey ? `Google KG: "${brandName}" not found.` : 'Google KG: skipped (GOOGLE_KG_API_KEY not set).',
+                hasWikidataEntity
+                    ? `Wikidata: ${wikidataQid} "${wdTop?.label}" — ${(wdTop?.description ?? '').slice(0, 80)}.`
+                    : `Wikidata: "${brandName}" not found.`,
+                kgDescription ? `KG description: "${kgDescription.slice(0, 100)}\u2026"` : '',
+                declaredSameAs.length > 0
+                    ? `sameAs declared (${declaredSameAs.length}): ${declaredSameAs.slice(0, 3).join(', ')}${declaredSameAs.length > 3 ? '\u2026' : ''}.`
+                    : 'sameAs: none declared in Organization schema.',
+                foundTopicEntities.length > 0
+                    ? `Topic entities with Wikidata IDs: ${foundTopicEntities.map(e => `${e.label} (${e.qid})`).join(', ')}.`
+                    : '',
+            ].filter(Boolean);
+
+            const sameAsRec = [
+                sameAsIssues.length > 0 ? `sameAs fixes:\n${sameAsIssues.map(i => `\u2022 ${i}`).join('\n')}` : '',
+                !hasGoogleKgEntity
+                    ? '\nBuild KG entity authority:\n\u2022 Create/claim a Wikipedia article or Wikidata item for your brand.\n\u2022 Deploy Organization schema with a full sameAs array.\n\u2022 Publish consistent NAP across directories, press, and partner sites.\n\u2022 KG recognition typically takes 3\u20136 months of accumulated E-E-A-T signals.'
+                    : '',
+                foundTopicEntities.length === 0 && candidateTopics.length > 0
+                    ? '\nTopic entity optimisation:\n\u2022 Add schema types (Person, Product, Event) with sameAs Wikidata QIDs for key topics on this page.\n\u2022 LLMs use entity co-occurrence to score topical authority — tagging topics with machine IDs strengthens AI citation signals.'
+                    : '',
+            ].filter(Boolean).join('\n').trim();
+
+            items.push({
+                id: 'aeo-kg-entity',
+                label: 'Semantic Entity Authority (KG + Wikidata)',
+                status: entityStatus,
+                finding: entityFindings.join(' '),
+                recommendation: (sameAsIssues.length > 0 || !hasGoogleKgEntity || !hasWikidataEntity) ? {
+                    text: sameAsRec || 'Add sameAs links to Wikidata, Wikipedia, LinkedIn, and Crunchbase in your Organization schema.',
+                    priority: entityStatus === 'Fail' ? 'High' : 'Medium',
+                } : undefined,
+                roiImpact: 90,
+                aiVisibilityImpact: 100,
+                details: {
+                    brandName,
+                    authorityScore:      authoritySignals,
+                    hasGoogleKgEntity,
+                    kgId:               kgId || 'none',
+                    kgTypes:            kgTypes || 'none',
+                    hasWikidataEntity,
+                    wikidataQid:        wikidataQid || 'none',
+                    wikidataUrl:        wikidataUrl || 'none',
+                    hasWikipedia,
+                    sameAsCount:        declaredSameAs.length,
+                    hasDeclaredWikidata,
+                    hasDeclaredLinkedIn,
+                    topicEntitiesFound: foundTopicEntities.length,
+                    topicEntities:      foundTopicEntities.map(e => `${e.label}:${e.qid}`).join(', ') || 'none',
+                    sameAsIssueCount:   sameAsIssues.length,
+                } as Record<string, string | number | boolean>,
+            });
+
+            // Speakable schema + voice/AI search readiness
+            const combinedSchemaText = root
+                .querySelectorAll('script[type="application/ld+json"]')
+                .map(el => el.text.toLowerCase())
+                .join(' ');
+
+            const hasSpeakable  = combinedSchemaText.includes('"speakable"') || combinedSchemaText.includes('speakable');
+            const hasQAPage     = /"@type"\s*:\s*"qapage"/i.test(combinedSchemaText);
+            const hasHowTo      = /"@type"\s*:\s*"howto"/i.test(combinedSchemaText);
+            const hasFAQPage    = /"@type"\s*:\s*"faqpage"/i.test(combinedSchemaText);
+
+            const voicePatterns = [
+                root.querySelectorAll('h2, h3').filter(h =>
+                    /^(what|how|why|is|are|can|does|do|should|which|when|where|who|will)\b/i.test(h.text.trim())
+                ).length >= 2,
+                hasSpeakable,
+                hasQAPage,
+                hasHowTo || hasFAQPage,
+            ].filter(Boolean).length;
+
+            const voiceMissing: string[] = [
+                !hasSpeakable ? 'Speakable schema (@type: Speakable with cssSelector or xPath)' : '',
+                !hasQAPage    ? 'QAPage schema for Q&A content' : '',
+                !hasHowTo     ? 'HowTo schema for instructional content' : '',
+                !hasFAQPage   ? 'FAQPage schema for FAQ content' : '',
+            ].filter(Boolean);
+
+            items.push({
+                id: 'aeo-voice-speakable',
+                label: 'Voice Search & Speakable Schema (AEO)',
+                status: voicePatterns >= 3 ? 'Pass' : voicePatterns >= 2 ? 'Warning' : 'Fail',
+                finding: voicePatterns >= 3
+                    ? `Voice/AI search readiness: Speakable=${hasSpeakable ? '✓' : '✗'}, QAPage=${hasQAPage ? '✓' : '✗'}, HowTo=${hasHowTo ? '✓' : '✗'}, FAQPage=${hasFAQPage ? '✓' : '✗'}. Page is well-configured for voice answer extraction.`
+                    : `Voice/AI search readiness score: ${voicePatterns}/4 signals. Missing: ${voiceMissing.join(', ')}. Voice search and AI answer engines (Siri, Alexa, Google Assistant, Perplexity) rely on these schemas to extract spoken answers.`,
+                recommendation: voicePatterns < 3 ? {
+                    text: [
+                        !hasSpeakable
+                            ? '• Add Speakable JSON-LD to mark sections suitable for text-to-speech:\n  {"@type":"WebPage","speakable":{"@type":"SpeakableSpecification","cssSelector":[".article-intro",".article-summary"]}}'
+                            : '',
+                        !hasQAPage && root.querySelectorAll('details, summary').length > 0
+                            ? '• Wrap Q&A content in QAPage schema with Question/Answer objects (similar to FAQPage but for single primary questions).'
+                            : '',
+                        !hasHowTo && (context.html.includes('step') || context.html.includes('Step'))
+                            ? '• Add HowTo schema for step-by-step instructional content — eligible for How-to rich results in Google and voice answers in Google Assistant.'
+                            : '',
+                    ].filter(Boolean).join('\n') || 'Add Speakable, FAQPage, HowTo, or QAPage schema to make content extractable by voice AI engines.',
+                    priority: voicePatterns === 0 ? 'High' : 'Medium',
+                } : undefined,
+                roiImpact: 78,
+                aiVisibilityImpact: 95,
+                details: {
+                    hasSpeakable,
+                    hasQAPage,
+                    hasHowTo,
+                    hasFAQPage,
+                    voiceReadinessScore: voicePatterns,
+                } as Record<string, string | number | boolean>,
+            });
         }
 
         const analyzable = items.filter(i => i.status !== 'Skipped' && i.status !== 'Info');

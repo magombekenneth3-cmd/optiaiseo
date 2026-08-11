@@ -1,7 +1,7 @@
 import { logger } from "@/lib/logger";
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { prisma } from "@/lib/prisma";
-import { pingGoogleIndexingApi } from "@/lib/gsc/indexing";
+import { submitUrlForIndexing } from "@/lib/indexer";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 
 
@@ -86,7 +86,7 @@ export async function extractFactsFromContent(siteId: string, content: string, s
             if (site) {
                 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${site.domain}`;
                 const kgFeedUrl = `${baseUrl}/api/kg-feed?domain=${site.domain}`;
-                await pingGoogleIndexingApi(kgFeedUrl, "URL_UPDATED", site.userId);
+                await submitUrlForIndexing(siteId, kgFeedUrl, "FACT_EXTRACTED", site.userId);
             }
         }
 

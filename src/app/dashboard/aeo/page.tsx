@@ -381,7 +381,7 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
             : "Details";
 
     return (
-        <div className="rounded-2xl border border-[#30363d] bg-[#0d1117] overflow-hidden transition-all duration-200 hover:border-[#484f58]">
+        <div className="rounded-2xl border border-border bg-card overflow-hidden transition-all duration-200 hover:border-border/80">
 
             {/* ── Header row ── */}
             <div className="p-5 flex items-center justify-between gap-4 flex-wrap">

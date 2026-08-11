@@ -272,6 +272,57 @@ export interface CitationContext {
     snippetAround: string; // 200-char window where brand was mentioned
 }
 
+/**
+ * Selects 1 representative query per intent category (Informational, Commercial, Problem-Aware, Comparison, Navigational).
+ * If questions cannot be categorized, picks up to 5 unique queries across categories.
+ */
+export function selectRepresentativeIntentQuestions(questions: string[]): string[] {
+    if (questions.length <= 5) return questions;
+
+    const categories: Record<string, string[]> = {
+        informational: [],
+        commercial: [],
+        problem_aware: [],
+        comparison: [],
+        navigational: [],
+    };
+
+    for (const q of questions) {
+        const lower = q.toLowerCase();
+        if (lower.includes("vs") || lower.includes("compared") || lower.includes("alternative")) {
+            categories.comparison.push(q);
+        } else if (lower.includes("why is my") || lower.includes("how to fix") || lower.includes("mistake") || lower.includes("issue")) {
+            categories.problem_aware.push(q);
+        } else if (lower.includes("how to use") || lower.includes("dashboard") || lower.includes("feature") || lower.includes("login") || lower.includes("account")) {
+            categories.navigational.push(q);
+        } else if (lower.includes("best") || lower.includes("worth") || lower.includes("pricing") || lower.includes("plan")) {
+            categories.commercial.push(q);
+        } else {
+            categories.informational.push(q);
+        }
+    }
+
+    const selected: string[] = [];
+    const intentKeys = ["informational", "commercial", "problem_aware", "comparison", "navigational"];
+
+    for (const key of intentKeys) {
+        if (categories[key].length > 0) {
+            selected.push(categories[key][0]);
+        }
+    }
+
+    if (selected.length < 5) {
+        for (const q of questions) {
+            if (!selected.includes(q)) {
+                selected.push(q);
+                if (selected.length === 5) break;
+            }
+        }
+    }
+
+    return selected.slice(0, 5);
+}
+
 const checkPerplexityCitation = async (
     domain: string,
     coreServices: string | null | undefined,
@@ -281,7 +332,9 @@ const checkPerplexityCitation = async (
         return { score: -1, contexts: [] }
     }
 
-    const questions = await generateRelevantQuestions(domain, coreServices, pageContent);
+    const allQuestions = await generateRelevantQuestions(domain, coreServices, pageContent);
+    // Select 1 representative query per intent category (max 5 queries)
+    const questions = selectRepresentativeIntentQuestions(allQuestions);
 
     const results = await Promise.all(
         questions.map(async (question) => {

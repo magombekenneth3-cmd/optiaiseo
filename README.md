@@ -1,10 +1,11 @@
 # AISEO — Voice-First AI SEO Strategist
 
 > **Built for the [Gemini Live Agent Challenge](https://geminiliveagentchallenge.devpost.com) — #GeminiLiveAgentChallenge**
-> 
+>
 > **Challenge Categories Tackled:**
+>
 > 1. **🗣️ Live Agents:** Native voice-in/voice-out utilizing Gemini 2.5 Flash Native Audio Preview + LiveKit. Sub-second latency, barge-in support.
-> 2. **☸️ UI Navigators:** Integrated Multimodal Vision. Aria can independently use Playwright to take screenshots of live URLs and use `gemini-2.5-pro` to evaluate visual UX complexity, accessibility, and design conversion. 
+> 2. **☸️ UI Navigators:** Integrated Multimodal Vision. Aria can independently use Playwright to take screenshots of live URLs and use `gemini-2.5-pro` to evaluate visual UX complexity, accessibility, and design conversion.
 
 AISEO is a real-time, voice-driven AI platform that turns SEO from a manual grind into a live, interrupted conversation. Talk to **Aria**, your AI SEO strategist: she audits your site, visually critiques your design, checks your visibility in AI search engines (ChatGPT, Perplexity, Claude), and even stages GitHub Pull Requests to fix issues automatically.
 
@@ -76,7 +77,7 @@ AISEO is a real-time, voice-driven AI platform that turns SEO from a manual grin
 
 ### Steps
 
-```bash
+````bash
 # 1. Clone the repository
 git clone https://github.com/YOUR_USERNAME/aiseo
 cd aiseo
@@ -101,7 +102,35 @@ pnpm dev
 
 # 7. Start the Aria voice agent worker (Terminal 2)
 pnpm agent
+
+### Dev Quickstart (demo mode)
+
+To try the app locally without configuring AI or LiveKit keys, use demo mode.
+
+1. Copy the example env and enable demo mode:
+
+```bash
+cp .env.example .env
+# Edit .env and set DEMO_MODE=1 or run the command below to set it for the session
+export DEMO_MODE=1
+````
+
+2. Start a minimal local stack (Postgres + Redis):
+
+```bash
+docker-compose -f docker-compose.dev.yml up -d
 ```
+
+3. Start the app in demo mode:
+
+```bash
+pnpm install
+DEMO_MODE=1 pnpm dev
+```
+
+Demo mode uses canned responses and avoids calling external AI/LiveKit services so you can explore the UI and voice flows with reduced configuration.
+
+````
 
 Open **http://localhost:3000** → Sign up → Dashboard → **Talk to Aria** → click "🎙 Start Voice Session"
 
@@ -118,7 +147,7 @@ gcloud auth login
 # Deploy everything to Cloud Run
 chmod +x deploy.sh
 ./deploy.sh YOUR_GCP_PROJECT_ID
-```
+````
 
 ### Or via Google Cloud Build (CI/CD)
 

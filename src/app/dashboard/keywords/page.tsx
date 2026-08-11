@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { getKeywordRankingsFast } from "@/app/actions/keywords";
 import { AlertCircle, Search } from "lucide-react";
 import { ConnectGSCButton } from "@/components/ConnectGSCButton";
+import { GscConnectCard } from "@/components/dashboard/GscConnectCard";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -78,7 +79,7 @@ function OverviewStrip({
     const bucketTotal = buckets.reduce((s, b) => s + b.count, 0) || 1;
 
     return (
-        <div className="rounded-2xl border border-[#30363d] bg-[#0d1117] overflow-hidden">
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
             {/* Stat row */}
             <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-[#21262d]">
                 {stats.map(s => (
@@ -264,6 +265,11 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
                     />
                 )}
             </div>
+
+            {/* ── GSC Disconnected Callout ── */}
+            {summary.total === 0 && (
+                <GscConnectCard siteDomain={activeSite?.domain} />
+            )}
 
             {/* ── Unified overview strip ── */}
             <OverviewStrip summary={summary} visibilityScore={visibilityScore} />

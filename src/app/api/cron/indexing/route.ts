@@ -4,16 +4,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isCronAuthorized } from "@/lib/cron-auth";
 import { inngest } from "@/lib/inngest/client";
+import { drainRetryQueue } from "@/lib/indexer";
 
 export async function GET(req: NextRequest) {
     if (!isCronAuthorized(req)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const sites = await prisma.site.findMany({
-        where: { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },
-        select: { id: true, domain: true, userId: true },
-    });
+    const [sites, retryStats] = await Promise.all([
+        prisma.site.findMany({
+            where: { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },
+            select: { id: true, domain: true, userId: true },
+        }),
+        drainRetryQueue(50),
+    ]);
 
     if (sites.length > 0) {
         await inngest.send(
@@ -24,6 +28,6 @@ export async function GET(req: NextRequest) {
         );
     }
 
-    logger.debug(`[Cron/Indexing] Queued ${sites.length} sites`);
-    return NextResponse.json({ success: true, queued: sites.length });
+    logger.debug(`[Cron/Indexing] Queued ${sites.length} sites; retries: ${JSON.stringify(retryStats)}`);
+    return NextResponse.json({ success: true, queued: sites.length, retries: retryStats });
 }

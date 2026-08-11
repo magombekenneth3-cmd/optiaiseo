@@ -13,6 +13,7 @@ import { parse } from 'node-html-parser';
 import { prisma } from "@/lib/prisma";
 import { clusterKeywords, EnrichedKeyword } from "@/lib/keywords";
 import { isSafeUrl } from '@/lib/security/safe-url';
+import { redis } from "@/lib/redis";
 
 
 export interface LinkingRecommendation {
@@ -31,7 +32,6 @@ export async function analyzeInternalLinking(siteId: string): Promise<LinkingRec
 
     if (!site || site.rankSnapshots.length === 0) return [];
 
-    // 1. Cluster the keywords to find topic pillars
     const enrichedKeywords: EnrichedKeyword[] = site.rankSnapshots.map(rs => ({
         keyword: rs.keyword,
         searchVolume: 0,
@@ -47,34 +47,32 @@ export async function analyzeInternalLinking(siteId: string): Promise<LinkingRec
 
     const recommendations: LinkingRecommendation[] = [];
 
-    // 2. For each cluster, find the "Pillar" page
     for (const cluster of clusters) {
         const pillarPage = [...cluster.keywords].sort((a, b) => (a.gscPosition || 100) - (b.gscPosition || 100))[0];
 
         if (!pillarPage?.gscUrl) continue;
 
-        // 3. Find other pages in the same cluster that should link to this pillar
         const supportingPages = cluster.keywords.filter(kw => kw.gscUrl && kw.gscUrl !== pillarPage.gscUrl);
 
         for (const support of supportingPages) {
             recommendations.push({
                 sourceUrl: support.gscUrl!,
                 targetUrl: pillarPage.gscUrl,
-                anchorText: cluster.topic, // Use cluster topic as semantic anchor
+                anchorText: cluster.topic,
                 reason: `Semantic support for topic pillar: ${cluster.topic}`,
                 semanticScore: 0.85
             });
         }
     }
 
-    return recommendations.slice(0, 20); // Return top 20 semantic link opportunities
+    return recommendations.slice(0, 20);
 }
 
 
 export interface BrokenLink {
     url: string;
     foundOn: string;
-    httpStatus: number | null;   // null = network timeout
+    httpStatus: number | null;
     error?: string;
 }
 
@@ -84,30 +82,18 @@ export interface OrphanPage {
 }
 
 export interface InternalLinkAnalysisResult {
-    /** Semantic pillar-page link opportunities (max 20) */
     linkOpportunities: LinkingRecommendation[];
-    /** Internal links that returned 4xx/5xx or timed out (sampled, max 50) */
     brokenLinks: BrokenLink[];
-    /** Pages in the sitemap with zero inbound internal links */
     orphanPages: OrphanPage[];
-    /** Aggregated stats */
     stats: {
         totalInternalLinks: number;
         uniqueInternalLinks: number;
         brokenCount: number;
         orphanCount: number;
+        clickDepth?: number;
     };
 }
 
-/**
- * Performs a full three-part internal link analysis for a given URL.
- *
- * - Broken links: samples up to `maxLinksToCheck` in-page hrefs with HEAD requests
- * - Orphan pages: discovers pages via sitemap and cross-references inbound link data
- *
- * All network calls are wrapped in try/catch so a single timeout cannot fail
- * the entire analysis.
- */
 export async function analyzeInternalLinksForUrl(
     pageUrl: string,
     html: string,
@@ -126,8 +112,8 @@ export async function analyzeInternalLinksForUrl(
         if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) return null;
         try {
             const u = new URL(href, origin);
-            if (u.origin !== origin) return null; // external
-            return u.href.split('#')[0]; // strip fragment
+            if (u.origin !== origin) return null;
+            return u.href.split('#')[0];
         } catch {
             return null;
         }
@@ -173,49 +159,81 @@ export async function analyzeInternalLinksForUrl(
     );
 
     let orphanPages: OrphanPage[] = [];
+    let detectedClickDepth: number | undefined = undefined;
 
-    try {
-        const sitemapRes = await fetch(`${origin}/sitemap.xml`, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OptiAISEO-LinkBot/1.0)' },
-            signal: AbortSignal.timeout(8000),
-        });
+    if (origin) {
+        try {
+            const cachedGraphRaw = await redis.get(`site:crawl:${origin}`);
+            if (cachedGraphRaw) {
+                const cachedGraph = typeof cachedGraphRaw === 'string' ? JSON.parse(cachedGraphRaw) : cachedGraphRaw;
 
-        if (sitemapRes.ok) {
-            const sitemapXml = await sitemapRes.text();
-            const locRegex = /<loc>\s*([^<]+)\s*<\/loc>/gi;
-            const sitemapUrls = new Set<string>();
-            let m: RegExpExecArray | null;
-            while ((m = locRegex.exec(sitemapXml)) !== null) {
-                const u = m[1].trim().split('#')[0];
-                if (u.startsWith(origin)) sitemapUrls.add(u);
-            }
+                if (cachedGraph?.clickDepthMap && typeof cachedGraph.clickDepthMap[pageUrl] === 'number') {
+                    detectedClickDepth = cachedGraph.clickDepthMap[pageUrl];
+                }
 
-            // Build an inbound-link set from our sampled page
-            const inboundUrls = new Set<string>(rawLinks.map(l => l.split('#')[0]));
+                if (Array.isArray(cachedGraph?.orphanPages)) {
+                    orphanPages = cachedGraph.orphanPages.map((url: string) => ({
+                        url,
+                        reason: 'True orphan page — detected with 0 internal inbound links during multi-depth site crawl.',
+                    }));
+                }
 
-            // Orphan = in sitemap, not linked from the current page (approximation;
-            // a full crawl would check all pages, but we surface what we can here)
-            for (const sUrl of sitemapUrls) {
-                if (sUrl === pageUrl || sUrl === origin || sUrl === `${origin}/`) continue;
-                if (!inboundUrls.has(sUrl)) {
-                    orphanPages.push({
-                        url: sUrl,
-                        reason: 'Found in sitemap.xml but no inbound internal link detected from this page.',
-                    });
+                if (Array.isArray(cachedGraph?.brokenLinks)) {
+                    for (const bl of cachedGraph.brokenLinks) {
+                        if (!brokenLinks.some(b => b.url === bl.to)) {
+                            brokenLinks.push({
+                                url: bl.to,
+                                foundOn: bl.from,
+                                httpStatus: bl.status > 0 ? bl.status : null,
+                                error: bl.status === 0 ? 'Network Error / Timeout during site crawl' : undefined,
+                            });
+                        }
+                    }
                 }
             }
-
-            // Cap at 20 orphans (most impactful shown first — shorter URLs = top-level pages)
-            orphanPages = orphanPages
-                .sort((a, b) => a.url.length - b.url.length)
-                .slice(0, 20);
+        } catch {
         }
-    } catch {
-        // Sitemap fetch failed — skip orphan detection gracefully
+    }
+
+    if (orphanPages.length === 0 && origin) {
+        try {
+            const sitemapRes = await fetch(`${origin}/sitemap.xml`, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OptiAISEO-LinkBot/1.0)' },
+                signal: AbortSignal.timeout(8000),
+            });
+
+            if (sitemapRes.ok) {
+                const sitemapXml = await sitemapRes.text();
+                const locRegex = /<loc>\s*([^<]+)\s*<\/loc>/gi;
+                const sitemapUrls = new Set<string>();
+                let m: RegExpExecArray | null;
+                while ((m = locRegex.exec(sitemapXml)) !== null) {
+                    const u = m[1].trim().split('#')[0];
+                    if (u.startsWith(origin)) sitemapUrls.add(u);
+                }
+
+                const inboundUrls = new Set<string>(rawLinks.map(l => l.split('#')[0]));
+
+                for (const sUrl of sitemapUrls) {
+                    if (sUrl === pageUrl || sUrl === origin || sUrl === `${origin}/`) continue;
+                    if (!inboundUrls.has(sUrl)) {
+                        orphanPages.push({
+                            url: sUrl,
+                            reason: 'Found in sitemap.xml but no inbound internal link detected from this page.',
+                        });
+                    }
+                }
+
+                orphanPages = orphanPages
+                    .sort((a, b) => a.url.length - b.url.length)
+                    .slice(0, 20);
+            }
+        } catch {
+        }
     }
 
     return {
-        linkOpportunities: [], // populated by analyzeInternalLinking() which needs siteId
+        linkOpportunities: [],
         brokenLinks: brokenLinks.slice(0, 50),
         orphanPages,
         stats: {
@@ -223,6 +241,7 @@ export async function analyzeInternalLinksForUrl(
             uniqueInternalLinks: unique.length,
             brokenCount: brokenLinks.length,
             orphanCount: orphanPages.length,
+            clickDepth: detectedClickDepth,
         },
     };
 }

@@ -74,6 +74,26 @@ export async function requestIndexing(url: string, siteId?: string): Promise<Act
             };
         }
 
+        if (siteId) {
+            const result = await Promise.race([
+                submitUrlForIndexing(siteId, normalizedUrl, "MANUAL", session.user.id),
+                new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error("Timeout")), INDEXING_TIMEOUT_MS)
+                ),
+            ]);
+
+            if (result.skipped && result.reason === "Daily quota reached") {
+                return { success: false, code: "QUOTA_EXCEEDED", error: "Daily quota of 200 URLs reached. Resets at midnight UTC." };
+            }
+            if (result.skipped) {
+                return { success: true, message: "Already submitted in the last 24 hours — no action needed." };
+            }
+            if (!result.success) {
+                return { success: false, code: "UNKNOWN", error: result.reason ?? "Indexing request failed." };
+            }
+            return { success: true, message: "Google is on it! Your URL has been queued for fast indexing." };
+        }
+
         const result = await Promise.race([
             pingGoogleIndexingApi(normalizedUrl, "URL_UPDATED", session.user.id),
             new Promise<never>((_, reject) =>
@@ -81,23 +101,31 @@ export async function requestIndexing(url: string, siteId?: string): Promise<Act
             ),
         ]);
 
+        if (!result.success && (result.code === "RATE_LIMITED" || result.code === "UNKNOWN")) {
+            const retryDelay = result.code === "RATE_LIMITED" ? 4 * 60 * 60 * 1000 : 60 * 60 * 1000;
+            await prisma.indexingLog.create({
+                data: {
+                    siteId: "orphan",
+                    url: normalizedUrl,
+                    status: "RETRY_PENDING",
+                    trigger: "MANUAL",
+                    retryCount: 1,
+                    retryError: result.message,
+                    nextRetryAt: new Date(Date.now() + retryDelay),
+                },
+            }).catch(() => undefined);
+        }
+
         if (result.success) {
             return { success: true, message: "Google is on it! Your URL has been queued for fast indexing." };
         }
 
         if (result.code === "API_DISABLED") {
-            return {
-                success: false,
-                code: "API_DISABLED",
-                consoleUrl: result.message,
-                error: "The Google Indexing API is not enabled in your Google Cloud project.",
-            };
+            return { success: false, code: "API_DISABLED", consoleUrl: result.message, error: "The Google Indexing API is not enabled in your Google Cloud project." };
         }
-
         if (result.code === "PERMISSION_DENIED") {
             return { success: false, code: "PERMISSION_DENIED", error: result.message };
         }
-
         return { success: false, code: "UNKNOWN", error: result.message };
     } catch (error: unknown) {
         logger.error("[Action] requestIndexing error:", { error });

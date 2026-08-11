@@ -128,6 +128,7 @@ model User {
   apiKeys                ApiKey[]
   dripSequence           DripSequence?
   creditHistory          CreditHistory[]
+  creditLedger           CreditLedger[]
   notifications          Notification[]
   dailyBriefings         DailyBriefing[]
   campaigns              Campaign[]
@@ -227,6 +228,8 @@ model Site {
   dailyBriefings         DailyBriefing[]
   competitorAlerts       CompetitorAlert[]
   campaigns              Campaign[]
+  growthDecisions        GrowthDecision[]
+
 
 
   ga4PropertyId          String?
@@ -288,6 +291,7 @@ model RankSnapshot {
   @@index([recordedAt])
   @@index([siteId, keyword, recordedAt(sort: Desc)])
   @@index([trackedId, recordedAt(sort: Desc)])
+  @@index([siteId, keyword, device, recordedAt(sort: Desc)])
 }
 
 model TrackedKeyword {
@@ -325,6 +329,7 @@ model AiShareOfVoice {
   @@index([siteId, keyword])
   @@index([recordedAt])
   @@index([siteId, mentionConfidence]) // low-confidence queries
+  @@index([siteId, modelName, recordedAt(sort: Desc)])
 }
 
 // Gap 2 — user-flagged brand mention corrections (false positive / false negative)
@@ -483,6 +488,8 @@ model Blog {
   citationCriteria     Json?
   aeoEvents            AeoEvent[]
   repurposedResult     RepurposedResult?
+  sourceLinks          InternalLink[]    @relation("SourceLinks")
+  targetLinks          InternalLink[]    @relation("TargetLinks")
   site                 Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@unique([siteId, slug])
@@ -490,6 +497,24 @@ model Blog {
   @@index([siteId, status, createdAt])
   @@index([siteId, pipelineType, createdAt])
   @@index([siteId, status, publishedAt])
+}
+
+model InternalLink {
+  id           String   @id @default(cuid())
+  siteId       String
+  sourceBlogId String
+  targetBlogId String
+  sourceUrl    String
+  targetUrl    String
+  anchorText   String?
+  createdAt    DateTime @default(now())
+
+  sourceBlog Blog @relation("SourceLinks", fields: [sourceBlogId], references: [id], onDelete: Cascade)
+  targetBlog Blog @relation("TargetLinks", fields: [targetBlogId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceBlogId, targetBlogId])
+  @@index([siteId, targetUrl])
+  @@index([siteId, sourceUrl])
 }
 
 model TrendingTopic {
@@ -768,19 +793,23 @@ model TeamMember {
 }
 
 model IndexingLog {
-  id        String   @id @default(cuid())
-  siteId    String
-  url       String
-  status    String   @default("PENDING")
-  trigger   String
-  engine    String   @default("GOOGLE")
-  errorMsg  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  id           String    @id @default(cuid())
+  siteId       String
+  url          String
+  status       String    @default("PENDING")
+  trigger      String
+  engine       String    @default("GOOGLE")
+  errorMsg     String?
+  retryCount   Int       @default(0)
+  nextRetryAt  DateTime?
+  retryError   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  site         Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId, createdAt])
   @@index([status])
+  @@index([status, nextRetryAt])
 }
 
 model IndexNowConfig {
@@ -1230,6 +1259,44 @@ model CreditHistory {
   @@index([userId, createdAt(sort: Desc)])
   @@index([userId, action])
 }
+
+model CreditLedger {
+  id          String   @id @default(cuid())
+  userId      String
+  amount      Int      // Positive for top-up/refund, negative for consumption
+  type        String   // "BLOG_GEN", "REFUND_FAILED_GEN", "CREDIT_PURCHASE"
+  referenceId String   // Unique key e.g. "refund:blog_gen:clx12345"
+  reason      String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, referenceId])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model GrowthDecision {
+  id                    String   @id @default(cuid())
+  siteId                String
+  url                   String
+  primaryKeyword        String
+  primaryCategory       String
+  opportunityCategories Json
+  action                String
+  score                 Json
+  whyNow                Json
+  impact                Json
+  executionPlan         Json
+  status                String   @default("ACTIVE")
+  generatedAt           DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, status])
+  @@index([siteId, generatedAt(sort: Desc)])
+}
+
+
 
 model SerpGapAnalysis {
   id                    String    @id @default(cuid())

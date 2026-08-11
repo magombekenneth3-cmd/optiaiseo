@@ -7,6 +7,7 @@ import {
     Bell, Zap, ClipboardList, CheckCircle, AlertCircle, Info,
     X, ExternalLink, Search, Sparkles, Loader2, ChevronRight,
 } from "lucide-react";
+import { ActiveJobIndicator } from "./ActiveJobIndicator";
 
 interface AppNotification {
     id: string;
@@ -455,9 +456,23 @@ export function TopHeader({ mobileSidebar }: { mobileSidebar?: ReactNode }) {
                         <span className="hidden lg:inline">Ask data</span>
                         <kbd className="text-[10px] font-mono opacity-50">⌘/</kbd>
                     </button>
-
                     {/* Credit balance pill */}
                     <CreditPill credits={credits} />
+
+                    {/* Live Background Job Indicator */}
+                    <ActiveJobIndicator />
+
+                    {/* Mobile Search Trigger */}
+                    <button
+                        onClick={() => {
+                            const e = new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true });
+                            document.dispatchEvent(e);
+                        }}
+                        className="flex sm:hidden min-w-[44px] min-h-[44px] items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                        aria-label="Search dashboard"
+                    >
+                        <Search className="w-4 h-4" />
+                    </button>
 
                     {/* ⌘K quick-launch hint */}
                     <button

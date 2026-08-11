@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Users, Mail, Shield, Trash2, Clock, CheckCircle, Crown, Eye, Edit3, UserPlus, AlertCircle, Lock } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
+import { Button } from "@/components/ui/button";
 
 type Role = "VIEWER" | "EDITOR" | "ADMIN";
 
@@ -149,14 +150,14 @@ export function TeamManagementClient({ members: initialMembers, invitations: ini
                                 <option key={r} value={r}>{ROLE_META[r].label}</option>
                             ))}
                         </select>
-                        <button
+                        <Button
                             type="submit"
                             disabled={loading}
-                            className="btn-primary px-4 py-2 text-sm rounded-lg disabled:opacity-60 whitespace-nowrap"
                             id="team-invite-submit"
+                            className="whitespace-nowrap"
                         >
                             {loading ? "Sending…" : "Send Invite"}
-                        </button>
+                        </Button>
                     </form>
                 )}
 

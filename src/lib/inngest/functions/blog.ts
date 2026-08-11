@@ -256,14 +256,13 @@ export const generateBlogJob = inngest.createFunction(
                 logger.error("[Inngest/Blog] onFailure: no blogId or siteId — cannot auto-recover stuck blog. Manual DB sweep needed.");
             }
 
-            // Refund 10 credits regardless of how the failure was identified.
+            // Refund 10 credits idempotently — unique referenceId prevents double-refunds on retries.
             if (userId) {
                 try {
-                    await prisma.$executeRaw`
-                        UPDATE "User" SET credits = credits + 10
-                        WHERE id = ${userId}
-                    `;
-                    logger.info("[Inngest/Blog] Refunded 10 credits after job failure", { userId, blogId });
+                    const { refundCreditsIdempotent } = await import("@/lib/credits");
+                    const refId = blogId ? `refund:blog_gen:${blogId}` : `refund:blog_gen:${siteId ?? "unknown"}:${Date.now()}`;
+                    await refundCreditsIdempotent(userId, 10, refId, "Refund: Failed Blog Generation");
+                    logger.info("[Inngest/Blog] Idempotently refunded 10 credits after job failure", { userId, blogId, refId });
                 } catch (refundErr) {
                     logger.error("[Inngest/Blog] Failed to refund credits — manual action required", {
                         blogId,

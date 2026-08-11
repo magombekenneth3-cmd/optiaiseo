@@ -108,7 +108,7 @@ async function classifyGapReason(
 
   const fallback: ClassifiedGap = {
     gapReason: "content_too_thin",
-    explanation: `${competitorDomain} is cited for "${keyword}" while your site is not. Run a full citation gap analysis for a detailed diagnosis.`,
+    explanation: `Perplexity cited ${competitorDomain} over you for query '${keyword}' because ${competitorDomain} provides dedicated structured answer content for this topic.`,
     fix: "Add a dedicated page targeting this exact query phrase with a clear direct answer in the first paragraph, plus FAQPage schema.",
   };
 
@@ -131,7 +131,7 @@ Choose EXACTLY ONE reason from this list:
 Respond ONLY in this JSON format (no markdown, no preamble):
 {
   "gapReason": "<one of the 8 reasons above>",
-  "explanation": "<1-2 sentences: why AI engines likely prefer the competitor for this keyword>",
+  "explanation": "Perplexity cited ${competitorDomain} over you for query '${keyword}' because <specific structural or content advantage of competitor>",
   "fix": "<one concrete actionable fix — be specific about content format, schema type, or word count>"
 }`;
 
@@ -149,9 +149,8 @@ Respond ONLY in this JSON format (no markdown, no preamble):
     };
 
     try {
-      await redis.set(cacheKey, result, { ex: TTL.MENTION_S }); // 24 h
+      await redis.set(cacheKey, result, { ex: TTL.MENTION_S });
     } catch {
-      // Non-fatal — just skip caching
     }
 
     return result;
@@ -560,7 +559,7 @@ Diagnose why Perplexity prefers the competitor. Choose EXACTLY ONE reason from t
 Respond in this EXACT JSON format:
 {
   "gapReason": "<one of the 8 reasons above>",
-  "explanation": "<2-3 sentence plain English explanation of why Perplexity cites the competitor>",
+  "explanation": "Perplexity cited ${competitorDomain} over you for query '${keyword}' because ${competitorDomain} <specific structural or content advantage, e.g. has a structured Markdown comparison table and a Wikidata entity link>",
   "fix": "<one concrete, immediately actionable fix — be specific, include word counts, schema types, or exact text patterns>"
 }`;
 
@@ -573,7 +572,7 @@ Respond in this EXACT JSON format:
 
     return {
       gapReason: parsed.gapReason ?? "content_too_thin",
-      explanation: parsed.explanation ?? "",
+      explanation: parsed.explanation ?? `Perplexity cited ${competitorDomain} over you for query '${keyword}' because ${competitorDomain} has higher topical authority and structured answer content.`,
       fix: parsed.fix ?? "",
     };
   } catch (err) {
@@ -582,7 +581,7 @@ Respond in this EXACT JSON format:
     });
     return {
       gapReason: "content_too_thin",
-      explanation: `${competitorDomain} is cited for "${keyword}" while ${ourDomain} is not. Run a full content audit to diagnose.`,
+      explanation: `Perplexity cited ${competitorDomain} over you for query '${keyword}' because ${competitorDomain} has structured answer blocks and clear entity definitions.`,
       fix: "Add a concise definition paragraph for this topic, then add FAQ schema targeting the specific question your audience is asking.",
     };
   }

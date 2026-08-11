@@ -55,6 +55,7 @@ const NAV_ITEMS = [
     { name: "Citation History", href: "/dashboard/aeo/proofs", icon: History, exact: false, contextSiteId: true, indent: true },
     { name: "Wikidata Entity", href: "/dashboard/aeo/entity", icon: Globe, exact: false, contextSiteId: true, indent: true },
     { name: "AI Content", href: "/dashboard/blogs", icon: FileText, exact: false, contextSiteId: false },
+    { name: "Programmatic SEO", href: "/dashboard/pseo", icon: Zap, exact: false, contextSiteId: false },
 ];
 
 const ACCOUNT_ITEMS = [
@@ -385,8 +386,8 @@ function SidebarNavInner({
                     );
                 })}
 
-                {/* Analyse group */}
-                {!isCollapsed && <NavSectionLabel>Analyse</NavSectionLabel>}
+                {/* OPTIMIZE group */}
+                {!isCollapsed && <NavSectionLabel>OPTIMIZE</NavSectionLabel>}
                 {NAV_ITEMS.filter(i => {
                     const baseMatch = ["SEO Audits", "Keywords", "Competitors", "AI Visibility"].includes(i.name);
                     if (isCollapsed) return baseMatch;
@@ -413,7 +414,7 @@ function SidebarNavInner({
 
                 {/* Content group */}
                 {!isCollapsed && <NavSectionLabel>Content</NavSectionLabel>}
-                {NAV_ITEMS.filter(i => i.name === "AI Content").map((item) => {
+                {NAV_ITEMS.filter(i => i.name === "AI Content" || i.name === "Programmatic SEO").map((item) => {
                     const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
                     const isActive = item.exact
                         ? pathname === item.href

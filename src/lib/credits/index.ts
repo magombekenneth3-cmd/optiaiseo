@@ -211,3 +211,50 @@ export async function refundCredits(
 
     logger.info("[Credits] Refunded credits for failed action", { userId, action, refunded: cost });
 }
+
+/**
+ * Idempotent credit refund for failed background jobs / async sagas.
+ * Uses the CreditLedger table with unique [userId, referenceId] to guarantee
+ * that function retries (e.g. Inngest worker re-runs) will NEVER refund twice.
+ */
+export async function refundCreditsIdempotent(
+    userId: string,
+    amount: number,
+    referenceId: string,
+    reason: string
+): Promise<{ success: boolean; refunded: boolean }> {
+    try {
+        return await prisma.$transaction(async (tx) => {
+            const existing = await tx.creditLedger.findUnique({
+                where: { userId_referenceId: { userId, referenceId } }
+            });
+
+            if (existing) {
+                logger.info("[Credits] Idempotent refund skipped (already processed)", { userId, referenceId });
+                return { success: true, refunded: false };
+            }
+
+            await tx.creditLedger.create({
+                data: {
+                    userId,
+                    amount,
+                    type: "REFUND",
+                    referenceId,
+                    reason,
+                }
+            });
+
+            await tx.user.update({
+                where: { id: userId },
+                data: { credits: { increment: amount } }
+            });
+
+            logger.info("[Credits] Idempotent refund granted", { userId, amount, referenceId, reason });
+            return { success: true, refunded: true };
+        });
+    } catch (error) {
+        logger.error("[Credits] Idempotent refund failed", { userId, referenceId, error: (error as Error)?.message || String(error) });
+        return { success: false, refunded: false };
+    }
+}
+

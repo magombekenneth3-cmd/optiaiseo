@@ -59,7 +59,7 @@ export function KeywordTabPanels({
     const [activeTab, setActiveTab] = useState<TabId>("keywords");
 
     return (
-        <div className="rounded-2xl border border-[#30363d] bg-[#0d1117] overflow-hidden">
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
             {/* Tab bar */}
             <div className="flex overflow-x-auto border-b border-[#21262d] scrollbar-none bg-[#0a0d11]">
                 {TABS.map((tab) => {

@@ -22,8 +22,8 @@ import { classifySerpFormat } from "./serp";
 import type { AuthorProfile } from "./index";
 import { getClaimRules, getToneRules, getScopeRules, getStructureRules } from "./rules";
 import type { GroundedSiteContext } from "@/lib/prompt-context/build-site-context";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { runInformationGainAlgorithm } from "./information-gain";
+import { injectVisualEvidenceIntoBlog } from "./image-evidence";
 
 export interface ResearchBrain {
     intent: string;
@@ -36,6 +36,7 @@ export interface ResearchBrain {
     commonMisconceptions: string[];
     industryMyths: string[];
     whatPeopleAvoidSaying: string[];
+    informationGainDirective?: string;
 }
 
 export interface OutlineSection {
@@ -302,15 +303,27 @@ Rules:
         whatPeopleAvoidSaying: [],
     };
 
+    const infoGain = await runInformationGainAlgorithm(keyword).catch(() => null);
+
     try {
-        return await generateWithFallbackJson<ResearchBrain>({
+        const result = await generateWithFallbackJson<ResearchBrain>({
             prompt,
             model: AI_MODELS.GEMINI_FLASH,
             maxTokens: 2048,
         });
+
+        if (infoGain) {
+            result.informationGainDirective = infoGain.informationGainPromptDirective;
+            result.contentGaps = [...new Set([...(result.contentGaps || []), ...infoGain.uniqueContentGaps])];
+        }
+
+        return result;
     } catch (e) {
         logger.warn("[Pipeline] Research brain failed — using fallback", { error: (e as Error).message });
-        return fallback;
+        return {
+            ...fallback,
+            informationGainDirective: infoGain?.informationGainPromptDirective,
+        };
     }
 }
 
@@ -499,9 +512,14 @@ export async function runSectionWriter(
 
         const stripped = sectionText.replace(/\*?\*?\[EDITOR:[^\]]*\]\*?\*?\s*/g, "").trim();
 
-        const finalText = section.evidenceType === "faq"
+        let finalText = section.evidenceType === "faq"
             ? enforceFaqOpeners(stripped)
             : stripped;
+
+        if (i === 1 || section.evidenceType === "data") {
+            finalText = injectVisualEvidenceIntoBlog(finalText, section.heading || ctx.keyword || "Research");
+        }
+
         sections.push(finalText);
 
         memory.previousSectionSummary = finalText.slice(0, 300) + "\u2026";
@@ -661,6 +679,8 @@ ${authorNote}
 ${mythNote}
 ${misconceptionNote}
 ${introSnippetNote}
+
+${brain.informationGainDirective || ""}
 
 ${getClaimRules(ctx)}
 ${getToneRules(ctx)}

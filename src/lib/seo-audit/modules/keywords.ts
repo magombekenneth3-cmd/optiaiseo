@@ -1,5 +1,6 @@
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem, AuditStatus } from "../types"
 import { parse } from "node-html-parser"
+import { getKeywordMetricsBatch, getSerpData, resolveLocationCode, DATAFORSEO_LOCATION_CODES } from "@/lib/keywords/dataforseo"
 
 const STOP_WORDS = new Set([
     "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
@@ -461,6 +462,173 @@ export const KeywordsModule: AuditModule = {
             roiImpact: 85,
             aiVisibilityImpact: 75,
         })
+
+        // ── DataForSEO Keyword Metrics + Intent Classification ─────────────────
+        if (primaryKeyword) {
+            const locationCode = resolveLocationCode((context as { targetLocation?: string }).targetLocation)
+
+            const [metricsMap, serpData] = await Promise.all([
+                getKeywordMetricsBatch([primaryKeyword], locationCode).catch(() => new Map()),
+                getSerpData(primaryKeyword, locationCode, 10).catch(() => null),
+            ])
+
+            const metrics = metricsMap.get(primaryKeyword.toLowerCase().trim())
+
+            if (metrics) {
+                const msv  = metrics.searchVolume
+                const kd   = metrics.difficulty
+                const cpc  = metrics.cpc
+                const trend = metrics.trend ?? []
+
+                const trendDir = (() => {
+                    if (trend.length < 3) return 'stable'
+                    const recent = trend.slice(-3).reduce((a: number, b: number) => a + b, 0) / 3
+                    const older  = trend.slice(0, 3).reduce((a: number, b: number) => a + b, 0) / 3
+                    if (older === 0) return 'stable'
+                    const pct = (recent - older) / older
+                    return pct > 0.1 ? 'growing' : pct < -0.1 ? 'declining' : 'stable'
+                })()
+
+                const kdStatus: AuditStatus = kd < 30 ? 'Pass' : kd < 60 ? 'Warning' : 'Fail'
+                const trendEmoji = trendDir === 'growing' ? '📈' : trendDir === 'declining' ? '📉' : '→'
+
+                items.push({
+                    id: 'keyword-market-metrics',
+                    label: 'Keyword Market Metrics (MSV / KD / CPC)',
+                    status: kdStatus,
+                    finding: [
+                        `Monthly Search Volume: ${msv.toLocaleString()}/mo.`,
+                        `Keyword Difficulty: ${kd}/100 (${kd < 30 ? 'Low — good opportunity' : kd < 60 ? 'Medium — competitive' : 'High — very competitive'}).`,
+                        `CPC: $${cpc.toFixed(2)} — ${cpc > 5 ? 'High commercial intent' : cpc > 1 ? 'Moderate commercial value' : 'Low commercial value'}.`,
+                        trend.length > 0 ? `12-month trend: ${trendEmoji} ${trendDir} (recent avg: ${Math.round(trend.slice(-3).reduce((a: number, b: number) => a + b, 0) / Math.max(trend.slice(-3).length, 1)).toLocaleString()}/mo).` : '',
+                    ].filter(Boolean).join(' '),
+                    recommendation: kd >= 60 ? {
+                        text: [
+                            `KD ${kd}/100 means this keyword is highly competitive. Strategies for high-KD keywords:`,
+                            '• Target long-tail variations (3–5 words) with KD < 40 to build topical authority first.',
+                            `• Build 20+ high-DR backlinks specifically to this page before expecting top-10 rankings.`,
+                            `• Target "People Also Ask" and featured snippet opportunities — these are achievable even at KD ${kd}.`,
+                            cpc > 3 ? `• High CPC ($${cpc.toFixed(2)}) signals strong commercial intent — consider PPC while building organic authority.` : '',
+                        ].filter(Boolean).join('\n'),
+                        priority: 'High',
+                    } : kd >= 30 ? {
+                        text: `KD ${kd}/100 is competitive but achievable. Build 10–15 quality backlinks and ensure on-page optimisation is complete. Estimated time to top 5: 6–12 months at current domain authority.`,
+                        priority: 'Medium',
+                    } : undefined,
+                    roiImpact: 95,
+                    aiVisibilityImpact: 75,
+                    details: {
+                        keyword: primaryKeyword,
+                        monthlySearchVolume: msv,
+                        keywordDifficulty: kd,
+                        cpc,
+                        trendDirection: trendDir,
+                        locationCode,
+                    } as Record<string, string | number | boolean>,
+                })
+            } else {
+                items.push({
+                    id: 'keyword-market-metrics',
+                    label: 'Keyword Market Metrics (MSV / KD / CPC)',
+                    status: 'Info',
+                    finding: `Keyword metrics (search volume, difficulty, CPC) are not available — set DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD in your environment to enable live DataForSEO metrics for "${primaryKeyword}".`,
+                    recommendation: {
+                        text: 'Add DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD to .env. DataForSEO provides MSV, KD, CPC, and 12-month trend data at $0.0006/keyword via their Google Ads Search Volume API.',
+                        priority: 'Medium',
+                    },
+                    roiImpact: 90,
+                    aiVisibilityImpact: 70,
+                })
+            }
+
+            // ── Search Intent Classification ──────────────────────────────────
+            const intentModifiers = {
+                informational: /\b(what|how|why|guide|tutorial|learn|understand|definition|tips|examples?|overview|introduction|basics?)\b/i,
+                navigational:  /\b(login|sign in|download|official|website|app|contact|support|portal)\b/i,
+                commercial:    /\b(best|top|review|vs|compare|comparison|alternative|alternatives|rated|recommended|ranking|list)\b/i,
+                transactional: /\b(buy|purchase|price|pricing|cost|cheap|discount|deal|coupon|order|shop|subscription|free trial|get started|hire|book|schedule)\b/i,
+            }
+
+            const intentScores: Record<string, number> = {
+                informational: 0,
+                navigational: 0,
+                commercial: 0,
+                transactional: 0,
+            }
+
+            for (const [intent, regex] of Object.entries(intentModifiers)) {
+                if (regex.test(primaryKeyword)) intentScores[intent]! += 3
+            }
+
+            if (metrics) {
+                if (metrics.cpc > 3) { intentScores['transactional']! += 2; intentScores['commercial']! += 1 }
+                else if (metrics.cpc > 1) { intentScores['commercial']! += 1 }
+                if (metrics.competition > 0.6) { intentScores['transactional']! += 1; intentScores['commercial']! += 1 }
+            }
+
+            if (serpData) {
+                if (serpData.features.hasAnswerBox)  intentScores['informational']! += 2
+                if (serpData.features.hasShopping)   intentScores['transactional']! += 3
+                if (serpData.features.hasLocalPack)  intentScores['transactional']! += 1
+            }
+
+            const topIntentEntry = Object.entries(intentScores).sort((a, b) => b[1] - a[1])[0]
+            const detectedIntent = topIntentEntry?.[0] ?? 'informational'
+            const secondEntry    = Object.entries(intentScores).sort((a, b) => b[1] - a[1])[1]
+            const isMixed = secondEntry && secondEntry[1] > 0 && topIntentEntry && secondEntry[1] >= topIntentEntry[1] * 0.7
+            const intentLabel  = isMixed ? `Mixed (${detectedIntent} + ${secondEntry[0]})` : detectedIntent.charAt(0).toUpperCase() + detectedIntent.slice(1)
+
+            const intentAligned = (() => {
+                const bodyLower = cleanBodyText.toLowerCase()
+                if (detectedIntent === 'informational' && (bodyLower.includes('what') || bodyLower.includes('how') || bodyLower.includes('why') || rawH1?.toLowerCase().includes('guide'))) return true
+                if (detectedIntent === 'transactional' && (bodyLower.includes('buy') || bodyLower.includes('price') || bodyLower.includes('sign up') || rawH1?.toLowerCase().includes('get'))) return true
+                if (detectedIntent === 'commercial' && (bodyLower.includes('review') || bodyLower.includes('compare') || bodyLower.includes('best'))) return true
+                return null // cannot determine
+            })()
+
+            const serpFeatureNote = serpData ? [
+                serpData.features.hasAnswerBox ? 'Featured Snippet opportunity detected' : '',
+                serpData.features.hasShopping  ? 'Shopping carousel present' : '',
+                serpData.features.hasLocalPack  ? 'Local Pack present' : '',
+            ].filter(Boolean).join(', ') : ''
+
+            const intentStatus: AuditStatus =
+                intentAligned === true  ? 'Pass'
+                : intentAligned === null ? 'Info'
+                : 'Warning'
+            const needsRec = intentAligned !== true
+
+            items.push({
+                id: 'keyword-search-intent',
+                label: 'Search Intent Classification',
+                status: intentStatus,
+                finding: [
+                    `Detected intent: ${intentLabel}.`,
+                    intentAligned === true  ? `Page content appears aligned with ${detectedIntent} intent.` : '',
+                    intentAligned === null  ? '' : `Page content may be misaligned with ${detectedIntent} intent — this causes poor engagement signals and high bounce rate.`,
+                    serpFeatureNote ? `SERP features: ${serpFeatureNote}.` : '',
+                ].filter(Boolean).join(' '),
+                recommendation: needsRec ? {
+                    text: {
+                        informational: `This keyword has informational intent. Ensure the page:\n• Opens with a direct answer to the implied question.\n• Uses H2/H3 headings that mirror "People Also Ask" queries.\n• Includes definitions, how-to steps, or explanatory content.\n• Avoids heavy product promotion in the first fold (signals misaligned intent to Google).`,
+                        transactional:  `This keyword has transactional intent. Ensure the page:\n• Has a clear CTA (Buy Now, Get Started, Book) above the fold.\n• Includes pricing, trust signals (reviews, guarantees), and urgency.\n• Is a product/service/landing page, NOT a blog post.\n• Lacks excessive informational content that pushes CTAs below the fold.`,
+                        commercial:     `This keyword has commercial investigation intent (comparing options). Ensure the page:\n• Is structured as a comparison, review, or "best X" list.\n• Includes feature tables, pros/cons, and clear recommendations.\n• Contains structured Product or Review schema for Rich Results eligibility.`,
+                        navigational:   `This keyword has navigational intent. Users are looking for a specific brand/tool. Ensure:\n• The page is the official brand/product page.\n• Title and H1 clearly state the brand name.\n• No SEO tricks — just ensure the correct page ranks.`,
+                    }[detectedIntent as 'informational' | 'transactional' | 'commercial' | 'navigational'] ?? 'Align page content with the detected search intent.',
+                    priority: intentAligned === null ? 'Medium' : 'High',
+                } : undefined,
+                roiImpact: 88,
+                aiVisibilityImpact: 85,
+                details: {
+                    primaryKeyword,
+                    detectedIntent: intentLabel,
+                    intentScores: JSON.stringify(intentScores),
+                    serpHasAnswerBox: serpData?.features.hasAnswerBox ?? false,
+                    serpHasShopping:  serpData?.features.hasShopping  ?? false,
+                    serpHasLocalPack: serpData?.features.hasLocalPack  ?? false,
+                } as Record<string, string | number | boolean>,
+            })
+        }
 
         const analyzable = items.filter((i) => i.status !== "Skipped" && i.status !== "Info")
         const passed = analyzable.filter((i) => i.status === "Pass").length

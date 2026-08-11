@@ -143,11 +143,21 @@ function guardEnv(): string | null {
   return null;
 }
 
-export async function sendAeoDropAlert(toEmail: string, data: AeoDropData): Promise<EmailResult> {
+export async function sendAeoDropAlert(toEmail: string, data: AeoDropData, idempotencyKey?: string): Promise<EmailResult> {
   const envErr = guardEnv();
   if (envErr) { logger.warn(`[Email] ${envErr} — drop alert not sent`); return { success: false, error: envErr }; }
   try {
-    await resend().emails.send({ from: FROM, to: toEmail, subject: `⚠️ AEO score alert for ${data.domain}`, html: buildDropHtml(data) });
+    const refKey = idempotencyKey ?? `aeo-drop-${data.domain}-${Date.now()}`;
+    await resend().emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: `⚠️ AEO score alert for ${data.domain}`,
+      html: buildDropHtml(data),
+      headers: {
+        "X-Entity-Ref-ID": refKey,
+        "Idempotency-Key": refKey,
+      },
+    });
     return { success: true };
   } catch (err: unknown) {
     logger.error("[Email] AEO drop alert failed", { error: (err as Error)?.message, toEmail });
@@ -155,11 +165,21 @@ export async function sendAeoDropAlert(toEmail: string, data: AeoDropData): Prom
   }
 }
 
-export async function sendAeoWeeklyDigest(toEmail: string, data: AeoWeeklyDigestData): Promise<EmailResult> {
+export async function sendAeoWeeklyDigest(toEmail: string, data: AeoWeeklyDigestData, idempotencyKey?: string): Promise<EmailResult> {
   const envErr = guardEnv();
   if (envErr) { logger.warn(`[Email] ${envErr} — digest not sent`); return { success: false, error: envErr }; }
   try {
-    await resend().emails.send({ from: FROM, to: toEmail, subject: `Your weekly AEO report — ${data.domain}`, html: buildDigestHtml(data) });
+    const refKey = idempotencyKey ?? `aeo-digest-${data.siteId}-${new Date().toISOString().slice(0, 10)}`;
+    await resend().emails.send({
+      from: FROM,
+      to: toEmail,
+      subject: `Your weekly AEO report — ${data.domain}`,
+      html: buildDigestHtml(data),
+      headers: {
+        "X-Entity-Ref-ID": refKey,
+        "Idempotency-Key": refKey,
+      },
+    });
     return { success: true };
   } catch (err: unknown) {
     logger.error("[Email] AEO weekly digest failed", { error: (err as Error)?.message, toEmail });

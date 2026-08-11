@@ -1112,6 +1112,374 @@ export const TechnicalModule: AuditModule = {
             details: { invisibleCount, invisibleExamples: invisibleExamples.join(', ') }
         });
 
+        // 24. Hreflang Deep Verification
+        const hreflangDeepTags = root.querySelectorAll('link[rel="alternate"][hreflang]');
+        if (hreflangDeepTags.length > 0) {
+            const hreflangIssues: string[] = [];
+
+            const langTagRe = /^([a-z]{2,3})(-[A-Za-z]{2,4})?(-x-[A-Za-z0-9-]+)?$/;
+            const langs: string[] = [];
+            let hasXDefault = false;
+            let hasSelfRef = false;
+
+            const currentOrigin = (() => { try { return new URL(context.url).origin; } catch { return ''; } })();
+
+            hreflangDeepTags.forEach(tag => {
+                const lang = (tag.getAttribute('hreflang') ?? '').trim().toLowerCase();
+                const href = (tag.getAttribute('href') ?? '').trim();
+
+                if (lang === 'x-default') { hasXDefault = true; return; }
+
+                if (!langTagRe.test(lang)) {
+                    hreflangIssues.push(`Invalid hreflang value "${lang}" — must be a valid BCP-47 language tag (e.g. en, en-US, zh-Hant).`);
+                }
+
+                if (langs.includes(lang)) {
+                    hreflangIssues.push(`Duplicate hreflang="${lang}" detected. Each language/region must appear exactly once.`);
+                } else {
+                    langs.push(lang);
+                }
+
+                try {
+                    const hrefOrigin = new URL(href).origin;
+                    if (hrefOrigin === currentOrigin && href === context.url) hasSelfRef = true;
+                } catch {
+                    hreflangIssues.push(`Malformed href in hreflang tag for lang="${lang}": "${href}"`);
+                }
+            });
+
+            if (!hasXDefault && langs.length > 1) {
+                hreflangIssues.push('Missing x-default hreflang. Google recommends a fallback for users whose language is not explicitly targeted.');
+            }
+
+            if (!hasSelfRef) {
+                hreflangIssues.push('Page does not include a self-referencing hreflang tag for its own language/region. Each URL must include itself in the hreflang set.');
+            }
+
+            const hreflangStatus: 'Pass' | 'Warning' | 'Fail' =
+                hreflangIssues.length === 0 ? 'Pass'
+                : hreflangIssues.some(i => i.startsWith('Invalid') || i.startsWith('Duplicate') || i.startsWith('Missing x-default')) ? 'Warning'
+                : 'Fail';
+
+            items.push({
+                id: 'hreflang-verification',
+                label: 'Hreflang Deep Verification',
+                status: hreflangStatus,
+                finding: hreflangIssues.length === 0
+                    ? `${hreflangDeepTags.length} hreflang tag(s) validated: language codes correct, self-referencing present${hasXDefault ? ', x-default present ✓' : ''}.`
+                    : `${hreflangDeepTags.length} hreflang tag(s) found with ${hreflangIssues.length} issue(s):\n• ${hreflangIssues.join('\n• ')}`,
+                recommendation: hreflangIssues.length > 0 ? {
+                    text: 'Fix hreflang issues:\n• Ensure every language/region variant links to every other variant (reciprocal hreflang set).\n• Use valid BCP-47 codes (e.g. en-US, not en_US or EN).\n• Include x-default pointing to your language-selector page or primary locale.\n• Every URL in the set must include a self-referencing tag for its own language.\nValidate using Google Search Console → International Targeting.',
+                    priority: hreflangStatus === 'Fail' ? 'High' : 'Medium',
+                } : undefined,
+                roiImpact: 72,
+                aiVisibilityImpact: 55,
+                details: {
+                    totalTags: hreflangDeepTags.length,
+                    languagesFound: langs.length,
+                    hasXDefault,
+                    hasSelfRef,
+                    issueCount: hreflangIssues.length,
+                } as Record<string, string | number | boolean>,
+            });
+        }
+
+        // 25. Robots.txt Directive Verification + Sitemap Index Validation
+        await (async () => {
+            try {
+                const urlObj = new URL(context.url);
+                const robotsUrl = `${urlObj.origin}/robots.txt`;
+
+                const robotsRes = await fetch(robotsUrl, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
+                    signal: AbortSignal.timeout(8000),
+                    cache: 'no-store',
+                }).catch(() => null);
+
+                if (!robotsRes?.ok) {
+                    items.push({
+                        id: 'robots-directive-check',
+                        label: 'Robots.txt Directive Verification',
+                        status: 'Warning',
+                        finding: `robots.txt at ${robotsUrl} returned HTTP ${robotsRes?.status ?? 'timeout/network error'}. Could not verify directives.`,
+                        recommendation: { text: 'Ensure robots.txt is accessible at your domain root and returns HTTP 200.', priority: 'Medium' },
+                        roiImpact: 80,
+                        aiVisibilityImpact: 70,
+                    });
+                    return;
+                }
+
+                const robotsText = await robotsRes.text();
+                const robotsLines = robotsText.split('\n').map(l => l.trim());
+
+                const blocks: Array<{ agents: string[]; disallow: string[]; allow: string[] }> = [];
+                let currentBlock: { agents: string[]; disallow: string[]; allow: string[] } | null = null;
+
+                for (const line of robotsLines) {
+                    if (line.startsWith('#') || line === '') {
+                        if (currentBlock && (currentBlock.disallow.length > 0 || currentBlock.allow.length > 0)) {
+                            blocks.push(currentBlock);
+                            currentBlock = null;
+                        }
+                        continue;
+                    }
+                    const [field, ...rest] = line.split(':');
+                    const key = (field ?? '').trim().toLowerCase();
+                    const val = rest.join(':').trim();
+                    if (key === 'user-agent') {
+                        if (!currentBlock) currentBlock = { agents: [], disallow: [], allow: [] };
+                        currentBlock.agents.push(val.toLowerCase());
+                    } else if (key === 'disallow' && currentBlock) {
+                        if (val) currentBlock.disallow.push(val);
+                    } else if (key === 'allow' && currentBlock) {
+                        if (val) currentBlock.allow.push(val);
+                    }
+                }
+                if (currentBlock && (currentBlock.disallow.length > 0 || currentBlock.allow.length > 0)) {
+                    blocks.push(currentBlock);
+                }
+
+                const pagePath = urlObj.pathname;
+
+                const matchesPrefix = (directive: string, path: string): boolean => {
+                    const pattern = directive.replace(/\*/g, '.*').replace(/\?/g, '\\?');
+                    return new RegExp(`^${pattern}`).test(path);
+                };
+
+                const robotsIssues: string[] = [];
+                let blockedByAgent: string | null = null;
+                let effectiveDisallows: string[] = [];
+                let effectiveAllows: string[] = [];
+
+                for (const block of blocks) {
+                    const appliesToAll = block.agents.includes('*');
+                    const appliesToGoogle = block.agents.some(a => a.includes('googlebot'));
+                    if (!appliesToAll && !appliesToGoogle) continue;
+
+                    const disallowed = block.disallow.filter(d => matchesPrefix(d, pagePath));
+                    const allowed = block.allow.filter(a => matchesPrefix(a, pagePath));
+
+                    if (disallowed.length > 0 && allowed.length === 0) {
+                        blockedByAgent = block.agents.join(', ');
+                        effectiveDisallows = disallowed;
+                        effectiveAllows = allowed;
+                    } else if (disallowed.length > 0 && allowed.length > 0) {
+                        const maxDisallow = Math.max(...disallowed.map(d => d.length));
+                        const maxAllow = Math.max(...allowed.map(a => a.length));
+                        if (maxDisallow > maxAllow) {
+                            blockedByAgent = block.agents.join(', ');
+                            effectiveDisallows = disallowed;
+                            effectiveAllows = allowed;
+                        }
+                    }
+                }
+
+                const isFullyBlocked = blocks.some(b =>
+                    b.agents.includes('*') &&
+                    b.disallow.includes('/') &&
+                    b.allow.length === 0
+                );
+
+                if (isFullyBlocked) {
+                    robotsIssues.push('Disallow: / for User-agent: * found — ALL crawlers are blocked from the entire site. This will cause complete deindexation.');
+                }
+                if (blockedByAgent) {
+                    robotsIssues.push(`Audited URL path (${pagePath}) is blocked by robots.txt Disallow directive(s) for agent(s): ${blockedByAgent}. Effective disallow: ${effectiveDisallows.join(', ')}${effectiveAllows.length > 0 ? ` (Allow override: ${effectiveAllows.join(', ')})` : ''}.`);
+                }
+
+                const sitemapUrls = robotsLines
+                    .filter(l => l.toLowerCase().startsWith('sitemap:'))
+                    .map(l => l.slice('sitemap:'.length).trim())
+                    .filter(Boolean);
+
+                const sitemapIssues: string[] = [];
+                let sitemapUrlCount = 0;
+                let isSitemapIndex = false;
+                let sitemapAccessible = false;
+
+                if (sitemapUrls.length > 0) {
+                    for (const sitemapUrl of sitemapUrls.slice(0, 3)) {
+                        const sRes = await fetch(sitemapUrl, {
+                            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
+                            signal: AbortSignal.timeout(8000),
+                        }).catch(() => null);
+
+                        if (!sRes?.ok) {
+                            sitemapIssues.push(`Sitemap "${sitemapUrl}" listed in robots.txt is inaccessible (HTTP ${sRes?.status ?? 'error'}).`);
+                            continue;
+                        }
+
+                        sitemapAccessible = true;
+                        const sitemapText = await sRes.text().catch(() => '');
+
+                        if (sitemapText.includes('<sitemapindex')) {
+                            isSitemapIndex = true;
+                            const subSitemapMatches = [...sitemapText.matchAll(/<loc>([\s\S]*?)<\/loc>/g)];
+                            const subCount = subSitemapMatches.length;
+
+                            const lastModMatches = [...sitemapText.matchAll(/<lastmod>([\s\S]*?)<\/lastmod>/g)];
+                            const staleThreshold = 90;
+                            const staleEntries = lastModMatches.filter(m => {
+                                const d = new Date(m[1].trim());
+                                return !isNaN(d.getTime()) && (Date.now() - d.getTime()) > staleThreshold * 86400000;
+                            });
+
+                            if (staleEntries.length > 0 && staleEntries.length === lastModMatches.length) {
+                                sitemapIssues.push(`Sitemap index at "${sitemapUrl}": all ${subCount} sub-sitemaps have lastmod older than ${staleThreshold} days. Ensure lastmod reflects actual content update dates.`);
+                            }
+
+                            sitemapUrlCount += subCount;
+                        } else if (sitemapText.includes('<urlset')) {
+                            const urlMatches = [...sitemapText.matchAll(/<loc>([\s\S]*?)<\/loc>/g)];
+                            sitemapUrlCount += urlMatches.length;
+
+                            const hasLastmod = sitemapText.includes('<lastmod>');
+                            const hasPriority = sitemapText.includes('<priority>');
+                            const hasChangefreq = sitemapText.includes('<changefreq>');
+
+                            if (!hasLastmod) {
+                                sitemapIssues.push(`Sitemap "${sitemapUrl}" is missing <lastmod> — Google uses this to prioritise recrawling updated pages.`);
+                            }
+                            if (hasPriority && hasChangefreq) {
+                                sitemapIssues.push(`Sitemap "${sitemapUrl}" uses <priority> and <changefreq> — Google ignores these fields. Remove to reduce sitemap size.`);
+                            }
+                        } else {
+                            sitemapIssues.push(`Sitemap "${sitemapUrl}" does not appear to be valid XML (missing <sitemapindex> or <urlset> root element).`);
+                        }
+                    }
+                } else {
+                    sitemapIssues.push('No Sitemap directive found in robots.txt. Add "Sitemap: https://yourdomain.com/sitemap.xml" to help crawlers discover all pages.');
+                }
+
+                const allIssues = [...robotsIssues, ...sitemapIssues];
+                const hasCritical = robotsIssues.some(i => i.includes('ALL crawlers') || i.includes('blocked by robots'));
+                const robotsSitemapStatus: 'Pass' | 'Warning' | 'Fail' =
+                    hasCritical ? 'Fail'
+                    : allIssues.length > 0 ? 'Warning'
+                    : 'Pass';
+
+                items.push({
+                    id: 'robots-directive-check',
+                    label: 'Robots.txt Directive & Sitemap Validation',
+                    status: robotsSitemapStatus,
+                    finding: allIssues.length === 0
+                        ? `robots.txt parsed — no blocking directives for this URL. ${sitemapUrls.length} sitemap(s) declared${sitemapAccessible ? ` (${isSitemapIndex ? 'sitemap index' : 'standard sitemap'}, ${sitemapUrlCount} URL(s) found) ✓` : ''}.`
+                        : `${allIssues.length} issue(s) found in robots.txt / sitemap:\n• ${allIssues.join('\n• ')}`,
+                    recommendation: allIssues.length > 0 ? {
+                        text: hasCritical
+                            ? 'CRITICAL: This URL is blocked from crawling. Remove or restrict the Disallow directive in robots.txt, then verify in Google Search Console → URL Inspection.'
+                            : 'Fix sitemap issues:\n• Declare sitemaps in robots.txt with "Sitemap:" directive\n• Ensure all listed sitemaps return HTTP 200\n• Use <lastmod> (ISO 8601 format) to signal freshness\n• Avoid <priority> and <changefreq> — Google ignores them',
+                        priority: hasCritical ? 'High' : 'Medium',
+                    } : undefined,
+                    roiImpact: hasCritical ? 100 : 85,
+                    aiVisibilityImpact: 80,
+                    details: {
+                        sitemapsDeclared: sitemapUrls.length,
+                        sitemapUrlsFound: sitemapUrlCount,
+                        isSitemapIndex,
+                        urlBlocked: blockedByAgent != null,
+                        issueCount: allIssues.length,
+                    } as Record<string, string | number | boolean>,
+                });
+            } catch {
+                items.push({
+                    id: 'robots-directive-check',
+                    label: 'Robots.txt Directive & Sitemap Validation',
+                    status: 'Warning',
+                    finding: 'Could not complete robots.txt parsing — network error or invalid URL.',
+                    roiImpact: 80,
+                    aiVisibilityImpact: 70,
+                });
+            }
+        })();
+
+        // 26. Asset Optimisation (srcset, next-gen formats, render-blocking CSS)
+        {
+            const assetIssues: string[] = [];
+
+            const allImgEls = root.querySelectorAll('img');
+            const imgsMissingSrcset = allImgEls.filter(img => {
+                const src = (img.getAttribute('src') ?? '').toLowerCase();
+                if (src.startsWith('data:') || src.includes('svg')) return false;
+                return !img.hasAttribute('srcset') && !img.closest('picture');
+            });
+
+            if (imgsMissingSrcset.length > 0) {
+                assetIssues.push(`${imgsMissingSrcset.length} <img> element(s) are missing srcset and sizes attributes. Responsive image descriptors (e.g. srcset="img-480w.webp 480w, img-960w.webp 960w") allow browsers to download the smallest appropriate image for the device, saving bandwidth and improving LCP on mobile.`);
+            }
+
+            const legacyImgEls = allImgEls.filter(img => {
+                const src = (img.getAttribute('src') ?? '').toLowerCase();
+                return (src.endsWith('.jpg') || src.endsWith('.jpeg') || src.endsWith('.png')) &&
+                    !img.closest('picture');
+            });
+            const pictureEls = root.querySelectorAll('picture');
+            const pictureWebpCount = [...pictureEls].filter(p =>
+                [...p.querySelectorAll('source')].some(s => {
+                    const t = (s.getAttribute('type') ?? '').toLowerCase();
+                    return t.includes('webp') || t.includes('avif');
+                })
+            ).length;
+
+            if (legacyImgEls.length > 0) {
+                assetIssues.push(`${legacyImgEls.length} JPEG/PNG <img> tag(s) without <picture> WebP/AVIF sources. Serving next-gen formats reduces image weight by 25–50% over JPEG and 50–80% over PNG.${pictureWebpCount > 0 ? ` (${pictureWebpCount} <picture> elements with WebP/AVIF sources already present — extend coverage.)` : ''}`);
+            }
+
+            const blockingCssLinks = root.querySelectorAll('link[rel="stylesheet"]').filter(link => {
+                const media = link.getAttribute('media') ?? 'all';
+                return media === 'all' || media === '';
+            });
+
+            const printCssLinks = root.querySelectorAll('link[rel="stylesheet"][media="print"]');
+            if (blockingCssLinks.length > 3 && printCssLinks.length === 0) {
+                assetIssues.push(`${blockingCssLinks.length} render-blocking <link rel="stylesheet"> tags detected with no print/media-query separation. Each blocks HTML parsing. Critical CSS should be inlined; non-critical CSS should be loaded asynchronously (rel="preload" with onload, or media="print" trick).`);
+            }
+
+            const hasServiceWorker = html.includes('serviceWorker') || html.includes('service-worker');
+            const hasManifest = root.querySelector('link[rel="manifest"]') !== null;
+            const hasCacheControl = false;
+
+            const assetStatus: 'Pass' | 'Warning' | 'Fail' =
+                assetIssues.length === 0 ? 'Pass'
+                : assetIssues.length <= 1 ? 'Warning'
+                : 'Fail';
+
+            const recommendationParts: string[] = [];
+            if (imgsMissingSrcset.length > 0) {
+                recommendationParts.push(`Add srcset and sizes to all responsive <img> elements:\n  <img src="img.webp" srcset="img-480w.webp 480w, img-960w.webp 960w" sizes="(max-width:600px) 480px, 960px" alt="...">`);
+            }
+            if (legacyImgEls.length > 0) {
+                recommendationParts.push(`Wrap legacy JPEGs/PNGs in <picture> with WebP/AVIF <source> elements:\n  <picture>\n    <source type="image/avif" srcset="img.avif">\n    <source type="image/webp" srcset="img.webp">\n    <img src="img.jpg" alt="...">\n  </picture>\nOr use next/image (Next.js) which does this automatically.`);
+            }
+            if (blockingCssLinks.length > 3 && printCssLinks.length === 0) {
+                recommendationParts.push(`Split CSS into critical (inline in <style>) and non-critical (async load). Use:\n  <link rel="preload" href="styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">\n  <noscript><link rel="stylesheet" href="styles.css"></noscript>`);
+            }
+
+            items.push({
+                id: 'asset-optimisation',
+                label: 'Asset Optimisation (srcset, Next-Gen Formats, CSS)',
+                status: assetStatus,
+                finding: assetIssues.length === 0
+                    ? `Images use srcset/picture correctly. No legacy JPEG/PNG without next-gen fallback. ${hasManifest ? 'Web App Manifest present ✓.' : ''}${hasServiceWorker ? ' Service Worker detected ✓.' : ''}`
+                    : assetIssues.map(i => `• ${i}`).join('\n'),
+                recommendation: recommendationParts.length > 0 ? {
+                    text: recommendationParts.join('\n\n'),
+                    priority: assetStatus === 'Fail' ? 'High' : 'Medium',
+                } : undefined,
+                roiImpact: 80,
+                aiVisibilityImpact: 60,
+                details: {
+                    imgsMissingSrcset: imgsMissingSrcset.length,
+                    legacyFormatImgs: legacyImgEls.length,
+                    pictureWithWebP: pictureWebpCount,
+                    blockingStylesheets: blockingCssLinks.length,
+                    hasServiceWorker,
+                    hasManifest,
+                    hasCacheControl,
+                } as Record<string, string | number | boolean>,
+            });
+        }
+
         // Score
         const analyzableItems = items.filter(i => i.status !== 'Skipped' && i.status !== 'Info');
         const passed = analyzableItems.filter(i => i.status === 'Pass').length;

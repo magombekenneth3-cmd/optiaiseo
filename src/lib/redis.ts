@@ -25,3 +25,9 @@ export const redis = new Redis({
 });
 
 export const isRedisConfigured = !!(url && token);
+
+export function getRedis(): Redis | null {
+    if (!url || !token) return null;
+    return redis;
+}
+

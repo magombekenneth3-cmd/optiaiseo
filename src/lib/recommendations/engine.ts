@@ -18,12 +18,11 @@
  */
 
 import { getGscOpportunities, type GscOpportunity } from "@/lib/keywords/gsc-opportunities";
-
-// Types
+import { generateLlmOptimizationRules } from "@/lib/aeo/llm-recommendations";
 
 export type RecommendationPriority = "critical" | "high" | "medium" | "low";
 export type RecommendationEffort   = "low" | "medium" | "high";
-export type RecommendationSource   = "setup" | "gsc" | "content" | "technical";
+export type RecommendationSource   = "setup" | "gsc" | "content" | "technical" | "llm";
 
 export interface Recommendation {
   id: string;
@@ -32,11 +31,9 @@ export interface Recommendation {
   category: string;
   title: string;
   description: string;
-  /** One-line quantified impact shown in the impact chip */
   impact: string;
   effort: RecommendationEffort;
   tags: string[];
-  /** Optional supporting numbers rendered as a stat row under the description */
   stats?: Array<{ label: string; value: string; highlight?: boolean }>;
   cta?: { label: string; href: string; external?: boolean };
 }
@@ -57,13 +54,28 @@ export interface SiteContext {
 export interface RecommendationResult {
   recommendations: Recommendation[];
   gscConnected: boolean;
-  /** Top-level stats surfaced in the page header */
   summary: {
     totalOpportunities: number;
     estimatedMissedClicks: number;
     criticalCount: number;
     highCount: number;
   };
+}
+
+function buildLlmRecommendations(domain: string): Recommendation[] {
+  const rules = generateLlmOptimizationRules(domain);
+  return rules.map((r) => ({
+    id: r.id,
+    priority: r.estimatedImpact.toLowerCase() as RecommendationPriority,
+    source: "llm",
+    category: "LLM Optimization",
+    title: r.title,
+    description: r.rule,
+    impact: `Targeting: ${r.targetLLMs.join(", ")}`,
+    effort: "medium" as RecommendationEffort,
+    tags: ["LLM", "RAG", "Scrapers", "AEO"],
+    cta: { label: "View AEO Audit", href: "/dashboard/aeo" },
+  }));
 }
 
 // CTR benchmarks by average position bucket
@@ -374,9 +386,9 @@ export async function buildRecommendations(
   const insights  = analyseOpportunities(opportunities);
   const gscRecs   = buildGscRecommendations(insights, ctx.domain);
   const setupRecs = buildSetupRecommendations(ctx);
+  const llmRecs   = buildLlmRecommendations(ctx.domain);
 
-  // Merge: GSC recs first (data-driven, most valuable), then setup
-  const all = [...gscRecs, ...setupRecs];
+  const all = [...gscRecs, ...llmRecs, ...setupRecs];
 
   // Stable sort: priority order, then by source (gsc before setup at same priority)
   const PRIORITY_ORDER: Record<RecommendationPriority, number> = {

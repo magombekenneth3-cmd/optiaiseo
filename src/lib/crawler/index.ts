@@ -8,7 +8,7 @@ import { isSafeUrl } from "@/lib/security/safe-url";
 
 export interface CrawlIssue {
     url: string
-    type: "broken_link" | "redirect_chain" | "duplicate_title" | "missing_canonical" | "thin_content" | "slow_page"
+    type: "broken_link" | "redirect_chain" | "duplicate_title" | "missing_canonical" | "thin_content" | "slow_page" | "deep_click_depth" | "orphan_page"
     severity: "critical" | "warning"
     details: string
 }
@@ -20,11 +20,15 @@ export interface CrawlResult {
     brokenLinks: { from: string; to: string; status: number }[]
     redirectChains: { url: string; chain: string[] }[]
     duplicateTitles: { title: string; urls: string[] }[]
+    clickDepthMap: Record<string, number>
+    orphanPages: string[]
+    deepPages: string[]
+    linkGraph: { url: string; inboundCount: number; outboundCount: number; depth: number }[]
     scannedAt: Date
 }
 
-const MAX_PAGES = 50
-const MAX_DEPTH = 2
+const DEFAULT_MAX_PAGES = 50
+const DEFAULT_MAX_DEPTH = 4
 const TIMEOUT_MS = 8000
 
 const isAllowedByRobots = async (
@@ -103,7 +107,10 @@ const followRedirects = async (
     return { finalUrl: current, chain, finalStatus: 0 }
 }
 
-export const crawlSite = async (domain: string): Promise<CrawlResult> => {
+export const crawlSite = async (
+    domain: string,
+    options?: { maxPages?: number; maxDepth?: number }
+): Promise<CrawlResult> => {
     let origin: string
     try {
         const parsed = new URL(domain.startsWith("http") ? domain : `https://${domain}`)
@@ -112,7 +119,13 @@ export const crawlSite = async (domain: string): Promise<CrawlResult> => {
         throw new Error(`Invalid domain: ${domain}`)
     }
 
+    const maxPages = options?.maxPages ?? DEFAULT_MAX_PAGES
+    const maxDepth = options?.maxDepth ?? DEFAULT_MAX_DEPTH
+
     const visited = new Set<string>()
+    const clickDepthMap: Record<string, number> = {}
+    const inboundCounts = new Map<string, number>()
+    const outboundCounts = new Map<string, number>()
     const queue: { url: string; depth: number; from: string }[] = [{ url: origin, depth: 0, from: "root" }]
     const issues: CrawlIssue[] = []
     const brokenLinks: CrawlResult["brokenLinks"] = []
@@ -122,13 +135,25 @@ export const crawlSite = async (domain: string): Promise<CrawlResult> => {
     const externalLinksToCheck: { url: string; from: string }[] = []
     const visitedExternal = new Set<string>()
 
-    while (queue.length > 0 && visited.size < MAX_PAGES) {
+    inboundCounts.set(origin, 1)
+
+    while (queue.length > 0 && visited.size < maxPages) {
         const item = queue.shift()
         if (!item) break
         const { url, depth, from } = item
 
         if (visited.has(url)) continue
         visited.add(url)
+        clickDepthMap[url] = depth
+
+        if (depth > 3) {
+            issues.push({
+                url,
+                type: "deep_click_depth",
+                severity: "warning",
+                details: `Click depth of ${depth} exceeds recommended maximum of 3 clicks from homepage.`
+            })
+        }
 
         let parsedPath: string
         try { parsedPath = new URL(url).pathname } catch { continue }
@@ -137,7 +162,6 @@ export const crawlSite = async (domain: string): Promise<CrawlResult> => {
         if (!allowed) continue
 
         try {
-            // Follow redirects manually to detect chains
             const { finalUrl, chain, finalStatus } = await followRedirects(url)
 
             if (chain.length > 2) {
@@ -152,6 +176,7 @@ export const crawlSite = async (domain: string): Promise<CrawlResult> => {
 
             if (finalUrl !== url && !visited.has(finalUrl)) {
                 visited.add(finalUrl)
+                clickDepthMap[finalUrl] = depth
             }
 
             if (finalStatus === 0 || finalStatus >= 400) {
@@ -166,8 +191,6 @@ export const crawlSite = async (domain: string): Promise<CrawlResult> => {
 
             if (finalStatus !== 0 && (finalStatus < 200 || finalStatus >= 400)) continue
 
-            // Re-validate the resolved URL before fetching page content —
-            // guards against open-redirect chains that escape isSafeUrl in followRedirects.
             const resolvedGuard = isSafeUrl(finalUrl)
             if (!resolvedGuard.ok) continue
 
@@ -194,29 +217,35 @@ export const crawlSite = async (domain: string): Promise<CrawlResult> => {
                 issues.push({ url, type: "thin_content", severity: "warning", details: `Only ~${wordCount} words — potential thin content penalty` })
             }
 
-            if (depth < MAX_DEPTH) {
-                const linkMatches = [...html.matchAll(/href=["']([^"'#?]+)["']/gi)]
-                for (const match of linkMatches) {
-                    let href = match[1]
-                    if (href.startsWith("/")) href = `${origin}${href}`
-                    if (!href.startsWith("http")) continue
+            const linkMatches = [...html.matchAll(/href=["']([^"'#?]+)["']/gi)]
+            let outboundCount = 0
 
-                    if (!isSafeUrl(href)) continue
+            for (const match of linkMatches) {
+                let href = match[1]
+                if (href.startsWith("/")) href = `${origin}${href}`
+                if (!href.startsWith("http")) continue
 
-                    if (!href.startsWith(origin)) {
-                        // External link
-                        if (!visitedExternal.has(href)) {
-                            visitedExternal.add(href)
-                            externalLinksToCheck.push({ url: href, from: url })
-                        }
-                        continue
+                if (!isSafeUrl(href)) continue
+
+                if (!href.startsWith(origin)) {
+                    if (!visitedExternal.has(href)) {
+                        visitedExternal.add(href)
+                        externalLinksToCheck.push({ url: href, from: url })
                     }
+                    continue
+                }
 
-                    if (!visited.has(href)) queue.push({ url: href, depth: depth + 1, from: url })
+                outboundCount++
+                const currentInbound = inboundCounts.get(href) ?? 0
+                inboundCounts.set(href, currentInbound + 1)
+
+                if (depth < maxDepth && !visited.has(href)) {
+                    queue.push({ url: href, depth: depth + 1, from: url })
                 }
             }
-         
-         
+
+            outboundCounts.set(url, outboundCount)
+
         } catch (err: unknown) {
             brokenLinks.push({ from, to: url, status: 0 })
             if ((err as { name?: string }).name !== "AbortError") {
@@ -227,39 +256,36 @@ export const crawlSite = async (domain: string): Promise<CrawlResult> => {
         }
     }
 
-    // Check external links (batched to respect limits)
-    const CHUNK_SIZE = 10;
+    const CHUNK_SIZE = 10
     for (let i = 0; i < externalLinksToCheck.length; i += CHUNK_SIZE) {
-        const chunk = externalLinksToCheck.slice(i, i + CHUNK_SIZE);
+        const chunk = externalLinksToCheck.slice(i, i + CHUNK_SIZE)
         await Promise.allSettled(chunk.map(async ({ url: extUrl, from: extFrom }) => {
             if (!isSafeUrl(extUrl)) return
 
             try {
-                // First try HEAD request to save bandwidth
                 let res = await fetch(extUrl, {
                     method: 'HEAD',
                     headers: { "User-Agent": "SEOTool-Bot/1.0 (site audit; read-only)" },
                     signal: AbortSignal.timeout(5000),
-                });
+                })
 
-                // Some servers block HEAD requests, fallback to GET
                 if (res.status === 405 || res.status === 403) {
                     res = await fetch(extUrl, {
                         method: 'GET',
                         headers: { "User-Agent": "SEOTool-Bot/1.0 (site audit; read-only)" },
                         signal: AbortSignal.timeout(5000),
-                    });
+                    })
                 }
 
                 if (res.status >= 400) {
-                    brokenLinks.push({ from: extFrom, to: extUrl, status: res.status });
-                    issues.push({ url: extUrl, type: "broken_link", severity: "warning", details: `External HTTP ${res.status} Error — linked from ${extFrom}` });
+                    brokenLinks.push({ from: extFrom, to: extUrl, status: res.status })
+                    issues.push({ url: extUrl, type: "broken_link", severity: "warning", details: `External HTTP ${res.status} Error — linked from ${extFrom}` })
                 }
             } catch {
-                brokenLinks.push({ from: extFrom, to: extUrl, status: 0 });
-                issues.push({ url: extUrl, type: "broken_link", severity: "warning", details: `External Network Error / Timeout — linked from ${extFrom}` });
+                brokenLinks.push({ from: extFrom, to: extUrl, status: 0 })
+                issues.push({ url: extUrl, type: "broken_link", severity: "warning", details: `External Network Error / Timeout — linked from ${extFrom}` })
             }
-        }));
+        }))
     }
 
     const duplicateTitles: CrawlResult["duplicateTitles"] = []
@@ -270,6 +296,32 @@ export const crawlSite = async (domain: string): Promise<CrawlResult> => {
         }
     }
 
+    const orphanPages: string[] = []
+    const deepPages: string[] = []
+    const linkGraph: CrawlResult["linkGraph"] = []
+
+    for (const url of visited) {
+        const depth = clickDepthMap[url] ?? 0
+        const inboundCount = inboundCounts.get(url) ?? 0
+        const outboundCount = outboundCounts.get(url) ?? 0
+
+        linkGraph.push({ url, inboundCount, outboundCount, depth })
+
+        if (depth > 3) {
+            deepPages.push(url)
+        }
+
+        if (inboundCount === 0 && url !== origin && url !== `${origin}/`) {
+            orphanPages.push(url)
+            issues.push({
+                url,
+                type: "orphan_page",
+                severity: "warning",
+                details: "Orphan page detected — no internal inbound links were found pointing to this page."
+            })
+        }
+    }
+
     return {
         domain,
         pagesScanned: visited.size,
@@ -277,6 +329,10 @@ export const crawlSite = async (domain: string): Promise<CrawlResult> => {
         brokenLinks,
         redirectChains,
         duplicateTitles,
+        clickDepthMap,
+        orphanPages,
+        deepPages,
+        linkGraph,
         scannedAt: new Date(),
     }
 }

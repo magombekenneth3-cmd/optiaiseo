@@ -1,7 +1,8 @@
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem } from '../types';
 import { parse, HTMLElement } from 'node-html-parser';
 import { isSafeUrl } from '@/lib/security/safe-url';
-import { getAhrefsDomainOverview, getAhrefsBacklinks } from '@/lib/ahrefs';
+import { getAhrefsDomainOverview, getAhrefsBacklinks, getAhrefsCompetitors } from '@/lib/ahrefs';
+import { getCompetitorTopPages } from '@/lib/keywords/dataforseo';
 
 const MAX_HTML_BYTES = 10 * 1024 * 1024;
 const MAX_LINKS_TO_CHECK = 20;   // reduced from 50 — checking 50 links serially caused 70s+ hangs
@@ -419,6 +420,158 @@ export const OffPageModule: AuditModule = {
                 unreachableUrls: unreachable.map(u => u.url).join(', '),
             },
         });
+
+        // ── Primary keyword (extracted from title for anchor/gap analysis) ──
+        const primaryKeyword = (() => {
+            try {
+                const root2 = parse(html)
+                const title = root2.querySelector('title')?.textContent?.trim() ?? ''
+                const words = title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 3)
+                return words.slice(0, 2).join(' ')
+            } catch { return '' }
+        })()
+
+        // ── Anchor Text Distribution ──────────────────────────────────────────
+        if (backlinks.length > 0) {
+            const anchors = backlinks.map(l => (l.anchorText ?? '').trim().toLowerCase())
+            const brandTerms = domain.replace(/\.(com|io|net|org|co|app)$/, '').toLowerCase()
+
+            const anchorBuckets = { branded: 0, exact: 0, partial: 0, generic: 0, naked: 0 }
+            for (const anchor of anchors) {
+                if (!anchor || anchor === domain || anchor.startsWith('http')) {
+                    anchorBuckets.naked++
+                } else if (anchor.includes(brandTerms)) {
+                    anchorBuckets.branded++
+                } else if (primaryKeyword && anchor === primaryKeyword.toLowerCase()) {
+                    anchorBuckets.exact++
+                } else if (primaryKeyword && primaryKeyword.toLowerCase().split(' ').some(w => anchor.includes(w))) {
+                    anchorBuckets.partial++
+                } else {
+                    anchorBuckets.generic++
+                }
+            }
+
+            const total = anchors.length
+            const exactPct   = total > 0 ? Math.round((anchorBuckets.exact  / total) * 100) : 0
+            const brandedPct = total > 0 ? Math.round((anchorBuckets.branded / total) * 100) : 0
+            const genericPct = total > 0 ? Math.round((anchorBuckets.generic + anchorBuckets.naked) / total * 100) : 0
+
+            const anchorStatus: ChecklistItem['status'] =
+                exactPct > 40 ? 'Fail'
+                : exactPct > 20 ? 'Warning'
+                : 'Pass'
+
+            items.push({
+                id: 'anchor-text-distribution',
+                label: 'Anchor Text Distribution',
+                status: anchorStatus,
+                finding: [
+                    `Anchor text analysis (${total} links):`,
+                    `Branded: ${anchorBuckets.branded} (${brandedPct}%),`,
+                    `Exact-match: ${anchorBuckets.exact} (${exactPct}%),`,
+                    `Partial: ${anchorBuckets.partial},`,
+                    `Generic/Naked: ${anchorBuckets.generic + anchorBuckets.naked} (${genericPct}%).`,
+                    exactPct > 40 ? `PENALTY RISK: ${exactPct}% exact-match anchors exceeds safe threshold (< 20%). Google Penguin may interpret this as manipulative link building.` : '',
+                    exactPct > 20 ? `Caution: Exact-match anchor ratio (${exactPct}%) is elevated. Natural profiles average < 10% exact-match.` : '',
+                ].filter(Boolean).join(' '),
+                recommendation: exactPct > 20 ? {
+                    text: [
+                        `Target anchor text distribution for a natural profile:`,
+                        `• Branded ("${brandTerms}", "${brandTerms}.com"): 40–60%`,
+                        `• Generic ("click here", "this article", "learn more"): 20–30%`,
+                        `• Naked URLs: 10–20%`,
+                        `• Partial-match: 10–20%`,
+                        `• Exact-match (primary keyword verbatim): < 10%`,
+                        ``,
+                        `To rebalance: stop building exact-match links and focus on branded/generic outreach. Disavow any spammy exact-match links in Google Search Console.`,
+                    ].join('\n'),
+                    priority: exactPct > 40 ? 'High' : 'Medium',
+                } : undefined,
+                roiImpact: 85,
+                aiVisibilityImpact: 60,
+                details: {
+                    total,
+                    branded:  anchorBuckets.branded,
+                    exact:    anchorBuckets.exact,
+                    partial:  anchorBuckets.partial,
+                    generic:  anchorBuckets.generic,
+                    naked:    anchorBuckets.naked,
+                    exactPct,
+                    brandedPct,
+                } as Record<string, string | number | boolean>,
+            })
+        }
+
+        // ── Competitor Link Intersection (Link Gap) ──────────────────────
+        if (primaryKeyword && (process.env.DATAFORSEO_LOGIN || process.env.SERPER_API_KEY)) {
+            const competitors = await getAhrefsCompetitors(domain, 5).catch(() => [])
+            const competitorDomains = competitors.map(c => c.domain).filter(Boolean)
+
+            if (competitorDomains.length > 0) {
+                const competitorPages = await Promise.all(
+                    competitorDomains.slice(0, 3).map(d =>
+                        getCompetitorTopPages(d).catch(() => [])
+                    )
+                )
+
+                const myDomainSet = new Set(backlinks.map(l => l.sourceDomain.toLowerCase()))
+                const competitorLinkSites = new Map<string, string[]>()
+
+                competitorPages.forEach((pages, idx) => {
+                    const cd = competitorDomains[idx] ?? ''
+                    pages.forEach(page => {
+                        const linkDomain = (() => {
+                            try { return new URL(page.url.startsWith('http') ? page.url : `https://${cd}${page.url}`).hostname.replace(/^www\./, '') } catch { return '' }
+                        })()
+                        if (linkDomain && !myDomainSet.has(linkDomain) && linkDomain !== domain) {
+                            const existing = competitorLinkSites.get(linkDomain) ?? []
+                            existing.push(cd)
+                            competitorLinkSites.set(linkDomain, existing)
+                        }
+                    })
+                })
+
+                const multiCompetitorLinks = [...competitorLinkSites.entries()]
+                    .filter(([, cds]) => cds.length >= 2)
+                    .slice(0, 10)
+
+                const totalGapSites = competitorLinkSites.size
+                const highValueGaps = multiCompetitorLinks.length
+
+                items.push({
+                    id: 'competitor-link-gap',
+                    label: 'Competitor Link Intersection (Link Gap)',
+                    status: highValueGaps === 0 && totalGapSites === 0 ? 'Pass'
+                        : highValueGaps > 5 ? 'Warning'
+                        : 'Info',
+                    finding: highValueGaps > 0
+                        ? `Found ${totalGapSites} domains linking to competitors [${competitorDomains.slice(0, 3).join(', ')}] but NOT to you. ${highValueGaps} of these link to 2+ competitors — highest-priority outreach targets.`
+                        : `Competitor link analysis complete. ${totalGapSites} unearned link opportunities identified across ${competitorDomains.length} competitor(s).`,
+                    recommendation: totalGapSites > 0 ? {
+                        text: [
+                            `Link gap opportunities vs. competitors [${competitorDomains.slice(0, 3).join(', ')}]:`,
+                            multiCompetitorLinks.length > 0
+                                ? `Priority targets (link to 2+ competitors):\n${multiCompetitorLinks.slice(0, 5).map(([site, cds]) => `  • ${site} (links to: ${cds.join(', ')})`).join('\n')}`
+                                : '',
+                            ``,
+                            `Outreach playbook:`,
+                            `• Sites that link to 2+ competitors are highest-intent — they cover your category and may add you.`,
+                            `• Find the exact linking page on each site, identify the content manager, and pitch why your tool/content belongs there.`,
+                            `• Use a broken link angle if the competitor page they link to is outdated or removed.`,
+                            `• Create content that is directly comparable to what competitors rank for on those linking pages.`,
+                        ].filter(Boolean).join('\n'),
+                        priority: highValueGaps > 3 ? 'High' : 'Medium',
+                    } : undefined,
+                    roiImpact: 90,
+                    aiVisibilityImpact: 55,
+                    details: {
+                        competitorDomains: competitorDomains.slice(0, 3).join(', '),
+                        totalGapSites,
+                        highPriorityTargets: highValueGaps,
+                    } as Record<string, string | number | boolean>,
+                })
+            }
+        }
 
         const { score, passed, failed, warnings } = calculateScore(items);
 

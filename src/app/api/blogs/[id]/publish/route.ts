@@ -66,7 +66,8 @@ async function checkOriginality(text: string): Promise<{ isOriginal: boolean, co
 }
 
 import { prisma } from "@/lib/prisma";
-import { pingGoogleIndexingApi } from "@/lib/gsc/indexing";
+import { submitUrlForIndexing } from "@/lib/indexer";
+import { getIndexNowConfig } from "@/lib/indexnow-config";
 
 
 import { syndicateToHashnode } from "@/lib/blog/hashnode";
@@ -184,26 +185,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
         const canonicalUrl = `https://${blog.site.domain}/blog/${blog.slug}`;
 
-        // 1. Ping Google Indexing API instantly (fire-and-forget)
         try {
-            const idxResult = await pingGoogleIndexingApi(canonicalUrl, "URL_UPDATED", user!.id);
-             
-            if (!idxResult.success) {
-                logger.warn(`[Indexing API] Ping failed (${idxResult.code}): ${idxResult.message}`);
-            }
-         
+            await submitUrlForIndexing(blog.siteId, canonicalUrl, "BLOG_PUBLISHED", user!.id);
         } catch (idxErr: unknown) {
-            logger.error("[Indexing API] Failed to ping Google:", { error: (idxErr as Error)?.message || String(idxErr) });
+            logger.error("[Indexing API] Failed to submit via indexer:", { error: (idxErr as Error)?.message || String(idxErr) });
         }
 
-        // 1b. IndexNow — notify Bing, Yandex & Naver simultaneously (fire-and-forget).
-        //     Only fires if INDEXNOW_KEY env var is configured.
-        if (process.env.INDEXNOW_KEY) {
-            const indexNowKey = process.env.INDEXNOW_KEY;
-            const host = blog.site.domain.replace(/^https?:\/\//, "");
+        const indexNowCfg = await getIndexNowConfig(blog.siteId).catch(() => null);
+        if (indexNowCfg) {
             import("@/lib/indexnow")
                 .then(({ submitToAllIndexNow }) =>
-                    submitToAllIndexNow(host, indexNowKey, [canonicalUrl])
+                    submitToAllIndexNow(indexNowCfg.host, indexNowCfg.apiKey, [canonicalUrl])
                 )
                 .then((results) => {
                     const succeeded = results.filter((r) => r.success).map((r) => r.engine);

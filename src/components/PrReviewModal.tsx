@@ -1,8 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { X, GitBranch, Loader2, Check, Copy, AlertCircle } from "lucide-react";
-import { useFocusTrap } from "@/hooks/use-focus-trap";
+import { GitBranch, Loader2, Check, Copy, AlertCircle } from "lucide-react";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 
 export interface PrReviewPayload {
     filePath: string;
@@ -22,21 +27,10 @@ export function PrReviewModal({ payload, onConfirm, onCancel }: Props) {
     const [submitting, setSubmitting] = useState(false);
     const [copied, setCopied] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const panelRef    = useRef<HTMLDivElement>(null);
-    useFocusTrap(panelRef, true);   // always active while mounted
 
     useEffect(() => {
         textareaRef.current?.focus();
     }, []);
-
-    // Close on Escape key
-    useEffect(() => {
-        const handler = (e: KeyboardEvent) => {
-            if (e.key === "Escape") onCancel();
-        };
-        window.addEventListener("keydown", handler);
-        return () => window.removeEventListener("keydown", handler);
-    }, [onCancel]);
 
     const handleConfirm = async () => {
         setSubmitting(true);
@@ -51,38 +45,19 @@ export function PrReviewModal({ payload, onConfirm, onCancel }: Props) {
     };
 
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(6px)" }}
-            onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
-        >
-            <div
-                ref={panelRef}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="pr-review-title"
-                tabIndex={-1}
-                className="relative w-full max-w-3xl max-h-[90vh] flex flex-col rounded-2xl border border-border bg-card shadow-2xl focus:outline-none"
-                onClick={e => e.stopPropagation()}
-            >
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+        <Dialog open onOpenChange={(open) => { if (!open) onCancel(); }}>
+            <DialogContent className="w-full max-w-3xl max-h-[90vh] flex flex-col p-0 border-border bg-card shadow-2xl overflow-hidden">
+                <DialogHeader className="flex items-center justify-between flex-row px-6 py-4 border-b border-border shrink-0 text-left">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center" aria-hidden="true">
                             <GitBranch className="w-4 h-4 text-emerald-400" />
                         </div>
                         <div>
-                            <p id="pr-review-title" className="font-semibold text-sm text-foreground">Review Before Committing</p>
+                            <DialogTitle className="font-semibold text-sm text-foreground">Review Before Committing</DialogTitle>
                             <p className="text-[11px] text-muted-foreground font-mono mt-0.5">{payload.filePath}</p>
                         </div>
                     </div>
-                    <button
-                        onClick={onCancel}
-                        aria-label="Close review dialog"
-                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                    >
-                        <X className="w-4 h-4" aria-hidden="true" />
-                    </button>
-                </div>
+                </DialogHeader>
 
                 <div className="px-6 py-3 border-b border-border shrink-0">
                     <div className="flex items-start gap-2 text-xs text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
@@ -133,7 +108,7 @@ export function PrReviewModal({ payload, onConfirm, onCancel }: Props) {
                     }
                     </button>
                 </div>
-            </div>
-        </div>
+            </DialogContent>
+        </Dialog>
     );
 }

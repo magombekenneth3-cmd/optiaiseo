@@ -468,13 +468,16 @@ export const monitorGsovJob = inngest.createFunction(
             });
         });
 
-        await step.sendEvent(
-            "fan-out-gsov-checks",
-            sites.map((site) => ({
-                name: "gsov.check.site" as const,
-                data: { siteId: site.id, domain: site.domain },
-            }))
-        );
+        const events = sites.map((site) => ({
+            name: "gsov.check.site" as const,
+            data: { siteId: site.id, domain: site.domain },
+        }));
+
+        const CHUNK_SIZE = 500;
+        for (let i = 0; i < events.length; i += CHUNK_SIZE) {
+            const chunk = events.slice(i, i + CHUNK_SIZE);
+            await step.sendEvent(`fan-out-gsov-checks-${i}`, chunk);
+        }
 
         return { sitesMonitored: sites.length };
     }
@@ -536,13 +539,16 @@ export const monitorGscAnomaliesJob = inngest.createFunction(
             });
         });
 
-        await step.sendEvent(
-            "fan-out-gsc-checks",
-            sites.map((site) => ({
-                name: "gsc.anomaly.check.site" as const,
-                data: { siteId: site.id, domain: site.domain },
-            }))
-        );
+        const events = sites.map((site) => ({
+            name: "gsc.anomaly.check.site" as const,
+            data: { siteId: site.id, domain: site.domain },
+        }));
+
+        const CHUNK_SIZE = 500;
+        for (let i = 0; i < events.length; i += CHUNK_SIZE) {
+            const chunk = events.slice(i, i + CHUNK_SIZE);
+            await step.sendEvent(`fan-out-gsc-checks-${i}`, chunk);
+        }
 
         return { sitesProcessed: sites.length };
     }

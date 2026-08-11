@@ -1,19 +1,15 @@
 "use client";
 
-/**
- * UpgradeModal
- * ─────────────
- * Shown when a user hits their blog generation limit (code: "insufficient_credits"
- * or code: "rate_limit"). Presents the 3 paid plans with the recommended plan
- * highlighted, and links to /dashboard/billing to complete checkout.
- *
- * Design: dark glassmorphism, gradient spotlight, animated plan cards.
- */
-
-import { useEffect } from "react";
 import {
     X, Sparkles, Zap, Building2, Check, ArrowRight, Lock,
 } from "lucide-react";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+} from "@/components/ui/dialog";
 
 interface Plan {
     id: string;
@@ -102,69 +98,40 @@ interface Props {
 }
 
 export function UpgradeModal({ onClose, currentTier = "FREE", usedCount, limitCount }: Props) {
-    // Close on Escape
-    useEffect(() => {
-        const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-        window.addEventListener("keydown", handler);
-        return () => window.removeEventListener("keydown", handler);
-    }, [onClose]);
-
-    // Lock body scroll
-    useEffect(() => {
-        document.body.style.overflow = "hidden";
-        return () => { document.body.style.overflow = ""; };
-    }, []);
-
     const recommended = currentTier === "FREE" ? "pro" : currentTier === "STARTER" ? "pro" : "agency";
 
     return (
-        <div
-            className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-        >
-            {/* Backdrop */}
-            <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" />
-
-            {/* Modal */}
-            <div className="relative w-full max-w-3xl rounded-2xl border border-white/10 bg-[#0a0a0f] shadow-[0_0_120px_rgba(0,0,0,0.9)] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-
+        <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+            <DialogContent className="w-full max-w-3xl border-white/10 bg-[#0a0a0f] p-0 overflow-hidden shadow-[0_0_120px_rgba(0,0,0,0.9)]">
                 {/* Gradient spotlight top */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-40 bg-gradient-to-b from-emerald-500/10 to-transparent rounded-full blur-3xl pointer-events-none" />
 
                 {/* Header */}
-                <div className="relative flex items-start justify-between p-6 pb-4">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1.5">
-                            <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                                <Lock className="w-3.5 h-3.5 text-amber-400" />
-                            </div>
-                            <span className="text-[11px] font-bold uppercase tracking-widest text-amber-400">
-                                Limit Reached
-                            </span>
+                <DialogHeader className="relative p-6 pb-4">
+                    <div className="flex items-center gap-2 mb-1.5">
+                        <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                            <Lock className="w-3.5 h-3.5 text-amber-400" />
                         </div>
-                        <h2 className="text-xl font-bold text-white leading-tight">
-                            Unlock more AI blog posts
-                        </h2>
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-amber-400">
+                            Limit Reached
+                        </span>
+                    </div>
+                    <DialogTitle className="text-xl font-bold text-white leading-tight">
+                        Unlock more AI blog posts
+                    </DialogTitle>
+                    <DialogDescription className="text-sm text-muted-foreground mt-1">
                         {usedCount !== undefined && limitCount !== undefined ? (
-                            <p className="text-sm text-muted-foreground mt-1">
+                            <>
                                 You&apos;ve used{" "}
                                 <span className="text-white font-semibold">{usedCount}/{limitCount}</span>{" "}
                                 posts this month on the <span className="capitalize">{currentTier.toLowerCase()}</span> plan.
                                 Upgrade to keep publishing.
-                            </p>
+                            </>
                         ) : (
-                            <p className="text-sm text-muted-foreground mt-1">
-                                You&apos;ve hit your monthly blog limit. Upgrade to keep publishing AI content that drives organic traffic.
-                            </p>
+                            <>You&apos;ve hit your monthly blog limit. Upgrade to keep publishing AI content that drives organic traffic.</>
                         )}
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:text-white hover:bg-white/5 transition-colors shrink-0"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
+                    </DialogDescription>
+                </DialogHeader>
 
                 {/* Plan cards */}
                 <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-3 px-6 pb-6 pt-2">
@@ -252,7 +219,7 @@ export function UpgradeModal({ onClose, currentTier = "FREE", usedCount, limitCo
                         Continue on free plan
                     </button>
                 </div>
-            </div>
-        </div>
+            </DialogContent>
+        </Dialog>
     );
 }

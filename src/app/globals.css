@@ -28,10 +28,14 @@
   --ring: #10b981;
   --radius: 0.5rem;
 
-  /* Brand */
+  /* Brand & Status */
   --brand: #10b981;
   --brand-muted: rgba(16, 185, 129, 0.10);
   --brand-border: rgba(16, 185, 129, 0.22);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
 
   /* Sidebar */
   --sidebar: #fafafa;
@@ -77,6 +81,15 @@
   --input: rgba(255, 255, 255, 0.07);
   --ring: #10b981;
 
+  /* Brand & Status */
+  --brand: #10b981;
+  --brand-muted: rgba(16, 185, 129, 0.12);
+  --brand-border: rgba(16, 185, 129, 0.25);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #f87171;
+  --info: #60a5fa;
+
   /* Sidebar */
   --sidebar: #111113;
   --sidebar-foreground: #f4f4f5;
@@ -108,6 +121,13 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-muted: var(--brand-muted);
+  --color-brand-border: var(--brand-border);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);

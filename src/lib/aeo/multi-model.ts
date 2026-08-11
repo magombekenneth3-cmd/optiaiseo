@@ -4,6 +4,7 @@ import { checkChatGptMention } from "./openai-check";
 import { checkClaudeMention } from "./claude-check";
 import { checkGrokMention } from "./check-grok";
 import { checkCopilotMention } from "./check-copilot";
+import { checkDeepSeekMention } from "./check-deepseek";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { checkPerplexityCitation } from "./perplexity-citation-check";
 import { cachedMentionCheck } from "./response-cache";
@@ -26,18 +27,16 @@ export interface MentionResult {
     snippet?: string;
     details?: string;
     error?: string;
-    /**
-     * Gap 2: true when the brand prominence score is in the 10–40 borderline range.
-     * The regex may have matched a co-mention or partial token rather than a clean
-     * citation. Surface these rows in the tracker UI for human review.
-     */
     positionInResponse?: number;
+    sentiment?: "positive" | "neutral" | "negative";
+    linkedSourceUrls?: string[];
     quality?: {
         positionScore: number;
         isAuthoritative: boolean;
         mentionCount: number;
         context: string | null;
         positionInResponse?: number;
+        sentiment?: "positive" | "neutral" | "negative";
     };
     citation?: {
         cited: boolean;
@@ -63,6 +62,15 @@ function analyzeCitationQuality(content: string, domainOrIdentity: string | Bran
         "leading", "top-rated", "best", "trusted",
     ];
     const isAuthoritative = authorityPhrases.some((p) => lower.includes(p));
+
+    const negativePhrases = [
+        "outdated", "expensive", "poor", "lacks", "slow", "limited", "issues", "complaints", "weak"
+    ];
+    const isNegative = negativePhrases.some((p) => lower.includes(p));
+
+    const sentiment: "positive" | "neutral" | "negative" = isNegative
+        ? "negative"
+        : (isAuthoritative || positionScore >= 60 ? "positive" : "neutral");
 
     let mentionCount = 0;
     for (const variant of identity.variants) {
@@ -91,7 +99,7 @@ function analyzeCitationQuality(content: string, domainOrIdentity: string | Bran
         }
     }
 
-    return { positionScore, isAuthoritative, mentionCount, context, positionInResponse };
+    return { positionScore, isAuthoritative, mentionCount, context, positionInResponse, sentiment };
 }
 
 export { analyzeCitationQuality };
@@ -105,9 +113,6 @@ export async function checkGeminiMention(
         return { model: "Gemini", mentioned: false, confidence: 0, details: "Gemini API key missing" };
     }
 
-    const cacheKey = `Gemini:${domain}:${coreServices ?? ""}`;
-    return semanticMentionCheck(cacheKey, async () => {
-    return cachedMentionCheck("Gemini", domain, coreServices, async (_d, _svcs) => {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
         const identity = extractBrandIdentity(domain, brandNameOverride);
@@ -130,16 +135,12 @@ export async function checkGeminiMention(
             }
         `;
 
-        // Use Google Search grounding so the check reflects real user behaviour
-        // on gemini.google.com, which browses the live web — not frozen training data.
         const result = await ai.models.generateContent({
             model: AI_MODELS.GEMINI_PRO,
             contents: prompt,
             config: {
                 temperature: 0.1,
                 tools: [{ googleSearch: {} }],
-                // Note: responseMimeType cannot be used with googleSearch grounding;
-                // JSON is parsed from the text response instead.
             },
         });
 
@@ -166,8 +167,6 @@ export async function checkGeminiMention(
         const confidenceTier  = classifyMentionConfidence(prominenceScore);
         const lowConfidence   = confidenceTier === "low_confidence";
 
-        // Gap 2: fire-and-forget LOW_CONFIDENCE_MENTION event so the dashboard
-        // can surface borderline detections for human review without blocking.
         if (lowConfidence && domain) {
             prisma.site.findFirst({ where: { domain }, select: { id: true } })
                 .then(site => {
@@ -185,7 +184,7 @@ export async function checkGeminiMention(
                         },
                     });
                 })
-                .catch(() => { /* non-fatal */ });
+                .catch(() => { });
         }
 
         return {
@@ -194,8 +193,8 @@ export async function checkGeminiMention(
             confidence: mentioned ? (quality?.positionScore || data.confidence || 0) : 0,
             details: description,
             quality,
-            lowConfidence,
             positionInResponse: quality?.positionInResponse !== -1 ? quality?.positionInResponse : undefined,
+            sentiment: quality?.sentiment,
         };
     } catch (error: unknown) {
         logger.error("[Multi-Model] Gemini mention check failed:", {
@@ -208,8 +207,6 @@ export async function checkGeminiMention(
             details: "Check failed due to parsing error or timeout.",
         };
     }
-    });
-    });
 }
 
 export async function checkPerplexityMention(
@@ -250,6 +247,8 @@ export async function checkPerplexityMention(
                     : `Not cited. Perplexity retrieved: ${result.competitorsCited.slice(0, 3).join(", ") || "no competitors identified"}`,
             quality,
             positionInResponse: quality?.positionInResponse !== -1 ? quality?.positionInResponse : (result.citationPosition ?? undefined),
+            sentiment: quality?.sentiment,
+            linkedSourceUrls: result.citationUrl ? [result.citationUrl] : [],
             citation: {
                 cited: result.cited,
                 citationPosition: result.citationPosition,
@@ -277,7 +276,7 @@ export async function auditMultiModelMentions(domain: string, coreServices?: str
         return parsed as { results: MentionResult[]; overallScore: number };
     }
 
-    const [geminiSettled, perplexitySettled, chatgptSettled, claudeSettled, grokSettled, copilotSettled] =
+    const [geminiSettled, perplexitySettled, chatgptSettled, claudeSettled, grokSettled, copilotSettled, deepseekSettled] =
         await Promise.allSettled([
             cachedMentionCheck("Gemini",     domain, coreServices, (d, s) => checkGeminiMention(d, s, brandNameOverride)),
             cachedMentionCheck("Perplexity", domain, coreServices, (d, s) => checkPerplexityMention(d, s, brandNameOverride)),
@@ -285,6 +284,7 @@ export async function auditMultiModelMentions(domain: string, coreServices?: str
             cachedMentionCheck("Claude",     domain, coreServices, checkClaudeMention),
             cachedMentionCheck("Grok",       domain, coreServices, checkGrokMention),
             cachedMentionCheck("Copilot",    domain, coreServices, checkCopilotMention),
+            cachedMentionCheck("DeepSeek",   domain, coreServices, checkDeepSeekMention),
         ]);
 
     const toResult = (settled: PromiseSettledResult<MentionResult>, engineName: string): MentionResult =>
@@ -304,12 +304,13 @@ export async function auditMultiModelMentions(domain: string, coreServices?: str
         toResult(claudeSettled, "Claude"),
         toResult(grokSettled, "Grok"),
         toResult(copilotSettled, "Copilot"),
+        toResult(deepseekSettled, "DeepSeek"),
     ];
 
-    const cacheHits = [geminiSettled, perplexitySettled, chatgptSettled, claudeSettled, grokSettled, copilotSettled]
+    const cacheHits = [geminiSettled, perplexitySettled, chatgptSettled, claudeSettled, grokSettled, copilotSettled, deepseekSettled]
         .filter((s) => s.status === "fulfilled" && (s.value as MentionResult & { fromCache?: boolean }).fromCache)
         .length;
-    logger.debug("[MultiModel] Cache", { domain, cacheHits, liveCalls: 6 - cacheHits });
+    logger.debug("[MultiModel] Cache", { domain, cacheHits, liveCalls: 7 - cacheHits });
 
     const score = results.reduce((acc, curr) => acc + (curr.mentioned ? curr.confidence : 0), 0) / results.length;
     const output = { results, overallScore: Math.round(score) };

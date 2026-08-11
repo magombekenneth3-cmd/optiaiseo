@@ -387,6 +387,93 @@ export const SchemaModule: AuditModule = {
             });
         }
 
+        // Rich Results Test API — Google's official schema validator
+        const richTestApiKey = process.env.PAGESPEED_API_KEY;
+        const richResultEligibleTypes = [...detectedTypeNames].filter(t => RICH_RESULT_ELIGIBLE.has(t));
+
+        if (richTestApiKey && richResultEligibleTypes.length > 0) {
+            const richTestResult = await (async () => {
+                const richCacheKey = `rich-results:v1:${context.url}`;
+                try {
+                    const { redis: redisClient } = await import('@/lib/redis');
+                    const cached = await redisClient.get(richCacheKey);
+                    if (cached) return JSON.parse(cached as string) as { richResultsFound?: boolean; detectedItems?: Array<{ richResultType?: string; items?: Array<{ issues?: Array<{ type?: string; issueMessage?: string; severity?: string }> }> }> };
+                } catch { }
+
+                try {
+                    const res = await fetch(
+                        `https://searchconsole.googleapis.com/v1/urlTestingTools/richResultsTest:run?url=${encodeURIComponent(context.url)}&key=${richTestApiKey}`,
+                        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(20000) }
+                    );
+                    if (!res.ok) return null;
+                    const data = await res.json() as { richResultsFound?: boolean; detectedItems?: Array<{ richResultType?: string; items?: Array<{ issues?: Array<{ type?: string; issueMessage?: string; severity?: string }> }> }> };
+                    try {
+                        const { redis: redisClient } = await import('@/lib/redis');
+                        await redisClient.set(richCacheKey, JSON.stringify(data), { ex: 86400 });
+                    } catch { }
+                    return data;
+                } catch { return null; }
+            })();
+
+            if (richTestResult) {
+                const richErrors: string[] = [];
+                const richWarnings: string[] = [];
+
+                (richTestResult.detectedItems ?? []).forEach(detected => {
+                    (detected.items ?? []).forEach(item => {
+                        (item.issues ?? []).forEach(issue => {
+                            const msg = `[${detected.richResultType}] ${issue.issueMessage ?? 'Unknown issue'}`;
+                            if (issue.severity === 'ERROR') richErrors.push(msg);
+                            else if (issue.severity === 'WARNING') richWarnings.push(msg);
+                        });
+                    });
+                });
+
+                const richStatus: 'Pass' | 'Warning' | 'Fail' =
+                    richErrors.length > 0 ? 'Fail'
+                    : richWarnings.length > 0 ? 'Warning'
+                    : 'Pass';
+
+                items.push({
+                    id: 'schema-rich-results-test',
+                    label: 'Rich Results Test (Google Official)',
+                    status: richStatus,
+                    finding: richStatus === 'Pass'
+                        ? `Google Rich Results Test passed for ${richResultEligibleTypes.join(', ')} — all eligible schema types are valid and rich-result-ready.`
+                        : richErrors.length > 0
+                            ? `Google Rich Results Test found ${richErrors.length} blocking error(s) and ${richWarnings.length} warning(s):\n• ${richErrors.slice(0, 5).join('\n• ')}${richWarnings.length > 0 ? `\n⚠ Warnings: ${richWarnings.slice(0, 3).join(', ')}` : ''}`
+                            : `Google Rich Results Test found ${richWarnings.length} warning(s) (no blocking errors):\n• ${richWarnings.slice(0, 5).join('\n• ')}`,
+                    recommendation: richStatus !== 'Pass' ? {
+                        text: richErrors.length > 0
+                            ? `Fix blocking schema errors to restore rich result eligibility. Each ERROR means Google will NOT show a rich snippet for that type. Validate at search.google.com/test/rich-results and fix the flagged fields.`
+                            : `Address schema warnings to maximise rich result appearance rate. Warnings do not block eligibility but reduce display frequency.`,
+                        priority: richStatus === 'Fail' ? 'High' : 'Medium',
+                    } : undefined,
+                    roiImpact: 90,
+                    aiVisibilityImpact: 95,
+                    details: {
+                        richResultsFound: richTestResult.richResultsFound ?? false,
+                        eligibleTypes: richResultEligibleTypes.join(', '),
+                        blockingErrors: richErrors.length,
+                        warnings: richWarnings.length,
+                    } as Record<string, string | number | boolean>,
+                });
+            } else {
+                items.push({
+                    id: 'schema-rich-results-test',
+                    label: 'Rich Results Test (Google Official)',
+                    status: 'Warning',
+                    finding: 'Could not reach Google Rich Results Test API. Schema may be valid but official validation was not completed.',
+                    recommendation: {
+                        text: 'Validate your schema manually at search.google.com/test/rich-results. Ensure PAGESPEED_API_KEY is set and has the Search Console API enabled.',
+                        priority: 'Medium',
+                    },
+                    roiImpact: 80,
+                    aiVisibilityImpact: 85,
+                });
+            }
+        }
+
         const { score, passed, failed, warnings } = calculateScore(items);
 
         return {

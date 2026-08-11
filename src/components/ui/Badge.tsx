@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-export type BadgeVariant = "neutral" | "success" | "warning" | "danger" | "info";
+export type BadgeVariant = "neutral" | "success" | "warning" | "danger" | "info" | "outline";
 
 const variantCls: Record<BadgeVariant, string> = {
     neutral: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
@@ -8,6 +8,7 @@ const variantCls: Record<BadgeVariant, string> = {
     warning: "bg-amber-500/10 text-amber-400 border-amber-500/20",
     danger:  "bg-rose-500/10 text-rose-400 border-rose-500/20",
     info:    "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    outline: "bg-transparent text-foreground border-border hover:bg-muted/50",
 };
 
 export function Badge({

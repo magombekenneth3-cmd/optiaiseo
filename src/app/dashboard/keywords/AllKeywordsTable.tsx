@@ -91,7 +91,7 @@ export function AllKeywordsTable({ keywords, siteId }: Props) {
     ];
 
     return (
-        <div className="rounded-2xl border border-[#30363d] bg-[#0d1117] overflow-hidden">
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
             {/* Header controls */}
             <div className="flex flex-col gap-3 px-5 py-4 border-b border-[#21262d]">
                 <div className="flex items-center gap-3 flex-wrap">

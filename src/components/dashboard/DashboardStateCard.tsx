@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { Globe, Zap, ClipboardList, Loader2, CheckCircle, ChevronRight, Sparkles } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export type DashboardState =
     | "no_site"
@@ -45,7 +47,7 @@ export function DashboardStateCard({
                 <Link
                     href="/dashboard/sites/new"
                     id="state-add-site"
-                    className="inline-flex items-center gap-2 btn-primary px-5 py-2.5 rounded-xl text-sm font-semibold"
+                    className={cn(buttonVariants({ size: "lg" }), "rounded-xl font-semibold px-5 py-2.5")}
                 >
                     Add your site <ChevronRight className="w-4 h-4" />
                 </Link>
@@ -71,7 +73,7 @@ export function DashboardStateCard({
                 <Link
                     href={siteId ? `/dashboard/audits?siteId=${siteId}` : "/dashboard/audits"}
                     id="state-run-audit"
-                    className="inline-flex items-center gap-2 btn-primary px-5 py-2.5 rounded-xl text-sm font-semibold"
+                    className={cn(buttonVariants({ size: "lg" }), "rounded-xl font-semibold px-5 py-2.5")}
                 >
                     <Zap className="w-4 h-4" /> Start audit
                 </Link>
@@ -108,7 +110,7 @@ export function DashboardStateCard({
                         <Link
                             href={`/dashboard/audits?siteId=${siteId}&issueId=${topIssueId}`}
                             id="state-view-fix"
-                            className="inline-flex items-center gap-1.5 btn-primary px-4 py-2 rounded-lg text-sm font-semibold"
+                            className={cn(buttonVariants(), "rounded-lg font-semibold px-4 py-2")}
                         >
                             View fix <ChevronRight className="w-3.5 h-3.5" />
                         </Link>
@@ -116,7 +118,7 @@ export function DashboardStateCard({
                     <Link
                         href="/dashboard/voice"
                         id="state-ask-aria"
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border bg-muted/60 text-sm font-medium text-foreground hover:bg-muted hover:border-border transition-colors"
+                        className={cn(buttonVariants({ variant: "outline" }), "rounded-lg font-medium px-4 py-2")}
                     >
                         Ask Aria to fix it
                     </Link>
@@ -184,14 +186,14 @@ export function DashboardStateCard({
                     <Link
                         href={siteId ? `/dashboard/aeo?siteId=${siteId}` : "/dashboard/aeo"}
                         id="state-aeo-audit"
-                        className="inline-flex items-center gap-2 btn-primary px-5 py-2.5 rounded-xl text-sm font-semibold"
+                        className={cn(buttonVariants({ size: "lg" }), "rounded-xl font-semibold px-5 py-2.5")}
                     >
                         <Sparkles className="w-4 h-4" /> Run AEO Audit
                     </Link>
                     <Link
                         href="/dashboard/blogs"
                         id="state-generate-content"
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border bg-muted/60 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                        className={cn(buttonVariants({ variant: "outline", size: "lg" }), "rounded-xl font-medium px-5 py-2.5")}
                     >
                         Generate Content
                     </Link>

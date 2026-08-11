@@ -172,6 +172,9 @@ export async function middleware(request: NextRequest) {
         const isStrict = STRICT_PATHS.some((p) => pathname.startsWith(p));
         const isAi = AI_PATHS.some((p) => pathname.startsWith(p));
 
+        const authHeader = request.headers.get("authorization");
+        const bearerKey = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+
         let identifier: string;
         let limiter: Ratelimit;
 
@@ -181,6 +184,9 @@ export async function middleware(request: NextRequest) {
         } else if (isAi) {
             identifier = token?.id ? `ai:${token.id as string}:${pathname}` : `ai:${ip}:${pathname}`;
             limiter = limiters.limiterAi;
+        } else if (bearerKey) {
+            identifier = `apikey:${bearerKey.slice(0, 16)}`;
+            limiter = limiters.limiterAuthed;
         } else {
             if (token?.id) {
                 identifier = `uid:${token.id as string}`;

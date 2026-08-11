@@ -38,6 +38,7 @@ import {
   WinCelebrationToast,
   ReAuditNudge,
 } from "@/components/dashboard/DashboardClientWidgets";
+import { DashboardHeroHeader } from "@/components/dashboard/DashboardHeroHeader";
 import { getDashboardUser } from "@/lib/auth/dashboard-context";
 
 export const dynamic = "force-dynamic";
@@ -323,6 +324,18 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-8 w-full max-w-6xl mx-auto">
+      {/* ── Top Fold: Health → Change → Next Action ───────────────────── */}
+      <DashboardHeroHeader
+        domain={primarySiteDomain ?? user.sites[0]?.domain ?? ""}
+        lastAuditDate={audits[0] ? new Date(audits[0].runTimestamp).toLocaleDateString() : null}
+        seoScore={avgSeoScore}
+        aeoScore={aeoScore}
+        clicksDeltaPct={organicTrafficDelta !== null ? Math.round(organicTrafficDelta) : null}
+        rankDelta={rankWin ? rankWin.delta : null}
+        pendingPrsCount={pendingPrsCount}
+        siteId={primarySiteId}
+        statusHeadline={statusHeadline}
+      />
 
       {/* ── Value Created Banner (ROI proof) ──────────────────────────── */}
       {!isNewUser && (
