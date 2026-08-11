@@ -113,9 +113,11 @@ export function rankGrowthDecisions(
         }
 
         const executionPlan = buildExecutionPlan(action, opp, intel);
+        const decisionId = `dec:${siteId}:${encodeURIComponent(opp.url)}`;
+        const evidenceSnapshotId = (opp as unknown as { evidenceSnapshotId?: string }).evidenceSnapshotId ?? `snap-${siteId}-default`;
 
         decisions.push({
-            id: `dec:${siteId}:${encodeURIComponent(opp.url)}`,
+            id: decisionId,
             siteId,
             url: opp.url,
             primaryKeyword: opp.keyword,
@@ -135,7 +137,17 @@ export function rankGrowthDecisions(
                     confidence: 85
                 }
             },
-            executionPlan
+            executionPlan,
+            traceability: {
+                decisionId,
+                siteId,
+                actionType: action,
+                rankerVersion: "ranker-v1.0.0",
+                weightsVersion: "weights-v1.0.0",
+                featureSetVersion: "gsc-lh-aeo-v1",
+                evidenceSnapshotId,
+                generatedAt: new Date().toISOString(),
+            }
         });
     }
 

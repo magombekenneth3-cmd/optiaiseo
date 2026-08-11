@@ -107,6 +107,17 @@ export interface OpportunityIntelligence {
     commercialValueScore: number; // 0-100
 }
 
+export interface DecisionTraceability {
+    decisionId: string;
+    siteId: string;
+    actionType: GrowthAction;
+    rankerVersion: string;
+    weightsVersion: string;
+    featureSetVersion: string;
+    evidenceSnapshotId: string;
+    generatedAt: string;
+}
+
 export interface GrowthDecision {
     id: string;
     siteId: string;
@@ -128,4 +139,5 @@ export interface GrowthDecision {
         action: string;
         expectedOutcome: string;
     }>;
+    traceability: DecisionTraceability;
 }
