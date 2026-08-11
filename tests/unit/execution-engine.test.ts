@@ -8,7 +8,7 @@ describe("Autonomous Growth Decision Execution Engine Unit Tests", () => {
         expect(result).toBeDefined();
         expect(result.decisionId).toBe("non-existent-dec-123");
         expect(result.siteId).toBe("site-123");
-        expect(result.success).toBe(true);
+        expect(result.success).toBe(false);
         expect(result.details).toBeDefined();
     }, 15000);
 
