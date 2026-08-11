@@ -52,6 +52,21 @@ export async function submitIndexNow(
     }
 }
 
+import { reserveGoogleQuotaAtomic } from "./indexnow-lua";
+import Redis from "ioredis";
+
+let redisInstance: Redis | null = null;
+function getRedisClient(): Redis | null {
+    if (redisInstance) return redisInstance;
+    if (!process.env.REDIS_URL) return null;
+    try {
+        redisInstance = new Redis(process.env.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1 });
+        return redisInstance;
+    } catch {
+        return null;
+    }
+}
+
 export async function submitGoogleIndexingApi(
     urls: string[]
 ): Promise<boolean> {
@@ -62,10 +77,24 @@ export async function submitGoogleIndexingApi(
             return true;
         }
 
-        // Chunk URLs into max 10 URLs per payload to prevent rate limits
+        // Atomic Lua Quota Reservation (max 200 URLs/day)
+        const redis = getRedisClient();
+        let allowedUrls = urls;
+        if (redis) {
+            const today = new Date().toISOString().slice(0, 10);
+            const quotaKey = `indexing:google:quota:${today}`;
+            const reserved = await reserveGoogleQuotaAtomic(redis, quotaKey, 200, urls.length);
+            if (reserved === 0) {
+                logger.warn("[InstantIndexing] Daily Google quota exhausted. Deferring all URLs.", { total: urls.length });
+                return false;
+            }
+            allowedUrls = urls.slice(0, reserved);
+        }
+
+        // Chunk URLs into max 10 URLs per payload
         const CHUNK_SIZE = 10;
-        for (let i = 0; i < urls.length; i += CHUNK_SIZE) {
-            const chunk = urls.slice(i, i + CHUNK_SIZE);
+        for (let i = 0; i < allowedUrls.length; i += CHUNK_SIZE) {
+            const chunk = allowedUrls.slice(i, i + CHUNK_SIZE);
             if (i > 0) {
                 await new Promise((resolve) => setTimeout(resolve, 100));
             }

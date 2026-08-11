@@ -4,14 +4,16 @@ import {
     GrowthAction,
     ExplainableScore,
     DeterministicWhyNowSignal,
-    OpportunityIntelligence
+    OpportunityIntelligence,
+    DecisionTraceability
 } from "./types";
 import { buildExecutionPlan } from "@/lib/growth/execution-planner";
 
 export function rankGrowthDecisions(
     siteId: string,
     consolidated: ConsolidatedOpportunity[],
-    intelligenceMap: Map<string, OpportunityIntelligence> = new Map()
+    intelligenceMap: Map<string, OpportunityIntelligence> = new Map(),
+    contextOverride?: Partial<DecisionTraceability>
 ): GrowthDecision[] {
     const decisions: GrowthDecision[] = [];
 
@@ -142,10 +144,10 @@ export function rankGrowthDecisions(
                 decisionId,
                 siteId,
                 actionType: action,
-                rankerVersion: "ranker-v1.0.0",
-                weightsVersion: "weights-v1.0.0",
-                featureSetVersion: "gsc-lh-aeo-v1",
-                evidenceSnapshotId,
+                rankerVersion: contextOverride?.rankerVersion ?? "ranker-v1.0.0",
+                weightsVersion: contextOverride?.weightsVersion ?? "weights-v1.0.0",
+                featureSetVersion: contextOverride?.featureSetVersion ?? "gsc-lh-aeo-v1",
+                evidenceSnapshotId: contextOverride?.evidenceSnapshotId ?? evidenceSnapshotId,
                 generatedAt: new Date().toISOString(),
             }
         });

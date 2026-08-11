@@ -1440,3 +1440,30 @@ model RssSocialPost {
   @@unique([siteId, articleUrl])
   @@index([siteId])
 }
+
+model EvidenceSnapshot {
+  evidenceSnapshotId String   @id
+  siteId             String
+  createdAt          DateTime @default(now())
+  inputHash          String
+  canonicalPayload   Json
+  featureSetVersion  String   @default("gsc-lh-aeo-v1")
+  checksum           String
+
+  @@index([siteId, createdAt(sort: Desc)])
+  @@index([inputHash])
+}
+
+model RankerSnapshot {
+  rankerVersion     String   @id
+  weightsVersion    String
+  featureSetVersion String
+  configuration     Json
+  createdAt         DateTime @default(now())
+  createdBy         String   @default("system")
+  status            String   @default("INACTIVE")
+  parentVersion     String?
+  checksum          String
+
+  @@index([status])
+}

@@ -12,7 +12,7 @@ export async function POST(req: Request) {
         }
 
         const body = await req.json().catch(() => ({})) as { targetVersion?: string };
-        const result = rollbackRanker(body.targetVersion);
+        const result = await rollbackRanker(body.targetVersion);
 
         logger.info("[RankerRollback] Rollback executed successfully", {
             user: session.user.email,
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
             activeVersion: result.activeVersion,
             previousVersion: result.previousVersion,
             auditId: result.auditId,
-            currentRanker: getActiveRanker(),
+            currentRanker: await getActiveRanker(),
         });
     } catch (err: unknown) {
         logger.error("[RankerRollback] Rollback failed", { error: (err as Error)?.message || String(err) });

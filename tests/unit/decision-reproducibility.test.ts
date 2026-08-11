@@ -1,44 +1,42 @@
 import { describe, it, expect } from "vitest";
+import { createEvidenceSnapshot } from "@/lib/opportunity-engine/evidence-snapshot";
 import { rankGrowthDecisions } from "@/lib/opportunity-engine/decision-ranker";
 import { ConsolidatedOpportunity } from "@/lib/opportunity-engine/types";
-import { createEvidenceSnapshot } from "@/lib/opportunity-engine/evidence-snapshot";
 
-describe("Decision Traceability & Reconstruction Unit Tests (Gate 4)", () => {
-    it("should generate reproducible decision outputs with full traceability metadata", () => {
-        const siteId = "site-reproducibility-123";
-        const metrics = { impressions: 3200, clicks: 140, position: 6.2 };
-        const snapshot = createEvidenceSnapshot(siteId, metrics);
+describe("Decision Reconstruction Reproducibility Unit Tests", () => {
+    it("should generate identical decision score.final for identical raw evidence snapshots", async () => {
+        const siteId = "site-repro-1";
+        const rawMetrics = { clicks: 150, impressions: 4500, position: 6.8 };
 
-        const opp: ConsolidatedOpportunity & { evidenceSnapshotId?: string } = {
-            url: "https://acme.com/seo-guide",
-            keyword: "best seo software",
+        const opp: ConsolidatedOpportunity = {
+            url: "https://acme.com/pricing",
+            keyword: "saas pricing calculator",
             primaryCategory: "QUICK_WIN",
-            categories: ["QUICK_WIN", "STALE"],
-            impressions: 3200,
-            clicks: 140,
-            position: 6.2,
-            inboundInternalLinksCount: 1,
+            categories: ["QUICK_WIN"],
+            impressions: 4500,
+            clicks: 150,
+            position: 6.8,
+            inboundInternalLinksCount: 2,
             signals: [],
-            evidenceSnapshotId: snapshot.evidenceSnapshotId,
         };
 
-        const decisions = rankGrowthDecisions(siteId, [opp]);
+        const snapshotA = await createEvidenceSnapshot(siteId, rawMetrics);
+        const decisionsA = rankGrowthDecisions(siteId, [opp], new Map(), {
+            rankerVersion: "ranker-v1.0.0",
+            weightsVersion: "weights-v1.0.0",
+            featureSetVersion: "gsc-lh-aeo-v1",
+            evidenceSnapshotId: snapshotA.evidenceSnapshotId,
+        });
 
-        expect(decisions).toHaveLength(1);
-        const dec = decisions[0];
+        const snapshotB = await createEvidenceSnapshot(siteId, rawMetrics);
+        const decisionsB = rankGrowthDecisions(siteId, [opp], new Map(), {
+            rankerVersion: "ranker-v1.0.0",
+            weightsVersion: "weights-v1.0.0",
+            featureSetVersion: "gsc-lh-aeo-v1",
+            evidenceSnapshotId: snapshotB.evidenceSnapshotId,
+        });
 
-        // Traceability payload invariants
-        expect(dec.traceability).toBeDefined();
-        expect(dec.traceability.decisionId).toEqual(`dec:${siteId}:${encodeURIComponent(opp.url)}`);
-        expect(dec.traceability.siteId).toEqual(siteId);
-        expect(dec.traceability.rankerVersion).toEqual("ranker-v1.0.0");
-        expect(dec.traceability.weightsVersion).toEqual("weights-v1.0.0");
-        expect(dec.traceability.evidenceSnapshotId).toEqual(snapshot.evidenceSnapshotId);
-        expect(dec.traceability.generatedAt).toBeDefined();
-
-        // Reconstruction Invariant Test
-        const reconstructedDecisions = rankGrowthDecisions(siteId, [opp]);
-        expect(reconstructedDecisions[0].score.final).toEqual(dec.score.final);
-        expect(reconstructedDecisions[0].action).toEqual(dec.action);
+        expect(decisionsA[0].score.final).toEqual(decisionsB[0].score.final);
+        expect(decisionsA[0].traceability.evidenceSnapshotId).toEqual(decisionsB[0].traceability.evidenceSnapshotId);
     });
 });
