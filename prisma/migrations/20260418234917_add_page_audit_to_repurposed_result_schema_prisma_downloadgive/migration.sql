@@ -127,4 +127,4 @@ ALTER TABLE "TrackedQuery" ADD CONSTRAINT "TrackedQuery_siteId_fkey" FOREIGN KEY
 ALTER TABLE "QueryResult" ADD CONSTRAINT "QueryResult_trackedQueryId_fkey" FOREIGN KEY ("trackedQueryId") REFERENCES "TrackedQuery"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- RenameIndex
-ALTER INDEX "SeedKeyword_source_discoveredAt_idx" RENAME TO "SeedKeyword_siteId_source_discoveredAt_idx";
+ALTER INDEX IF EXISTS "SeedKeyword_source_discoveredAt_idx" RENAME TO "SeedKeyword_siteId_source_discoveredAt_idx";

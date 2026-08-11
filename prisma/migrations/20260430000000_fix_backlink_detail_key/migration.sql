@@ -9,9 +9,10 @@
 --   - The new UNIQUE constraint build may take a few minutes on large tables
 --     but does NOT lock the table for reads.
 
--- 1. Drop the old narrow unique constraint
+-- 1. Drop the old narrow unique constraint (and target constraint if already present)
 ALTER TABLE "BacklinkDetail"
-    DROP CONSTRAINT IF EXISTS "BacklinkDetail_siteId_srcDomain_key";
+    DROP CONSTRAINT IF EXISTS "BacklinkDetail_siteId_srcDomain_key",
+    DROP CONSTRAINT IF EXISTS "BacklinkDetail_siteId_srcDomain_anchorText_key";
 
 -- 2. Add the targetUrl column (nullable at first for backward compat, then we set a default)
 ALTER TABLE "BacklinkDetail"
