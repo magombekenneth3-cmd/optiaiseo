@@ -229,6 +229,8 @@ model Site {
   competitorAlerts       CompetitorAlert[]
   campaigns              Campaign[]
   growthDecisions        GrowthDecision[]
+  competitorAlertLogs    CompetitorAlertLog[]
+  evidenceSnapshots      EvidenceSnapshot[]
 
 
 
@@ -705,6 +707,7 @@ model CompetitorAlertLog {
   oldPos     Int
   newPos     Int
   sentAt     DateTime @default(now())
+  site       Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@unique([siteId, competitor, keyword, newPos])
   @@index([siteId, sentAt])
@@ -1449,6 +1452,7 @@ model EvidenceSnapshot {
   canonicalPayload   Json
   featureSetVersion  String   @default("gsc-lh-aeo-v1")
   checksum           String
+  site               Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId, createdAt(sort: Desc)])
   @@index([inputHash])
