@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { Zap, ArrowUpRight, TrendingUp, ShieldCheck, Activity, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -136,3 +138,4 @@ export function DashboardHeroHeader({
         </div>
     );
 }
+
