@@ -17,6 +17,7 @@ import {
     Github,
     BookOpen,
     Zap,
+    FlaskConical,
 } from "lucide-react";
 import {
     getFixRequirements,
@@ -79,6 +80,48 @@ function CopyButton({ text }: { text: string }) {
         >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
         </button>
+    );
+}
+
+
+/**
+ * Renders the structured `details` payload from an audit module as a compact
+ * evidence table. Keys are humanised automatically.
+ */
+function humaniseKey(key: string): string {
+    return key
+        .replace(/([A-Z])/g, " $1")
+        .replace(/[_-]/g, " ")
+        .replace(/^./, (c) => c.toUpperCase())
+        .trim();
+}
+
+function EvidencePanel({ details }: { details: Record<string, string | number | boolean> }) {
+    const entries = Object.entries(details).filter(
+        ([, v]) => v !== undefined && v !== null && v !== ""
+    );
+    if (entries.length === 0) return null;
+    return (
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/[0.03] p-4">
+            <div className="flex items-center gap-2 mb-3">
+                <FlaskConical className="w-3.5 h-3.5 text-blue-400" />
+                <h4 className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">
+                    Evidence
+                </h4>
+            </div>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+                {entries.map(([key, value]) => (
+                    <div key={key}>
+                        <dt className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
+                            {humaniseKey(key)}
+                        </dt>
+                        <dd className="text-xs text-foreground/80 font-mono break-all">
+                            {typeof value === "boolean" ? (value ? "Yes" : "No") : String(value)}
+                        </dd>
+                    </div>
+                ))}
+            </dl>
+        </div>
     );
 }
 
@@ -426,6 +469,10 @@ export function IssueRow({
                 {/* ── Expanded panel ── */}
                 {isExpanded && (
                     <div className="mx-5 mb-4 space-y-3">
+                        {/* Evidence — renders structured details from the audit module */}
+                        {issue.details && Object.keys(issue.details).length > 0 && (
+                            <EvidencePanel details={issue.details} />
+                        )}
 
                         {/* Recommendation */}
                         {hasFix && fixState.status === "idle" && (

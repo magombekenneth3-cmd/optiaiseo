@@ -15,6 +15,8 @@ import { getSiteBenchmarkContext } from "@/app/actions/benchmarks";
 import { BenchmarkPanel, BenchmarkPlaceholder } from "@/components/dashboard/BenchmarkPanel";
 import { CacheStatsWidget } from "@/components/dashboard/CacheStatsWidget";
 import { ContentDecayPanel } from "@/components/dashboard/ContentDecayPanel";
+import { SerpFeatureHistoryPanel } from "@/components/dashboard/SerpFeatureHistoryPanel";
+import { getAiOverviewStats, getSerpFeatureHistory } from "@/app/actions/serp-features";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -29,6 +31,12 @@ export default async function SiteDetailsPage({ params }: { params: Promise<{ id
     const { id } = await params;
     const siteResult = await getSite(id);
     const benchmarkContext = siteResult.success && siteResult.site ? await getSiteBenchmarkContext(siteResult.site.id) : null;
+    const [serpStats, serpHistory] = siteResult.success && siteResult.site
+        ? await Promise.all([
+            getAiOverviewStats(siteResult.site.id).catch(() => null),
+            getSerpFeatureHistory(siteResult.site.id, 90).catch(() => []),
+          ])
+        : [null, []];
 
     // Check if the user has GitHub OAuth connected (needed for auto-fix PRs)
     let githubOAuthConnected = false;
@@ -227,6 +235,12 @@ export default async function SiteDetailsPage({ params }: { params: Promise<{ id
                     </div>
 
                     <ContentDecayPanel siteId={site.id} />
+
+                    <SerpFeatureHistoryPanel
+                        siteId={site.id}
+                        stats={serpStats}
+                        history={serpHistory}
+                    />
 
                     <EntityPanel siteId={site.id} />
 

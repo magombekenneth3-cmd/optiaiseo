@@ -14,6 +14,7 @@ import { RevenueSimulator } from "@/components/dashboard/RevenueSimulator";
 import { KeywordClustersPanel } from "./KeywordClustersPanel";
 import { AllKeywordsTable } from "./AllKeywordsTable";
 import { estimateKeywordRoi } from "@/lib/keywords/roi";
+import { SerpFeatureHistoryPanel } from "./SerpFeatureHistoryPanel";
 
 const TABS = [
     { id: "keywords",    label: "All Keywords",label2: "Keywords", desc: "Full keyword rankings from Search Console" },
@@ -140,6 +141,8 @@ export function KeywordTabPanels({
                                 <div className="py-12 text-center text-[#6e7681] text-sm">Rank tracking is available on the Pro plan and above.</div>
                             )}
                             {hasShareOfVoice && <ShareOfVoiceChart siteId={siteId} />}
+                            {/* SERP Feature History — reads SerpFeatureSnapshot written by the weekly cron */}
+                            <SerpFeatureHistoryPanel siteId={siteId} />
                         </div>
                     </PanelErrorBoundary>
                 )}

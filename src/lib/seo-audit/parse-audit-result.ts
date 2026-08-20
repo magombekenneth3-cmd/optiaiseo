@@ -265,10 +265,21 @@ export interface NormalisedIssue {
     priorityScore: number;
     status?: string;
     finding?: string;
+    /** Raw structured evidence from the audit module (e.g. { value, length, canonicalUrl }). */
+    details?: Record<string, string | number | boolean>;
 }
 
 /** Converts ParsedAuditResult into the flat NormalisedIssue[] the dashboard UI expects. */
 export function toNormalisedIssues(parsed: ParsedAuditResult): NormalisedIssue[] {
+    // Build a lookup of details by itemId so we can attach them even when
+    // the recommendations[] path is used (which omits details from its source).
+    const detailsByItemId = new Map<string, Record<string, string | number | boolean>>();
+    for (const cat of parsed.categories) {
+        for (const item of cat.items) {
+            if (item.details && item.id) detailsByItemId.set(item.id, item.details);
+        }
+    }
+
     // Prefer recommendations[] (already priority-sorted with real scores)
     if (parsed.recommendations.length > 0) {
         return parsed.recommendations.map(
@@ -283,6 +294,7 @@ export function toNormalisedIssues(parsed: ParsedAuditResult): NormalisedIssue[]
                 aiVisibilityImpact: rec.aiVisibilityImpact,
                 priorityScore:      rec.priorityScore,
                 finding:            rec.finding,
+                details:            detailsByItemId.get(rec.itemId),
             })
         );
     }
@@ -306,6 +318,7 @@ export function toNormalisedIssues(parsed: ParsedAuditResult): NormalisedIssue[]
                     priorityScore:      Math.round(roi * 0.6 + aio * 0.4),
                     status:             item.status,
                     finding:            item.finding,
+                    details:            item.details,
                 };
             })
     );
