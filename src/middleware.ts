@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
+import { Redis } from "ioredis";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -27,7 +27,7 @@ function buildCsp(nonce: string): string {
         `style-src 'self' 'unsafe-inline'`,
         "img-src 'self' data: blob: https://images.unsplash.com https://lh3.googleusercontent.com https://avatars.githubusercontent.com https://cdn.hashnode.com",
         "font-src 'self' data:",
-        `connect-src 'self' https://api.stripe.com https://*.livekit.cloud wss://*.livekit.cloud https://generativelanguage.googleapis.com https://api.anthropic.com https://api.openai.com https://inn.gs https://*.inngest.com https://*.upstash.io https://api.resend.com https://api.serper.dev https://serpapi.com https://*.sentry.io https://o*.ingest.sentry.io${devConnectSrc}`,
+        `connect-src 'self' https://api.stripe.com https://*.livekit.cloud wss://*.livekit.cloud https://generativelanguage.googleapis.com https://api.anthropic.com https://api.openai.com https://inn.gs https://*.inngest.com https://api.resend.com https://api.serper.dev https://serpapi.com https://*.sentry.io https://o*.ingest.sentry.io${devConnectSrc}`,
         "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
         "object-src 'none'",
         "base-uri 'self'",
@@ -66,9 +66,7 @@ let limiterAi: Ratelimit | null = null;
 function getRedis(): Redis | null {
     if (redis) return redis;
     if (!process.env.REDIS_URL) return null;
-    redis = new Redis({
-        url: process.env.REDIS_URL,
-    });
+    redis = new Redis(process.env.REDIS_URL);
     return redis;
 }
 
