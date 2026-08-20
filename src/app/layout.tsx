@@ -53,6 +53,7 @@ export const metadata: Metadata = {
   keywords: [
     // High-volume, high-intent
     "SEO audit tool",
+    "Best seo tool",
     "free SEO checker",
     "website SEO analysis",
     "SEO audit free",
@@ -76,7 +77,7 @@ export const metadata: Metadata = {
     "AEO tool",
   ],
   verification: {
-    google: "gtmmekBMWygaQST6rDKl6Zj4wWCQbpPXos4zw_Hhkyg",
+    google: "DcH54oZclcEZRL5YAHqs1bLx36I6rGFXeDGXFIjmJjE",
   },
   openGraph: {
     type: "website",
