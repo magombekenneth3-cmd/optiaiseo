@@ -339,9 +339,8 @@ async function sitemapFromRobots(origin: string): Promise<string | null> {
   return match ? match[1].trim() : null;
 }
 
-async function fromHomepageCrawl(origin: string): Promise<string[]> {
-  const html = await safeGet(origin);
-  if (!html) return [];
+/** Extract same-origin internal links from an HTML string. */
+export function extractLinks(html: string, origin: string): string[] {
   const urls = new Set<string>();
   const hrefRe = /href=["']([^"'#?]+)["']/gi;
   let m: RegExpExecArray | null;
@@ -350,6 +349,58 @@ async function fromHomepageCrawl(origin: string): Promise<string[]> {
     if (abs && abs.startsWith(origin)) urls.add(abs);
   }
   return Array.from(urls);
+}
+
+/**
+ * Minimum link threshold before Playwright fallback is attempted.
+ * If a static homepage fetch returns fewer links than this, the page is
+ * likely a client-rendered SPA whose links are injected by JavaScript.
+ */
+const THIN_LINK_THRESHOLD = 3;
+
+async function fromHomepageCrawl(origin: string): Promise<string[]> {
+  const html = await safeGet(origin);
+  if (!html) return [];
+
+  const staticLinks = extractLinks(html, origin);
+
+  // If static crawl found enough links, return them immediately.
+  if (staticLinks.length >= THIN_LINK_THRESHOLD) {
+    return staticLinks;
+  }
+
+  // Thin link count — possibly a JS-rendered SPA.  Try Playwright if available.
+  try {
+    const { isPlaywrightAvailable, detectSpaSignatures } = await import("@/lib/crawler/index");
+    const spaResult = detectSpaSignatures(html);
+
+    if ((spaResult.isSpa || staticLinks.length === 0) && isPlaywrightAvailable()) {
+      logger.info(
+        `[crawler:homepage] Static crawl found only ${staticLinks.length} links` +
+        (spaResult.framework ? ` (${spaResult.framework} detected)` : "") +
+        " — re-fetching with Playwright"
+      );
+
+      const { fetchRenderedHtml } = await import("@/lib/crawler/browser");
+      const rendered = await fetchRenderedHtml(origin, 20_000);
+      if (rendered.html) {
+        const renderedLinks = extractLinks(rendered.html, origin);
+        if (renderedLinks.length > staticLinks.length) {
+          logger.info(
+            `[crawler:homepage] Playwright discovered ${renderedLinks.length} links (was ${staticLinks.length} static)`
+          );
+          return renderedLinks;
+        }
+      }
+    }
+  } catch (err) {
+    // Playwright unavailable or failed — non-fatal, use static links
+    logger.warn("[crawler:homepage] Playwright fallback failed (non-fatal):", {
+      error: (err as Error)?.message,
+    });
+  }
+
+  return staticLinks;
 }
 
 

@@ -13,6 +13,8 @@ import {
     ArrowDownRight,
     Minus,
     Globe,
+    Target,
+    FileText,
 } from "lucide-react";
 
 function fmt(n: number): string {
@@ -148,6 +150,20 @@ export function UnifiedAnalyticsPanel({ siteId }: { siteId: string }) {
                     </>
                 )}
             </div>
+
+            {ga4 && (ga4.conversions > 0 || ga4.pageviews > 0) && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 divide-x divide-[#21262d] border-t border-[#21262d]">
+                    <StatBox label="Conversions" value={fmt(ga4.conversions)} sub="GA4 key events" icon={Target} color="#f778ba" />
+                    <StatBox label="Pageviews" value={fmt(ga4.pageviews)} sub={`${ga4.users} users`} icon={FileText} color="#79c0ff" />
+                    <StatBox
+                        label="Conv. Rate"
+                        value={ga4.sessions > 0 ? `${((ga4.conversions / ga4.sessions) * 100).toFixed(1)}%` : "—"}
+                        sub={ga4.sessions > 0 ? `${ga4.conversions} / ${fmt(ga4.sessions)} sessions` : undefined}
+                        icon={ArrowUpRight}
+                        color={ga4.sessions > 0 && (ga4.conversions / ga4.sessions) > 0.02 ? "#2ea043" : "#d29922"}
+                    />
+                </div>
+            )}
 
             {merged && (
                 <div className="px-5 py-3 border-t border-[#21262d]">

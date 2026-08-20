@@ -1,16 +1,33 @@
 // =============================================================================
 // TECHNICAL SEO CRAWLER
-// Follows internal links (max depth 2) and finds technical SEO issues.
+// Follows internal links (max depth 4) and finds technical SEO issues.
 // READ ONLY — only makes GET requests, respects robots.txt.
+// Supports JS-rendered crawling via Playwright for SPA frameworks.
 // =============================================================================
 
 import { isSafeUrl } from "@/lib/security/safe-url";
+import { logger } from "@/lib/logger";
 
 export interface CrawlIssue {
     url: string
     type: "broken_link" | "redirect_chain" | "duplicate_title" | "missing_canonical" | "thin_content" | "slow_page" | "deep_click_depth" | "orphan_page"
     severity: "critical" | "warning"
     details: string
+}
+
+/**
+ * Options for the technical SEO crawl.
+ */
+export interface CrawlOptions {
+    maxPages?: number;
+    maxDepth?: number;
+    /**
+     * JS rendering strategy:
+     * - 'auto' (default): detect SPA markers in homepage raw HTML, switch to Playwright if found
+     * - 'always': use Playwright for every page fetch
+     * - 'never': plain fetch only (legacy behaviour)
+     */
+    jsRendering?: 'auto' | 'always' | 'never';
 }
 
 export interface CrawlResult {
@@ -25,11 +42,152 @@ export interface CrawlResult {
     deepPages: string[]
     linkGraph: { url: string; inboundCount: number; outboundCount: number; depth: number }[]
     scannedAt: Date
+    /** Whether Playwright JS rendering was active for this crawl. */
+    jsRendered: boolean
+    /** SPA framework detected in the homepage HTML, if any. */
+    spaFrameworkDetected: string | null
 }
 
 const DEFAULT_MAX_PAGES = 50
 const DEFAULT_MAX_DEPTH = 4
 const TIMEOUT_MS = 8000
+const JS_RENDER_TIMEOUT_MS = 20_000
+
+// ---------------------------------------------------------------------------
+// SPA Detection
+// ---------------------------------------------------------------------------
+
+interface SpaDetectionResult {
+    isSpa: boolean;
+    framework: string | null;
+}
+
+/**
+ * Analyse raw HTML for SPA framework markers.
+ * Returns whether the page appears to be a client-rendered SPA and which
+ * framework was detected (if any).
+ *
+ * Exported for testing — not part of the public crawl API.
+ */
+export function detectSpaSignatures(html: string): SpaDetectionResult {
+    // Next.js CSR / SSR hydration markers
+    if (html.includes('__NEXT_DATA__') || html.includes('_next/static') || html.includes('id="__next"')) {
+        // Next.js pages may be SSR or CSR — check if the body is thin
+        const bodyText = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ');
+        const wordCount = bodyText.split(/\s+/).filter(w => w.length > 2).length;
+        if (wordCount < 200) {
+            return { isSpa: true, framework: 'Next.js' };
+        }
+    }
+
+    // React SPA (CRA, Vite-React, etc.) — thin body with root mount point
+    if (
+        (html.includes('data-reactroot') || html.includes('id="root"')) &&
+        !html.includes('data-reactroot') // id="root" alone isn't conclusive — also check body
+    ) {
+        const bodyText = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ');
+        const wordCount = bodyText.split(/\s+/).filter(w => w.length > 2).length;
+        if (wordCount < 200) {
+            return { isSpa: true, framework: 'React' };
+        }
+    }
+    // Explicit React root attribute is strong signal
+    if (html.includes('data-reactroot')) {
+        const bodyText = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ');
+        const wordCount = bodyText.split(/\s+/).filter(w => w.length > 2).length;
+        if (wordCount < 200) {
+            return { isSpa: true, framework: 'React' };
+        }
+    }
+
+    // Vue / Nuxt markers
+    if (html.includes('__NUXT__') || html.includes('data-server-rendered')) {
+        const bodyText = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ');
+        const wordCount = bodyText.split(/\s+/).filter(w => w.length > 2).length;
+        if (wordCount < 200) {
+            return { isSpa: true, framework: 'Vue' };
+        }
+    }
+    if (/data-v-[a-f0-9]/i.test(html)) {
+        const bodyText = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ');
+        const wordCount = bodyText.split(/\s+/).filter(w => w.length > 2).length;
+        if (wordCount < 200) {
+            return { isSpa: true, framework: 'Vue' };
+        }
+    }
+
+    // Angular markers
+    if (html.includes('ng-version') || html.includes('ng-app')) {
+        const bodyText = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ');
+        const wordCount = bodyText.split(/\s+/).filter(w => w.length > 2).length;
+        if (wordCount < 200) {
+            return { isSpa: true, framework: 'Angular' };
+        }
+    }
+
+    // Generic SPA heuristic: very thin body with many script tags
+    const scriptCount = (html.match(/<script/gi) ?? []).length;
+    if (scriptCount > 3) {
+        const bodyText = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ');
+        const wordCount = bodyText.split(/\s+/).filter(w => w.length > 2).length;
+        if (wordCount < 100) {
+            return { isSpa: true, framework: null };
+        }
+    }
+
+    return { isSpa: false, framework: null };
+}
+
+// ---------------------------------------------------------------------------
+// Playwright-aware page fetch
+// ---------------------------------------------------------------------------
+
+/**
+ * Check whether Playwright rendering is available in the current environment.
+ */
+export function isPlaywrightAvailable(): boolean {
+    return !!(process.env.BROWSERLESS_URL || process.env.PLAYWRIGHT_ENABLED === 'true');
+}
+
+/**
+ * Fetch a page's HTML, optionally using Playwright for JS rendering.
+ * Falls back to plain fetch if Playwright is unavailable or errors.
+ */
+async function fetchPageHtml(
+    url: string,
+    usePlaywright: boolean,
+): Promise<{ html: string; renderTimeMs?: number } | null> {
+    if (usePlaywright) {
+        try {
+            const { fetchRenderedHtml } = await import('@/lib/crawler/browser');
+            const result = await fetchRenderedHtml(url, JS_RENDER_TIMEOUT_MS);
+            if (result.html && result.html.length > 0) {
+                return { html: result.html, renderTimeMs: result.jsRenderTimeMs };
+            }
+            // Rendered HTML was empty — fall through to plain fetch
+            logger.warn(`[Crawler] Playwright returned empty HTML for ${url} — falling back to plain fetch`);
+        } catch (err: unknown) {
+            // Playwright unavailable or page-level error — graceful degradation
+            logger.warn(`[Crawler] Playwright fetch failed for ${url}, falling back to plain fetch`, {
+                error: (err as Error)?.message,
+            });
+        }
+    }
+
+    // Plain fetch fallback
+    try {
+        const res = await fetch(url, {
+            redirect: 'follow',
+            headers: { 'User-Agent': 'SEOTool-Bot/1.0 (site audit; read-only)' },
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+        if (!res.ok) return null;
+        const html = await res.text();
+        return { html };
+    } catch {
+        return null;
+    }
+}
 
 const isAllowedByRobots = async (
     origin: string,
@@ -109,7 +267,7 @@ const followRedirects = async (
 
 export const crawlSite = async (
     domain: string,
-    options?: { maxPages?: number; maxDepth?: number }
+    options?: CrawlOptions
 ): Promise<CrawlResult> => {
     let origin: string
     try {
@@ -121,6 +279,7 @@ export const crawlSite = async (
 
     const maxPages = options?.maxPages ?? DEFAULT_MAX_PAGES
     const maxDepth = options?.maxDepth ?? DEFAULT_MAX_DEPTH
+    const jsRenderingMode = options?.jsRendering ?? 'auto'
 
     const visited = new Set<string>()
     const clickDepthMap: Record<string, number> = {}
@@ -136,6 +295,49 @@ export const crawlSite = async (
     const visitedExternal = new Set<string>()
 
     inboundCounts.set(origin, 1)
+
+    // -----------------------------------------------------------------------
+    // SPA detection (auto mode) — fetch homepage raw HTML once to decide
+    // whether Playwright rendering is needed for this site.
+    // -----------------------------------------------------------------------
+    let spaDetection: { isSpa: boolean; framework: string | null } | null = null;
+    let usePlaywright = false;
+
+    if (jsRenderingMode === 'always') {
+        usePlaywright = isPlaywrightAvailable();
+        if (!usePlaywright) {
+            logger.warn('[Crawler] jsRendering=always but Playwright is not available — falling back to plain fetch');
+        }
+    } else if (jsRenderingMode === 'auto') {
+        // Probe homepage with a quick plain fetch to check for SPA markers
+        try {
+            const probeRes = await fetch(origin, {
+                redirect: 'follow',
+                headers: { 'User-Agent': 'SEOTool-Bot/1.0 (site audit; read-only)' },
+                signal: AbortSignal.timeout(TIMEOUT_MS),
+            });
+            if (probeRes.ok) {
+                const probeHtml = await probeRes.text();
+                spaDetection = detectSpaSignatures(probeHtml);
+                if (spaDetection.isSpa && isPlaywrightAvailable()) {
+                    usePlaywright = true;
+                    logger.info(
+                        `[Crawler] SPA detected on ${origin}` +
+                        (spaDetection.framework ? ` (${spaDetection.framework})` : '') +
+                        ' — enabling Playwright rendering'
+                    );
+                } else if (spaDetection.isSpa) {
+                    logger.warn(
+                        `[Crawler] SPA detected on ${origin} but Playwright is not available — crawling with plain fetch`
+                    );
+                }
+            }
+        } catch {
+            // Homepage probe failed — proceed with plain fetch
+            logger.warn(`[Crawler] Homepage probe failed for ${origin} — proceeding without JS rendering`);
+        }
+    }
+    // jsRenderingMode === 'never' → usePlaywright stays false
 
     while (queue.length > 0 && visited.size < maxPages) {
         const item = queue.shift()
@@ -194,15 +396,10 @@ export const crawlSite = async (
             const resolvedGuard = isSafeUrl(finalUrl)
             if (!resolvedGuard.ok) continue
 
-            const pageRes = await fetch(finalUrl, {
-                redirect: "follow",
-                headers: { "User-Agent": "SEOTool-Bot/1.0 (site audit; read-only)" },
-                signal: AbortSignal.timeout(TIMEOUT_MS),
-            })
+            const pageResult = await fetchPageHtml(finalUrl, usePlaywright)
+            if (!pageResult) continue
 
-            if (!pageRes.ok) continue
-
-            const html = await pageRes.text()
+            const html = pageResult.html
 
             const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
             const pageTitle = titleMatch ? titleMatch[1].trim() : null
@@ -334,5 +531,7 @@ export const crawlSite = async (
         deepPages,
         linkGraph,
         scannedAt: new Date(),
+        jsRendered: usePlaywright,
+        spaFrameworkDetected: spaDetection?.framework ?? null,
     }
 }

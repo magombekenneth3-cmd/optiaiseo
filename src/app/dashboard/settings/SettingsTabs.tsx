@@ -8,6 +8,7 @@ import { ChangePasswordForm } from "./ChangePasswordForm";
 import { NotificationPreferencesForm } from "./NotificationPreferencesForm";
 import { SettingsClientExtras } from "./SettingsClientExtras";
 import { WordPressPluginPanel } from "./WordPressPluginPanel";
+import { Ga4ConnectForm } from "@/components/dashboard/Ga4ConnectForm";
 import { DeleteAccountButton } from "./DeleteAccountButton";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
@@ -30,6 +31,7 @@ interface Props {
     emailDigest: boolean;
     userId: string;
     firstSiteId: string;
+    firstSiteGa4PropertyId: string | null;
     planName: string;
     subscriptionTier: string;
 }
@@ -42,6 +44,7 @@ export function SettingsTabs({
     emailDigest,
     userId,
     firstSiteId,
+    firstSiteGa4PropertyId,
     planName,
     subscriptionTier,
 }: Props) {
@@ -123,7 +126,10 @@ export function SettingsTabs({
                 hidden={active !== "integrations"}
             >
                 {active === "integrations" && (
-                    <WordPressPluginPanel siteId={firstSiteId} />
+                    <div className="flex flex-col gap-6">
+                        <Ga4ConnectForm siteId={firstSiteId} currentPropertyId={firstSiteGa4PropertyId} />
+                        <WordPressPluginPanel siteId={firstSiteId} />
+                    </div>
                 )}
             </div>
 

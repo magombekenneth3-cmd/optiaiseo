@@ -26,7 +26,7 @@ export default async function SettingsPage() {
 
     const firstSite = await prisma.site.findFirst({
         where:   { userId: dbUser?.id ?? "" },
-        select:  { id: true },
+        select:  { id: true, ga4PropertyId: true },
         orderBy: { createdAt: "asc" },
     });
 
@@ -51,6 +51,7 @@ export default async function SettingsPage() {
                 emailDigest={emailDigest}
                 userId={dbUser?.id ?? ""}
                 firstSiteId={firstSite?.id ?? ""}
+                firstSiteGa4PropertyId={firstSite?.ga4PropertyId ?? null}
                 planName={getPlan(subscriptionTier).name}
                 subscriptionTier={subscriptionTier}
             />
