@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "ioredis";
+import { Redis } from "@upstash/redis";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -66,7 +66,9 @@ let limiterAi: Ratelimit | null = null;
 function getRedis(): Redis | null {
     if (redis) return redis;
     if (!process.env.REDIS_URL) return null;
-    redis = new Redis(process.env.REDIS_URL);
+    redis = new Redis({
+        url: process.env.REDIS_URL,
+    });
     return redis;
 }
 
