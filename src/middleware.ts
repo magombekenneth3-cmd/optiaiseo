@@ -65,17 +65,12 @@ let limiterAi: Ratelimit | null = null;
 
 function getRedis(): Redis | null {
     if (redis) return redis;
-    if (!process.env.REDIS_URL) return null;
-    
-    // Parse REDIS_URL (format: redis://:password@host:port)
-    const url = new URL(process.env.REDIS_URL);
-    const token = url.password || "";
-    const host = url.hostname || "localhost";
-    const port = parseInt(url.port || "6379", 10);
-    
+    // @upstash/redis requires the HTTPS REST URL — not a raw redis:// socket URL.
+    // REDIS_URL is legacy ioredis / docker-compose only; use the Upstash vars in production.
+    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) return null;
     redis = new Redis({
-        url: `https://${host}:${port}`,
-        token: token || "",
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
     });
     return redis;
 }
