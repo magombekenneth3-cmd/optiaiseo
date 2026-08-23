@@ -19,6 +19,11 @@ import {
   MousePointerClick,
   Eye,
   Activity,
+  Filter,
+  AlertTriangle,
+  Shield,
+  Zap,
+  LayoutGrid,
 } from "lucide-react";
 import type { BaselineMetrics, LiftMetrics } from "@/lib/experiments/tracker";
 
@@ -59,11 +64,50 @@ interface ExperimentsSummary {
   totalRevenueLift: number;
 }
 
+interface ActionInsight {
+  action: string;
+  totalExperiments: number;
+  completedExperiments: number;
+  avgPositionDelta: number;
+  avgClicksLiftPercent: number;
+  successRate: number;
+  totalRevenueLift: number;
+  label: string;
+}
+
+interface GscAlert {
+  severity: "warning" | "critical";
+  message: string;
+  suggestion: string;
+}
+
+interface GscHealthData {
+  lastSyncDate: string | null;
+  daysSinceSync: number;
+  totalDaysTracked: number;
+  missingDaysLast30: number;
+  dataFreshness: "fresh" | "stale" | "missing";
+  healthLabel: string;
+  alerts: GscAlert[];
+}
+
+interface InsightsData {
+  totalExperiments: number;
+  totalCompleted: number;
+  byAction: ActionInsight[];
+  bestAction: ActionInsight | null;
+  worstAction: ActionInsight | null;
+  recentTrend: string;
+  recentTrendLabel: string;
+}
+
 interface ExperimentsDashboardProps {
   domain: string;
   siteId: string;
   experiments: MergedExperiment[];
   summary: ExperimentsSummary;
+  insights?: InsightsData;
+  gscHealth?: GscHealthData;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -364,10 +408,14 @@ export function ExperimentsDashboard({
   siteId,
   experiments,
   summary,
+  insights,
+  gscHealth,
 }: ExperimentsDashboardProps) {
   const [evaluating, setEvaluating] = useState<string | null>(null);
   const [experimentList, setExperimentList] = useState(experiments);
   const [summaryData, setSummaryData] = useState(summary);
+  const [filterAction, setFilterAction] = useState<string>("ALL");
+  const [filterStatus, setFilterStatus] = useState<string>("ALL");
 
   async function handleEvaluate(experimentId: string) {
     setEvaluating(experimentId);
@@ -376,7 +424,6 @@ export function ExperimentsDashboard({
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.experiment) {
-          // Update the experiment in the list
           setExperimentList((prev) =>
             prev.map((exp) => {
               if (exp.experiment?.id === experimentId) {
@@ -394,7 +441,6 @@ export function ExperimentsDashboard({
             })
           );
 
-          // Update summary if completed
           if (data.experiment.status === "COMPLETED" && data.experiment.lift) {
             setSummaryData((prev) => ({
               ...prev,
@@ -407,6 +453,16 @@ export function ExperimentsDashboard({
     } catch { /* fail silently */ }
     setEvaluating(null);
   }
+
+  // Filtering
+  const actionTypes = [...new Set(experimentList.map((e) => e.action))];
+  const filteredExperiments = experimentList.filter((exp) => {
+    if (filterAction !== "ALL" && exp.action !== filterAction) return false;
+    if (filterStatus === "COMPLETED" && exp.experiment?.status !== "COMPLETED") return false;
+    if (filterStatus === "IN_PROGRESS" && (exp.experiment?.status === "COMPLETED" || !exp.experiment)) return false;
+    if (filterStatus === "READY" && !exp.experiment?.isReadyForEvaluation) return false;
+    return true;
+  });
 
   const hasExperiments = experimentList.length > 0;
 
@@ -427,21 +483,200 @@ export function ExperimentsDashboard({
         </div>
       </div>
 
+      {/* GSC Health Banner */}
+      {gscHealth && gscHealth.alerts.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {gscHealth.alerts.map((alert, i) => (
+            <div
+              key={i}
+              className={`flex items-start gap-3 p-3 rounded-xl border ${
+                alert.severity === "critical"
+                  ? "bg-rose-500/5 border-rose-500/20"
+                  : "bg-amber-500/5 border-amber-500/20"
+              }`}
+            >
+              <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${
+                alert.severity === "critical" ? "text-rose-400" : "text-amber-400"
+              }`} />
+              <div>
+                <p className={`text-[13px] font-medium ${
+                  alert.severity === "critical" ? "text-rose-300" : "text-amber-300"
+                }`}>
+                  {alert.message}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{alert.suggestion}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* GSC Health Status Bar */}
+      {gscHealth && gscHealth.dataFreshness !== "missing" && (
+        <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-accent/30 border border-border/30">
+          <Shield className={`w-4 h-4 ${
+            gscHealth.dataFreshness === "fresh" ? "text-emerald-400" : "text-amber-400"
+          }`} />
+          <span className="text-[12px] text-muted-foreground">{gscHealth.healthLabel}</span>
+          <span className="text-[11px] text-muted-foreground ml-auto">
+            {gscHealth.totalDaysTracked}/30 days tracked
+          </span>
+        </div>
+      )}
+
       {/* Summary */}
       {hasExperiments && <SummaryHeader summary={summaryData} />}
 
+      {/* Cross-Experiment Insights Panel */}
+      {insights && insights.totalCompleted >= 2 && (
+        <div className="card-surface p-5 flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-violet-400" />
+            <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">Cross-Experiment Insights</h2>
+          </div>
+
+          {/* Trend indicator */}
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
+            insights.recentTrend === "improving"
+              ? "bg-emerald-500/5 border-emerald-500/20"
+              : insights.recentTrend === "declining"
+                ? "bg-rose-500/5 border-rose-500/20"
+                : "bg-accent/30 border-border/30"
+          }`}>
+            {insights.recentTrend === "improving" ? (
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
+            ) : insights.recentTrend === "declining" ? (
+              <TrendingDown className="w-4 h-4 text-rose-400" />
+            ) : (
+              <Activity className="w-4 h-4 text-muted-foreground" />
+            )}
+            <span className="text-[12px] text-muted-foreground">{insights.recentTrendLabel}</span>
+          </div>
+
+          {/* Action breakdown table */}
+          {insights.byAction.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="text-muted-foreground text-left border-b border-border/30">
+                    <th className="pb-2 font-medium">Action Type</th>
+                    <th className="pb-2 font-medium text-center">Experiments</th>
+                    <th className="pb-2 font-medium text-center">Success Rate</th>
+                    <th className="pb-2 font-medium text-center">Avg Clicks Lift</th>
+                    <th className="pb-2 font-medium text-center">Avg Position Δ</th>
+                    <th className="pb-2 font-medium text-right">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {insights.byAction.map((a) => (
+                    <tr key={a.action} className="border-b border-border/10">
+                      <td className="py-2 font-medium text-foreground">
+                        {a.action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                      </td>
+                      <td className="py-2 text-center text-muted-foreground">
+                        {a.completedExperiments}/{a.totalExperiments}
+                      </td>
+                      <td className="py-2 text-center">
+                        {a.completedExperiments > 0 ? (
+                          <span className={`font-semibold ${
+                            a.successRate >= 70 ? "text-emerald-400" :
+                            a.successRate >= 40 ? "text-amber-400" : "text-rose-400"
+                          }`}>
+                            {a.successRate}%
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 text-center">
+                        {a.completedExperiments > 0 ? (
+                          <LiftIndicator value={a.avgClicksLiftPercent} suffix="%" />
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 text-center">
+                        {a.completedExperiments > 0 ? (
+                          <LiftIndicator value={a.avgPositionDelta} suffix=" pos" />
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 text-right font-mono text-muted-foreground">
+                        {a.totalRevenueLift > 0 ? `+$${a.totalRevenueLift.toLocaleString()}` : a.totalRevenueLift < 0 ? `-$${Math.abs(a.totalRevenueLift).toLocaleString()}` : "$0"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Best/worst action callout */}
+          {insights.bestAction && insights.bestAction.completedExperiments >= 2 && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
+              <Zap className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <p className="text-[12px] text-emerald-300">{insights.bestAction.label}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Filters */}
+      {hasExperiments && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Filter</span>
+          </div>
+
+          <select
+            value={filterAction}
+            onChange={(e) => setFilterAction(e.target.value)}
+            className="text-[12px] px-2.5 py-1.5 rounded-lg bg-accent border border-border text-foreground"
+          >
+            <option value="ALL">All Actions</option>
+            {actionTypes.map((a) => (
+              <option key={a} value={a}>{a.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>
+            ))}
+          </select>
+
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="text-[12px] px-2.5 py-1.5 rounded-lg bg-accent border border-border text-foreground"
+          >
+            <option value="ALL">All Statuses</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="IN_PROGRESS">In Progress</option>
+            <option value="READY">Ready for Evaluation</option>
+          </select>
+
+          <span className="text-[11px] text-muted-foreground ml-auto">
+            {filteredExperiments.length} of {experimentList.length} shown
+          </span>
+        </div>
+      )}
+
       {/* Experiment cards */}
       {hasExperiments ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {experimentList.map((exp) => (
-            <ExperimentCard
-              key={exp.decisionId}
-              exp={exp}
-              onEvaluate={handleEvaluate}
-              evaluating={evaluating}
-            />
-          ))}
-        </div>
+        filteredExperiments.length > 0 ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {filteredExperiments.map((exp) => (
+              <ExperimentCard
+                key={exp.decisionId}
+                exp={exp}
+                onEvaluate={handleEvaluate}
+                evaluating={evaluating}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-12 text-center gap-2">
+            <LayoutGrid className="w-8 h-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">No experiments match the current filters</p>
+          </div>
+        )
       ) : (
         <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
           <FlaskConical className="w-10 h-10 text-blue-400" />

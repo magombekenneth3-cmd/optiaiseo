@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 import { logger } from "@/lib/logger";
+import { getCrossExperimentInsights } from "@/lib/experiments/insights";
+import { getGscHealthStatus } from "@/lib/gsc/health-monitor";
 import type { ExperimentRecord } from "@/lib/experiments/tracker";
 
 const REDIS_EXPERIMENT_KEY = "aiseo:experiments";
@@ -39,25 +41,45 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Site not found or unauthorized" }, { status: 403 });
         }
 
-        // 1. Fetch experiment records from Redis
-        const experiments: ExperimentRecord[] = [];
-        const redis = getRedis();
-        if (redis) {
-            try {
-                const allRaw = await redis.hgetall<Record<string, string>>(REDIS_EXPERIMENT_KEY);
-                if (allRaw) {
-                    for (const value of Object.values(allRaw)) {
-                        try {
-                            const parsed = typeof value === "string" ? JSON.parse(value) : value;
-                            if (parsed.siteId === siteId) {
-                                parsed.executedAt = new Date(parsed.executedAt);
-                                parsed.evaluationDate = new Date(parsed.evaluationDate);
-                                experiments.push(parsed);
-                            }
-                        } catch { /* skip malformed */ }
+        // 1. Fetch experiment records from PostgreSQL (source of truth) + Redis fallback
+        let experiments: ExperimentRecord[] = [];
+        try {
+            const dbRows = await (prisma as any).experiment.findMany({
+                where: { siteId },
+                orderBy: { executedAt: "desc" },
+            });
+            experiments = dbRows.map((row: any) => ({
+                id: row.id,
+                decisionId: row.decisionId,
+                siteId: row.siteId,
+                targetUrl: row.targetUrl,
+                actionExecuted: row.actionExecuted,
+                executedAt: new Date(row.executedAt),
+                evaluationDate: new Date(row.evaluationDate),
+                status: row.status,
+                baseline: typeof row.baseline === "string" ? JSON.parse(row.baseline) : row.baseline,
+                lift: row.lift ? (typeof row.lift === "string" ? JSON.parse(row.lift) : row.lift) : undefined,
+            }));
+        } catch {
+            // Fallback to Redis if DB fails
+            const redis = getRedis();
+            if (redis) {
+                try {
+                    const allRaw = await redis.hgetall<Record<string, string>>(REDIS_EXPERIMENT_KEY);
+                    if (allRaw) {
+                        for (const value of Object.values(allRaw)) {
+                            try {
+                                const parsed = typeof value === "string" ? JSON.parse(value) : value;
+                                if (parsed.siteId === siteId) {
+                                    parsed.executedAt = new Date(parsed.executedAt);
+                                    parsed.evaluationDate = new Date(parsed.evaluationDate);
+                                    experiments.push(parsed);
+                                }
+                            } catch { /* skip malformed */ }
+                        }
                     }
-                }
-            } catch { /* Redis unavailable */ }
+                } catch { /* Redis unavailable */ }
+            }
         }
 
         // 2. Also fetch GrowthDecision records with status APPROVED/EXECUTED
@@ -188,10 +210,18 @@ export async function GET(req: NextRequest) {
             ),
         };
 
+        // 5. Fetch cross-experiment insights and GSC health
+        const [insights, gscHealth] = await Promise.all([
+            getCrossExperimentInsights(siteId),
+            getGscHealthStatus(siteId),
+        ]);
+
         return NextResponse.json({
             domain: site.domain,
             experiments: mergedExperiments,
             summary,
+            insights,
+            gscHealth,
         });
     } catch (err: unknown) {
         logger.error("[ExperimentsAPI] Fetch failed", {
