@@ -617,23 +617,32 @@ export function RecommendationsDashboard({
       )}
 
       {/* Filter tabs */}
-      <div className="flex items-center gap-1 p-1 rounded-xl bg-accent/40 border border-border/40 w-fit">
-        {filterTabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveFilter(tab.key)}
-            className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors ${
-              activeFilter === tab.key
-                ? "bg-background text-foreground shadow-sm border border-border/60"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-            {tab.count > 0 && (
-              <span className="ml-1.5 text-[11px] opacity-70">({tab.count})</span>
-            )}
-          </button>
-        ))}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-accent/40 border border-border/40 w-fit">
+          {filterTabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveFilter(tab.key)}
+              className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors ${
+                activeFilter === tab.key
+                  ? "bg-background text-foreground shadow-sm border border-border/60"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab.label}
+              {tab.count > 0 && (
+                <span className="ml-1.5 text-[11px] opacity-70">({tab.count})</span>
+              )}
+            </button>
+          ))}
+        </div>
+        <a
+          href="/dashboard/experiments"
+          className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13px] font-semibold text-blue-400 hover:bg-blue-500/10 transition-colors border border-blue-500/20"
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+          View Experiments
+        </a>
       </div>
 
       {/* Recommendation grid */}
