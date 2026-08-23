@@ -137,7 +137,15 @@ export async function runAeoReport(siteId: string): Promise<RunAeoReportResult> 
 
         // --- Distributed lock (300s TTL — audit takes up to 3 min) ---
         const lockKey = `aeo-audit-lock:${user.id}:${site.id}`;
-        const acquired = await redis.set(lockKey, "1", { ex: 300, nx: true });
+        let acquired = true;
+        try {
+            const res = await redis.set(lockKey, "1", { ex: 300, nx: true });
+            acquired = !!res;
+        } catch (redisErr) {
+            logger.warn("[AEO] Redis lock check failed, proceeding without lock", {
+                error: (redisErr as Error)?.message,
+            });
+        }
         if (!acquired) {
             return {
                 success: false,

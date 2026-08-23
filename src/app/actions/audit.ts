@@ -111,7 +111,15 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
     // completion (or FAILED). The 600s TTL is a backstop for crash scenarios —
     // if Inngest never calls back the user is unlocked automatically after 10m.
     const lockKey = `audit-lock:${user.id}:${site.id}`;
-    const acquired = await redis.set(lockKey, "1", { ex: 600, nx: true });
+    let acquired = true;
+    try {
+      const res = await redis.set(lockKey, "1", { ex: 600, nx: true });
+      acquired = !!res;
+    } catch (redisErr) {
+      logger.warn("[runAudit] Redis lock check failed, proceeding without lock", {
+        error: (redisErr as Error)?.message,
+      });
+    }
     if (!acquired) {
       return {
         success: false,
