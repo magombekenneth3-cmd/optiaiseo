@@ -231,6 +231,7 @@ model Site {
   growthDecisions        GrowthDecision[]
   competitorAlertLogs    CompetitorAlertLog[]
   evidenceSnapshots      EvidenceSnapshot[]
+  gscPerformance         GscDailyPerformance[]
 
 
 
@@ -1470,4 +1471,24 @@ model RankerSnapshot {
   checksum          String
 
   @@index([status])
+}
+
+model GscDailyPerformance {
+  id          String   @id @default(cuid())
+  siteId      String
+  url         String
+  keyword     String
+  date        String   // YYYY-MM-DD (string for composite index efficiency)
+  clicks      Int      @default(0)
+  impressions Int      @default(0)
+  ctr         Float    @default(0)
+  position    Float    @default(0)
+  device      String   @default("ALL") // ALL, DESKTOP, MOBILE, TABLET
+  fetchedAt   DateTime @default(now())
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, url, keyword, date, device])
+  @@index([siteId, date(sort: Desc)])
+  @@index([siteId, url, date(sort: Desc)])
+  @@index([siteId, keyword, date(sort: Desc)])
 }

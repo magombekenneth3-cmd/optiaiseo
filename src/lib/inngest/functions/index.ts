@@ -34,3 +34,4 @@ export * from "./dr-snapshot";
 export * from "./blog-repurpose";
 export * from "./social-repurpose";
 export * from "./campaign";
+export * from "./gsc-sync";
