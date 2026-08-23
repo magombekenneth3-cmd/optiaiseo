@@ -1,23 +1,3 @@
-/**
- * Inngest native cron triggers — platform-agnostic scheduling.
- *
- * Railway ignores vercel.json cron definitions. By registering cron triggers
- * directly in Inngest, scheduling is handled by Inngest Cloud regardless of
- * which hosting platform the app runs on.
- *
- * Fan-out pattern: each cron fetches paid site IDs then sends per-site events
- * that are processed by the existing per-site job handlers (backlinks-check-site,
- * competitor.alerts.site, etc.) with their own concurrency + retry configs.
- *
- * Inngest v4 API: createFunction takes 2 args — (config, handler).
- * Triggers are declared inside config via triggers: [{ cron: "..." }].
- *
- * IMPORTANT: These cron functions complement — not replace — the existing
- * weeklyAutoReauditJob in cron-workers.ts. Both are valid; these provide
- * the missing fan-outs for backlinks, AEO, blog, competitor alerts, rank,
- * and indexing workflows that vercel.json was supposed to cover.
- */
-
 import { inngest } from "../client";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
@@ -43,7 +23,7 @@ export const cronWeeklyAudit = inngest.createFunction(
     {
         id: "cron-weekly-audit",
         name: "Cron: Weekly Audit Fan-out",
-        retries: 0, // Fan-out is idempotent; per-site jobs have their own retries
+        retries: 0,
         triggers: [{ cron: "0 2 * * 1" }],
     },
     async ({ step }) => {
@@ -270,12 +250,12 @@ export const cronWeeklySerpAnalysis = inngest.createFunction(
             expired.map((a) => ({
                 name: "serp-analysis/requested" as const,
                 data: {
-                    analysisId:     a.id,
-                    siteId:         a.siteId,
-                    userId:         a.site.userId,
-                    keyword:        a.keyword,
+                    analysisId: a.id,
+                    siteId: a.siteId,
+                    userId: a.site.userId,
+                    keyword: a.keyword,
                     landingPageUrl: a.landingUrl,
-                    domain:         a.site.domain,
+                    domain: a.site.domain,
                 },
             })),
         );
@@ -515,7 +495,7 @@ export const cronWeeklyGrowthPipeline = inngest.createFunction(
         id: "cron-weekly-growth-pipeline",
         name: "Cron: Weekly Growth Pipeline Fan-out",
         retries: 0,
-        triggers: [{ cron: "0 3 * * 3" }], // Wednesday 03:00 UTC
+        triggers: [{ cron: "0 3 * * 3" }],
     },
     async ({ step }) => {
         const sites = await step.run("fetch-paid-sites", getPaidSites);
@@ -541,7 +521,7 @@ export const cronWeeklyGrowthPipeline = inngest.createFunction(
 
 // ────────────────────────────────────────────────────────────────────────────
 // Experiment Auto-Evaluation: daily scan for mature experiments
-// Runs daily at 05:00 UTC
+// Runs daily at 05:00 UTC — queries PostgreSQL (source of truth)
 // ────────────────────────────────────────────────────────────────────────────
 
 export const cronDailyExperimentEval = inngest.createFunction(
@@ -549,54 +529,36 @@ export const cronDailyExperimentEval = inngest.createFunction(
         id: "cron-daily-experiment-eval",
         name: "Cron: Daily Experiment Auto-Evaluation",
         retries: 1,
-        triggers: [{ cron: "0 5 * * *" }], // Daily 05:00 UTC
+        triggers: [{ cron: "0 5 * * *" }],
     },
     async ({ step }) => {
-        const { getRedis } = await import("@/lib/redis");
         const { evaluate28DayExperimentLift } = await import("@/lib/experiments/tracker");
 
-        const REDIS_KEY = "aiseo:experiments";
-        const redis = getRedis();
-        if (!redis) {
-            logger.info("[CronExperimentEval] Redis unavailable — skipping");
-            return { evaluated: 0 };
-        }
-
-        // Fetch all experiments from Redis
-        const allRaw = await step.run("fetch-experiments", async () => {
+        const readyExperiments = await step.run("fetch-mature-experiments", async () => {
             try {
-                const data = await redis.hgetall<Record<string, string>>(REDIS_KEY);
-                return data ?? {};
+                const rows = await (prisma as any).experiment.findMany({
+                    where: {
+                        evaluationDate: { lte: new Date() },
+                        status: { in: ["RECORDED", "EVALUATING"] },
+                    },
+                    select: { id: true },
+                    take: 50,
+                });
+                return rows.map((r: any) => r.id as string);
             } catch {
-                return {};
+                return [];
             }
         });
 
-        // Find experiments ready for evaluation
-        const now = Date.now();
-        const readyIds: string[] = [];
-        for (const [key, value] of Object.entries(allRaw)) {
-            try {
-                const parsed = typeof value === "string" ? JSON.parse(value) : value;
-                if (parsed.status === "COMPLETED") continue;
-                const evalDate = new Date(parsed.evaluationDate).getTime();
-                if (evalDate <= now) {
-                    readyIds.push(parsed.id);
-                }
-            } catch { /* skip malformed */ }
-        }
-
-        if (readyIds.length === 0) {
+        if (readyExperiments.length === 0) {
             logger.info("[CronExperimentEval] No mature experiments to evaluate");
             return { evaluated: 0 };
         }
 
-        // Evaluate each (capped at 50 for safety)
-        const toEvaluate = readyIds.slice(0, 50);
         let evaluated = 0;
 
         await step.run("evaluate-experiments", async () => {
-            for (const expId of toEvaluate) {
+            for (const expId of readyExperiments) {
                 try {
                     const result = await evaluate28DayExperimentLift(expId);
                     if (result.status === "COMPLETED") evaluated++;
@@ -614,7 +576,7 @@ export const cronDailyExperimentEval = inngest.createFunction(
             }
         });
 
-        logger.info(`[CronExperimentEval] Auto-evaluated ${evaluated}/${toEvaluate.length} experiments`);
-        return { evaluated, total: toEvaluate.length };
+        logger.info(`[CronExperimentEval] Auto-evaluated ${evaluated}/${readyExperiments.length} experiments`);
+        return { evaluated, total: readyExperiments.length };
     },
 );

@@ -8,17 +8,41 @@ import { logger } from "@/lib/logger";
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 
-const REDIS_TTL_SECONDS = 86400; // 24 hours
+const REDIS_TTL_SECONDS = 86400;
 const BATCH_CHUNK_SIZE = 1000;
 
 export async function savePersistedDecisions(siteId: string, decisions: GrowthDecision[]): Promise<void> {
     try {
-        // 1. High-Scale Chunked Transaction using Prisma createMany()
+        // P1-6: Only delete ACTIVE (unactioned) decisions. Preserve APPROVED/EXECUTED/MONITORING.
         await prisma.$transaction(async (tx: any) => {
-            await tx.growthDecision.deleteMany({ where: { siteId } });
+            // 1. Find existing non-ACTIVE decisions to protect
+            const protectedDecisions = await tx.growthDecision.findMany({
+                where: {
+                    siteId,
+                    status: { notIn: ["ACTIVE"] },
+                },
+                select: { url: true, primaryKeyword: true, action: true },
+            });
 
-            for (let i = 0; i < decisions.length; i += BATCH_CHUNK_SIZE) {
-                const chunk = decisions.slice(i, i + BATCH_CHUNK_SIZE);
+            // Build lookup set for dedup: "url|keyword|action"
+            const protectedKeys = new Set(
+                protectedDecisions.map((d: any) => `${d.url}|${d.primaryKeyword}|${d.action}`)
+            );
+
+            // 2. Delete only ACTIVE decisions (safe to replace)
+            await tx.growthDecision.deleteMany({
+                where: { siteId, status: "ACTIVE" },
+            });
+
+            // 3. Filter out new decisions that duplicate a protected decision
+            const newDecisions = decisions.filter((dec) => {
+                const key = `${dec.url}|${dec.primaryKeyword}|${dec.action}`;
+                return !protectedKeys.has(key);
+            });
+
+            // 4. Batch insert new decisions
+            for (let i = 0; i < newDecisions.length; i += BATCH_CHUNK_SIZE) {
+                const chunk = newDecisions.slice(i, i + BATCH_CHUNK_SIZE);
                 await tx.growthDecision.createMany({
                     data: chunk.map((dec) => ({
                         id: dec.id,
@@ -33,12 +57,19 @@ export async function savePersistedDecisions(siteId: string, decisions: GrowthDe
                         impact: JSON.stringify(dec.impact),
                         executionPlan: JSON.stringify(dec.executionPlan),
                         status: "ACTIVE",
-                    }))
+                        engineVersion: "v1",
+                    })),
+                    skipDuplicates: true,
                 });
             }
-        });
 
-        // 2. High-Performance Gzip Compressed Binary Redis Cache (85% size reduction)
+            logger.info("[DecisionPersistence] Dedup-aware persistence", {
+                siteId,
+                totalInput: decisions.length,
+                protected: protectedDecisions.length,
+                inserted: newDecisions.length,
+            });
+        });
         const redis = getRedis();
         if (redis) {
             try {
@@ -55,7 +86,6 @@ export async function savePersistedDecisions(siteId: string, decisions: GrowthDe
 }
 
 export async function getPersistedDecisions(siteId: string): Promise<GrowthDecision[]> {
-    // 1. High-Speed Decompression Read from Redis
     const redis = getRedis();
     if (redis) {
         try {
@@ -71,7 +101,6 @@ export async function getPersistedDecisions(siteId: string): Promise<GrowthDecis
         } catch { /* Fallback to DB */ }
     }
 
-    // 2. Read from Prisma Primary Source of Truth
     try {
         const records = await (prisma as any).growthDecision.findMany({
             where: { siteId, status: "ACTIVE" },

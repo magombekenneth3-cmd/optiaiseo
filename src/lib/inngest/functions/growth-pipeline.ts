@@ -18,6 +18,7 @@ export const growthPipelineJob = inngest.createFunction(
         name: "Growth Pipeline: Per-Site Recommendations",
         retries: 2,
         concurrency: { limit: 3 },
+        idempotency: "event.data.siteId",
         triggers: [{ event: "growth.pipeline.run" }],
     },
     async ({ event, step }: { event: { data: { siteId: string } }; step: any }) => {

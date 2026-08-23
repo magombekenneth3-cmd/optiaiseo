@@ -100,6 +100,19 @@ export async function executeGrowthDecision(
                     executedAt
                 };
             }
+
+            // P0: Early-exit if decision is not in APPROVED state
+            if (dbRecord.status !== "APPROVED" && dbRecord.status !== "EXECUTED") {
+                return {
+                    decisionId,
+                    siteId,
+                    actionExecuted,
+                    targetUrl,
+                    success: false,
+                    details: `Decision status is '${dbRecord.status}', not APPROVED — refusing execution.`,
+                    executedAt
+                };
+            }
         }
 
         // Extract blog slug from targetUrl (e.g. /blog/my-post)
@@ -249,12 +262,17 @@ export async function executeGrowthDecision(
         }
 
         // 3. Mark Decision as EXECUTED & Enqueue Outbox Jobs inside an Atomic Prisma Transaction
+        // P0: Use updateMany with status guard to prevent double-execution.
+        // If another worker already transitioned APPROVED → EXECUTED, count will be 0.
         try {
             await (prisma as any).$transaction(async (tx: any) => {
-                await tx.growthDecision.update({
-                    where: { id: decisionId },
+                const result = await tx.growthDecision.updateMany({
+                    where: { id: decisionId, status: "APPROVED" },
                     data: { status: "EXECUTED" }
                 });
+                if (result.count === 0) {
+                    throw new Error("ATOMIC_GUARD: Decision not in APPROVED state — aborting transaction");
+                }
                 await enqueueOutboxJob("INDEXNOW", `${decisionId}:${targetUrl}`, { siteId, targetUrl }, { tx });
                 await enqueueOutboxJob("GOOGLE_INDEXING", `${decisionId}:${targetUrl}`, { siteId, targetUrl }, { tx });
             });

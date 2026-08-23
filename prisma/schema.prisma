@@ -229,6 +229,7 @@ model Site {
   competitorAlerts       CompetitorAlert[]
   campaigns              Campaign[]
   growthDecisions        GrowthDecision[]
+  experiments            Experiment[]
   competitorAlertLogs    CompetitorAlertLog[]
   evidenceSnapshots      EvidenceSnapshot[]
   gscPerformance         GscDailyPerformance[]
@@ -1291,14 +1292,39 @@ model GrowthDecision {
   impact                Json
   executionPlan         Json
   status                String   @default("ACTIVE")
+  engineVersion         String   @default("v1")
+  inputPeriodStart      DateTime?
+  inputPeriodEnd        DateTime?
   generatedAt           DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site        Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  experiment  Experiment?
 
   @@unique([siteId, url, primaryKeyword, action])
   @@index([siteId, status])
   @@index([siteId, generatedAt(sort: Desc)])
+}
+
+model Experiment {
+  id               String   @id
+  decisionId       String   @unique
+  siteId           String
+  targetUrl        String
+  actionExecuted   String
+  executedAt       DateTime
+  evaluationDate   DateTime
+  status           String   @default("RECORDED") // RECORDED | EVALUATING | COMPLETED | INSUFFICIENT_DATA
+  baseline         Json
+  lift             Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  site     Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  decision GrowthDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, status])
+  @@index([evaluationDate, status])
 }
 
 
