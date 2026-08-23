@@ -163,7 +163,7 @@ export function CtrDiagnosisBanner({
             </p>
           </div>
           <Link
-            href="/dashboard/audits/new"
+            href="/dashboard/audits"
             className="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors"
           >
             <TrendingUp className="w-3.5 h-3.5" />
