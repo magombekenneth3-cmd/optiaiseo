@@ -412,13 +412,13 @@ function RecommendationCard({
       {/* Actions */}
       {isGsc && rec.opportunityId ? (
         <div className="flex items-center gap-2 pt-1 border-t border-border/30">
-          <button
-            onClick={() => onReview(rec)}
+          <a
+            href={`/dashboard/recommendations/${rec.opportunityId}`}
             className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-lg text-[13px] font-semibold text-emerald-400 hover:bg-emerald-500/10 transition-colors"
           >
             <ArrowUpRight className="w-3.5 h-3.5" />
             Review
-          </button>
+          </a>
           <button
             onClick={() => onApprove(rec.opportunityId!)}
             disabled={actionLoading === rec.opportunityId}
