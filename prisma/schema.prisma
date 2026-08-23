@@ -1296,6 +1296,7 @@ model GrowthDecision {
 
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
+  @@unique([siteId, url, primaryKeyword, action])
   @@index([siteId, status])
   @@index([siteId, generatedAt(sort: Desc)])
 }
