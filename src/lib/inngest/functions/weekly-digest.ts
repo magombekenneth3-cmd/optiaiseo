@@ -74,6 +74,11 @@ interface DigestData {
   positionDropCount: number;    // keywords that fell this week
   bestOpportunityKw: string | null;  // highest-impression page-2 keyword
   bestOpportunityImpr: number;  // its impressions
+  // Experiment tracking
+  experimentsExecuted: number;
+  experimentsCompleted: number;
+  avgPositionGain: number;
+  experimentRevenueLift: number;
 }
 
 
@@ -157,6 +162,15 @@ function buildEmailHtml(
        </tr>`
     : "";
 
+  const experimentRow = data.experimentsExecuted > 0
+    ? `<tr>
+        <td style="padding:8px 0;color:#a1a1aa;font-size:13px">🧪 Experiments</td>
+        <td style="padding:8px 0;font-size:13px;font-weight:600;color:#60a5fa;text-align:right">
+          ${data.experimentsExecuted} running${data.experimentsCompleted > 0 ? ` · ${data.experimentsCompleted} evaluated` : ""}${data.avgPositionGain > 0 ? ` · avg +${data.avgPositionGain} pos` : ""}${data.experimentRevenueLift > 0 ? ` · +$${data.experimentRevenueLift.toLocaleString()}/mo` : ""}
+        </td>
+       </tr>`
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -203,7 +217,7 @@ function buildEmailHtml(
         </tr>
         <tr><td style="padding:0 20px">
           <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #27272a">
-            ${winRow}${dropRow}${blogRow}${issueRow}${competitorRow}${dropCountRow}${opportunityRow}
+            ${winRow}${dropRow}${blogRow}${issueRow}${competitorRow}${dropCountRow}${opportunityRow}${experimentRow}
           </table>
         </td></tr>
       </table>
@@ -257,6 +271,7 @@ function buildEmailText(displayName: string, data: DigestData, userId: string): 
   if (competitorGapCount > 0) lines.push(`🎯 Competitor gaps: ${competitorGapCount} keywords competitors rank for that you don't`);
   if (positionDropCount > 0) lines.push(`📉 ${positionDropCount} keyword${positionDropCount !== 1 ? "s" : ""} fell in rankings this week`);
   if (bestOpportunityKw) lines.push(`💡 Best opportunity: "${bestOpportunityKw}" — ${bestOpportunityImpr.toLocaleString()} impressions on page 2`);
+  if (data.experimentsExecuted > 0) lines.push(`🧪 Experiments: ${data.experimentsExecuted} running${data.experimentsCompleted > 0 ? `, ${data.experimentsCompleted} evaluated` : ""}${data.avgPositionGain > 0 ? `, avg +${data.avgPositionGain} positions` : ""}`);
   lines.push(`\n${actionLabel}: ${base}${actionHref}`);
   lines.push(`\nUnsubscribe: ${unsub}`);
   return lines.join("\n");
@@ -320,7 +335,9 @@ export const weeklyDigestJob = inngest.createFunction(
           const displayName = user.name?.split(" ")[0] ?? "there";
 
           try {
-            const [audits, rankSnaps7d, pendingBlogs, newIssues, competitorGapCount, positionDrops, page2Snaps] = await Promise.all([
+            const { getSiteExperimentSummary } = await import("@/lib/experiments/tracker");
+
+            const [audits, rankSnaps7d, pendingBlogs, newIssues, competitorGapCount, positionDrops, page2Snaps, experimentSummary] = await Promise.all([
               // Last 2 audits for score delta
               prisma.audit.findMany({
                 where: { siteId: site.id },
@@ -358,6 +375,8 @@ export const weeklyDigestJob = inngest.createFunction(
                 take: 30,
                 select: { keyword: true, position: true },
               }).catch(() => []),
+              // Experiment summary
+              getSiteExperimentSummary(site.id).catch(() => ({ totalExperimentsExecuted: 0, completedExperiments: 0, averagePositionGain: 0, totalRevenueGenerated: 0 })),
             ]);
 
             // Score delta
@@ -429,6 +448,10 @@ export const weeklyDigestJob = inngest.createFunction(
               positionDropCount,
               bestOpportunityKw,
               bestOpportunityImpr,
+              experimentsExecuted: (experimentSummary as any).totalExperimentsExecuted ?? 0,
+              experimentsCompleted: (experimentSummary as any).completedExperiments ?? 0,
+              avgPositionGain: (experimentSummary as any).averagePositionGain ?? 0,
+              experimentRevenueLift: (experimentSummary as any).totalRevenueGenerated ?? 0,
             };
 
             await resend.emails.send({

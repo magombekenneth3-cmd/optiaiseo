@@ -504,3 +504,117 @@ export const cronCreditWipeFinalizer = inngest.createFunction(
     },
 );
 
+
+// ────────────────────────────────────────────────────────────────────────────
+// Growth Pipeline: Weekly recommendation refresh for all paid sites
+// Runs Wednesday 03:00 UTC — offset from Monday audit/backlink crons
+// ────────────────────────────────────────────────────────────────────────────
+
+export const cronWeeklyGrowthPipeline = inngest.createFunction(
+    {
+        id: "cron-weekly-growth-pipeline",
+        name: "Cron: Weekly Growth Pipeline Fan-out",
+        retries: 0,
+        triggers: [{ cron: "0 3 * * 3" }], // Wednesday 03:00 UTC
+    },
+    async ({ step }) => {
+        const sites = await step.run("fetch-paid-sites", getPaidSites);
+
+        if (sites.length === 0) {
+            logger.info("[CronWeeklyGrowth] No paid sites — skipping fan-out");
+            return { queued: 0 };
+        }
+
+        await step.sendEvent(
+            "fan-out-growth-pipeline",
+            sites.map((s) => ({
+                name: "growth.pipeline.run" as const,
+                data: { siteId: s.id },
+            })),
+        );
+
+        logger.info(`[CronWeeklyGrowth] Queued ${sites.length} sites for growth pipeline`);
+        return { queued: sites.length };
+    },
+);
+
+
+// ────────────────────────────────────────────────────────────────────────────
+// Experiment Auto-Evaluation: daily scan for mature experiments
+// Runs daily at 05:00 UTC
+// ────────────────────────────────────────────────────────────────────────────
+
+export const cronDailyExperimentEval = inngest.createFunction(
+    {
+        id: "cron-daily-experiment-eval",
+        name: "Cron: Daily Experiment Auto-Evaluation",
+        retries: 1,
+        triggers: [{ cron: "0 5 * * *" }], // Daily 05:00 UTC
+    },
+    async ({ step }) => {
+        const { getRedis } = await import("@/lib/redis");
+        const { evaluate28DayExperimentLift } = await import("@/lib/experiments/tracker");
+
+        const REDIS_KEY = "aiseo:experiments";
+        const redis = getRedis();
+        if (!redis) {
+            logger.info("[CronExperimentEval] Redis unavailable — skipping");
+            return { evaluated: 0 };
+        }
+
+        // Fetch all experiments from Redis
+        const allRaw = await step.run("fetch-experiments", async () => {
+            try {
+                const data = await redis.hgetall<Record<string, string>>(REDIS_KEY);
+                return data ?? {};
+            } catch {
+                return {};
+            }
+        });
+
+        // Find experiments ready for evaluation
+        const now = Date.now();
+        const readyIds: string[] = [];
+        for (const [key, value] of Object.entries(allRaw)) {
+            try {
+                const parsed = typeof value === "string" ? JSON.parse(value) : value;
+                if (parsed.status === "COMPLETED") continue;
+                const evalDate = new Date(parsed.evaluationDate).getTime();
+                if (evalDate <= now) {
+                    readyIds.push(parsed.id);
+                }
+            } catch { /* skip malformed */ }
+        }
+
+        if (readyIds.length === 0) {
+            logger.info("[CronExperimentEval] No mature experiments to evaluate");
+            return { evaluated: 0 };
+        }
+
+        // Evaluate each (capped at 50 for safety)
+        const toEvaluate = readyIds.slice(0, 50);
+        let evaluated = 0;
+
+        await step.run("evaluate-experiments", async () => {
+            for (const expId of toEvaluate) {
+                try {
+                    const result = await evaluate28DayExperimentLift(expId);
+                    if (result.status === "COMPLETED") evaluated++;
+                    logger.info("[CronExperimentEval] Evaluated experiment", {
+                        expId,
+                        status: result.status,
+                        positionDelta: result.lift?.positionDelta,
+                    });
+                } catch (err: unknown) {
+                    logger.warn("[CronExperimentEval] Failed to evaluate", {
+                        expId,
+                        error: (err as Error)?.message,
+                    });
+                }
+            }
+        });
+
+        logger.info(`[CronExperimentEval] Auto-evaluated ${evaluated}/${toEvaluate.length} experiments`);
+        return { evaluated, total: toEvaluate.length };
+    },
+);
