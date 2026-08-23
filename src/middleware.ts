@@ -199,7 +199,23 @@ export async function middleware(request: NextRequest) {
             }
         }
 
-        const { success, limit, remaining, reset } = await limiter.limit(identifier);
+        let success: boolean;
+        let limit: number;
+        let remaining: number;
+        let reset: number;
+
+        try {
+            const result = await limiter.limit(identifier);
+            success = result.success;
+            limit = result.limit;
+            remaining = result.remaining;
+            reset = result.reset;
+        } catch (err) {
+            // Redis unreachable (DNS, network, timeout) — fail open.
+            // Rate limiting is best-effort; a Redis outage must not take down all API routes.
+            console.error("[middleware] Rate-limit Redis error, failing open:", (err as Error).message);
+            return applySecurityHeaders(baseResponse, nonce);
+        }
 
         if (!success) {
             const retryAfter = Math.max(1, Math.ceil((reset - Date.now()) / 1000));
@@ -225,6 +241,7 @@ export async function middleware(request: NextRequest) {
         apiRes.headers.set("X-RateLimit-Reset", String(reset));
         forwardRefCookie(baseResponse, apiRes);
         return applySecurityHeaders(apiRes, nonce);
+
     }
 
     return applySecurityHeaders(baseResponse, nonce);
