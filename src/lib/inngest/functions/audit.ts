@@ -364,11 +364,11 @@ export const auditPostFixJob = inngest.createFunction(
 
         const newAudit = await step.run("run-full-audit", async () => {
             const { getFullAuditEngine } = await import("@/lib/seo-audit");
-            const site = await prisma.site.findUnique({ where: { id: siteId }, select: { domain: true } });
+            const site = await prisma.site.findUnique({ where: { id: siteId }, select: { domain: true, userId: true } });
             if (!site) throw new Error("Site not found");
             const engine = getFullAuditEngine();
             const url = site.domain.startsWith("http") ? site.domain : `https://${site.domain}`;
-            return engine.runAudit(url, { userId });
+            return engine.runAudit(url, { userId: site.userId });
         });
 
         await step.run("save-impact", async () => {
