@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Search, ShieldCheck, CheckCircle2, AlertCircle, Loader2, ExternalLink } from "lucide-react";
 
 interface Props {
@@ -68,13 +69,13 @@ export function GscIntegrationCard({ isConnected }: Props) {
                     </button>
                 </div>
             ) : (
-                <a
+                <Link
                     href="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard%2Fsettings%3Ftab%3Dintegrations"
                     className="inline-flex items-center gap-2 px-4 py-2 text-[12px] font-semibold rounded-lg bg-[#238636] text-white hover:bg-[#2ea043] transition-colors"
                 >
                     <ExternalLink className="w-3.5 h-3.5" />
                     Connect with Google
-                </a>
+                </Link>
             )}
 
             {error && (
