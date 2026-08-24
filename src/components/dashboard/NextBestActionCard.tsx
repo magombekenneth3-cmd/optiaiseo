@@ -56,7 +56,7 @@ export function NextBestActionCard({
             label: "Unlock your keyword data",
             desc: "Connect Google Search Console to see exactly which queries bring visitors — and which keywords you're missing.",
             cta: "Connect GSC →",
-            href: "/dashboard/settings",
+            href: "/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard",
         },
         {
             condition: !hasKeywords,

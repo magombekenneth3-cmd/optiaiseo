@@ -36,7 +36,7 @@ export function GscConnectCard({ siteDomain }: Props) {
 
             <div className="shrink-0 relative z-10 w-full md:w-auto">
                 <Link
-                    href="/api/auth/signin?callbackUrl=/dashboard/settings"
+                    href="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard%2Fkeywords"
                     className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-brand hover:bg-brand/90 text-brand-foreground text-xs font-bold transition-all shadow-lg shadow-brand/25 active:scale-95"
                 >
                     Connect Search Console

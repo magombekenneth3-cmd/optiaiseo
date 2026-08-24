@@ -150,7 +150,7 @@ function buildSetupRecommendations(ctx: SiteContext): Recommendation[] {
       impact: "Unlocks live CTR, impressions & position data",
       effort: "low", status: "ACTIVE",
       tags: ["GSC", "Data Quality", "Setup"],
-      cta: { label: "Connect GSC", href: "/dashboard/settings" },
+      cta: { label: "Connect GSC", href: "/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard" },
     });
   }
 
