@@ -56,7 +56,7 @@ export const processManualAuditJob = inngest.createFunction(
         const auditResult = await step.run("run-homepage-audit", async () => {
             const engine = getFullAuditEngine();
             const url = domain.startsWith("http") ? domain : `https://${domain}`;
-            return engine.runAudit(url);
+            return engine.runAudit(url, { userId });
         });
 
         // Step 2: Save results to the PENDING audit record
@@ -188,7 +188,7 @@ export const runWeeklyAuditJob = inngest.createFunction(
         const auditResult = await step.run("run-audit", async () => {
             const engine = getFullAuditEngine();
             const url = site.domain.startsWith("http") ? site.domain : `https://${site.domain}`;
-            return await engine.runAudit(url);
+            return await engine.runAudit(url, { userId: site.userId });
         });
 
         const previousAudit = await step.run("fetch-previous-audit", async () => {
@@ -368,7 +368,7 @@ export const auditPostFixJob = inngest.createFunction(
             if (!site) throw new Error("Site not found");
             const engine = getFullAuditEngine();
             const url = site.domain.startsWith("http") ? site.domain : `https://${site.domain}`;
-            return engine.runAudit(url);
+            return engine.runAudit(url, { userId });
         });
 
         await step.run("save-impact", async () => {

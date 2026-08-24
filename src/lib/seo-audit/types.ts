@@ -111,6 +111,8 @@ export interface AuditModuleContext {
     readonly pageType?: string;
     /** Target keyword from site settings — used by KeywordOptimisationModule and ImageSeoModule */
     readonly targetKeyword?: string;
+    /** Authenticated user ID — passed to Moz client for per-user API token lookup */
+    readonly userId?: string;
 }
 
 export interface AuditModule {

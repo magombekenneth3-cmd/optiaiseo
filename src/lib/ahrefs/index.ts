@@ -33,7 +33,8 @@ export interface AhrefsBacklink {
 // =============================================================================
 
 export const getAhrefsDomainOverview = async (
-    domain: string
+    domain: string,
+    userId?: string
 ): Promise<AhrefsDomainOverview> => {
 
     // Supports two auth methods:
@@ -42,9 +43,27 @@ export const getAhrefsDomainOverview = async (
     //   LEGACY (pre-March 2024): MOZ_ACCESS_ID + MOZ_SECRET_KEY → Basic Auth
     //                           endpoint: https://lsapi.seomoz.com/v2/url_metrics
     // Get your token at: https://moz.com/api/dashboard
-    const mozToken = process.env.MOZ_API_TOKEN
-    const mozAccessId = process.env.MOZ_ACCESS_ID
+    let mozToken    = process.env.MOZ_API_TOKEN
+    const mozAccessId  = process.env.MOZ_ACCESS_ID
     const mozSecretKey = process.env.MOZ_SECRET_KEY
+
+    // Fall back to user-stored token from DB when env var isn't set
+    if (!mozToken && !mozAccessId && userId) {
+        try {
+            const { prisma } = await import("@/lib/prisma")
+            const dbUser = await prisma.user.findUnique({
+                where:  { id: userId },
+                select: { preferences: true },
+            })
+            const prefs = (dbUser?.preferences as Record<string, unknown>) ?? {}
+            const stored = prefs.mozApiToken
+            if (typeof stored === "string" && stored.trim()) {
+                mozToken = stored.trim()
+            }
+        } catch {
+            // non-fatal — continue without token
+        }
+    }
 
     if (mozToken || (mozAccessId && mozSecretKey)) {
         try {

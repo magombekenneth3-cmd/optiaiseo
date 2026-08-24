@@ -273,7 +273,7 @@ export const OffPageModule: AuditModule = {
         })();
 
         const [domainOverview, backlinks] = await Promise.all([
-            domain ? getAhrefsDomainOverview(domain).catch(() => null) : Promise.resolve(null),
+            domain ? getAhrefsDomainOverview(domain, context.userId).catch(() => null) : Promise.resolve(null),
             domain ? getAhrefsBacklinks(domain, 20).catch(() => []) : Promise.resolve([]),
         ]);
 

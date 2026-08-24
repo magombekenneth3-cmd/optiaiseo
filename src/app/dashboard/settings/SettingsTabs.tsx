@@ -10,6 +10,7 @@ import { SettingsClientExtras } from "./SettingsClientExtras";
 import { WordPressPluginPanel } from "./WordPressPluginPanel";
 import { GscIntegrationCard } from "@/components/dashboard/GscIntegrationCard";
 import { Ga4ConnectForm } from "@/components/dashboard/Ga4ConnectForm";
+import { MozApiTokenCard } from "@/components/dashboard/MozApiTokenCard";
 import { DeleteAccountButton } from "./DeleteAccountButton";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
@@ -36,6 +37,7 @@ interface Props {
     gscConnected: boolean;
     planName: string;
     subscriptionTier: string;
+    mozApiToken?: string;
 }
 
 export function SettingsTabs({
@@ -50,6 +52,7 @@ export function SettingsTabs({
     gscConnected,
     planName,
     subscriptionTier,
+    mozApiToken = "",
 }: Props) {
     const [active, setActive] = useState<TabId>("profile");
 
@@ -132,6 +135,7 @@ export function SettingsTabs({
                     <div className="flex flex-col gap-6">
                         <GscIntegrationCard isConnected={gscConnected} />
                         <Ga4ConnectForm siteId={firstSiteId} currentPropertyId={firstSiteGa4PropertyId} />
+                        <MozApiTokenCard initialToken={mozApiToken} />
                         <WordPressPluginPanel siteId={firstSiteId} />
                     </div>
                 )}

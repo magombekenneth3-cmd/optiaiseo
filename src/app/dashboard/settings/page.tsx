@@ -42,6 +42,7 @@ export default async function SettingsPage() {
     const wl = (dbUser?.whiteLabel as any) || {};
     const prefs = (dbUser?.preferences as Record<string, unknown>) ?? {};
     const emailDigest = prefs.emailDigest !== false;
+    const mozApiToken = typeof prefs.mozApiToken === "string" ? prefs.mozApiToken : "";
 
     return (
         <div className="flex flex-col gap-6 w-full max-w-4xl mx-auto">
@@ -62,6 +63,7 @@ export default async function SettingsPage() {
                 gscConnected={gscConnected}
                 planName={getPlan(subscriptionTier).name}
                 subscriptionTier={subscriptionTier}
+                mozApiToken={mozApiToken}
             />
         </div>
     );
