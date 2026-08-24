@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { CONCURRENCY } from "../concurrency";
 import { getFullAuditEngine } from "@/lib/seo-audit";
 import { diffAuditSnapshots } from "@/lib/seo-audit/audit-diff";
-import { sendSEODigest } from "@/lib/email";
+import { sendSEODigest, sendAuditCompleteEmail } from "@/lib/email";
 import { fetchGSCKeywords, findOpportunities, normaliseSiteUrl } from "@/lib/gsc";
 import { detectGsovDrop, generateHealingPlan } from "@/lib/self-healing/engine";
 import { executeHealingWithConfidenceGate } from "@/lib/self-healing/confidence";
@@ -116,6 +116,23 @@ export const processManualAuditJob = inngest.createFunction(
                 domain,
                 timestamp: new Date().toISOString(),
                 data: { auditId, seoScore: auditResult.overallScore },
+            });
+        });
+
+        await step.run("send-audit-complete-email", async () => {
+            const dbUser = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { email: true, name: true, preferences: true },
+            });
+            if (!dbUser?.email) return;
+            const prefs = (dbUser.preferences as Record<string, unknown>) ?? {};
+            if (prefs.emailDigest === false) return;
+            await sendAuditCompleteEmail({
+                toEmail:  dbUser.email,
+                userName: dbUser.name ?? dbUser.email.split("@")[0],
+                domain,
+                auditId,
+                score:    auditResult.overallScore,
             });
         });
 

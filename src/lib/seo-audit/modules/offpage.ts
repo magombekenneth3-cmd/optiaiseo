@@ -205,8 +205,8 @@ function buildBacklinkRecommendationText(pageType: PageType, hasApiKey: boolean)
         `PAGE TYPE: ${pageType}`,
         `STRATEGY: ${effortNote}`,
         hasApiKey
-            ? 'API KEY CONFIGURED: Live backlink data fetch coming soon.'
-            : 'NO BACKLINK API CONFIGURED: Set AHREFS_API_KEY or MOZ_API_KEY for live data.',
+            ? 'BACKLINK API ACTIVE: Live data fetched via OpenLinkProfiler. For richer metrics (DR, organic traffic) set MOZ_API_TOKEN.'
+            : 'NO BACKLINK API CONFIGURED: Tactical strategy below. For live DR metrics set MOZ_API_TOKEN; for full backlink details set DATAFORSEO_LOGIN + DATAFORSEO_PASSWORD.',
         '',
         'PAGE-SPECIFIC TACTICS:',
         ...tactics,

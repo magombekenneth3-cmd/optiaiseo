@@ -219,19 +219,7 @@ export const getAhrefsBacklinks = async (
      
     } catch (err: unknown) {
         logger.warn("[Ahrefs/OpenLinkProfiler] Backlinks fetch failed:", { error: (err as Error)?.message || String(err) })
-
-        // Fallback mock
-        return [
-            {
-                sourceDomain: "example.com",
-                sourceUrl: "https://example.com/blog/post",
-                targetUrl: `https://${domain}`,
-                domainRating: 67,
-                anchorText: "SEO tool",
-                firstSeen: new Date().toISOString(),
-                lastSeen: new Date().toISOString(),
-            },
-        ]
+        return []
     }
 }
 
@@ -295,9 +283,5 @@ export const getAhrefsCompetitors = async (
         }
     }
 
-    // Fallback mock
-    return [
-        { domain: "competitor1.com", commonKeywords: 450, organicTraffic: 25000 },
-        { domain: "competitor2.com", commonKeywords: 320, organicTraffic: 18000 },
-    ]
+    return []
 }

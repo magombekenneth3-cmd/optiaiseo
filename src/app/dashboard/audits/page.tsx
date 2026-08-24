@@ -21,9 +21,16 @@ export default async function AuditsPage() {
   const [{ success, audits, nextCursor }, { sites }, dbUser] = await Promise.all([
     getUserAudits(),
     getUserSites(),
-    userEmail ? prisma.user.findUnique({ where: { email: userEmail }, select: { subscriptionTier: true } }) : null,
+    userEmail ? prisma.user.findUnique({
+      where: { email: userEmail },
+      select: {
+        subscriptionTier: true,
+        accounts: { where: { provider: "google-gsc" }, select: { id: true } },
+      },
+    }) : null,
   ]);
-  const userTier = dbUser?.subscriptionTier ?? "FREE";
+  const userTier       = dbUser?.subscriptionTier ?? "FREE";
+  const gscConnected   = (dbUser?.accounts?.length ?? 0) > 0;
 
   const processingIds = (audits ?? [])
     .filter((a) => a.fixStatus === "IN_PROGRESS" || a.fixStatus === "PENDING")
@@ -40,6 +47,23 @@ export default async function AuditsPage() {
         </div>
         <AuditButton sites={sites} userTier={userTier} />
       </div>
+
+      {!gscConnected && (
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-blue-500/20 bg-blue-500/5">
+          <svg className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div className="flex-1 text-sm text-blue-300">
+            <span className="font-semibold text-blue-200">Connect Google Search Console</span> to unlock keyword-level audit insights — CTR drops, position changes, and exact queries losing traffic.
+          </div>
+          <a
+            href="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard%2Faudits"
+            className="shrink-0 text-xs font-semibold text-blue-300 border border-blue-500/30 px-3 py-1.5 rounded-lg hover:bg-blue-500/10 transition-colors whitespace-nowrap"
+          >
+            Connect GSC
+          </a>
+        </div>
+      )}
 
       {success && (!audits || audits.length === 0) && (
         <div className="card-surface p-5 flex flex-col sm:flex-row sm:items-center gap-3">

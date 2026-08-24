@@ -367,3 +367,80 @@ export async function sendRankMovementEmail(params: {
     appUrl,
   });
 }
+
+export async function sendAuditCompleteEmail(params: {
+  toEmail: string;
+  userName: string;
+  domain: string;
+  auditId: string;
+  score: number;
+}): Promise<{ success: boolean; error?: string }> {
+  if (!validateEmail(params.toEmail)) return { success: false, error: "Invalid email" };
+  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_DOMAIN) {
+    logger.warn("[Email] sendAuditCompleteEmail — email not configured, skipping");
+    return { success: false, error: "Email not configured" };
+  }
+
+  const appUrl  = process.env.NEXTAUTH_URL ?? "https://optiaiseo.online";
+  const auditUrl = `${appUrl}/dashboard/audits?auditId=${params.auditId}`;
+  const scoreColor = params.score >= 75 ? "#16a34a" : params.score >= 50 ? "#d97706" : "#dc2626";
+  const scoreLabel = params.score >= 75 ? "Great" : params.score >= 50 ? "Needs work" : "Critical issues";
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#09090b;font-family:'Inter',Arial,sans-serif;color:#f4f4f5;">
+  <div style="max-width:520px;margin:0 auto;padding:0 0 32px 0;">
+    <div style="background:#10b981;padding:28px 24px;text-align:center;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:rgba(255,255,255,0.8);text-transform:uppercase;margin-bottom:8px;">OptiAISEO</div>
+      <h1 style="font-size:20px;font-weight:800;margin:0;color:#fff;">Your audit is ready</h1>
+    </div>
+    <div style="padding:28px 24px;border-bottom:1px solid #1f2937;">
+      <p style="font-size:14px;color:#a1a1aa;margin:0 0 20px 0;">Hi ${escapeHtml(params.userName)}, your SEO audit for <strong style="color:#f4f4f5;">${escapeHtml(params.domain)}</strong> has completed.</p>
+      <div style="display:flex;align-items:center;gap:20px;background:#0f0f0f;border:1px solid #1f2937;border-radius:12px;padding:20px 24px;">
+        <div style="text-align:center;">
+          <div style="font-size:48px;font-weight:900;color:${scoreColor};line-height:1;">${params.score}</div>
+          <div style="font-size:11px;color:#6b7280;margin-top:4px;">out of 100</div>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:${scoreColor};margin-bottom:4px;">${scoreLabel}</div>
+          <div style="font-size:13px;color:#a1a1aa;">Overall SEO score for ${escapeHtml(params.domain)}</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:24px;text-align:center;">
+      <a href="${auditUrl}" style="display:inline-block;background:#16a34a;color:#fff;font-weight:700;font-size:14px;padding:14px 32px;border-radius:12px;text-decoration:none;">View Full Audit Report →</a>
+    </div>
+    <div style="padding:0 24px;text-align:center;">
+      <p style="font-size:11px;color:#52525b;margin:0;">You're receiving this because you ran a manual audit on OptiAISEO.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text = [
+    `Your OptiAISEO audit is ready — ${params.domain}`,
+    ``,
+    `Hi ${params.userName},`,
+    `Your SEO audit for ${params.domain} has completed.`,
+    ``,
+    `Score: ${params.score}/100 — ${scoreLabel}`,
+    ``,
+    `View full report: ${auditUrl}`,
+  ].join("\n");
+
+  try {
+    await getResend().emails.send({
+      from: `OptiAISEO <noreply@${process.env.RESEND_FROM_DOMAIN}>`,
+      to: params.toEmail,
+      subject: `Your ${params.domain} audit is ready — ${params.score}/100`,
+      html,
+      text,
+    });
+    logger.debug(`[Email] Sent audit-complete to ${maskEmail(params.toEmail)}`);
+    return { success: true };
+  } catch (err: unknown) {
+    logger.error("[Email] Failed to send audit-complete", { error: (err as Error)?.message });
+    return { success: false, error: (err as Error).message };
+  }
+}
