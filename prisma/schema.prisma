@@ -241,6 +241,9 @@ model Site {
   marketCategoryId String?
   marketCategory   MarketCategory? @relation(fields: [marketCategoryId], references: [id])
 
+  pseoTemplates          PseoTemplate[]
+  pseoPages              PseoPage[]
+
   @@index([userId])
   @@index([niche, operatingMode])
 }
@@ -1518,4 +1521,42 @@ model GscDailyPerformance {
   @@index([siteId, date(sort: Desc)])
   @@index([siteId, url, date(sort: Desc)])
   @@index([siteId, keyword, date(sort: Desc)])
+}
+
+model PseoTemplate {
+  id        String     @id @default(cuid())
+  siteId    String
+  name      String
+  pattern   String
+  dataset   Json
+  status    String     @default("DRAFT")
+  pageCount Int        @default(0)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  site      Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  pages     PseoPage[]
+
+  @@index([siteId, createdAt(sort: Desc)])
+}
+
+model PseoPage {
+  id              String       @id @default(cuid())
+  templateId      String
+  siteId          String
+  slug            String
+  title           String
+  metaDescription String?
+  contentHtml     String       @db.Text
+  schemaJsonLd    Json         @default("[]")
+  heroVisualSvg   String       @db.Text
+  variableData    Json         @default("{}")
+  status          String       @default("GENERATED")
+  publishedUrl    String?
+  createdAt       DateTime     @default(now())
+  template        PseoTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  site            Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, slug])
+  @@index([templateId, createdAt(sort: Desc)])
+  @@index([siteId, status])
 }
