@@ -11,6 +11,7 @@ import { WordPressPluginPanel } from "./WordPressPluginPanel";
 import { GscIntegrationCard } from "@/components/dashboard/GscIntegrationCard";
 import { Ga4ConnectForm } from "@/components/dashboard/Ga4ConnectForm";
 import { MozApiTokenCard } from "@/components/dashboard/MozApiTokenCard";
+import { ApiAccessCard } from "@/components/dashboard/ApiAccessCard";
 import { DeleteAccountButton } from "./DeleteAccountButton";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
@@ -133,6 +134,7 @@ export function SettingsTabs({
             >
                 {active === "integrations" && (
                     <div className="flex flex-col gap-6">
+                        <ApiAccessCard />
                         <GscIntegrationCard isConnected={gscConnected} />
                         <Ga4ConnectForm siteId={firstSiteId} currentPropertyId={firstSiteGa4PropertyId} />
                         <MozApiTokenCard initialToken={mozApiToken} />

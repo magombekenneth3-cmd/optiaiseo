@@ -31,6 +31,7 @@ import {
     History,
     Target,
     FlaskConical,
+    Code,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -60,10 +61,11 @@ const NAV_ITEMS = [
 ];
 
 const ACCOUNT_ITEMS = [
-    { name: "Billing", href: "/dashboard/billing", icon: CreditCard, exact: false, contextSiteId: false },
-    { name: "Refer & Earn", href: "/dashboard/referral", icon: Gift, exact: false, contextSiteId: false },
-    { name: "Settings", href: "/dashboard/settings", icon: Settings, exact: false, contextSiteId: false },
-    { name: "Talk to Aria", href: "/dashboard/voice", icon: Mic, exact: false, contextSiteId: false },
+    { name: "Billing",     href: "/dashboard/billing",  icon: CreditCard, exact: false, contextSiteId: false },
+    { name: "Refer & Earn",href: "/dashboard/referral", icon: Gift,        exact: false, contextSiteId: false },
+    { name: "Settings",    href: "/dashboard/settings", icon: Settings,    exact: false, contextSiteId: false },
+    { name: "API & Docs",  href: "/api-docs",            icon: Code,        exact: false, contextSiteId: false },
+    { name: "Talk to Aria",href: "/dashboard/voice",    icon: Mic,         exact: false, contextSiteId: false },
 ];
 
 const SECONDARY_ITEMS = [
