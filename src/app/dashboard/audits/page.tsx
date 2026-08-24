@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import Link from "next/link";
 import { getUserAudits } from "@/app/actions/audit";
 import { getUserSites } from "@/app/actions/site";
 import { AuditButton } from "./AuditButton";
@@ -56,12 +57,12 @@ export default async function AuditsPage() {
           <div className="flex-1 text-sm text-blue-300">
             <span className="font-semibold text-blue-200">Connect Google Search Console</span> to unlock keyword-level audit insights — CTR drops, position changes, and exact queries losing traffic.
           </div>
-          <a
+          <Link
             href="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard%2Faudits"
             className="shrink-0 text-xs font-semibold text-blue-300 border border-blue-500/30 px-3 py-1.5 rounded-lg hover:bg-blue-500/10 transition-colors whitespace-nowrap"
           >
             Connect GSC
-          </a>
+          </Link>
         </div>
       )}
 
