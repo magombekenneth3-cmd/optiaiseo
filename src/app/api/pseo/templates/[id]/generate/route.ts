@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { generatePseoBatch, replacePlaceholders } from "@/lib/pseo/generator";
+import { generatePseoBatch } from "@/lib/pseo/generator";
 import { logger } from "@/lib/logger";
 
 /**
@@ -83,5 +83,3 @@ export async function POST(
     });
 }
 
-// Re-export replacePlaceholders so it's importable alongside the route for tests
-export { replacePlaceholders };
