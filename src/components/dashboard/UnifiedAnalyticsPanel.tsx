@@ -109,6 +109,7 @@ export function UnifiedAnalyticsPanel({ siteId }: { siteId: string }) {
                     Connect Google Search Console to see click and impression data, then link a GA4 property for sessions, bounce rate, and conversion tracking.
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center mt-1">
+                    {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
                     <a
                         href="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard%2Fkeywords"
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#388bfd]/10 text-[#388bfd] border border-[#388bfd]/25 hover:bg-[#388bfd]/20 transition-colors"

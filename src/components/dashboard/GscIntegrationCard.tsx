@@ -68,6 +68,7 @@ export function GscIntegrationCard({ isConnected }: Props) {
                     </button>
                 </div>
             ) : (
+                // eslint-disable-next-line @next/next/no-html-link-for-pages
                 <a
                     href="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard%2Fsettings%3Ftab%3Dintegrations"
                     className="inline-flex items-center gap-2 px-4 py-2 text-[12px] font-semibold rounded-lg bg-[#238636] text-white hover:bg-[#2ea043] transition-colors"
