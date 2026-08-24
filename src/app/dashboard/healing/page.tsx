@@ -39,5 +39,5 @@ export default async function HealingRedirectPage({
     redirect(`/dashboard/sites/${siteId}/healing-log`);
   }
 
-  redirect("/dashboard/sites");
+  redirect("/dashboard/sites?prompt=add-site");
 }

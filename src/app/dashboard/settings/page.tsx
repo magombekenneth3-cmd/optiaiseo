@@ -21,8 +21,15 @@ export default async function SettingsPage() {
 
     const dbUser = await prisma.user.findUnique({
         where: { email: session.user.email },
-        select: { id: true, whiteLabel: true, preferences: true },
+        select: {
+            id: true,
+            whiteLabel: true,
+            preferences: true,
+            accounts: { where: { provider: "google-gsc" }, select: { id: true } },
+        },
     });
+
+    const gscConnected = (dbUser?.accounts?.length ?? 0) > 0;
 
     const firstSite = await prisma.site.findFirst({
         where:   { userId: dbUser?.id ?? "" },
@@ -52,6 +59,7 @@ export default async function SettingsPage() {
                 userId={dbUser?.id ?? ""}
                 firstSiteId={firstSite?.id ?? ""}
                 firstSiteGa4PropertyId={firstSite?.ga4PropertyId ?? null}
+                gscConnected={gscConnected}
                 planName={getPlan(subscriptionTier).name}
                 subscriptionTier={subscriptionTier}
             />

@@ -30,6 +30,7 @@ import {
     Gift,
     History,
     Target,
+    FlaskConical,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -69,6 +70,7 @@ const SECONDARY_ITEMS = [
     { name: "Recommendations", href: "/dashboard/recommendations", icon: Lightbulb, contextSiteId: false, group: "strategy" },
     { name: "SERP Gap Analysis", href: "/dashboard/serp-gap", icon: BarChart3, contextSiteId: true, group: "strategy" },
     { name: "Campaigns", href: "/dashboard/campaign", icon: Target, contextSiteId: true, group: "strategy" },
+    { name: "Experiments", href: "/dashboard/experiments", icon: FlaskConical, contextSiteId: true, group: "strategy" },
     { name: "Content Editor", href: "/dashboard/editor", icon: Highlighter, contextSiteId: false, group: "content" },
     { name: "Content Planner", href: "/dashboard/planner", icon: Calendar, contextSiteId: true, group: "content" },
     { name: "Re-Optimize", href: "/dashboard/refresh", icon: ClipboardList, contextSiteId: true, group: "content" },
@@ -112,6 +114,7 @@ function SitePickerDropdown({ sites, activeSiteId }: { sites: Site[]; activeSite
             "/dashboard/competitors",
             "/dashboard/serp-gap",
             "/dashboard/campaign",
+            "/dashboard/experiments",
             "/dashboard/content-decay",
             "/dashboard/planner",
             "/dashboard/indexing",

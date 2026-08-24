@@ -8,6 +8,7 @@ import { ChangePasswordForm } from "./ChangePasswordForm";
 import { NotificationPreferencesForm } from "./NotificationPreferencesForm";
 import { SettingsClientExtras } from "./SettingsClientExtras";
 import { WordPressPluginPanel } from "./WordPressPluginPanel";
+import { GscIntegrationCard } from "@/components/dashboard/GscIntegrationCard";
 import { Ga4ConnectForm } from "@/components/dashboard/Ga4ConnectForm";
 import { DeleteAccountButton } from "./DeleteAccountButton";
 import Link from "next/link";
@@ -32,6 +33,7 @@ interface Props {
     userId: string;
     firstSiteId: string;
     firstSiteGa4PropertyId: string | null;
+    gscConnected: boolean;
     planName: string;
     subscriptionTier: string;
 }
@@ -45,6 +47,7 @@ export function SettingsTabs({
     userId,
     firstSiteId,
     firstSiteGa4PropertyId,
+    gscConnected,
     planName,
     subscriptionTier,
 }: Props) {
@@ -127,6 +130,7 @@ export function SettingsTabs({
             >
                 {active === "integrations" && (
                     <div className="flex flex-col gap-6">
+                        <GscIntegrationCard isConnected={gscConnected} />
                         <Ga4ConnectForm siteId={firstSiteId} currentPropertyId={firstSiteGa4PropertyId} />
                         <WordPressPluginPanel siteId={firstSiteId} />
                     </div>

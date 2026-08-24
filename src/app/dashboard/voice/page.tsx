@@ -626,8 +626,13 @@ function VoiceAgentInner() {
         setError(null);
         try {
             const res  = await fetch(`/api/livekit/token?siteId=${selectedSite.id}&domain=${encodeURIComponent(selectedSite.domain)}`);
-            if (!res.ok) throw new Error(`Failed to get token: ${res.status}`);
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                if (res.status === 500 && data?.error === "LiveKit not configured") {
+                    throw new Error("Voice AI is not yet available — LiveKit credentials are not configured. Please contact support.");
+                }
+                throw new Error(data?.error || `Failed to connect (${res.status})`);
+            }
             if (!data.token || !data.url) throw new Error("Invalid token response from server.");
             setTokenDetails(data);
         } catch (err: unknown) {
