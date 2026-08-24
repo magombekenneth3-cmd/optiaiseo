@@ -80,11 +80,12 @@ function getChannelColor(channel: string): string {
 export function UnifiedAnalyticsPanel({ siteId }: { siteId: string }) {
     const [data, setData] = useState<UnifiedAnalytics | null>(null);
     const [loading, setLoading] = useState(true);
+    const [noData, setNoData] = useState(false);
 
     useEffect(() => {
         getUnifiedAnalytics(siteId)
-            .then(setData)
-            .catch(() => setData(null))
+            .then(d => { setData(d); setNoData(!d || (!d.gsc && !d.ga4)); })
+            .catch(() => { setData(null); setNoData(true); })
             .finally(() => setLoading(false));
     }, [siteId]);
 
@@ -99,13 +100,28 @@ export function UnifiedAnalyticsPanel({ siteId }: { siteId: string }) {
         );
     }
 
-    if (!data || (!data.gsc && !data.ga4)) {
+    if (noData || !data || (!data.gsc && !data.ga4)) {
         return (
-            <div className="rounded-2xl border border-[#30363d] bg-[#0d1117] p-8 text-center">
-                <Globe className="w-8 h-8 text-[#6e7681] mx-auto mb-3" />
-                <p className="text-[13px] text-[#6e7681]">
-                    Connect Google Search Console and GA4 in Settings to see unified analytics.
+            <div className="p-6 flex flex-col items-center gap-3 text-center">
+                <Globe className="w-7 h-7 text-[#6e7681]" />
+                <p className="text-[13px] font-semibold text-[#8b949e]">No analytics data yet</p>
+                <p className="text-[12px] text-[#6e7681] max-w-xs">
+                    Connect Google Search Console to see click and impression data, then link a GA4 property for sessions, bounce rate, and conversion tracking.
                 </p>
+                <div className="flex flex-wrap gap-2 justify-center mt-1">
+                    <a
+                        href="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard%2Fkeywords"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#388bfd]/10 text-[#388bfd] border border-[#388bfd]/25 hover:bg-[#388bfd]/20 transition-colors"
+                    >
+                        <Search className="w-3 h-3" /> Connect GSC
+                    </a>
+                    <a
+                        href={`/dashboard/sites/${siteId}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#a371f7]/10 text-[#a371f7] border border-[#a371f7]/25 hover:bg-[#a371f7]/20 transition-colors"
+                    >
+                        <BarChart3 className="w-3 h-3" /> Link GA4 Property
+                    </a>
+                </div>
             </div>
         );
     }
@@ -150,6 +166,22 @@ export function UnifiedAnalyticsPanel({ siteId }: { siteId: string }) {
                     </>
                 )}
             </div>
+
+            {/* GA4 nudge — shown when GSC is connected but GA4 isn't */}
+            {gsc && !ga4 && (
+                <div className="px-5 py-3 border-t border-[#21262d] flex items-center gap-3">
+                    <BarChart3 className="w-4 h-4 text-[#a371f7] shrink-0" />
+                    <p className="text-[12px] text-[#6e7681] flex-1">
+                        <span className="text-[#a371f7] font-semibold">Add GA4</span> to see sessions, bounce rate, and conversion data alongside your GSC metrics.
+                    </p>
+                    <a
+                        href={`/dashboard/sites/${siteId}`}
+                        className="shrink-0 text-[11px] font-semibold text-[#a371f7] border border-[#a371f7]/25 px-2.5 py-1 rounded-lg hover:bg-[#a371f7]/10 transition-colors whitespace-nowrap"
+                    >
+                        Link GA4 →
+                    </a>
+                </div>
+            )}
 
             {ga4 && (ga4.conversions > 0 || ga4.pageviews > 0) && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 divide-x divide-[#21262d] border-t border-[#21262d]">

@@ -248,12 +248,14 @@ export default async function DashboardPage() {
   // gscConnected lives on the User model (not Site)
   const hasGscToken = (user as unknown as { gscConnected?: boolean }).gscConnected ?? false;
   // Fetch domain separately (not in the user include select)
-  const primarySiteDomain = primarySiteId
+  const primarySiteData = primarySiteId
     ? await prisma.site.findFirst({
         where: { id: primarySiteId },
-        select: { domain: true },
-      }).then((s) => s?.domain ?? null).catch(() => null)
+        select: { domain: true, githubRepoUrl: true },
+      }).catch(() => null)
     : null;
+  const primarySiteDomain   = primarySiteData?.domain ?? null;
+  const primarySiteHasGithub = !!primarySiteData?.githubRepoUrl;
 
   const [hasTrackedKeywords, hasBlogPosts, hasTeamMember] = await Promise.all([
     primarySiteId
@@ -364,6 +366,24 @@ export default async function DashboardPage() {
           hasGsc={hasGscToken}
           siteId={primarySiteId}
         />
+      )}
+
+      {/* ── GitHub auto-fix nudge (shown when onboarding done + no repo linked) ── */}
+      {onboardingDone && hasSites && !primarySiteHasGithub && (
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-zinc-700/40 bg-zinc-800/20">
+          <GitBranch className="w-4 h-4 text-zinc-400 mt-0.5 shrink-0" />
+          <div className="flex-1 text-sm text-zinc-400">
+            <span className="font-semibold text-zinc-200">Enable AI auto-fix PRs</span> — connect a GitHub repo so the AI can open nightly pull requests with generated SEO fixes, ready for your review.
+          </div>
+          {primarySiteId && (
+            <Link
+              href={`/dashboard/sites/${primarySiteId}`}
+              className="shrink-0 text-xs font-semibold text-zinc-300 border border-zinc-600 px-3 py-1.5 rounded-lg hover:bg-zinc-700/50 transition-colors whitespace-nowrap"
+            >
+              Connect GitHub
+            </Link>
+          )}
+        </div>
       )}
 
       {/* ── Win celebration (client — shows once per win) ─────────────────── */}
