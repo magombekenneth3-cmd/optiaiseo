@@ -81,6 +81,11 @@ function StatusBadge({ status }: { status: string }) {
       dot: "bg-rose-400",
       label: "Failed",
     },
+    PARTIAL: {
+      cls: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+      dot: "bg-amber-400",
+      label: "Partial",
+    },
   };
   const meta = map[status] ?? {
     cls: "bg-zinc-500/10 text-muted-foreground border-zinc-500/20",

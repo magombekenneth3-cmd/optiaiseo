@@ -122,7 +122,7 @@ model User {
   commissions            Commission[]
   embedLeads             EmbedLead[]
   credits                Int                      @default(50)
-  creditsLockedAt        DateTime?                // Set when grace expires — credits become read-only until top-up/resub
+  creditsLockedAt        DateTime? // Set when grace expires — credits become read-only until top-up/resub
   voiceSessions          VoiceSession[]
   wpApiKey               String?                  @unique
   apiKeys                ApiKey[]
@@ -145,104 +145,102 @@ model VerificationToken {
 }
 
 model Site {
-  id                     String                   @id @default(cuid())
-  userId                 String
-  viewerId               String?
-  domain                 String
-  brandName              String? // User-supplied display name override, e.g. "Search Atlas"
-  targetKeyword          String?
-  operatingMode          String                   @default("REPORT_ONLY")
-  githubRepoUrl          String?
-  mediumToken            String?
-  hashnodeToken          String?
-  hashnodePublicationId  String?
-  coreServices           String?
-  createdAt              DateTime                 @default(now())
-  updatedAt              DateTime                 @updatedAt
-  blogTone               String?                  @default("Authoritative & Professional")
-  techStack              String?                  @default("nextjs")
-  authorName             String?
-  authorRole             String?
-  authorBio              String?
-  realExperience         String?
-  realNumbers            String?
-  localContext           String?
-  plannerState           Json?
-  niche                  String?
-  location               String?
-  targetCustomer         String?
-  wordPressConfig        Json?
-  ghostConfig            Json?
-  hideFromLeaderboard    Boolean                  @default(false)
-  shareToken             String?                  @unique
-  slackWebhookUrl        String?
-  zapierWebhookUrl       String?
-  aeoEvents              AeoEvent[]
-  aeoReports             AeoReport[]
-  ahrefsSnapshots        AhrefsSnapshot[]
-  audits                 Audit[]
-  backlinkAlerts         BacklinkAlert[]
-  blogs                  Blog[]
-  competitors            Competitor[]
-  onPageReports          OnPageReport[]
-  rankSnapshots          RankSnapshot[]
-  selfHealingLogs        SelfHealingLog[]
-  aiShareOfVoice         AiShareOfVoice[]
-  indexingLogs           IndexingLog[]
-  user                   User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  viewer                 User?                    @relation("SiteViewers", fields: [viewerId], references: [id])
-  brandFacts             BrandFact[]
-  aeoSnapshots           AeoSnapshot[]
-  plannerItems           PlannerItem[]
-  seedKeywords           SeedKeyword[]
-  competitorPageAnalyses CompetitorPageAnalysis[]
-  strategyMemories       StrategyMemory[]
-  metricSnapshots        MetricSnapshot[]
-  backlinkDetails        BacklinkDetail[]
-  healingOutcomes        HealingOutcome[]
-  serpFeatures           SerpFeature[]
-  serpFeatureSnapshots   SerpFeatureSnapshot[]
-  uptimeAlerts           UptimeAlert[]
-  voiceSessions          VoiceSession[]
-  detectedServices       DetectedService[]
-  skippedCompetitors     SkippedCompetitor[]
-  indexNowConfig         IndexNowConfig?
-  pageAudits             PageAudit[]
-  repurposedResults      RepurposedResult[]
-  aeoAutopilotEnabled    Boolean                  @default(false)
-  aeoAutopilotSchedule   String                   @default("weekly")
+  id                      String                   @id @default(cuid())
+  userId                  String
+  viewerId                String?
+  domain                  String
+  brandName               String? // User-supplied display name override, e.g. "Search Atlas"
+  targetKeyword           String?
+  operatingMode           String                   @default("REPORT_ONLY")
+  githubRepoUrl           String?
+  mediumToken             String?
+  hashnodeToken           String?
+  hashnodePublicationId   String?
+  coreServices            String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  blogTone                String?                  @default("Authoritative & Professional")
+  techStack               String?                  @default("nextjs")
+  authorName              String?
+  authorRole              String?
+  authorBio               String?
+  realExperience          String?
+  realNumbers             String?
+  localContext            String?
+  plannerState            Json?
+  niche                   String?
+  location                String?
+  targetCustomer          String?
+  wordPressConfig         Json?
+  ghostConfig             Json?
+  hideFromLeaderboard     Boolean                  @default(false)
+  shareToken              String?                  @unique
+  slackWebhookUrl         String?
+  zapierWebhookUrl        String?
+  aeoEvents               AeoEvent[]
+  aeoReports              AeoReport[]
+  ahrefsSnapshots         AhrefsSnapshot[]
+  audits                  Audit[]
+  backlinkAlerts          BacklinkAlert[]
+  blogs                   Blog[]
+  competitors             Competitor[]
+  onPageReports           OnPageReport[]
+  rankSnapshots           RankSnapshot[]
+  selfHealingLogs         SelfHealingLog[]
+  aiShareOfVoice          AiShareOfVoice[]
+  indexingLogs            IndexingLog[]
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  viewer                  User?                    @relation("SiteViewers", fields: [viewerId], references: [id])
+  brandFacts              BrandFact[]
+  aeoSnapshots            AeoSnapshot[]
+  plannerItems            PlannerItem[]
+  seedKeywords            SeedKeyword[]
+  competitorPageAnalyses  CompetitorPageAnalysis[]
+  strategyMemories        StrategyMemory[]
+  metricSnapshots         MetricSnapshot[]
+  backlinkDetails         BacklinkDetail[]
+  healingOutcomes         HealingOutcome[]
+  serpFeatures            SerpFeature[]
+  serpFeatureSnapshots    SerpFeatureSnapshot[]
+  uptimeAlerts            UptimeAlert[]
+  voiceSessions           VoiceSession[]
+  detectedServices        DetectedService[]
+  skippedCompetitors      SkippedCompetitor[]
+  indexNowConfig          IndexNowConfig?
+  pageAudits              PageAudit[]
+  repurposedResults       RepurposedResult[]
+  aeoAutopilotEnabled     Boolean                  @default(false)
+  aeoAutopilotSchedule    String                   @default("weekly")
   rssFeedUrl              String?
   socialRepurposeEnabled  Boolean                  @default(false)
   socialRepurposeSchedule String                   @default("weekly")
   rssSocialPosts          RssSocialPost[]
-  aeoPublicToken         String?                  @unique
-  aeoDigestEnabled       Boolean                  @default(true)
-  aeoProofs              AeoProof[]
-  trackedKeywords        TrackedKeyword[]
-  trackedQueries         TrackedQuery[]
-  visibilitySnapshots    VisibilitySnapshot[]
-  healingPlans           HealingPlan[]
-  mentionCorrectionLogs  MentionCorrectionLog[]
-  serpGapAnalyses        SerpGapAnalysis[]
-  keywordSerpAnalyses    KeywordSerpAnalysis[]
-  dailyBriefings         DailyBriefing[]
-  competitorAlerts       CompetitorAlert[]
-  campaigns              Campaign[]
-  growthDecisions        GrowthDecision[]
-  experiments            Experiment[]
-  competitorAlertLogs    CompetitorAlertLog[]
-  evidenceSnapshots      EvidenceSnapshot[]
-  gscPerformance         GscDailyPerformance[]
+  aeoPublicToken          String?                  @unique
+  aeoDigestEnabled        Boolean                  @default(true)
+  aeoProofs               AeoProof[]
+  trackedKeywords         TrackedKeyword[]
+  trackedQueries          TrackedQuery[]
+  visibilitySnapshots     VisibilitySnapshot[]
+  healingPlans            HealingPlan[]
+  mentionCorrectionLogs   MentionCorrectionLog[]
+  serpGapAnalyses         SerpGapAnalysis[]
+  keywordSerpAnalyses     KeywordSerpAnalysis[]
+  dailyBriefings          DailyBriefing[]
+  competitorAlerts        CompetitorAlert[]
+  campaigns               Campaign[]
+  growthDecisions         GrowthDecision[]
+  experiments             Experiment[]
+  competitorAlertLogs     CompetitorAlertLog[]
+  evidenceSnapshots       EvidenceSnapshot[]
+  gscPerformance          GscDailyPerformance[]
 
-
-
-  ga4PropertyId          String?
+  ga4PropertyId String?
 
   marketCategoryId String?
   marketCategory   MarketCategory? @relation(fields: [marketCategoryId], references: [id])
 
-  pseoTemplates          PseoTemplate[]
-  pseoPages              PseoPage[]
+  pseoTemplates PseoTemplate[]
+  pseoPages     PseoPage[]
 
   @@index([userId])
   @@index([niche, operatingMode])
@@ -368,17 +366,17 @@ model BacklinkAlert {
 }
 
 model Notification {
-  id         String   @id @default(cuid())
-  userId     String
-  type       String
-  title      String
-  body       String
-  href       String?
-  read       Boolean  @default(false)
-  dismissed  Boolean  @default(false)
-  metadata   Json?
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  href      String?
+  read      Boolean  @default(false)
+  dismissed Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, read, createdAt(sort: Desc)])
 }
@@ -401,6 +399,9 @@ model Audit {
   categoryScores Json
   issueList      Json
   fixStatus      String       @default("PENDING")
+  totalPages     Int          @default(0)
+  completedPages Int          @default(0)
+  failedPages    Int          @default(0)
   deletedAt      DateTime?
   lcp            Float?
   cls            Float?
@@ -535,7 +536,7 @@ model TrendingTopic {
   expiresAt DateTime @default(dbgenerated("now() + interval '30 days'"))
 
   @@index([fetchedAt(sort: Desc)])
-  @@index([expiresAt])              // purge job filter
+  @@index([expiresAt]) // purge job filter
 }
 
 model MarketCategory {
@@ -618,6 +619,7 @@ model CompetitorKeyword {
   dataSource   String?
   fetchedAt    DateTime   @default(now())
   competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
   @@index([competitorId])
   @@index([competitorId, fetchedAt(sort: Desc)])
 }
@@ -801,19 +803,19 @@ model TeamMember {
 }
 
 model IndexingLog {
-  id           String    @id @default(cuid())
-  siteId       String
-  url          String
-  status       String    @default("PENDING")
-  trigger      String
-  engine       String    @default("GOOGLE")
-  errorMsg     String?
-  retryCount   Int       @default(0)
-  nextRetryAt  DateTime?
-  retryError   String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  site         Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  siteId      String
+  url         String
+  status      String    @default("PENDING")
+  trigger     String
+  engine      String    @default("GOOGLE")
+  errorMsg    String?
+  retryCount  Int       @default(0)
+  nextRetryAt DateTime?
+  retryError  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  site        Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId, createdAt])
   @@index([status])
@@ -1271,9 +1273,9 @@ model CreditHistory {
 model CreditLedger {
   id          String   @id @default(cuid())
   userId      String
-  amount      Int      // Positive for top-up/refund, negative for consumption
-  type        String   // "BLOG_GEN", "REFUND_FAILED_GEN", "CREDIT_PURCHASE"
-  referenceId String   // Unique key e.g. "refund:blog_gen:clx12345"
+  amount      Int // Positive for top-up/refund, negative for consumption
+  type        String // "BLOG_GEN", "REFUND_FAILED_GEN", "CREDIT_PURCHASE"
+  referenceId String // Unique key e.g. "refund:blog_gen:clx12345"
   reason      String?
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1283,7 +1285,7 @@ model CreditLedger {
 }
 
 model GrowthDecision {
-  id                    String   @id @default(cuid())
+  id                    String    @id @default(cuid())
   siteId                String
   url                   String
   primaryKeyword        String
@@ -1294,15 +1296,15 @@ model GrowthDecision {
   whyNow                Json
   impact                Json
   executionPlan         Json
-  status                String   @default("ACTIVE")
-  engineVersion         String   @default("v1")
+  status                String    @default("ACTIVE")
+  engineVersion         String    @default("v1")
   inputPeriodStart      DateTime?
   inputPeriodEnd        DateTime?
-  generatedAt           DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  generatedAt           DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  site        Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  experiment  Experiment?
+  site       Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  experiment Experiment?
 
   @@unique([siteId, url, primaryKeyword, action])
   @@index([siteId, status])
@@ -1310,18 +1312,18 @@ model GrowthDecision {
 }
 
 model Experiment {
-  id               String   @id
-  decisionId       String   @unique
-  siteId           String
-  targetUrl        String
-  actionExecuted   String
-  executedAt       DateTime
-  evaluationDate   DateTime
-  status           String   @default("RECORDED") // RECORDED | EVALUATING | COMPLETED | INSUFFICIENT_DATA
-  baseline         Json
-  lift             Json?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id             String   @id
+  decisionId     String   @unique
+  siteId         String
+  targetUrl      String
+  actionExecuted String
+  executedAt     DateTime
+  evaluationDate DateTime
+  status         String   @default("RECORDED") // RECORDED | EVALUATING | COMPLETED | INSUFFICIENT_DATA
+  baseline       Json
+  lift           Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   site     Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
   decision GrowthDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
@@ -1330,96 +1332,93 @@ model Experiment {
   @@index([evaluationDate, status])
 }
 
-
-
 model SerpGapAnalysis {
-  id                    String    @id @default(cuid())
-  siteId                String
-  userId                String
-  keyword               String
-  clientUrl             String
-  clientPosition        Int
-  status                String    @default("PENDING")
+  id                     String    @id @default(cuid())
+  siteId                 String
+  userId                 String
+  keyword                String
+  clientUrl              String
+  clientPosition         Int
+  status                 String    @default("PENDING")
   // PENDING | SCRAPING | PLANNING | COMPLETED | FAILED
-  gapReport             Json?
-  implementationPlan    Json?
-  serpFormat            String?
-  serpHasAiOverview     Boolean   @default(false)
-  serpHasFeaturedSnippet Boolean  @default(false)
-  gapCount              Int?
-  criticalGapCount      Int?
+  gapReport              Json?
+  implementationPlan     Json?
+  serpFormat             String?
+  serpHasAiOverview      Boolean   @default(false)
+  serpHasFeaturedSnippet Boolean   @default(false)
+  gapCount               Int?
+  criticalGapCount       Int?
   competitorAvgWordCount Int?
-  estimatedPositionGain String?
-  executiveSummary      String?
-  topPriority           String?
-  taskCount             Int?
-  automatedTaskCount    Int?
-  errorMessage          String?
-  autoQueued            Boolean   @default(false)
-  createdAt             DateTime  @default(now())
-  completedAt           DateTime?
-  site                  Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  estimatedPositionGain  String?
+  executiveSummary       String?
+  topPriority            String?
+  taskCount              Int?
+  automatedTaskCount     Int?
+  errorMessage           String?
+  autoQueued             Boolean   @default(false)
+  createdAt              DateTime  @default(now())
+  completedAt            DateTime?
+  site                   Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId, createdAt(sort: Desc)])
   @@index([userId])
 }
 
-
 model KeywordSerpAnalysis {
-  id               String    @id @default(cuid())
-  siteId           String
-  keyword          String
-  landingUrl       String
-  status           String    @default("PENDING")
-  errorMessage     String?
-  serpResults      Json      @default("[]")
-  fixes            Json      @default("[]")
-  headingGaps      Json      @default("[]")
-  wordCountAvg     Int       @default(0)
-  wordCountPage    Int       @default(0)
-  yourPageH2s      Json      @default("[]")
-  drGap            Int?
-  rdGapRoot        Int?
-  rdGapPage        Int?
-  clientDR         Int?
-  clientRDs        Int?
-  toxicCount       Int       @default(0)
-  topAnchors       Json      @default("[]")
-  newLastWeek      Int       @default(0)
-  lostLastWeek     Int       @default(0)
-  dofollowRatio    Float     @default(0)
-  userPageScrapedOk Boolean  @default(true)
-  opportunityDoms  Json      @default("[]")
-  intentMismatch   Boolean   @default(false)
-  intentNote       String?
-  contentType      String?
-  disclaimerNeeded Boolean   @default(false)
-  createdAt        DateTime  @default(now())
-  completedAt      DateTime?
-  expiresAt        DateTime  @default(now())
-  site             Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  id                String    @id @default(cuid())
+  siteId            String
+  keyword           String
+  landingUrl        String
+  status            String    @default("PENDING")
+  errorMessage      String?
+  serpResults       Json      @default("[]")
+  fixes             Json      @default("[]")
+  headingGaps       Json      @default("[]")
+  wordCountAvg      Int       @default(0)
+  wordCountPage     Int       @default(0)
+  yourPageH2s       Json      @default("[]")
+  drGap             Int?
+  rdGapRoot         Int?
+  rdGapPage         Int?
+  clientDR          Int?
+  clientRDs         Int?
+  toxicCount        Int       @default(0)
+  topAnchors        Json      @default("[]")
+  newLastWeek       Int       @default(0)
+  lostLastWeek      Int       @default(0)
+  dofollowRatio     Float     @default(0)
+  userPageScrapedOk Boolean   @default(true)
+  opportunityDoms   Json      @default("[]")
+  intentMismatch    Boolean   @default(false)
+  intentNote        String?
+  contentType       String?
+  disclaimerNeeded  Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  completedAt       DateTime?
+  expiresAt         DateTime  @default(now())
+  site              Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@unique([siteId, keyword])
   @@index([siteId])
-  @@index([siteId, status])          // purge job + dashboard status filter
+  @@index([siteId, status]) // purge job + dashboard status filter
   @@index([expiresAt])
 }
 
 model DailyBriefing {
-  id                            String   @id @default(cuid())
-  siteId                        String
-  userId                        String
-  date                          DateTime @default(now())
-  yesterdayTraffic               Int      @default(0)
-  organicImpressions             Int      @default(0)
-  topPerformingKeyword           String?
-  topPerformingKeywordVolume     Int?
-  topPerformingKeywordPosition   Int?
-  anomaliesFound                 Json?
-  quickWins                      Json?
-  createdAt                      DateTime @default(now())
-  site                           Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  user                           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                           String   @id @default(cuid())
+  siteId                       String
+  userId                       String
+  date                         DateTime @default(now())
+  yesterdayTraffic             Int      @default(0)
+  organicImpressions           Int      @default(0)
+  topPerformingKeyword         String?
+  topPerformingKeywordVolume   Int?
+  topPerformingKeywordPosition Int?
+  anomaliesFound               Json?
+  quickWins                    Json?
+  createdAt                    DateTime @default(now())
+  site                         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user                         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([siteId, date(sort: Desc)])
   @@index([userId])
@@ -1467,7 +1466,7 @@ model RssSocialPost {
   siteId       String
   articleUrl   String
   articleTitle String
-  posts        Json     // Store the generated SocialPost[] JSON array
+  posts        Json // Store the generated SocialPost[] JSON array
   createdAt    DateTime @default(now())
   site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -1508,7 +1507,7 @@ model GscDailyPerformance {
   siteId      String
   url         String
   keyword     String
-  date        String   // YYYY-MM-DD (string for composite index efficiency)
+  date        String // YYYY-MM-DD (string for composite index efficiency)
   clicks      Int      @default(0)
   impressions Int      @default(0)
   ctr         Float    @default(0)

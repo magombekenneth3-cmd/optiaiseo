@@ -20,6 +20,9 @@ type AuditSummary = {
   id: string;
   runTimestamp: Date;
   fixStatus: string;
+  totalPages: number;
+  completedPages: number;
+  failedPages: number;
   categoryScores: unknown;
   issueList: unknown;
   lcp: number | null;
@@ -64,6 +67,9 @@ export async function getUserAudits(
         id: true,
         runTimestamp: true,
         fixStatus: true,
+        totalPages: true,
+        completedPages: true,
+        failedPages: true,
         categoryScores: true,
         issueList: true,
         lcp: true,

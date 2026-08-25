@@ -6,28 +6,29 @@ import { toast } from "sonner";
 import { CheckCircle2, BarChart2 } from "lucide-react";
 import Link from "next/link";
 
+interface AuditProgress {
+    id: string;
+    totalPages: number;
+    completedPages: number;
+    failedPages: number;
+    fixStatus: string;
+}
+
 interface AuditPollerProps {
-    /** IDs of audits currently IN_PROGRESS or PENDING */
-    processingAuditIds: string[];
+    processingAudits: AuditProgress[];
     initialIntervalMs?: number;
 }
 
-const AUDIT_STEPS = [
-    { label: "Crawling pages",            pct: 12 },
-    { label: "Checking SEO signals",      pct: 40 },
-    { label: "AI analysis",               pct: 68 },
-    { label: "Scoring & recommendations", pct: 90 },
-];
-
-const STEP_AT = [0, 4, 8, 12]; // attempt index at which each step becomes active
-
 /**
  * Shows a live progress bar while audits are in-flight.
+ * Reads real completedPages/totalPages from the server instead of
+ * faking progress with time-based estimates.
+ *
  * Polls on an exponential back-off schedule (6s → 30s max).
- * Stops after 60 attempts (~20 min) and shows a timeout banner.
- * Fires a completion toast when processingAuditIds goes to zero.
+ * Stops after 90 attempts (~20 min) and shows a timeout banner.
+ * Fires a completion toast when processingAudits goes to zero.
  */
-export function AuditPoller({ processingAuditIds, initialIntervalMs = 6000 }: AuditPollerProps) {
+export function AuditPoller({ processingAudits, initialIntervalMs = 6000 }: AuditPollerProps) {
     const router    = useRouter();
     const routerRef = useRef(router);
     useEffect(() => { routerRef.current = router; });
@@ -35,19 +36,16 @@ export function AuditPoller({ processingAuditIds, initialIntervalMs = 6000 }: Au
     const MAX_ATTEMPTS = 90;
     const MAX_INTERVAL = 30_000;
 
-    const attemptRef      = useRef(0);
-    const [gaveUp, setGaveUp]         = useState(false);
-    const [displayPct, setDisplayPct] = useState(0);
-    const prevLengthRef               = useRef(processingAuditIds.length);
+    const attemptRef = useRef(0);
+    const [gaveUp, setGaveUp] = useState(false);
+    const prevLengthRef = useRef(processingAudits.length);
 
     useEffect(() => {
         const prev = prevLengthRef.current;
-        const curr = processingAuditIds.length;
+        const curr = processingAudits.length;
         prevLengthRef.current = curr;
 
         if (prev > 0 && curr === 0) {
-            setDisplayPct(100);
-            setTimeout(() => setDisplayPct(0), 600);
             toast.custom(
                 (id) => (
                     <div
@@ -79,10 +77,10 @@ export function AuditPoller({ processingAuditIds, initialIntervalMs = 6000 }: Au
             );
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [processingAuditIds.length]);
+    }, [processingAudits.length]);
 
     useEffect(() => {
-        if (processingAuditIds.length === 0) {
+        if (processingAudits.length === 0) {
             attemptRef.current = 0;
             setGaveUp(false);
             return;
@@ -94,7 +92,6 @@ export function AuditPoller({ processingAuditIds, initialIntervalMs = 6000 }: Au
         function scheduleNext() {
             if (attemptRef.current >= MAX_ATTEMPTS) { setGaveUp(true); return; }
 
-            // Exponential back-off: 6s → 30s cap
             const delay = Math.min(
                 initialIntervalMs * Math.pow(1.25, attemptRef.current),
                 MAX_INTERVAL
@@ -103,21 +100,6 @@ export function AuditPoller({ processingAuditIds, initialIntervalMs = 6000 }: Au
             timeoutId = setTimeout(() => {
                 if (document.visibilityState !== "visible") { scheduleNext(); return; }
                 attemptRef.current += 1;
-
-                // Advance % estimate
-                const stepIdx = STEP_AT.reduce(
-                    (acc, min, i) => (attemptRef.current >= min ? i : acc), 0
-                );
-                const base       = AUDIT_STEPS[stepIdx].pct;
-                const next       = AUDIT_STEPS[Math.min(stepIdx + 1, AUDIT_STEPS.length - 1)].pct;
-                const stepRange  = next - base;
-                const stepsInBand = Math.max((STEP_AT[Math.min(stepIdx + 1, STEP_AT.length - 1)] ?? 60) - STEP_AT[stepIdx], 1);
-                const progress = Math.min(
-                    base + stepRange * ((attemptRef.current - STEP_AT[stepIdx]) / stepsInBand),
-                    93
-                );
-                setDisplayPct(Math.round(progress));
-
                 routerRef.current.refresh();
                 scheduleNext();
             }, delay);
@@ -126,12 +108,30 @@ export function AuditPoller({ processingAuditIds, initialIntervalMs = 6000 }: Au
         scheduleNext();
         return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [processingAuditIds.length, gaveUp, initialIntervalMs]);
+    }, [processingAudits.length, gaveUp, initialIntervalMs]);
 
-    if (processingAuditIds.length === 0) return null;
+    if (processingAudits.length === 0) return null;
 
-    const stepIdx   = STEP_AT.reduce((acc, min, i) => (attemptRef.current >= min ? i : acc), 0);
-    const stepLabel = AUDIT_STEPS[stepIdx].label;
+    const totals = processingAudits.reduce(
+        (acc, a) => ({
+            total: acc.total + a.totalPages,
+            completed: acc.completed + a.completedPages,
+            failed: acc.failed + a.failedPages,
+        }),
+        { total: 0, completed: 0, failed: 0 }
+    );
+
+    const processed = totals.completed + totals.failed;
+    const pct = totals.total > 0 ? Math.round((processed / totals.total) * 100) : 0;
+    const remaining = Math.max(totals.total - processed, 0);
+
+    const isDiscovering = processingAudits.some(
+        (a) => a.fixStatus === "PENDING" || a.totalPages === 0
+    );
+
+    const statusLabel = isDiscovering
+        ? "Discovering pages…"
+        : `${totals.completed} completed · ${totals.failed > 0 ? `${totals.failed} failed · ` : ""}${remaining} remaining`;
 
     if (gaveUp) {
         return (
@@ -170,44 +170,32 @@ export function AuditPoller({ processingAuditIds, initialIntervalMs = 6000 }: Au
                     </div>
                     <div>
                         <p className="text-emerald-200 font-semibold text-sm leading-none">
-                            Running {processingAuditIds.length === 1 ? "1 audit" : `${processingAuditIds.length} audits`}
+                            {isDiscovering
+                                ? "Discovering pages…"
+                                : `Auditing ${totals.total} page${totals.total !== 1 ? "s" : ""}`}
                         </p>
-                        <p className="text-emerald-400/70 text-xs mt-0.5">{stepLabel}</p>
+                        <p className="text-emerald-400/70 text-xs mt-0.5">{statusLabel}</p>
                     </div>
                 </div>
-                <span className="text-xs font-mono font-bold text-emerald-400/80 shrink-0">{displayPct}%</span>
+                <span className="text-xs font-mono font-bold text-emerald-400/80 shrink-0">
+                    {isDiscovering ? "…" : `${processed} / ${totals.total}`}
+                </span>
             </div>
 
-            {/* Animated progress bar */}
+            {/* Progress bar */}
             <div className="h-1.5 rounded-full bg-emerald-500/10 overflow-hidden w-full">
                 <div
                     className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-[2000ms] ease-out relative overflow-hidden"
-                    style={{ width: `${displayPct}%` }}
+                    style={{ width: `${isDiscovering ? 5 : Math.max(pct, 2)}%` }}
                 >
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
                 </div>
             </div>
 
-            {/* Step dots */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-                {AUDIT_STEPS.map((s, i) => (
-                    <div key={s.label} className="flex items-center gap-1.5">
-                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-500 ${
-                            i < stepIdx  ? "bg-emerald-400" :
-                            i === stepIdx ? "bg-emerald-300 animate-pulse" :
-                            "bg-zinc-700"
-                        }`} />
-                        <span className={`text-[10px] font-medium transition-colors duration-500 ${
-                            i < stepIdx  ? "text-emerald-400" :
-                            i === stepIdx ? "text-emerald-300" :
-                            "text-zinc-600"
-                        }`}>{s.label}</span>
-                        {i < AUDIT_STEPS.length - 1 && (
-                            <span className={`text-xs shrink-0 ${i < stepIdx ? "text-emerald-600" : "text-zinc-700"}`}>›</span>
-                        )}
-                    </div>
-                ))}
-            </div>
+            {/* Percentage */}
+            {!isDiscovering && totals.total > 0 && (
+                <p className="text-emerald-400/60 text-[11px] font-medium">{pct}% complete</p>
+            )}
         </div>
     );
 }

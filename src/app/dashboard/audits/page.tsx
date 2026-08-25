@@ -32,13 +32,19 @@ export default async function AuditsPage() {
   const userTier       = dbUser?.subscriptionTier ?? "FREE";
   const gscConnected   = (dbUser?.accounts?.length ?? 0) > 0;
 
-  const processingIds = (audits ?? [])
+  const processingAudits = (audits ?? [])
     .filter((a) => a.fixStatus === "IN_PROGRESS" || a.fixStatus === "PENDING")
-    .map((a) => a.id);
+    .map((a) => ({
+      id: a.id,
+      totalPages: a.totalPages,
+      completedPages: a.completedPages,
+      failedPages: a.failedPages,
+      fixStatus: a.fixStatus,
+    }));
 
   return (
     <div className="flex flex-col gap-8 w-full max-w-6xl mx-auto">
-      <AuditPoller processingAuditIds={processingIds} />
+      <AuditPoller processingAudits={processingAudits} />
 
       <div className="flex items-center justify-between">
         <div>
