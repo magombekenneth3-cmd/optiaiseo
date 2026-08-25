@@ -227,7 +227,6 @@ export async function getPageAudits(auditId: string): Promise<GetPageAuditsResul
         id: true,
         pageAudits: {
           orderBy: { overallScore: "asc" },
-          take: 100,
         },
       },
     });
