@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 import { executeGrowthDecision } from "@/lib/growth/execution-engine";
 import { logger } from "@/lib/logger";
+import { hashCanonicalMutation } from "@/lib/mutations";
 
 export async function POST(
     req: NextRequest,
@@ -27,10 +28,25 @@ export async function POST(
             return NextResponse.json({ error: "Recommendation not found or unauthorized" }, { status: 404 });
         }
 
-        // 1. Mark status as APPROVED
+        const approvalHash = hashCanonicalMutation(
+            "Blog",
+            decision.url,
+            1,
+            decision.action,
+            { action: decision.action, url: decision.url },
+        );
+
+        const ttlHours = 24;
+        const approvalExpiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
         await prisma.growthDecision.update({
             where: { id: decisionId },
-            data: { status: "APPROVED" },
+            data: {
+                status: "APPROVED",
+                approvedBy: session.user.id,
+                approvedAt: new Date(),
+                approvalExpiresAt,
+                mutationHash: approvalHash,
+            },
         });
 
         // Invalidate Redis cache
@@ -39,13 +55,14 @@ export async function POST(
             try { await redis.del(`growth_decisions_compressed:${decision.siteId}`); } catch { /* fail open */ }
         }
 
-        // 2. Execute via Execution Engine (applies fixes, sets EXECUTED, enqueues indexing, records T0 baseline)
+        // ── 3. Execute via mutation lifecycle ────────────────────────────────
         const execResult = await executeGrowthDecision(decisionId, decision.siteId);
 
         logger.info("[RecommendationsAPI] Approved and executed recommendation", {
             decisionId,
             siteId: decision.siteId,
             success: execResult.success,
+            operationId: execResult.operationId,
         });
 
         return NextResponse.json({
@@ -54,6 +71,7 @@ export async function POST(
             actionExecuted: execResult.actionExecuted,
             details: execResult.details,
             executedAt: execResult.executedAt,
+            operationId: execResult.operationId,
         });
     } catch (err: unknown) {
         logger.error("[RecommendationsAPI] Approve failed", { error: (err as Error)?.message || String(err) });

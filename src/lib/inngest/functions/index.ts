@@ -36,3 +36,4 @@ export * from "./social-repurpose";
 export * from "./campaign";
 export * from "./gsc-sync";
 export * from "./growth-pipeline";
+export * from "./mutation-effects";

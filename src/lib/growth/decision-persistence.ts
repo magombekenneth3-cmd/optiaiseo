@@ -76,7 +76,7 @@ export async function savePersistedDecisions(siteId: string, decisions: GrowthDe
                 const rawBuffer = Buffer.from(JSON.stringify(decisions));
                 const compressed = await gzip(rawBuffer);
                 await redis.set(`growth_decisions_compressed:${siteId}`, compressed.toString("base64"), { ex: REDIS_TTL_SECONDS });
-            } catch { /* Fail open for cache */ }
+            } catch { }
         }
 
         logger.info("[DecisionPersistence] Successfully batch persisted growth decisions", { siteId, count: decisions.length });

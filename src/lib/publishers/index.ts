@@ -7,6 +7,11 @@ import { publishToNextJs, NextJsConfig } from "./nextjs";
 import { publishToWix, WixConfig } from "./wix";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import {
+    registerEffect,
+    assertEffectChannelEnabled,
+    MutationBlockedError,
+} from "@/lib/mutations";
 
 export type CmsPlatform = "WORDPRESS" | "SHOPIFY" | "WEBFLOW" | "FRAMER" | "NEXTJS" | "WIX" | "GHOST";
 
@@ -21,6 +26,7 @@ export interface PublishableBlogItem {
 
 export interface SitePlatformConfig {
     platform: CmsPlatform;
+    siteId?: string;
     wordPressConfig?: unknown;
     ghostConfig?: unknown;
     shopifyConfig?: ShopifyConfig;
@@ -30,9 +36,74 @@ export interface SitePlatformConfig {
     wixConfig?: WixConfig;
 }
 
-export async function dispatchMultiCmsPublish(blog: PublishableBlogItem, site: SitePlatformConfig): Promise<{ platform: CmsPlatform; publishedUrl: string }> {
-    logger.info("[Publishers/Dispatcher] Starting multi-CMS publish", { blogId: blog.id, platform: site.platform });
+/**
+ * Dispatches a CMS publish as a MutationEffect when an operationId is provided.
+ * Falls back to direct dispatch when no operationId is given (backward compat).
+ *
+ * When routed through the mutation lifecycle:
+ *   1. Checks CMS channel kill switch
+ *   2. Registers a CMS_PUBLISH MutationEffect
+ *   3. Dispatches the actual CMS API call
+ *   4. Marks blog as PUBLISHED on success
+ *
+ * @param blog - The blog item to publish
+ * @param site - Platform configuration (must include siteId for mutation tracking)
+ * @param operationId - Optional: links this publish to a MutationOperation
+ */
+export async function dispatchMultiCmsPublish(
+    blog: PublishableBlogItem,
+    site: SitePlatformConfig,
+    operationId?: string,
+): Promise<{ platform: CmsPlatform; publishedUrl: string }> {
+    logger.info("[Publishers/Dispatcher] Starting multi-CMS publish", { blogId: blog.id, platform: site.platform, operationId });
 
+    // ── Kill switch check ────────────────────────────────────────────────
+    if (site.siteId) {
+        try {
+            await assertEffectChannelEnabled(site.siteId, "CMS");
+        } catch (err) {
+            if (err instanceof MutationBlockedError) {
+                logger.warn("[Publishers/Dispatcher] CMS channel blocked by kill switch", {
+                    blogId: blog.id,
+                    siteId: site.siteId,
+                    platform: site.platform,
+                });
+                throw err;
+            }
+            throw err;
+        }
+    }
+
+    // ── Register MutationEffect if we have an operation ──────────────────
+    let effectId: string | undefined;
+    if (operationId) {
+        try {
+            effectId = await registerEffect({
+                operationId,
+                effectType: "CMS_PUBLISH",
+                platform: site.platform,
+                payload: {
+                    blogId: blog.id,
+                    slug: blog.slug,
+                    platform: site.platform,
+                    title: blog.title,
+                },
+                confirmationMode: "POLL",
+                compensationPolicy: getCompensationPolicy(site.platform),
+                idempotencyParams: {
+                    blogId: blog.id,
+                    platform: site.platform,
+                },
+            });
+        } catch (effectErr) {
+            logger.warn("[Publishers/Dispatcher] Effect registration failed — continuing with direct dispatch", {
+                operationId,
+                error: (effectErr as Error)?.message,
+            });
+        }
+    }
+
+    // ── Dispatch to CMS platform ─────────────────────────────────────────
     let publishedUrl = "";
 
     switch (site.platform) {
@@ -85,7 +156,51 @@ export async function dispatchMultiCmsPublish(blog: PublishableBlogItem, site: S
         data: { status: "PUBLISHED", publishedAt: new Date() },
     });
 
+    // ── Update effect status on success ──────────────────────────────────
+    if (effectId) {
+        try {
+            await (prisma as any).mutationEffect.update({
+                where: { id: effectId },
+                data: {
+                    status: "DISPATCHED",
+                    dispatchedAt: new Date(),
+                    externalId: publishedUrl || undefined,
+                    attempts: { increment: 1 },
+                },
+            });
+        } catch (updateErr) {
+            logger.warn("[Publishers/Dispatcher] Failed to update effect status", {
+                effectId,
+                error: (updateErr as Error)?.message,
+            });
+        }
+    }
+
     return { platform: site.platform, publishedUrl };
+}
+
+/**
+ * Returns the appropriate compensation policy for each CMS platform.
+ * WordPress/Ghost/Shopify support full rollback (PUT previous content).
+ * Others support partial rollback or are irreversible.
+ */
+function getCompensationPolicy(
+    platform: CmsPlatform
+): "ROLLBACK_SUPPORTED" | "ROLLBACK_PARTIAL" | "COMPENSATION_ONLY" | "IRREVERSIBLE" {
+    switch (platform) {
+        case "WORDPRESS":
+        case "GHOST":
+        case "SHOPIFY":
+            return "ROLLBACK_SUPPORTED";
+        case "WEBFLOW":
+        case "NEXTJS":
+            return "ROLLBACK_PARTIAL";
+        case "FRAMER":
+        case "WIX":
+            return "COMPENSATION_ONLY";
+        default:
+            return "IRREVERSIBLE";
+    }
 }
 
 export { publishToShopify, publishToWebflow, publishToFramer, publishToNextJs, publishToWix, publishToWordPress, publishToGhost };

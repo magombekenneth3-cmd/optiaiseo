@@ -1,6 +1,11 @@
 import { logger } from "@/lib/logger";
 import { Octokit } from "@octokit/rest";
 import { BRAND } from "@/lib/constants/brand";
+import {
+    registerEffect,
+    assertEffectChannelEnabled,
+    MutationBlockedError,
+} from "@/lib/mutations";
 
 const MAX_FILE_SIZE = 1_000_000;
 
@@ -21,23 +26,33 @@ export interface GitHubPRResult {
     prUrl?: string;
     branchName?: string;
     error?: string;
+    effectId?: string;
 }
 
 /**
  * Opens a single PR containing all provided fix files.
  *
- * @param repoUrl   - Full GitHub URL, e.g. https://github.com/owner/repo
- * @param files     - Array of files to commit
- * @param domain    - Site domain (used in PR title / body)
- * @param token     - GitHub token
- * @param userEmail - Optional email to send notification
+ * When operationId + siteId are provided, this function:
+ *   1. Checks the GITHUB channel kill switch
+ *   2. Registers a GITHUB_PR MutationEffect
+ *   3. Updates the effect status on success/failure
+ *
+ * @param repoUrl      - Full GitHub URL, e.g. https://github.com/owner/repo
+ * @param files        - Array of files to commit
+ * @param domain       - Site domain (used in PR title / body)
+ * @param token        - GitHub token
+ * @param userEmail    - Optional email to send notification
+ * @param operationId  - Optional: links this PR to a MutationOperation
+ * @param siteId       - Optional: required for kill switch check
  */
 export async function createAutoFixPR(
     repoUrl: string,
     files: AutoFixFile[],
     domain: string,
     token: string,
-    userEmail?: string
+    userEmail?: string,
+    operationId?: string,
+    siteId?: string,
 ): Promise<GitHubPRResult> {
     if (!token) {
         return { success: false, error: "GitHub account not connected." };
@@ -45,6 +60,22 @@ export async function createAutoFixPR(
 
     if (!files.length) {
         return { success: false, error: "No fix files provided." };
+    }
+
+    // ── Kill switch check ────────────────────────────────────────────────
+    if (siteId) {
+        try {
+            await assertEffectChannelEnabled(siteId, "GITHUB");
+        } catch (err) {
+            if (err instanceof MutationBlockedError) {
+                logger.warn("[GitHub Engine] GITHUB channel blocked by kill switch", {
+                    siteId,
+                    repoUrl,
+                });
+                return { success: false, error: `GitHub channel blocked: ${err.message}` };
+            }
+            throw err;
+        }
     }
 
     const encoder = new TextEncoder();
@@ -75,7 +106,37 @@ export async function createAutoFixPR(
     }
     const [, owner, repo] = match;
 
-    logger.info("[GitHub Engine] PR flow started", { owner, repo, fileCount: files.length });
+    logger.info("[GitHub Engine] PR flow started", { owner, repo, fileCount: files.length, operationId });
+
+    // ── Register MutationEffect if we have an operation ──────────────────
+    let effectId: string | undefined;
+    if (operationId) {
+        try {
+            effectId = await registerEffect({
+                operationId,
+                effectType: "GITHUB_PR",
+                payload: {
+                    repoUrl,
+                    owner,
+                    repo,
+                    fileCount: files.length,
+                    domain,
+                },
+                confirmationMode: "POLL",
+                compensationPolicy: "ROLLBACK_PARTIAL",
+                idempotencyParams: {
+                    owner,
+                    repo,
+                    date: new Date().toISOString().slice(0, 10),
+                },
+            });
+        } catch (effectErr) {
+            logger.warn("[GitHub Engine] Effect registration failed — continuing with direct dispatch", {
+                operationId,
+                error: (effectErr as Error)?.message,
+            });
+        }
+    }
 
     try {
         const octokit = new Octokit({ auth: token });
@@ -103,7 +164,11 @@ export async function createAutoFixPR(
         if (existingPRs.data.length > 0) {
             const pr = existingPRs.data[0];
             logger.info("[GitHub Engine] PR already exists — returning early", { prUrl: pr.html_url });
-            return { success: true, prUrl: pr.html_url, branchName };
+            // Update effect as DISPATCHED — the PR already exists
+            if (effectId) {
+                await updateEffectStatus(effectId, "DISPATCHED", pr.html_url);
+            }
+            return { success: true, prUrl: pr.html_url, branchName, effectId };
         }
 
         try {
@@ -214,6 +279,11 @@ ${tableRows}
 
         logger.info("[GitHub Engine] PR opened successfully", { prUrl: prData.html_url });
 
+        // Update effect status on success
+        if (effectId) {
+            await updateEffectStatus(effectId, "DISPATCHED", prData.html_url);
+        }
+
         if (userEmail) {
             try {
                 const { sendPrNotification } = await import("@/lib/email/pr-notification");
@@ -230,7 +300,7 @@ ${tableRows}
             }
         }
 
-        return { success: true, prUrl: prData.html_url, branchName };
+        return { success: true, prUrl: prData.html_url, branchName, effectId };
 
     } catch (error: unknown) {
         logger.error("[GitHub Engine] PR flow failed", {
@@ -238,9 +308,47 @@ ${tableRows}
             repo,
             error: (error as Error)?.message || String(error),
         });
+
+        // Update effect status on failure
+        if (effectId) {
+            await updateEffectStatus(effectId, "FAILED", undefined, (error as Error)?.message);
+        }
+
         return {
             success: false,
             error: (error as Error).message || "Unknown GitHub API error.",
+            effectId,
         };
+    }
+}
+
+/**
+ * Updates a MutationEffect's status after dispatch attempt.
+ */
+async function updateEffectStatus(
+    effectId: string,
+    status: "DISPATCHED" | "FAILED",
+    externalId?: string,
+    externalError?: string,
+): Promise<void> {
+    try {
+        const { prisma } = await import("@/lib/prisma");
+        await (prisma as any).mutationEffect.update({
+            where: { id: effectId },
+            data: {
+                status,
+                dispatchedAt: status === "DISPATCHED" ? new Date() : undefined,
+                failedAt: status === "FAILED" ? new Date() : undefined,
+                externalId: externalId || undefined,
+                externalError: externalError || undefined,
+                attempts: { increment: 1 },
+            },
+        });
+    } catch (updateErr) {
+        logger.warn("[GitHub Engine] Failed to update effect status", {
+            effectId,
+            status,
+            error: (updateErr as Error)?.message,
+        });
     }
 }

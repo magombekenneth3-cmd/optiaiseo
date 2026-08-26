@@ -4,8 +4,19 @@ import { getPersistedDecisions } from "@/lib/growth/decision-persistence";
 import { performOneClickAutoFix } from "@/lib/autofix/fixer";
 import { triggerInstantIndexing } from "@/lib/indexing/indexnow";
 import { recordExperimentBaseline } from "@/lib/experiments/tracker";
-import { enqueueOutboxJob } from "@/lib/outbox/engine";
 import { logger } from "@/lib/logger";
+
+// Mutation lifecycle
+import {
+    createOperation,
+    executeOperation,
+    registerEffect,
+    type CreateOperationParams,
+    type MutableModel,
+    ExecutionClaimError,
+    MutationBlockedError,
+    ConcurrentModificationError,
+} from "@/lib/mutations";
 
 
 
@@ -18,6 +29,7 @@ export interface ExecutionResult {
     details: string;
     executedAt: Date;
     affectedBlogId?: string;
+    operationId?: string;
     baselineMetrics?: {
         position?: number;
         clicks?: number;
@@ -25,47 +37,27 @@ export interface ExecutionResult {
     };
 }
 
+/**
+ * Executes a growth decision through the Mutation Operation lifecycle.
+ *
+ * Flow:
+ *   1. Resolve decision + target blog
+ *   2. Build the mutation payload (the exact patch to apply)
+ *   3. createOperation() → risk assessment → auto-approve or PENDING_APPROVAL
+ *   4. executeOperation() → atomic versioned update with snapshot
+ *   5. registerEffect() → INDEXNOW, GOOGLE_INDEXING side effects
+ *   6. Mark GrowthDecision as EXECUTED
+ *
+ * The external ExecutionResult interface is preserved for backward compatibility.
+ */
 export async function executeGrowthDecision(
     decisionId: string,
     siteId: string
 ): Promise<ExecutionResult> {
     const executedAt = new Date();
-    const redis = getRedis();
-    const lockKey = `lock:decision:${decisionId}`;
-    const lockToken = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `token-${Date.now()}-${Math.random()}`;
-    let lockAcquired = false;
-
-    if (redis) {
-        try {
-            const acquired = await redis.set(lockKey, lockToken, { nx: true, ex: 30 });
-            if (!acquired) {
-                return {
-                    decisionId,
-                    siteId,
-                    actionExecuted: "LOCK_CONTESTED",
-                    targetUrl: "/",
-                    success: false,
-                    details: "Execution already in progress for this decision.",
-                    executedAt
-                };
-            }
-            lockAcquired = true;
-        } catch (redisErr) {
-            logger.warn("[ExecutionEngine] Redis lock error — aborting un-locked execution", { decisionId, error: (redisErr as Error)?.message });
-            return {
-                decisionId,
-                siteId,
-                actionExecuted: "LOCK_UNAVAILABLE",
-                targetUrl: "/",
-                success: false,
-                details: "Distributed lock service unavailable.",
-                executedAt
-            };
-        }
-    }
 
     try {
-        // 1. Fetch Decision from DB / Cache
+        // ── 1. Resolve Decision ──────────────────────────────────────────────
         const decisions = await getPersistedDecisions(siteId);
         const decision = decisions.find((d) => d.id === decisionId);
 
@@ -115,7 +107,7 @@ export async function executeGrowthDecision(
             }
         }
 
-        // Extract blog slug from targetUrl (e.g. /blog/my-post)
+        // ── 2. Resolve Target Blog ───────────────────────────────────────────
         const slug = targetUrl.replace(/^\/blog\//, "").replace(/\/$/, "");
         let blog: any = null;
         try {
@@ -135,183 +127,161 @@ export async function executeGrowthDecision(
             };
         }
 
-        let details = "";
+        // ── 3. Build Mutation Payload ────────────────────────────────────────
+        const mutationResult = buildMutationPayload(actionExecuted, blog, primaryKeyword, targetUrl, siteId);
 
-        // 2. Dispatch to Subsystem based on Action
-        switch (actionExecuted) {
-            case "BUILD_INTERNAL_LINKS": {
-                if (!blog) {
-                    return {
-                        decisionId,
-                        siteId,
-                        actionExecuted,
-                        targetUrl,
-                        success: false,
-                        details: `Target blog not found for internal link building: ${targetUrl}`,
-                        executedAt
-                    };
-                }
-                const candidatePillar = await prisma.blog.findFirst({
-                    where: { siteId, status: "PUBLISHED", id: { not: blog.id } },
-                    orderBy: { createdAt: "asc" }
-                });
-
-                if (candidatePillar) {
-                    await (prisma as any).internalLink.upsert({
-                        where: {
-                            sourceBlogId_targetBlogId: {
-                                sourceBlogId: candidatePillar.id,
-                                targetBlogId: blog.id
-                            }
-                        },
-                        update: { targetUrl: `/blog/${blog.slug}` },
-                        create: {
-                            siteId,
-                            sourceBlogId: candidatePillar.id,
-                            targetBlogId: blog.id,
-                            sourceUrl: `/blog/${candidatePillar.slug}`,
-                            targetUrl: `/blog/${blog.slug}`,
-                            anchorText: primaryKeyword
-                        }
-                    });
-                    details = `Created contextual internal link from ${candidatePillar.title} -> ${blog.title}`;
-                } else {
-                    details = `No eligible pillar article found for interlinking with ${blog.title}`;
-                }
-                break;
-            }
-
-            case "REFRESH_CONTENT": {
-                if (!blog) {
-                    return {
-                        decisionId,
-                        siteId,
-                        actionExecuted,
-                        targetUrl,
-                        success: false,
-                        details: `Target blog not found for content refresh: ${targetUrl}`,
-                        executedAt
-                    };
-                }
-                await prisma.blog.update({
-                    where: { id: blog.id },
-                    data: {
-                        needsRefresh: true,
-                        updatedAt: new Date()
-                    }
-                });
-                details = `Flagged "${blog.title}" for AI content refresh and 2026 stats update.`;
-                break;
-            }
-
-            case "IMPROVE_SEARCH_INTENT": {
-                if (!blog || !blog.content) {
-                    return {
-                        decisionId,
-                        siteId,
-                        actionExecuted,
-                        targetUrl,
-                        success: false,
-                        details: `Target blog content missing for search intent improvement: ${targetUrl}`,
-                        executedAt
-                    };
-                }
-                const fixResult = performOneClickAutoFix(blog.content, `https://site.com${targetUrl}`);
-                await prisma.blog.update({
-                    where: { id: blog.id },
-                    data: {
-                        content: fixResult.fixedHtml,
-                        schemaMarkup: JSON.stringify({
-                            "@context": "https://schema.org",
-                            "@type": "FAQPage",
-                            "mainEntity": [{
-                                "@type": "Question",
-                                "name": `What is ${primaryKeyword}?`,
-                                "acceptedAnswer": { "@type": "Answer", "text": `Comprehensive analysis of ${primaryKeyword}.` }
-                            }]
-                        })
-                    }
-                });
-                details = `Executed AutoFix Engine: Applied ${fixResult.changes.length} structural fixes & FAQ Schema.`;
-                break;
-            }
-
-            case "CONSOLIDATE_CONTENT": {
-                if (!blog) {
-                    return {
-                        decisionId,
-                        siteId,
-                        actionExecuted,
-                        targetUrl,
-                        success: false,
-                        details: `Target blog not found for content consolidation: ${targetUrl}`,
-                        executedAt
-                    };
-                }
-                await prisma.blog.update({
-                    where: { id: blog.id },
-                    data: { status: "CONSOLIDATED" }
-                });
-                details = `Set up 301 redirect consolidation for cannibalizing article "${blog.title}".`;
-                break;
-            }
-
-            default: {
-                details = `Applied optimization action ${actionExecuted} to ${targetUrl}`;
-            }
-        }
-
-        // 3. Mark Decision as EXECUTED & Enqueue Outbox Jobs inside an Atomic Prisma Transaction
-        // P0: Use updateMany with status guard to prevent double-execution.
-        // If another worker already transitioned APPROVED → EXECUTED, count will be 0.
-        try {
-            await (prisma as any).$transaction(async (tx: any) => {
-                const result = await tx.growthDecision.updateMany({
-                    where: { id: decisionId, status: "APPROVED" },
-                    data: { status: "EXECUTED" }
-                });
-                if (result.count === 0) {
-                    throw new Error("ATOMIC_GUARD: Decision not in APPROVED state — aborting transaction");
-                }
-                await enqueueOutboxJob("INDEXNOW", `${decisionId}:${targetUrl}`, { siteId, targetUrl }, { tx });
-                await enqueueOutboxJob("GOOGLE_INDEXING", `${decisionId}:${targetUrl}`, { siteId, targetUrl }, { tx });
-            });
-        } catch (dbUpdateErr) {
-            logger.error("[ExecutionEngine] Failed to mark growth decision as EXECUTED in database", { decisionId, error: (dbUpdateErr as Error)?.message });
+        if (!mutationResult.success) {
             return {
                 decisionId,
                 siteId,
                 actionExecuted,
                 targetUrl,
                 success: false,
-                details: `Database error updating decision status: ${(dbUpdateErr as Error)?.message}`,
-                executedAt
+                details: mutationResult.error!,
+                executedAt,
             };
         }
 
-        // 4. Invalidate Redis Cache
-        const redis = getRedis();
-        if (redis) {
-            try {
-                await redis.del(`growth_decisions_compressed:${siteId}`);
-            } catch { /* Fail open */ }
+        if (mutationResult.directAction) {
+            await mutationResult.directAction();
+            await markDecisionExecuted(decisionId, siteId, targetUrl);
+
+            return {
+                decisionId,
+                siteId,
+                actionExecuted,
+                targetUrl,
+                success: true,
+                details: mutationResult.details,
+                executedAt,
+                affectedBlogId: blog?.id,
+            };
         }
 
-        // 5. Instant Indexing side-effects now decoupled into Outbox Engine
+        // ── 4. Create Mutation Operation ─────────────────────────────────────
+        if (!blog) {
+            return {
+                decisionId,
+                siteId,
+                actionExecuted,
+                targetUrl,
+                success: false,
+                details: `Target blog not found for action ${actionExecuted}: ${targetUrl}`,
+                executedAt,
+            };
+        }
+
+        // Count site pages for blast radius calculation
+        const sitePageCount = await prisma.blog.count({ where: { siteId } });
+
+        const operationParams: CreateOperationParams = {
+            siteId,
+            actorId: dbRecord?.approvedBy || "system:growth-engine",
+            actorType: dbRecord?.approvedBy ? "USER" : "SYSTEM",
+            mutationType: mutationResult.mutationType!,
+            targetModel: "Blog" as MutableModel,
+            targetId: blog.id,
+            expectedVersion: blog.version ?? 1,
+            mutationPayload: mutationResult.payload!,
+            affectedFields: mutationResult.affectedFields!,
+            sitePageCount,
+            affectedUrlCount: 1,
+            idempotencyParams: {
+                decisionId,
+            },
+        };
+
+        const { operation, requiresApproval: needsApproval } =
+            await createOperation(operationParams);
+
+        if (needsApproval) {
+            // Operation requires human approval — do NOT execute yet
+            logger.info("[ExecutionEngine] Operation requires approval", {
+                operationId: operation.id,
+                decisionId,
+                riskLevel: operation.riskLevel,
+            });
+
+            return {
+                decisionId,
+                siteId,
+                actionExecuted,
+                targetUrl,
+                success: false,
+                details: `Operation ${operation.id} requires approval (risk: ${operation.riskLevel}). Review in dashboard.`,
+                executedAt,
+                operationId: operation.id,
+            };
+        }
+
+        // ── 5. Execute Operation (atomic versioned update) ───────────────────
+        const execResult = await executeOperation(operation.id);
+
+        if (!execResult.success) {
+            logger.warn("[ExecutionEngine] Mutation operation failed", {
+                operationId: operation.id,
+                status: execResult.status,
+                error: execResult.error,
+            });
+
+            return {
+                decisionId,
+                siteId,
+                actionExecuted,
+                targetUrl,
+                success: false,
+                details: `Mutation failed: ${execResult.error}`,
+                executedAt,
+                operationId: operation.id,
+            };
+        }
+
+        // ── 6. Register Side Effects ─────────────────────────────────────────
+        try {
+            await registerEffect({
+                operationId: operation.id,
+                effectType: "INDEXNOW",
+                payload: { siteId, targetUrl },
+                confirmationMode: "NONE",
+                compensationPolicy: "IRREVERSIBLE",
+                idempotencyParams: { targetUrl },
+            });
+
+            await registerEffect({
+                operationId: operation.id,
+                effectType: "GOOGLE_INDEXING",
+                payload: { siteId, targetUrl },
+                confirmationMode: "NONE",
+                compensationPolicy: "IRREVERSIBLE",
+                idempotencyParams: { targetUrl },
+            });
+        } catch (effectErr) {
+            // Effects are best-effort — don't fail the whole operation
+            logger.warn("[ExecutionEngine] Effect registration failed", {
+                operationId: operation.id,
+                error: (effectErr as Error)?.message,
+            });
+        }
+
+        // ── 7. Mark Decision as EXECUTED (atomic guard) ──────────────────────
+        await markDecisionExecuted(decisionId, siteId, targetUrl);
+
+        // ── 8. Fire-and-forget side effects ──────────────────────────────────
         try {
             await triggerInstantIndexing(siteId, [targetUrl]);
         } catch { /* Fail open */ }
 
-        // 6. Lock in T0 Baseline Metrics for 28-Day ROI Experiment Tracking
         try {
             await recordExperimentBaseline(decisionId, siteId, targetUrl, actionExecuted);
         } catch { /* Fail open */ }
 
-        logger.info("[ExecutionEngine] Growth decision successfully executed", {
+        logger.info("[ExecutionEngine] Growth decision successfully executed via mutation lifecycle", {
             decisionId,
             siteId,
             actionExecuted,
-            targetUrl
+            targetUrl,
+            operationId: operation.id,
+            newVersion: execResult.newVersion,
         });
 
         return {
@@ -320,11 +290,54 @@ export async function executeGrowthDecision(
             actionExecuted,
             targetUrl,
             success: true,
-            details,
+            details: mutationResult.details,
             executedAt,
-            affectedBlogId: blog?.id
+            affectedBlogId: blog?.id,
+            operationId: operation.id,
         };
     } catch (err: unknown) {
+        // Surface specific mutation errors with actionable messages
+        if (err instanceof MutationBlockedError) {
+            logger.warn("[ExecutionEngine] Mutation blocked by kill switch", {
+                decisionId,
+                siteId,
+                error: (err as Error).message,
+            });
+            return {
+                decisionId,
+                siteId,
+                actionExecuted: "BLOCKED",
+                targetUrl: "/",
+                success: false,
+                details: `Kill switch active: ${err.message}`,
+                executedAt,
+            };
+        }
+
+        if (err instanceof ExecutionClaimError) {
+            return {
+                decisionId,
+                siteId,
+                actionExecuted: "LOCK_CONTESTED",
+                targetUrl: "/",
+                success: false,
+                details: "Another worker is already executing this operation.",
+                executedAt,
+            };
+        }
+
+        if (err instanceof ConcurrentModificationError) {
+            return {
+                decisionId,
+                siteId,
+                actionExecuted: "STALE",
+                targetUrl: "/",
+                success: false,
+                details: `Target was modified by another process: ${err.message}`,
+                executedAt,
+            };
+        }
+
         logger.error("[ExecutionEngine] Decision execution failed", {
             decisionId,
             siteId,
@@ -340,26 +353,187 @@ export async function executeGrowthDecision(
             details: `Execution failed: ${(err as Error)?.message || String(err)}`,
             executedAt
         };
-    } finally {
-        if (lockAcquired && redis) {
-            try {
-                // Atomic compare-and-delete via Lua script: deletes lock ONLY if value matches lockToken
-                const luaUnlockScript = `
-                    if redis.call("get", KEYS[1]) == ARGV[1] then
-                        return redis.call("del", KEYS[1])
-                    else
-                        return 0
-                    end
-                `;
-                await redis.eval(luaUnlockScript, [lockKey], [lockToken]);
-            } catch {
-                // Fallback for mock/redis interfaces without eval support
-                try {
-                    const val = await redis.get(lockKey);
-                    if (val === lockToken) await redis.del(lockKey);
-                } catch { /* Fail open */ }
+    }
+}
+
+// ── Internal Helpers ────────────────────────────────────────────────────────
+
+interface MutationPayloadResult {
+    success: boolean;
+    error?: string;
+    details: string;
+    mutationType?: "BLOG_CONTENT_UPDATE" | "BLOG_STATUS_UPDATE" | "BLOG_SCHEMA_UPDATE" | "BLOG_REFRESH" | "INTERNAL_LINK_CREATE" | "CONTENT_CONSOLIDATION";
+    payload?: Record<string, unknown>;
+    affectedFields?: string[];
+    /** If set, this action should be executed directly (not via mutation operation) */
+    directAction?: () => Promise<void>;
+}
+
+/**
+ * Builds the exact mutation payload for each action type.
+ * This is the canonical description of WHAT will change — the mutation operation
+ * lifecycle handles HOW it's applied (versioned, snapshotted, audited).
+ */
+function buildMutationPayload(
+    action: string,
+    blog: any,
+    primaryKeyword: string,
+    targetUrl: string,
+    siteId: string,
+): MutationPayloadResult {
+    switch (action) {
+        case "BUILD_INTERNAL_LINKS": {
+            if (!blog) {
+                return {
+                    success: false,
+                    error: `Target blog not found for internal link building: ${targetUrl}`,
+                    details: "",
+                };
             }
+            // Internal link creation doesn't modify the Blog model directly,
+            // so we handle it as a "direct action" outside the versioned mutation path.
+            return {
+                success: true,
+                details: "",
+                directAction: async () => {
+                    const candidatePillar = await prisma.blog.findFirst({
+                        where: { siteId, status: "PUBLISHED", id: { not: blog.id } },
+                        orderBy: { createdAt: "asc" }
+                    });
+
+                    if (candidatePillar) {
+                        await (prisma as any).internalLink.upsert({
+                            where: {
+                                sourceBlogId_targetBlogId: {
+                                    sourceBlogId: candidatePillar.id,
+                                    targetBlogId: blog.id
+                                }
+                            },
+                            update: { targetUrl: `/blog/${blog.slug}` },
+                            create: {
+                                siteId,
+                                sourceBlogId: candidatePillar.id,
+                                targetBlogId: blog.id,
+                                sourceUrl: `/blog/${candidatePillar.slug}`,
+                                targetUrl: `/blog/${blog.slug}`,
+                                anchorText: primaryKeyword
+                            }
+                        });
+                    }
+                },
+            };
+        }
+
+        case "REFRESH_CONTENT": {
+            if (!blog) {
+                return {
+                    success: false,
+                    error: `Target blog not found for content refresh: ${targetUrl}`,
+                    details: "",
+                };
+            }
+            return {
+                success: true,
+                details: `Flagged "${blog.title}" for AI content refresh and 2026 stats update.`,
+                mutationType: "BLOG_REFRESH",
+                payload: { needsRefresh: true },
+                affectedFields: ["needsRefresh"],
+            };
+        }
+
+        case "IMPROVE_SEARCH_INTENT": {
+            if (!blog || !blog.content) {
+                return {
+                    success: false,
+                    error: `Target blog content missing for search intent improvement: ${targetUrl}`,
+                    details: "",
+                };
+            }
+            const fixResult = performOneClickAutoFix(blog.content, `https://site.com${targetUrl}`);
+            const schemaMarkup = JSON.stringify({
+                "@context": "https://schema.org",
+                "@type": "FAQPage",
+                "mainEntity": [{
+                    "@type": "Question",
+                    "name": `What is ${primaryKeyword}?`,
+                    "acceptedAnswer": { "@type": "Answer", "text": `Comprehensive analysis of ${primaryKeyword}.` }
+                }]
+            });
+
+            return {
+                success: true,
+                details: `Executed AutoFix Engine: Applied ${fixResult.changes.length} structural fixes & FAQ Schema.`,
+                mutationType: "BLOG_CONTENT_UPDATE",
+                payload: {
+                    content: fixResult.fixedHtml,
+                    schemaMarkup,
+                },
+                affectedFields: ["content", "schemaMarkup"],
+            };
+        }
+
+        case "CONSOLIDATE_CONTENT": {
+            if (!blog) {
+                return {
+                    success: false,
+                    error: `Target blog not found for content consolidation: ${targetUrl}`,
+                    details: "",
+                };
+            }
+            return {
+                success: true,
+                details: `Set up 301 redirect consolidation for cannibalizing article "${blog.title}".`,
+                mutationType: "CONTENT_CONSOLIDATION",
+                payload: { status: "CONSOLIDATED" },
+                affectedFields: ["status"],
+            };
+        }
+
+        default: {
+            // Unknown action — return as a direct pass-through
+            return {
+                success: true,
+                details: `Applied optimization action ${action} to ${targetUrl}`,
+                directAction: async () => {
+                    // No-op for unknown actions
+                },
+            };
         }
     }
 }
 
+/**
+ * Marks the GrowthDecision as EXECUTED with atomic guard and invalidates cache.
+ * Uses updateMany with status guard to prevent double-execution.
+ */
+async function markDecisionExecuted(
+    decisionId: string,
+    siteId: string,
+    targetUrl: string,
+): Promise<void> {
+    try {
+        await (prisma as any).$transaction(async (tx: any) => {
+            const result = await tx.growthDecision.updateMany({
+                where: { id: decisionId, status: "APPROVED" },
+                data: { status: "EXECUTED" }
+            });
+            if (result.count === 0) {
+                throw new Error("ATOMIC_GUARD: Decision not in APPROVED state — aborting transaction");
+            }
+        });
+    } catch (dbUpdateErr) {
+        logger.error("[ExecutionEngine] Failed to mark growth decision as EXECUTED", {
+            decisionId,
+            error: (dbUpdateErr as Error)?.message,
+        });
+        // Don't throw — the mutation itself succeeded, this is bookkeeping
+    }
+
+    // Invalidate Redis cache
+    const redis = getRedis();
+    if (redis) {
+        try {
+            await redis.del(`growth_decisions_compressed:${siteId}`);
+        } catch { /* Fail open */ }
+    }
+}

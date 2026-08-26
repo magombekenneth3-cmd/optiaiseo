@@ -140,12 +140,12 @@ export default async function ExperimentsPage({
         totalExecuted: mergedExperiments.length,
         completedEvaluations: completed.length,
         pendingEvaluations: mergedExperiments.filter((e) => e.experiment?.isReadyForEvaluation).length,
-        inProgress: mergedExperiments.filter((e) => e.experiment && !e.experiment.isReadyForEvaluation && e.experiment.status !== "COMPLETED").length,
+        inProgress: mergedExperiments.filter((e: any) => e.experiment && !e.experiment.isReadyForEvaluation && e.experiment.status !== "COMPLETED").length,
         avgPositionGain: completed.length > 0
-            ? parseFloat((completed.reduce((s, e) => s + (e.lift?.positionDelta ?? 0), 0) / completed.length).toFixed(1))
+            ? parseFloat((completed.reduce((s: any, e: any) => s + (e.lift?.positionDelta ?? 0), 0) / completed.length).toFixed(1))
             : 0,
         avgClicksLift: completed.length > 0
-            ? parseFloat((completed.reduce((s, e) => s + (e.lift?.clicksLiftPercent ?? 0), 0) / completed.length).toFixed(1))
+            ? parseFloat((completed.reduce((s: any, e: any) => s + (e.lift?.clicksLiftPercent ?? 0), 0) / completed.length).toFixed(1))
             : 0,
         totalRevenueLift: completed.reduce((s, e) => s + (e.lift?.revenueLiftAmount ?? 0), 0),
     };

@@ -233,6 +233,7 @@ model Site {
   competitorAlertLogs     CompetitorAlertLog[]
   evidenceSnapshots       EvidenceSnapshot[]
   gscPerformance          GscDailyPerformance[]
+  mutationOperations      MutationOperation[]
 
   ga4PropertyId String?
 
@@ -241,6 +242,14 @@ model Site {
 
   pseoTemplates PseoTemplate[]
   pseoPages     PseoPage[]
+
+  // Site-level mutation kill switch — pauses all automated mutations for this site
+  automationsPaused     Boolean @default(false)
+
+  // Per-channel effect kill switches (default: enabled)
+  effectCmsEnabled      Boolean @default(true)
+  effectGithubEnabled   Boolean @default(true)
+  effectIndexNowEnabled Boolean @default(true)
 
   @@index([userId])
   @@index([niche, operatingMode])
@@ -499,6 +508,7 @@ model Blog {
   sourceLinks          InternalLink[]    @relation("SourceLinks")
   targetLinks          InternalLink[]    @relation("TargetLinks")
   site                 Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  version              Int               @default(1) // optimistic concurrency token
 
   @@unique([siteId, slug])
   @@index([siteId])
@@ -1303,6 +1313,12 @@ model GrowthDecision {
   generatedAt           DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
+  // Approval metadata (populated when a human approves this decision)
+  approvedBy            String?
+  approvedAt            DateTime?
+  approvalExpiresAt     DateTime?
+  mutationHash          String?   // SHA-256 of the canonical executable mutation
+
   site       Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
   experiment Experiment?
 
@@ -1558,4 +1574,149 @@ model PseoPage {
   @@unique([siteId, slug])
   @@index([templateId, createdAt(sort: Desc)])
   @@index([siteId, status])
+}
+
+// ── MUTATION OPERATION LIFECYCLE ──────────────────────────────────────────────
+// Central abstraction for ALL mutations in the system.
+// See: implementation_plan.md v2.1
+// ─────────────────────────────────────────────────────────────────────────────
+
+model MutationOperation {
+  id                 String   @id @default(cuid())
+  siteId             String
+  idempotencyKey     String   @unique
+
+  // Actor + Authorization snapshot
+  actorId            String   // userId or "system:inngest" or "system:cron"
+  actorType          String   // "USER" | "SYSTEM" | "CRON"
+  authorizedBy       String?  // policy or userId that granted permission
+  authPolicyVersion  String?  // e.g. "rbac-v3" — auditable: "why was this allowed?"
+  authorizedAt       DateTime?
+
+  // What
+  mutationType       String   // "BLOG_CONTENT_UPDATE" | "CMS_PUBLISH" | "GITHUB_PR" | ...
+  targetModel        String   // "Blog" | "Site" | "InternalLink"
+  targetId           String   // e.g. blog.id
+  expectedVersion    Int      // optimistic concurrency: version we expect on target
+
+  // Canonical mutation
+  mutationPayload    Json     // The exact executable mutation (patch object)
+  mutationHash       String   // SHA-256 of canonicalized mutationPayload
+
+  // Risk
+  riskLevel          String   // "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+  riskScore          Int      // 0-100
+  affectedFields     String[] // ["content", "schemaMarkup"]
+  diffSizeBytes      Int      @default(0)
+
+  // Lifecycle
+  // PROPOSED → PENDING_APPROVAL → APPROVED → EXECUTING → COMMITTED → EFFECTS_PENDING → COMPLETED
+  // Terminal: REJECTED | EXPIRED | CANCELLED | FAILED | STALE | COMPLETED_WITH_ERRORS
+  status             String   @default("PROPOSED")
+
+  // Execution claim (prevents two workers executing the same operation)
+  executionClaimedBy       String?   // worker/process ID that claimed execution
+  executionClaimedAt       DateTime?
+  executionLeaseExpiresAt  DateTime? // lease expires → another worker can reclaim
+
+  // Approval (populated when status reaches APPROVED)
+  approvedBy         String?
+  approvedAt         DateTime?
+  approvalExpiresAt  DateTime?
+  approvalHash       String?  // SHA-256 of canonical mutation AT approval time
+
+  // Metadata
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  completedAt        DateTime?
+
+  // Relations — onDelete: Restrict prevents cascade-destroying audit history
+  site               Site              @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  snapshot           MutationSnapshot?
+  effects            MutationEffect[]
+  auditEvents        MutationAuditEvent[]
+
+  @@index([siteId, status])
+  @@index([siteId, targetModel, targetId])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([status, createdAt])
+  @@index([approvalExpiresAt])
+}
+
+model MutationSnapshot {
+  id              String   @id @default(cuid())
+  operationId     String   @unique
+  targetModel     String   // "Blog"
+  targetId        String   // e.g. blog.id
+  targetVersion   Int      // version AT snapshot time (before mutation)
+  beforeState     Json     // full state before mutation
+  afterState      Json?    // full state after (null until COMMITTED)
+  createdAt       DateTime @default(now())
+
+  // Cascade from operation only (operation itself uses Restrict from Site)
+  operation       MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@index([targetModel, targetId, targetVersion])
+  @@index([targetModel, targetId, createdAt(sort: Desc)])
+}
+
+model MutationEffect {
+  id                 String   @id @default(cuid())
+  operationId        String
+  idempotencyKey     String   @unique
+
+  // What
+  effectType         String   // "CMS_PUBLISH" | "INDEXNOW" | "GITHUB_PR" | "GOOGLE_INDEXING"
+  platform           String?  // "WORDPRESS" | "GHOST" | "SHOPIFY" | ... (for CMS effects)
+  payload            Json     // platform-specific parameters
+
+  // Lifecycle
+  // QUEUED → DISPATCHED → CONFIRMED | FAILED | IRREVERSIBLE_DISPATCHED
+  // QUEUED → CANCELLED
+  status             String   @default("QUEUED")
+
+  // Confirmation strategy
+  confirmationMode   String   @default("POLL")        // "POLL" | "READ_AFTER_WRITE" | "NONE"
+  compensationPolicy String   @default("IRREVERSIBLE") // "ROLLBACK_SUPPORTED" | "ROLLBACK_PARTIAL" | "COMPENSATION_ONLY" | "IRREVERSIBLE"
+
+  // External tracking
+  externalId         String?  // WordPress post ID, GitHub PR URL, etc.
+  externalError      String?
+
+  // Retry
+  attempts           Int      @default(0)
+  maxAttempts        Int      @default(5)
+  nextRetryAt        DateTime?
+
+  // Timestamps
+  dispatchedAt       DateTime?
+  confirmedAt        DateTime?
+  failedAt           DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  operation          MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@index([operationId])
+  @@index([status, nextRetryAt])
+  @@index([effectType, status])
+}
+
+model MutationAuditEvent {
+  id            String   @id @default(cuid())
+  operationId   String
+  eventType     String   // "CREATED" | "RISK_ASSESSED" | "APPROVAL_REQUESTED" |
+                         // "APPROVED" | "REJECTED" | "EXECUTING" | "COMMITTED" |
+                         // "EFFECT_DISPATCHED" | "EFFECT_CONFIRMED" | "STALE" |
+                         // "FAILED" | "ROLLED_BACK" | "COMPLETED_WITH_ERRORS"
+  actorId       String   // who triggered this event
+  details       Json?    // event-specific metadata
+  createdAt     DateTime @default(now())
+
+  // Append-only: no UPDATE or DELETE operations exposed through mutation library
+  operation     MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@index([operationId, createdAt])
+  @@index([eventType, createdAt])
+  @@index([actorId, createdAt(sort: Desc)])
 }
