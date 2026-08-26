@@ -1,11 +1,3 @@
-/**
- * Growth Pipeline — per-site Inngest handler.
- *
- * Triggered by the `growth.pipeline.run` event (fired by the weekly cron
- * fan-out in cron-schedule.ts). Runs the recommendation engine for a single
- * site and persists new decisions.
- */
-
 import { inngest } from "../client";
 import { prisma } from "@/lib/prisma";
 import { buildRecommendations } from "@/lib/recommendations/engine";
@@ -18,13 +10,10 @@ export const growthPipelineJob = inngest.createFunction(
         name: "Growth Pipeline: Per-Site Recommendations",
         retries: 2,
         concurrency: { limit: 3 },
-        idempotency: "event.data.siteId",
         triggers: [{ event: "growth.pipeline.run" }],
     },
     async ({ event, step }: { event: { data: { siteId: string } }; step: any }) => {
         const { siteId } = event.data;
-
-        // Build SiteContext from DB
         const ctx = await step.run("build-site-context", async (): Promise<SiteContext | null> => {
             const site = await prisma.site.findUnique({
                 where: { id: siteId },

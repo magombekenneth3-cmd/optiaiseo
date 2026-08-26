@@ -17,7 +17,13 @@ export async function GET(req: NextRequest) {
     const wsUrl     = process.env.LIVEKIT_URL;
 
     if (!apiKey || !apiSecret || !wsUrl) {
-        return NextResponse.json({ error: "LiveKit not configured" }, { status: 500 });
+        return NextResponse.json(
+            {
+                available: false,
+                error: "Voice AI is not currently available — LiveKit is not configured.",
+            },
+            { status: 503 }
+        );
     }
 
     const siteId = req.nextUrl.searchParams.get("siteId") ?? "";

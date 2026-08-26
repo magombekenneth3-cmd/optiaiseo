@@ -32,6 +32,7 @@ import {
     Target,
     FlaskConical,
     Code,
+    Activity,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -56,6 +57,7 @@ const NAV_ITEMS = [
     { name: "AI Visibility", href: "/dashboard/aeo", icon: MonitorSmartphone, exact: true, contextSiteId: true },
     { name: "Citation History", href: "/dashboard/aeo/proofs", icon: History, exact: false, contextSiteId: true, indent: true },
     { name: "Wikidata Entity", href: "/dashboard/aeo/entity", icon: Globe, exact: false, contextSiteId: true, indent: true },
+    { name: "Operations", href: "/dashboard/operations", icon: Activity, exact: false, contextSiteId: true },
     { name: "AI Content", href: "/dashboard/blogs", icon: FileText, exact: false, contextSiteId: false },
     { name: "Programmatic SEO", href: "/dashboard/pseo", icon: Zap, exact: false, contextSiteId: false },
 ];
@@ -117,6 +119,7 @@ function SitePickerDropdown({ sites, activeSiteId }: { sites: Site[]; activeSite
             "/dashboard/serp-gap",
             "/dashboard/campaign",
             "/dashboard/experiments",
+            "/dashboard/operations",
             "/dashboard/content-decay",
             "/dashboard/planner",
             "/dashboard/indexing",
@@ -394,7 +397,7 @@ function SidebarNavInner({
                 {/* OPTIMIZE group */}
                 {!isCollapsed && <NavSectionLabel>OPTIMIZE</NavSectionLabel>}
                 {NAV_ITEMS.filter(i => {
-                    const baseMatch = ["SEO Audits", "Keywords", "Competitors", "AI Visibility"].includes(i.name);
+                    const baseMatch = ["SEO Audits", "Keywords", "Competitors", "AI Visibility", "Operations"].includes(i.name);
                     if (isCollapsed) return baseMatch;
                     return baseMatch || ["Citation History", "Wikidata Entity"].includes(i.name);
                 }).map((item) => {

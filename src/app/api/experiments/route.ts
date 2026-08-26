@@ -2,19 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getRedis } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 import { getCrossExperimentInsights } from "@/lib/experiments/insights";
 import { getGscHealthStatus } from "@/lib/gsc/health-monitor";
 import type { ExperimentRecord } from "@/lib/experiments/tracker";
-
-const REDIS_EXPERIMENT_KEY = "aiseo:experiments";
 
 /**
  * GET /api/experiments?siteId=xxx
  *
  * Returns all experiment records for a site plus their associated
  * GrowthDecision metadata and GSC performance trends.
+ *
+ * PostgreSQL is the sole source of truth — no Redis fallback.
  */
 export async function GET(req: NextRequest) {
     try {
@@ -41,7 +40,7 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Site not found or unauthorized" }, { status: 403 });
         }
 
-        // 1. Fetch experiment records from PostgreSQL (source of truth) + Redis fallback
+        // 1. Fetch experiment records from PostgreSQL (sole source of truth)
         let experiments: ExperimentRecord[] = [];
         try {
             const dbRows = await (prisma as any).experiment.findMany({
@@ -60,26 +59,14 @@ export async function GET(req: NextRequest) {
                 baseline: typeof row.baseline === "string" ? JSON.parse(row.baseline) : row.baseline,
                 lift: row.lift ? (typeof row.lift === "string" ? JSON.parse(row.lift) : row.lift) : undefined,
             }));
-        } catch {
-            // Fallback to Redis if DB fails
-            const redis = getRedis();
-            if (redis) {
-                try {
-                    const allRaw = await redis.hgetall<Record<string, string>>(REDIS_EXPERIMENT_KEY);
-                    if (allRaw) {
-                        for (const value of Object.values(allRaw)) {
-                            try {
-                                const parsed = typeof value === "string" ? JSON.parse(value) : value;
-                                if (parsed.siteId === siteId) {
-                                    parsed.executedAt = new Date(parsed.executedAt);
-                                    parsed.evaluationDate = new Date(parsed.evaluationDate);
-                                    experiments.push(parsed);
-                                }
-                            } catch { /* skip malformed */ }
-                        }
-                    }
-                } catch { /* Redis unavailable */ }
-            }
+        } catch (dbErr: unknown) {
+            logger.error("[ExperimentsAPI] PostgreSQL read failed", {
+                siteId, error: (dbErr as Error)?.message,
+            });
+            return NextResponse.json(
+                { error: "Experiment data temporarily unavailable" },
+                { status: 503 }
+            );
         }
 
         // 2. Also fetch GrowthDecision records with status APPROVED/EXECUTED

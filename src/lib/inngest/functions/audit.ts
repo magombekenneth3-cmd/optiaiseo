@@ -6,6 +6,7 @@ import { CONCURRENCY } from "../concurrency";
 import { getFullAuditEngine } from "@/lib/seo-audit";
 import { diffAuditSnapshots } from "@/lib/seo-audit/audit-diff";
 import { sendSEODigest, sendAuditCompleteEmail } from "@/lib/email";
+import { notifyAuditComplete } from "@/lib/notifications";
 import { fetchGSCKeywords, findOpportunities, normaliseSiteUrl } from "@/lib/gsc";
 import { detectGsovDrop, generateHealingPlan } from "@/lib/self-healing/engine";
 import { executeHealingWithConfidenceGate } from "@/lib/self-healing/confidence";
@@ -133,6 +134,24 @@ export const processManualAuditJob = inngest.createFunction(
                 domain,
                 auditId,
                 score:    auditResult.overallScore,
+            });
+        });
+
+        // In-app notification (fail-open)
+        await step.run("notify-audit-complete", async () => {
+            const allItems = auditResult.categories?.flatMap(
+                (c: { items?: { status?: string }[] }) => c.items ?? []
+            ) ?? [];
+            const issueCount = allItems.filter(
+                (i: { status?: string }) => i.status === "fail" || i.status === "warning"
+            ).length;
+            await notifyAuditComplete({
+                userId,
+                siteId,
+                domain,
+                overallScore: auditResult.overallScore,
+                issueCount,
+                auditId,
             });
         });
 
@@ -342,6 +361,24 @@ export const runWeeklyAuditJob = inngest.createFunction(
                 domain: site.domain,
                 timestamp: new Date().toISOString(),
                 data: { auditId: savedAudit.auditId, seoScore: auditResult.overallScore },
+            });
+        });
+
+        // In-app notification (fail-open)
+        await step.run("notify-weekly-audit-complete", async () => {
+            const allItems = auditResult.categories?.flatMap(
+                (c: { items?: { status?: string }[] }) => c.items ?? []
+            ) ?? [];
+            const issueCount = allItems.filter(
+                (i: { status?: string }) => i.status === "fail" || i.status === "warning"
+            ).length;
+            await notifyAuditComplete({
+                userId: site.userId,
+                siteId: site.id,
+                domain: site.domain,
+                overallScore: auditResult.overallScore,
+                issueCount,
+                auditId: savedAudit.auditId,
             });
         });
 

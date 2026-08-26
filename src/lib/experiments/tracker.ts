@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import { getRedis } from "@/lib/redis";
+import { getRedis } from "@/lib/redis"; // write-through cache only
 import { prisma } from "@/lib/prisma";
 
 export interface BaselineMetrics {
@@ -43,7 +43,11 @@ export interface SiteExperimentSummary {
     averageCitationLiftPercent: number;
 }
 
-// Redis-backed experiment cache (PostgreSQL is source of truth)
+// Authority model:
+//   PostgreSQL = sole source of truth (all reads)
+//   Redis      = write-through cache only (warming downstream consumers)
+//   PostgreSQL failure → fail clearly (propagate error)
+//   Redis failure → irrelevant to correctness
 const REDIS_EXPERIMENT_KEY = "aiseo:experiments";
 
 // Minimum number of days with GSC data required in a 28-day window
@@ -122,31 +126,17 @@ async function getPerformanceForUrl(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Helpers: Redis cache read/write
+// Helpers: Redis write-through cache (never read from Redis)
 // ────────────────────────────────────────────────────────────────────────────
 
+/** Write-through: keep Redis warm for downstream consumers. Failure is irrelevant. */
 async function cacheExperiment(exp: ExperimentRecord): Promise<void> {
     const redis = getRedis();
     if (redis) {
         try {
             await redis.hset(REDIS_EXPERIMENT_KEY, { [exp.id]: JSON.stringify(exp) });
-        } catch { /* Fail open */ }
+        } catch { /* Write-through failure is non-critical */ }
     }
-}
-
-async function readCachedExperiment(experimentId: string): Promise<ExperimentRecord | null> {
-    const redis = getRedis();
-    if (!redis) return null;
-    try {
-        const raw = await redis.hget<string>(REDIS_EXPERIMENT_KEY, experimentId);
-        if (raw) {
-            const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-            parsed.executedAt = new Date(parsed.executedAt);
-            parsed.evaluationDate = new Date(parsed.evaluationDate);
-            return parsed;
-        }
-    } catch { /* Fall through */ }
-    return null;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -290,25 +280,13 @@ export async function recordExperimentBaseline(
 export async function evaluate28DayExperimentLift(
     experimentId: string
 ): Promise<ExperimentRecord> {
-    // Read from Redis → fall back to PostgreSQL
-    let exp: ExperimentRecord | null = await readCachedExperiment(experimentId);
-    if (!exp) {
-        exp = await readDbExperiment(experimentId);
-    }
+    // PostgreSQL is authoritative — no fallback
+    const exp: ExperimentRecord | null = await readDbExperiment(experimentId);
 
     if (!exp) {
-        logger.warn("[ExperimentTracker] Experiment not found", { experimentId });
-        return {
-            id: experimentId,
-            decisionId: experimentId.replace(/^exp-/, ""),
-            siteId: "unknown",
-            targetUrl: "/",
-            actionExecuted: "UNKNOWN",
-            executedAt: new Date(),
-            evaluationDate: new Date(),
-            status: "COMPLETED",
-            baseline: { position: 0, clicks: 0, impressions: 0, ctr: 0, monthlyRevenueEstimate: 0, aeoCitationRate: 0 },
-        };
+        const msg = `Experiment ${experimentId} not found in PostgreSQL`;
+        logger.error("[ExperimentTracker] " + msg);
+        throw new Error(msg);
     }
 
     // P0-5: Atomic status guard — only evaluate RECORDED experiments
@@ -431,41 +409,17 @@ async function persistExperimentUpdate(exp: ExperimentRecord): Promise<void> {
 
 // ────────────────────────────────────────────────────────────────────────────
 // Aggregation: site-level experiment summary
-// P0-3: Read from PostgreSQL (durable) as primary source
+// PostgreSQL is authoritative — failure propagates, no Redis fallback
 // ────────────────────────────────────────────────────────────────────────────
 
 export async function getSiteExperimentSummary(
     siteId: string
 ): Promise<SiteExperimentSummary> {
-    let experiments: ExperimentRecord[] = [];
-
-    // Read from PostgreSQL (source of truth)
-    try {
-        const rows = await (prisma as any).experiment.findMany({
-            where: { siteId },
-        });
-        experiments = rows.map(dbRowToExperiment);
-    } catch {
-        // Fall back to Redis if DB fails
-        const redis = getRedis();
-        if (redis) {
-            try {
-                const allRaw = await redis.hgetall<Record<string, string>>(REDIS_EXPERIMENT_KEY);
-                if (allRaw) {
-                    for (const value of Object.values(allRaw)) {
-                        try {
-                            const parsed = typeof value === "string" ? JSON.parse(value) : value;
-                            if (parsed.siteId === siteId) {
-                                parsed.executedAt = new Date(parsed.executedAt);
-                                parsed.evaluationDate = new Date(parsed.evaluationDate);
-                                experiments.push(parsed);
-                            }
-                        } catch { /* skip malformed entries */ }
-                    }
-                }
-            } catch { /* Fail open */ }
-        }
-    }
+    // PostgreSQL is the sole read source. Failure propagates to caller.
+    const rows = await (prisma as any).experiment.findMany({
+        where: { siteId },
+    });
+    const experiments: ExperimentRecord[] = rows.map(dbRowToExperiment);
 
     if (experiments.length === 0) {
         return {

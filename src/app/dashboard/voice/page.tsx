@@ -628,6 +628,11 @@ function VoiceAgentInner() {
             const res  = await fetch(`/api/livekit/token?siteId=${selectedSite.id}&domain=${encodeURIComponent(selectedSite.domain)}`);
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
+                // 503 = LiveKit not configured (graceful unavailable)
+                if (res.status === 503 && data?.available === false) {
+                    throw new Error("Voice AI is not currently available. The voice feature requires LiveKit to be configured. Contact your administrator to enable it.");
+                }
+                // Legacy 500 handling (kept for backwards compatibility during rollout)
                 if (res.status === 500 && data?.error === "LiveKit not configured") {
                     throw new Error("Voice AI is not yet available — LiveKit credentials are not configured. Please contact support.");
                 }

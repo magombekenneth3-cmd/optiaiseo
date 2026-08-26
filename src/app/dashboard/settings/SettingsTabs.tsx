@@ -7,11 +7,7 @@ import { WhiteLabelForm } from "./WhiteLabelForm";
 import { ChangePasswordForm } from "./ChangePasswordForm";
 import { NotificationPreferencesForm } from "./NotificationPreferencesForm";
 import { SettingsClientExtras } from "./SettingsClientExtras";
-import { WordPressPluginPanel } from "./WordPressPluginPanel";
-import { GscIntegrationCard } from "@/components/dashboard/GscIntegrationCard";
-import { Ga4ConnectForm } from "@/components/dashboard/Ga4ConnectForm";
-import { MozApiTokenCard } from "@/components/dashboard/MozApiTokenCard";
-import { ApiAccessCard } from "@/components/dashboard/ApiAccessCard";
+import { IntegrationsPanel } from "./IntegrationsPanel";
 import { DeleteAccountButton } from "./DeleteAccountButton";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
@@ -125,7 +121,7 @@ export function SettingsTabs({
                 )}
             </div>
 
-            {/* Integrations tab */}
+            {/* Integrations tab — unified panel with live status */}
             <div
                 id="settings-panel-integrations"
                 role="tabpanel"
@@ -133,13 +129,12 @@ export function SettingsTabs({
                 hidden={active !== "integrations"}
             >
                 {active === "integrations" && (
-                    <div className="flex flex-col gap-6">
-                        <ApiAccessCard />
-                        <GscIntegrationCard isConnected={gscConnected} />
-                        <Ga4ConnectForm siteId={firstSiteId} currentPropertyId={firstSiteGa4PropertyId} />
-                        <MozApiTokenCard initialToken={mozApiToken} />
-                        <WordPressPluginPanel siteId={firstSiteId} />
-                    </div>
+                    <IntegrationsPanel
+                        firstSiteId={firstSiteId}
+                        firstSiteGa4PropertyId={firstSiteGa4PropertyId}
+                        gscConnected={gscConnected}
+                        mozApiToken={mozApiToken}
+                    />
                 )}
             </div>
 
