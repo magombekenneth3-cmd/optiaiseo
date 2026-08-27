@@ -455,17 +455,35 @@ export async function compensateOperation(
   }
 
   // Step 3: Determine final status
+  // ROLLED_BACK is a real terminal state in the state machine.
+  // We only transition to it when the invariant is fully restored
+  // (DB + all effects). Partial compensation is logged via audit
+  // but does NOT change the operation status — the original status
+  // is preserved so operators know compensation was incomplete.
   const allSucceeded =
     (dbRollback === null || dbRollback.success) &&
     effectResults.every((r) => r.result.success);
 
   const finalStatus = allSucceeded
-    ? "COMPENSATED"
+    ? "ROLLED_BACK"
     : "COMPENSATION_PARTIAL";
 
-  // Note: We don't change the operation's status enum here because
-  // COMPENSATED is not in the state machine. Instead, we record it
-  // as an audit event so it's fully traceable.
+  // Only write ROLLED_BACK to the operation status when fully successful.
+  // Partial compensation is recorded in audit only — no phantom status.
+  if (allSucceeded) {
+    try {
+      await (prisma as any).mutationOperation.update({
+        where: { id: operation.id },
+        data: { status: "ROLLED_BACK", completedAt: new Date() },
+      });
+    } catch (statusErr) {
+      logger.error("[Compensation] Failed to transition to ROLLED_BACK", {
+        operationId: operation.id,
+        error: (statusErr as Error)?.message,
+      });
+    }
+  }
+
   await appendAuditEvent(
     operation.id,
     "COMPENSATION_COMPLETED",

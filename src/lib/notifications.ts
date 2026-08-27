@@ -176,3 +176,48 @@ export async function notifyMutationFailed(params: {
         },
     });
 }
+
+/**
+ * Notify user that a 28-day experiment has completed evaluation.
+ * Includes headline metrics so the user can see results at a glance.
+ */
+export async function notifyExperimentComplete(params: {
+    userId: string;
+    siteId: string;
+    experimentId: string;
+    targetUrl: string;
+    actionExecuted: string;
+    positionDelta: number;
+    clicksLiftPercent: number;
+    ctrLiftPercent: number;
+    revenueLiftAmount: number;
+}): Promise<string | null> {
+    const improved = params.positionDelta > 0;
+    const emoji = improved ? "🧪✅" : "🧪📊";
+    const direction = improved ? "improved" : "changed";
+
+    // Build a concise metrics summary
+    const metricLines = [
+        `Position: ${params.positionDelta > 0 ? "+" : ""}${params.positionDelta} places`,
+        `Clicks: ${params.clicksLiftPercent > 0 ? "+" : ""}${params.clicksLiftPercent}%`,
+        `CTR: ${params.ctrLiftPercent > 0 ? "+" : ""}${params.ctrLiftPercent}pp`,
+        `Revenue: ${params.revenueLiftAmount >= 0 ? "+$" : "-$"}${Math.abs(params.revenueLiftAmount)}`,
+    ].join(" · ");
+
+    return createNotification({
+        userId: params.userId,
+        type: "experiment_complete",
+        title: `${emoji} Experiment ${direction}: ${params.actionExecuted.replace(/_/g, " ")}`,
+        body: `28-day evaluation complete for ${params.targetUrl}. ${metricLines}`,
+        href: `/dashboard/experiments?siteId=${params.siteId}`,
+        metadata: {
+            siteId: params.siteId,
+            experimentId: params.experimentId,
+            targetUrl: params.targetUrl,
+            positionDelta: params.positionDelta,
+            clicksLiftPercent: params.clicksLiftPercent,
+            ctrLiftPercent: params.ctrLiftPercent,
+            revenueLiftAmount: params.revenueLiftAmount,
+        },
+    });
+}

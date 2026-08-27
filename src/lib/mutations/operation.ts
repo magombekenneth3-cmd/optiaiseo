@@ -45,6 +45,7 @@ import { generateOperationKey, generateEffectKey } from "./idempotency";
 import { assertAllKillSwitchesClear, assertEffectChannelEnabled } from "./kill-switch";
 import { calculateOperationRisk, requiresApproval } from "./risk-engine";
 import { captureBeforeSnapshot, recordAfterState } from "./snapshot";
+import { notifyMutationFailed } from "@/lib/notifications";
 
 // ── Create Operation ────────────────────────────────────────────────────────
 
@@ -634,6 +635,38 @@ async function transitionToTerminal(
   );
 
   logger.info("[MutationOp] Terminal state", { operationId, status });
+
+  // P1: Fire in-app notification for failure terminal states.
+  // Fail-open — notification failure never blocks the transition.
+  const NOTIFIABLE_FAILURES: OperationStatus[] = ["FAILED", "STALE", "COMPLETED_WITH_ERRORS"];
+  if (NOTIFIABLE_FAILURES.includes(status)) {
+    try {
+      const op = await prisma.mutationOperation.findUnique({
+        where: { id: operationId },
+        select: {
+          mutationType: true,
+          targetModel: true,
+          siteId: true,
+          site: { select: { userId: true } },
+        },
+      });
+      if (op?.site?.userId) {
+        await notifyMutationFailed({
+          userId: op.site.userId,
+          siteId: op.siteId,
+          operationId,
+          mutationType: op.mutationType,
+          targetModel: op.targetModel,
+          error: (details?.error as string) ?? `Operation ended in ${status}`,
+        });
+      }
+    } catch (notifErr) {
+      logger.warn("[MutationOp] Failed to send failure notification", {
+        operationId,
+        error: (notifErr as Error)?.message,
+      });
+    }
+  }
 }
 
 /**

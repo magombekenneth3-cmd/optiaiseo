@@ -1,6 +1,7 @@
 import { logger } from "@/lib/logger";
 import { getRedis } from "@/lib/redis"; // write-through cache only
 import { prisma } from "@/lib/prisma";
+import { notifyExperimentComplete } from "@/lib/notifications";
 
 export interface BaselineMetrics {
     position: number;
@@ -357,6 +358,33 @@ export async function evaluate28DayExperimentLift(
 
     // Persist to both PostgreSQL and Redis
     await persistExperimentUpdate(exp);
+
+    // P1: Notify user of experiment completion with headline metrics.
+    // Fail-open — notification failure doesn't affect the evaluation.
+    try {
+        const site = await prisma.site.findUnique({
+            where: { id: exp.siteId },
+            select: { userId: true },
+        });
+        if (site?.userId) {
+            await notifyExperimentComplete({
+                userId: site.userId,
+                siteId: exp.siteId,
+                experimentId: exp.id,
+                targetUrl: exp.targetUrl,
+                actionExecuted: exp.actionExecuted,
+                positionDelta: lift.positionDelta,
+                clicksLiftPercent: lift.clicksLiftPercent,
+                ctrLiftPercent: lift.ctrLiftPercent,
+                revenueLiftAmount: lift.revenueLiftAmount,
+            });
+        }
+    } catch (notifErr) {
+        logger.warn("[ExperimentTracker] Failed to send completion notification", {
+            experimentId,
+            error: (notifErr as Error)?.message,
+        });
+    }
 
     logger.info("[ExperimentTracker] Completed 28-day evaluation — observed changes after optimization", {
         experimentId,

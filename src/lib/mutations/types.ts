@@ -1,12 +1,3 @@
-/**
- * Mutation Operation Lifecycle — Shared Types & Enums
- *
- * Central type definitions for the mutation safety infrastructure.
- * See: implementation_plan.md v2.1
- */
-
-// ── Operation Status ────────────────────────────────────────────────────────
-
 export type OperationStatus =
   | "PROPOSED"
   | "PENDING_APPROVAL"
@@ -21,7 +12,8 @@ export type OperationStatus =
   | "EXPIRED"
   | "CANCELLED"
   | "FAILED"
-  | "STALE";
+  | "STALE"
+  | "ROLLED_BACK";
 
 /** Valid state transitions for MutationOperation */
 export const VALID_TRANSITIONS: Record<OperationStatus, OperationStatus[]> = {
@@ -29,15 +21,16 @@ export const VALID_TRANSITIONS: Record<OperationStatus, OperationStatus[]> = {
   PENDING_APPROVAL: ["APPROVED", "REJECTED", "EXPIRED", "CANCELLED"],
   APPROVED: ["EXECUTING", "EXPIRED", "CANCELLED"],
   EXECUTING: ["COMMITTED", "FAILED", "STALE"],
-  COMMITTED: ["EFFECTS_PENDING", "COMPLETED"],
-  EFFECTS_PENDING: ["COMPLETED", "COMPLETED_WITH_ERRORS"],
-  COMPLETED: [],
-  COMPLETED_WITH_ERRORS: [],
+  COMMITTED: ["EFFECTS_PENDING", "COMPLETED", "ROLLED_BACK"],
+  EFFECTS_PENDING: ["COMPLETED", "COMPLETED_WITH_ERRORS", "ROLLED_BACK"],
+  COMPLETED: ["ROLLED_BACK"],
+  COMPLETED_WITH_ERRORS: ["ROLLED_BACK"],
   REJECTED: [],
   EXPIRED: [],
   CANCELLED: [],
   FAILED: [],
   STALE: [],
+  ROLLED_BACK: [],
 };
 
 export const TERMINAL_STATUSES: OperationStatus[] = [
@@ -48,6 +41,7 @@ export const TERMINAL_STATUSES: OperationStatus[] = [
   "CANCELLED",
   "FAILED",
   "STALE",
+  "ROLLED_BACK",
 ];
 
 // ── Effect Status ───────────────────────────────────────────────────────────

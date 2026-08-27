@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import { type OperationStatus, VALID_TRANSITIONS } from "@/lib/mutations/types";
 
 /**
  * Known Prisma model names that support rollback.
@@ -58,16 +59,14 @@ export async function POST(
         return NextResponse.json({ error: "Only the site owner can rollback operations" }, { status: 403 });
     }
 
-    // Rollback eligibility check
-    const rollbackableStatuses = [
-        "COMMITTED",
-        "EFFECTS_PENDING",
-        "COMPLETED",
-        "COMPLETED_WITH_ERRORS",
-    ];
-    if (!rollbackableStatuses.includes(operation.status)) {
+    // Rollback eligibility: use the canonical state machine instead of
+    // a hand-rolled list. ROLLED_BACK must be a valid target from the
+    // current status, otherwise the transition is illegal.
+    const currentStatus = operation.status as OperationStatus;
+    const allowedTargets = VALID_TRANSITIONS[currentStatus] ?? [];
+    if (!allowedTargets.includes("ROLLED_BACK")) {
         return NextResponse.json(
-            { error: `Cannot rollback operation in status: ${operation.status}` },
+            { error: `Cannot rollback operation in status: ${currentStatus}` },
             { status: 409 }
         );
     }
