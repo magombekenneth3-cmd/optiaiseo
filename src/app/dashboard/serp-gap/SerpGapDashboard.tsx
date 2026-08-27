@@ -26,6 +26,14 @@ interface AnalysisRow {
     completedAt: Date | null;
 }
 
+interface QuotaInfo {
+    used: number;
+    limit: number;
+    remaining: number;
+    tier: string;
+    resetAt: string;
+}
+
 interface Props {
     sites: { id: string; domain: string }[];
     activeSiteId: string;
@@ -84,6 +92,17 @@ export function SerpGapDashboard({
     const [error, setError] = useState<string | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [pollingIds, setPollingIds] = useState<Set<string>>(new Set());
+    const [quota, setQuota] = useState<QuotaInfo | null>(null);
+
+    const isFree = userTier.toUpperCase() === "FREE";
+
+    // Fetch quota on mount
+    useEffect(() => {
+        fetch("/api/serp-gap/quota")
+            .then(r => r.ok ? r.json() : null)
+            .then(data => { if (data) setQuota(data); })
+            .catch(() => {});
+    }, []);
 
     // Poll in-progress analyses
     const pollAnalysis = useCallback(async (id: string) => {
@@ -149,6 +168,11 @@ export function SerpGapDashboard({
             setAnalyses(prev => [newRow, ...prev]);
             setPollingIds(prev => new Set([...prev, data.analysisId]));
             setKeyword(""); setClientPosition("");
+            // Refresh quota after successful submission
+            fetch("/api/serp-gap/quota")
+                .then(r => r.ok ? r.json() : null)
+                .then(d => { if (d) setQuota(d); })
+                .catch(() => {});
         } catch { setError("Network error. Please try again."); }
         finally { setSubmitting(false); }
     };
@@ -170,11 +194,23 @@ export function SerpGapDashboard({
                         {activeSiteDomain && <> · <span className="text-foreground font-medium">{activeSiteDomain}</span></>}
                     </p>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border border-border text-sm">
-                    <Zap className="w-4 h-4 text-amber-400" />
-                    <span className="text-muted-foreground">Credits:</span>
-                    <span className="font-bold">{userCredits}</span>
-                    <span className="text-muted-foreground text-xs">(5 per analysis)</span>
+                <div className="flex items-center gap-3">
+                    {quota && !isFree && (
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border border-border text-sm">
+                            <BarChart3 className="w-4 h-4 text-purple-400" />
+                            <span className="text-muted-foreground">Quota:</span>
+                            <span className="font-bold">{quota.used}</span>
+                            <span className="text-muted-foreground">/</span>
+                            <span className="font-bold">{quota.limit}</span>
+                            <span className="text-muted-foreground text-xs">this month</span>
+                        </div>
+                    )}
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border border-border text-sm">
+                        <Zap className="w-4 h-4 text-amber-400" />
+                        <span className="text-muted-foreground">Credits:</span>
+                        <span className="font-bold">{userCredits}</span>
+                        <span className="text-muted-foreground text-xs">(5 per analysis)</span>
+                    </div>
                 </div>
             </div>
 
@@ -188,73 +224,113 @@ export function SerpGapDashboard({
                 </p>
             </div>
 
-            {/* Trigger form */}
-            <form onSubmit={handleSubmit} className="card-surface p-6 flex flex-col gap-4">
-                <h2 className="font-semibold text-base flex items-center gap-2">
-                    <Search className="w-4 h-4 text-muted-foreground" />
-                    New Gap Analysis
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Target Keyword</label>
-                        <input
-                            id="serp-gap-keyword"
-                            type="text"
-                            value={keyword}
-                            onChange={e => setKeyword(e.target.value)}
-                            placeholder="e.g. best seo tools 2025"
-                            className="px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/60 transition-colors"
-                            required
-                        />
+            {/* Tier gate for FREE users */}
+            {isFree ? (
+                <div className="card-surface p-8 flex flex-col items-center gap-4 text-center border-amber-500/20 bg-amber-500/5">
+                    <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                        <BarChart3 className="w-7 h-7 text-amber-400" />
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Your Page URL</label>
-                        <input
-                            id="serp-gap-url"
-                            type="url"
-                            value={clientUrl}
-                            onChange={e => setClientUrl(e.target.value)}
-                            placeholder="https://yourdomain.com/page"
-                            className="px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/60 transition-colors"
-                            required
-                        />
+                    <div>
+                        <h3 className="text-lg font-semibold text-foreground mb-1">Upgrade to unlock SERP Gap Analysis</h3>
+                        <p className="text-sm text-muted-foreground max-w-md">
+                            SERP Gap Analysis is available on Starter (5/mo), Pro (30/mo), and Agency (200/mo) plans.
+                            Discover exactly why your pages aren&apos;t ranking and get a week-by-week fix plan.
+                        </p>
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Position</label>
-                        <input
-                            id="serp-gap-position"
-                            type="number"
-                            min={1}
-                            max={200}
-                            value={clientPosition}
-                            onChange={e => setClientPosition(e.target.value)}
-                            placeholder="e.g. 18"
-                            className="px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/60 transition-colors"
-                            required
-                        />
-                    </div>
-                </div>
-                {error && (
-                    <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">
-                        <AlertTriangle className="w-4 h-4 shrink-0" />
-                        {error}
-                    </div>
-                )}
-                <div className="flex items-center justify-between gap-4">
-                    <p className="text-xs text-muted-foreground">
-                        Analysis takes ~90 seconds. You&apos;ll see results appear below.
-                    </p>
-                    <button
-                        id="serp-gap-submit"
-                        type="submit"
-                        disabled={submitting || userCredits < 5}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+                    <a
+                        href="/dashboard/billing"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-sm font-bold transition-colors shadow-[0_0_15px_rgba(245,158,11,0.3)]"
                     >
-                        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                        {submitting ? "Starting…" : "Analyse Gap (5 credits)"}
-                    </button>
+                        <ArrowUpRight className="w-4 h-4" />
+                        View Plans
+                    </a>
                 </div>
-            </form>
+            ) : (
+                /* Trigger form */
+                <form onSubmit={handleSubmit} className="card-surface p-6 flex flex-col gap-4">
+                    <h2 className="font-semibold text-base flex items-center gap-2">
+                        <Search className="w-4 h-4 text-muted-foreground" />
+                        New Gap Analysis
+                    </h2>
+
+                    {/* Near-limit warning */}
+                    {quota && quota.remaining <= 2 && quota.remaining > 0 && (
+                        <div className="flex items-center gap-2 text-sm text-amber-400 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
+                            <AlertTriangle className="w-4 h-4 shrink-0" />
+                            Only {quota.remaining} analysis{quota.remaining === 1 ? "" : "es"} remaining this month.
+                        </div>
+                    )}
+                    {quota && quota.remaining <= 0 && (
+                        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">
+                            <AlertTriangle className="w-4 h-4 shrink-0" />
+                            Monthly quota reached ({quota.limit} analyses).{" "}
+                            <a href="/dashboard/billing" className="underline font-semibold hover:text-red-300">Upgrade</a>{" "}
+                            for more.
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Target Keyword</label>
+                            <input
+                                id="serp-gap-keyword"
+                                type="text"
+                                value={keyword}
+                                onChange={e => setKeyword(e.target.value)}
+                                placeholder="e.g. best seo tools 2025"
+                                className="px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/60 transition-colors"
+                                required
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Your Page URL</label>
+                            <input
+                                id="serp-gap-url"
+                                type="url"
+                                value={clientUrl}
+                                onChange={e => setClientUrl(e.target.value)}
+                                placeholder="https://yourdomain.com/page"
+                                className="px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/60 transition-colors"
+                                required
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Position</label>
+                            <input
+                                id="serp-gap-position"
+                                type="number"
+                                min={1}
+                                max={200}
+                                value={clientPosition}
+                                onChange={e => setClientPosition(e.target.value)}
+                                placeholder="e.g. 18"
+                                className="px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/60 transition-colors"
+                                required
+                            />
+                        </div>
+                    </div>
+                    {error && (
+                        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">
+                            <AlertTriangle className="w-4 h-4 shrink-0" />
+                            {error}
+                        </div>
+                    )}
+                    <div className="flex items-center justify-between gap-4">
+                        <p className="text-xs text-muted-foreground">
+                            Analysis takes ~90 seconds. You&apos;ll see results appear below.
+                        </p>
+                        <button
+                            id="serp-gap-submit"
+                            type="submit"
+                            disabled={submitting || userCredits < 5 || (quota != null && quota.remaining <= 0)}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+                        >
+                            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                            {submitting ? "Starting…" : "Analyse Gap (5 credits)"}
+                        </button>
+                    </div>
+                </form>
+            )}
 
             {/* Results table */}
             {analyses.length > 0 && (

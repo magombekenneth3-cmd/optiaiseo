@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { RecommendationsDashboard } from "@/components/dashboard/RecommendationsDashboard";
+import { GitHubPromptBanner } from "@/components/dashboard/GitHubPromptBanner";
 import { buildRecommendations, type SiteContext } from "@/lib/recommendations/engine";
 
 export const metadata: Metadata = {
@@ -83,7 +84,8 @@ export default async function RecommendationsPage({
   const result = await buildRecommendations(ctx);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
+      <GitHubPromptBanner siteId={site.id} githubConnected={!!site.githubRepoUrl} />
       <RecommendationsDashboard
         domain={site.domain}
         result={result}

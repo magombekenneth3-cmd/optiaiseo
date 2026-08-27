@@ -14,6 +14,7 @@ import { ArrowLeft, GitBranch, Bot, TrendingUp, ClipboardList, CheckCircle, Aler
 import { getSiteBenchmarkContext } from "@/app/actions/benchmarks";
 import { BenchmarkPanel, BenchmarkPlaceholder } from "@/components/dashboard/BenchmarkPanel";
 import { CacheStatsWidget } from "@/components/dashboard/CacheStatsWidget";
+import { GitHubPromptBanner } from "@/components/dashboard/GitHubPromptBanner";
 import { ContentDecayPanel } from "@/components/dashboard/ContentDecayPanel";
 import { SerpFeatureHistoryPanel } from "@/components/dashboard/SerpFeatureHistoryPanel";
 import { getAiOverviewStats, getSerpFeatureHistory } from "@/app/actions/serp-features";
@@ -96,6 +97,11 @@ export default async function SiteDetailsPage({ params }: { params: Promise<{ id
                     </div>
                 </div>
             </div>
+
+            {/* GitHub onboarding prompt — only when no repo is linked */}
+            {!site.githubRepoUrl && (
+                <GitHubPromptBanner siteId={site.id} githubConnected={githubOAuthConnected && !!site.githubRepoUrl} />
+            )}
 
             <PageDiscoveryPanel siteId={site.id} domain={site.domain} />
 

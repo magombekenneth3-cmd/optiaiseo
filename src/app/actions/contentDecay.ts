@@ -76,6 +76,122 @@ function extractStructuredContent(html: string, maxSections = 50): string {
     return lines.join("\n");
 }
 
+// ── Audit/Rank-based fallback when GSC isn't connected ───────────────────────
+
+export interface DecayRiskRow {
+    url: string;
+    /** Confidence: "HIGH" = rank dropped ≥15%, "SIGNAL" = audit score declined */
+    confidence: "HIGH" | "SIGNAL";
+    /** What deteriorated: e.g. "Rank #8 → #23" or "Score 82 → 61" */
+    signal: string;
+    /** Numeric drop percentage (always positive) */
+    dropPercentage: number;
+    /** The value in the previous period */
+    previousValue: number;
+    /** The value in the latest period */
+    currentValue: number;
+    /** What the values represent */
+    metric: "rank" | "auditScore";
+}
+
+async function getDecayFallbackData(siteId: string): Promise<DecayRiskRow[]> {
+    const rows: DecayRiskRow[] = [];
+
+    // ── 1. Rank snapshot deterioration (HIGH CONFIDENCE) ──────────────────
+    // Find keywords where the latest position is ≥15% worse than the previous
+    const rankSnapshots = await prisma.$queryRaw<
+        { keyword: string; url: string; latestPos: number; previousPos: number }[]
+    >`
+        WITH ranked AS (
+            SELECT
+                keyword,
+                url,
+                position,
+                ROW_NUMBER() OVER (PARTITION BY keyword ORDER BY "recordedAt" DESC) AS rn
+            FROM "RankSnapshot"
+            WHERE "siteId" = ${siteId}
+              AND url IS NOT NULL
+              AND "recordedAt" > NOW() - INTERVAL '90 days'
+        )
+        SELECT
+            a.keyword,
+            a.url,
+            a.position AS "latestPos",
+            b.position AS "previousPos"
+        FROM ranked a
+        JOIN ranked b ON a.keyword = b.keyword AND b.rn = 2
+        WHERE a.rn = 1
+          AND b.position > 0
+          AND a.position > b.position
+          AND ((a.position - b.position)::float / b.position) >= 0.15
+    `;
+
+    for (const snap of rankSnapshots) {
+        const drop = Math.round(((snap.latestPos - snap.previousPos) / snap.previousPos) * 100);
+        rows.push({
+            url: snap.url ?? `(keyword: ${snap.keyword})`,
+            confidence: "HIGH",
+            signal: `Rank #${snap.previousPos} → #${snap.latestPos}`,
+            dropPercentage: drop,
+            previousValue: snap.previousPos,
+            currentValue: snap.latestPos,
+            metric: "rank",
+        });
+    }
+
+    // ── 2. Audit score deterioration (SIGNAL) ────────────────────────────
+    const recentAudits = await prisma.audit.findMany({
+        where: { siteId, deletedAt: null },
+        orderBy: { runTimestamp: "desc" },
+        take: 2,
+        select: { id: true },
+    });
+
+    if (recentAudits.length >= 2) {
+        const [latestAudit, previousAudit] = recentAudits;
+        const [latestPages, previousPages] = await Promise.all([
+            prisma.pageAudit.findMany({
+                where: { auditId: latestAudit.id },
+                select: { pageUrl: true, overallScore: true },
+            }),
+            prisma.pageAudit.findMany({
+                where: { auditId: previousAudit.id },
+                select: { pageUrl: true, overallScore: true },
+            }),
+        ]);
+
+        const previousScoreMap = new Map(previousPages.map(p => [p.pageUrl, p.overallScore]));
+        // Dedupe: skip URLs already covered by rank-drop data
+        const rankUrls = new Set(rows.map(r => r.url));
+
+        for (const page of latestPages) {
+            if (rankUrls.has(page.pageUrl)) continue;
+            const prevScore = previousScoreMap.get(page.pageUrl);
+            if (prevScore == null || prevScore === 0) continue;
+            const drop = Math.round(((prevScore - page.overallScore) / prevScore) * 100);
+            if (drop > 0) {
+                rows.push({
+                    url: page.pageUrl,
+                    confidence: drop >= 15 ? "HIGH" : "SIGNAL",
+                    signal: `Score ${prevScore} → ${page.overallScore}`,
+                    dropPercentage: drop,
+                    previousValue: prevScore,
+                    currentValue: page.overallScore,
+                    metric: "auditScore",
+                });
+            }
+        }
+    }
+
+    // Sort: HIGH first, then by drop severity
+    rows.sort((a, b) => {
+        if (a.confidence !== b.confidence) return a.confidence === "HIGH" ? -1 : 1;
+        return b.dropPercentage - a.dropPercentage;
+    });
+
+    return rows;
+}
+
 // Actions
 
 export async function getDecayingContent(siteId: string) {
@@ -87,11 +203,23 @@ export async function getDecayingContent(siteId: string) {
         const site = await prisma.site.findUnique({ where: { id: siteId, userId: user.id } });
         if (!site) return { success: false, error: "Site not found" };
 
-        const normalisedUrl = normaliseSiteUrl(site.domain);
-        const accessToken = await getUserGscToken(user.id);
-        const decayData = await fetchGSCDecayData(accessToken, normalisedUrl);
-
-        return { success: true, data: decayData };
+        // Try GSC first
+        try {
+            const normalisedUrl = normaliseSiteUrl(site.domain);
+            const accessToken = await getUserGscToken(user.id);
+            const decayData = await fetchGSCDecayData(accessToken, normalisedUrl);
+            return { success: true, data: decayData, source: "gsc" as const };
+        } catch {
+            // GSC not connected or failed — try audit-based fallback
+            const fallback = await getDecayFallbackData(siteId);
+            if (fallback.length > 0) {
+                return { success: true, data: fallback, source: "audit" as const };
+            }
+            return {
+                success: false,
+                error: "Connect Google Search Console or run at least 2 audits to detect content decay.",
+            };
+        }
     } catch (error: unknown) {
         logger.error("Error fetching decaying content:", { error: (error as Error)?.message ?? String(error) });
         return { success: false, error: (error as Error).message ?? "Failed to fetch decaying content." };

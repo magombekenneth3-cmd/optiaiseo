@@ -17,8 +17,8 @@ export default function RefreshClient({ siteId }: { siteId: string }) {
             setIsLoading(true);
             try {
                 const res = await getDecayingContent(siteId);
-                if (mounted && res.success && res.data) {
-                    setDecayData(res.data);
+                if (mounted && res.success && res.data && res.source === "gsc") {
+                    setDecayData(res.data as DecayRow[]);
                 } else if (mounted && !res.success) {
                     toast.error(res.error || "Failed to load decaying content data");
                 }
