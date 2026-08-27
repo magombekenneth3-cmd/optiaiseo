@@ -113,6 +113,8 @@ export interface AuditModuleContext {
     readonly targetKeyword?: string;
     /** Authenticated user ID — passed to Moz client for per-user API token lookup */
     readonly userId?: string;
+    /** Site ID — passed to backlink module for DB-enriched metrics (toxic count, doFollow ratio) */
+    readonly siteId?: string;
 }
 
 export interface AuditModule {

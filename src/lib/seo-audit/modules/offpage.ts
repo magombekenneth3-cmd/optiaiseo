@@ -5,7 +5,7 @@ import { getAhrefsDomainOverview, getAhrefsBacklinks, getAhrefsCompetitors } fro
 import { getCompetitorTopPages } from '@/lib/keywords/dataforseo';
 
 const MAX_HTML_BYTES = 10 * 1024 * 1024;
-const MAX_LINKS_TO_CHECK = 20;   // reduced from 50 — checking 50 links serially caused 70s+ hangs
+const MAX_LINKS_TO_CHECK = 20;
 const FETCH_CHUNK_SIZE = 10;
 const FETCH_TIMEOUT_MS = 3_000;
 const MAX_HREF_LENGTH = 2048;
@@ -282,8 +282,8 @@ export const OffPageModule: AuditModule = {
         if (domainOverview && !isMockData) {
             const drStatus: 'Pass' | 'Warning' | 'Fail' =
                 domainOverview.domainRating >= 40 ? 'Pass'
-                : domainOverview.domainRating >= 20 ? 'Warning'
-                : 'Fail';
+                    : domainOverview.domainRating >= 20 ? 'Warning'
+                        : 'Fail';
 
             items.push({
                 id: 'backlink-profile',
@@ -452,14 +452,14 @@ export const OffPageModule: AuditModule = {
             }
 
             const total = anchors.length
-            const exactPct   = total > 0 ? Math.round((anchorBuckets.exact  / total) * 100) : 0
+            const exactPct = total > 0 ? Math.round((anchorBuckets.exact / total) * 100) : 0
             const brandedPct = total > 0 ? Math.round((anchorBuckets.branded / total) * 100) : 0
             const genericPct = total > 0 ? Math.round((anchorBuckets.generic + anchorBuckets.naked) / total * 100) : 0
 
             const anchorStatus: ChecklistItem['status'] =
                 exactPct > 40 ? 'Fail'
-                : exactPct > 20 ? 'Warning'
-                : 'Pass'
+                    : exactPct > 20 ? 'Warning'
+                        : 'Pass'
 
             items.push({
                 id: 'anchor-text-distribution',
@@ -491,11 +491,11 @@ export const OffPageModule: AuditModule = {
                 aiVisibilityImpact: 60,
                 details: {
                     total,
-                    branded:  anchorBuckets.branded,
-                    exact:    anchorBuckets.exact,
-                    partial:  anchorBuckets.partial,
-                    generic:  anchorBuckets.generic,
-                    naked:    anchorBuckets.naked,
+                    branded: anchorBuckets.branded,
+                    exact: anchorBuckets.exact,
+                    partial: anchorBuckets.partial,
+                    generic: anchorBuckets.generic,
+                    naked: anchorBuckets.naked,
                     exactPct,
                     brandedPct,
                 } as Record<string, string | number | boolean>,
@@ -543,7 +543,7 @@ export const OffPageModule: AuditModule = {
                     label: 'Competitor Link Intersection (Link Gap)',
                     status: highValueGaps === 0 && totalGapSites === 0 ? 'Pass'
                         : highValueGaps > 5 ? 'Warning'
-                        : 'Info',
+                            : 'Info',
                     finding: highValueGaps > 0
                         ? `Found ${totalGapSites} domains linking to competitors [${competitorDomains.slice(0, 3).join(', ')}] but NOT to you. ${highValueGaps} of these link to 2+ competitors — highest-priority outreach targets.`
                         : `Competitor link analysis complete. ${totalGapSites} unearned link opportunities identified across ${competitorDomains.length} competitor(s).`,

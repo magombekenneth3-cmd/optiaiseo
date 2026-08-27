@@ -30,7 +30,7 @@ export class AuditEngine {
         this.modules.push(module);
     }
 
-    async runAudit(url: string, opts?: { targetKeyword?: string; userId?: string }): Promise<FullAuditReport> {
+    async runAudit(url: string, opts?: { targetKeyword?: string; userId?: string; siteId?: string }): Promise<FullAuditReport> {
         // WARM-UP: Fetch HTML once (with retry) BEFORE running modules.
         //
         // All 8 modules run in parallel below via Promise.all. Without
@@ -64,6 +64,7 @@ export class AuditEngine {
             frameworkHints: [],
             targetKeyword: opts?.targetKeyword ?? undefined,
             userId: opts?.userId ?? undefined,
+            siteId: opts?.siteId ?? undefined,
         };
 
 
