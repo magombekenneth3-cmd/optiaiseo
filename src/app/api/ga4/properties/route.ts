@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getUserGscToken } from "@/lib/gsc/token";
+import { getUserGa4Token } from "@/lib/ga4/token";
 import { listGa4Properties } from "@/lib/ga4";
 
 export async function GET(req: NextRequest) {
@@ -26,10 +26,20 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-        const accessToken = await getUserGscToken(site.userId);
+        const accessToken = await getUserGa4Token(site.userId);
         const properties = await listGa4Properties(accessToken);
         return NextResponse.json({ properties });
-    } catch {
-        return NextResponse.json({ error: "Failed to list GA4 properties. Ensure Google is connected." }, { status: 500 });
+    } catch (err) {
+        const msg = (err as Error)?.message ?? '';
+        if (msg.includes('GA4_PERMISSION_DENIED')) {
+            return NextResponse.json(
+                { error: "Missing analytics permission. Please connect Google Analytics to grant GA4 access." },
+                { status: 403 }
+            );
+        }
+        return NextResponse.json(
+            { error: "Failed to list GA4 properties. Ensure Google is connected." },
+            { status: 500 }
+        );
     }
 }

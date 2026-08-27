@@ -15,13 +15,13 @@ const SRC = path.resolve(__dirname, "../../src");
 
 describe("F2 – GA4 Integration wiring", () => {
     describe("Ga4ConnectForm is mounted in Settings", () => {
-        it("SettingsTabs imports Ga4ConnectForm", () => {
-            const tabs = fs.readFileSync(
-                path.join(SRC, "app/dashboard/settings/SettingsTabs.tsx"),
+        it("IntegrationsPanel imports Ga4ConnectForm", () => {
+            const panel = fs.readFileSync(
+                path.join(SRC, "app/dashboard/settings/IntegrationsPanel.tsx"),
                 "utf8"
             );
-            expect(tabs).toContain('import { Ga4ConnectForm }');
-            expect(tabs).toContain("Ga4ConnectForm");
+            expect(panel).toContain('import { Ga4ConnectForm }');
+            expect(panel).toContain("Ga4ConnectForm");
         });
 
         it("SettingsTabs accepts firstSiteGa4PropertyId prop", () => {
@@ -32,14 +32,14 @@ describe("F2 – GA4 Integration wiring", () => {
             expect(tabs).toContain("firstSiteGa4PropertyId");
         });
 
-        it("SettingsTabs renders Ga4ConnectForm in integrations tab", () => {
-            const tabs = fs.readFileSync(
-                path.join(SRC, "app/dashboard/settings/SettingsTabs.tsx"),
+        it("IntegrationsPanel renders Ga4ConnectForm with siteId and currentPropertyId", () => {
+            const panel = fs.readFileSync(
+                path.join(SRC, "app/dashboard/settings/IntegrationsPanel.tsx"),
                 "utf8"
             );
             // Should pass siteId and currentPropertyId props
-            expect(tabs).toMatch(/Ga4ConnectForm\s+siteId=/);
-            expect(tabs).toMatch(/currentPropertyId=/);
+            expect(panel).toMatch(/Ga4ConnectForm\s+siteId=/);
+            expect(panel).toMatch(/currentPropertyId=/);
         });
 
         it("Settings page queries ga4PropertyId from Site", () => {

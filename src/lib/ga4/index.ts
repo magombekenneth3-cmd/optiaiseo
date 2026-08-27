@@ -54,6 +54,14 @@ export async function fetchGa4Metrics(
 
         if (!res.ok) {
             const errText = await res.text().catch(() => "");
+            if (res.status === 403) {
+                logger.warn("[GA4] Insufficient OAuth scope — user must re-authorize with analytics.readonly", {
+                    status: res.status,
+                    body: errText.slice(0, 200),
+                    hint: "Check Google Cloud Console: analyticsdata.googleapis.com must be enabled",
+                });
+                throw new Error(`GA4_PERMISSION_DENIED: ${errText.slice(0, 200)}`);
+            }
             logger.warn("[GA4] API error", { status: res.status, body: errText.slice(0, 200) });
             return null;
         }
@@ -158,7 +166,13 @@ async function fetchTopPages(
             }
         );
 
-        if (!res.ok) return [];
+        if (!res.ok) {
+            if (res.status === 403) {
+                const errText = await res.text().catch(() => "");
+                throw new Error(`GA4_PERMISSION_DENIED: ${errText.slice(0, 200)}`);
+            }
+            return [];
+        }
 
         const data = await res.json();
         return (data.rows ?? []).map((row: { dimensionValues?: { value?: string }[]; metricValues?: { value?: string }[] }) => ({
@@ -183,7 +197,14 @@ export async function listGa4Properties(
             }
         );
 
-        if (!res.ok) return [];
+        if (!res.ok) {
+            if (res.status === 403) {
+                logger.warn("[GA4] listGa4Properties: Insufficient OAuth scope", { status: res.status });
+            } else {
+                logger.warn("[GA4] listGa4Properties failed", { status: res.status });
+            }
+            return [];
+        }
 
         const data = await res.json();
         const properties: { id: string; displayName: string }[] = [];

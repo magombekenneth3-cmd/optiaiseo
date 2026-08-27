@@ -176,6 +176,9 @@ export async function disconnectGsc(userId: string): Promise<void> {
         data: { gscConnected: false },
     });
 
+    // GA4 property IDs are intentionally NOT cleared here — GA4 now uses its
+    // own dedicated google-ga4 OAuth credential, independent of GSC.
+
     // Bust the Next.js unstable_cache entries for every site belonging to this
     // user so that a subsequent reconnect always fetches live GSC data.
     const sites = await prisma.site.findMany({

@@ -4,6 +4,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getUserGscToken } from "@/lib/gsc/token";
+import { getUserGa4Token } from "@/lib/ga4/token";
+import { logger } from "@/lib/logger";
 import {
     fetchGSCKeywords,
     normaliseSiteUrl,
@@ -78,10 +80,18 @@ export async function getUnifiedAnalytics(siteId: string): Promise<UnifiedAnalyt
 
     if (site.ga4PropertyId) {
         try {
-            const accessToken = await getUserGscToken(site.userId);
+            const accessToken = await getUserGa4Token(site.userId);
             ga4Data = await fetchGa4Metrics(accessToken, site.ga4PropertyId, 28);
-        } catch {
-            // GA4 fetch failed
+        } catch (err) {
+            const msg = (err as Error)?.message ?? '';
+            if (msg.includes('403') || msg.includes('PERMISSION_DENIED')) {
+                logger.warn('[GA4] Permission denied — analytics.readonly scope likely missing', {
+                    siteId,
+                    userId: site.userId,
+                });
+            } else {
+                logger.warn('[GA4] Fetch failed', { siteId, error: msg });
+            }
         }
     }
 

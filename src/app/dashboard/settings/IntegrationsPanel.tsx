@@ -145,6 +145,11 @@ export function IntegrationsPanel({
                         accountLabel={ga4?.accountLabel}
                         lastSyncAt={ga4?.lastSyncAt}
                         configErrors={ga4?.configErrors ?? []}
+                        connectAction="/api/auth/signin/google-ga4?callbackUrl=%2Fdashboard%2Fsettings%3Ftab%3Dintegrations"
+                        onDisconnect={async () => {
+                            const res = await fetch("/api/settings/disconnect-ga4", { method: "POST" });
+                            if (!res.ok) throw new Error("Failed to disconnect");
+                        }}
                     >
                         {/* Embed the existing GA4 property selector */}
                         <Ga4ConnectForm siteId={firstSiteId} currentPropertyId={firstSiteGa4PropertyId} />

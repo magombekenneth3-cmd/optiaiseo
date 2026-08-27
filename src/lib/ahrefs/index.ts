@@ -1,11 +1,3 @@
-/**
- * @deprecated This module is superseded by `@/lib/backlinks/`.
- * Remaining consumers:
- *   - `@/lib/keywords/index.ts` → getAhrefsTopKeywords()
- *   - `@/lib/seo-audit/modules/offpage.ts` → getAhrefsCompetitors() (Serper competitor discovery)
- *
- * Do NOT add new imports from this module. Use `@/lib/backlinks/` instead.
- */
 import { logger } from "@/lib/logger";
 
 export interface AhrefsDomainOverview {

@@ -143,6 +143,20 @@ export const authOptions: NextAuthOptions = {
             },
         }),
 
+        GoogleProvider({
+            id: "google-ga4",
+            name: "Google Analytics",
+            clientId: process.env.GOOGLE_CLIENT_ID || "",
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+            authorization: {
+                params: {
+                    scope: "openid email profile https://www.googleapis.com/auth/analytics.readonly",
+                    prompt: "consent",
+                    access_type: "offline",
+                },
+            },
+        }),
+
         CredentialsProvider({
             name: "Email & Password",
             credentials: {
@@ -302,6 +316,10 @@ export const authOptions: NextAuthOptions = {
                                 data: { gscConnected: true },
                             });
                         }
+
+                        // GA4 uses a dedicated provider — no user flag needed;
+                        // connection status is derived from the google-ga4 Account row
+                        // at runtime in the integration-status endpoint.
                     } catch (err: unknown) {
                         logger.error("[Auth] Failed to persist Account tokens:", {
                             error: err instanceof Error ? (err.stack ?? err.message) : String(err),

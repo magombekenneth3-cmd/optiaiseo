@@ -33,7 +33,7 @@ export async function GET() {
         const userId = session.user.id;
 
         // Parallel queries for all integration data
-        const [user, gscAccount, firstSite] = await Promise.all([
+        const [user, gscAccount, ga4Account, firstSite] = await Promise.all([
             prisma.user.findUnique({
                 where: { id: userId },
                 select: {
@@ -45,7 +45,11 @@ export async function GET() {
             }),
             prisma.account.findFirst({
                 where: { userId, provider: "google-gsc" },
-                select: { id: true, providerAccountId: true },
+                select: { id: true, providerAccountId: true, scope: true },
+            }),
+            prisma.account.findFirst({
+                where: { userId, provider: "google-ga4" },
+                select: { id: true, providerAccountId: true, scope: true },
             }),
             prisma.site.findFirst({
                 where: { userId },
@@ -82,7 +86,18 @@ export async function GET() {
         }
 
         const gscConnected = (user.gscConnected || !!gscAccount);
-        const ga4Connected = !!firstSite?.ga4PropertyId;
+        // GA4 connection: prefer dedicated google-ga4 Account, fall back to
+        // legacy google-gsc Account if it has analytics.readonly scope.
+        const ga4HasDedicatedAccount = !!ga4Account;
+        const ga4LegacyScope = gscAccount?.scope?.includes('analytics.readonly') ?? false;
+        const ga4Connected = !!firstSite?.ga4PropertyId && (ga4HasDedicatedAccount || ga4LegacyScope);
+        const ga4ConfigErrors: string[] = [];
+        if (firstSite?.ga4PropertyId && !ga4HasDedicatedAccount && !ga4LegacyScope) {
+            ga4ConfigErrors.push("Connect Google Analytics separately to restore GA4 data");
+        }
+        if (firstSite?.ga4PropertyId && !ga4HasDedicatedAccount && !gscAccount) {
+            ga4ConfigErrors.push("Google account disconnected — GA4 data unavailable");
+        }
         const githubConnected = !!firstSite?.githubRepoUrl;
 
         // Parse WordPress config
@@ -130,7 +145,7 @@ export async function GET() {
                 connected: ga4Connected,
                 accountLabel: firstSite?.ga4PropertyId ?? undefined,
                 lastSyncAt: null,
-                configErrors: [],
+                configErrors: ga4ConfigErrors,
                 canConnect: true,
                 canDisconnect: ga4Connected,
             },
