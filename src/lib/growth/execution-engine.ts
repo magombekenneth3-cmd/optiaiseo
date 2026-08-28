@@ -5,6 +5,7 @@ import { performOneClickAutoFix } from "@/lib/autofix/fixer";
 import { triggerInstantIndexing } from "@/lib/indexing/indexnow";
 import { recordExperimentBaseline } from "@/lib/experiments/tracker";
 import { logger } from "@/lib/logger";
+import { acquireSyncLock, releaseSyncLock } from "@/lib/growth/decision-lock";
 
 // Mutation lifecycle
 import {
@@ -41,6 +42,7 @@ export interface ExecutionResult {
  * Executes a growth decision through the Mutation Operation lifecycle.
  *
  * Flow:
+ *   0. Acquire Redis sync lock (fail-closed on Redis error)
  *   1. Resolve decision + target blog
  *   2. Build the mutation payload (the exact patch to apply)
  *   3. createOperation() → risk assessment → auto-approve or PENDING_APPROVAL
@@ -55,6 +57,41 @@ export async function executeGrowthDecision(
     siteId: string
 ): Promise<ExecutionResult> {
     const executedAt = new Date();
+
+    // ── 0. Acquire Redis sync lock (fail-closed on error) ───────────────
+    // If the lock cannot be acquired (Redis error, contention), abort
+    // immediately with LOCK_UNAVAILABLE so callers know nothing was mutated.
+    let lockAcquired = false;
+    try {
+        lockAcquired = await acquireSyncLock(siteId);
+    } catch (lockErr: unknown) {
+        logger.warn("[ExecutionEngine] Redis lock acquisition error — aborting execution", {
+            decisionId,
+            siteId,
+            error: (lockErr as Error)?.message,
+        });
+        return {
+            decisionId,
+            siteId,
+            actionExecuted: "LOCK_UNAVAILABLE",
+            targetUrl: "/",
+            success: false,
+            details: `Lock acquisition failed: ${(lockErr as Error)?.message || "Redis error"}`,
+            executedAt,
+        };
+    }
+
+    if (!lockAcquired) {
+        return {
+            decisionId,
+            siteId,
+            actionExecuted: "LOCK_UNAVAILABLE",
+            targetUrl: "/",
+            success: false,
+            details: "Another execution is already in progress for this site.",
+            executedAt,
+        };
+    }
 
     try {
         // ── 1. Resolve Decision ──────────────────────────────────────────────
@@ -353,6 +390,9 @@ export async function executeGrowthDecision(
             details: `Execution failed: ${(err as Error)?.message || String(err)}`,
             executedAt
         };
+    } finally {
+        // Always release the sync lock, regardless of success or failure
+        await releaseSyncLock(siteId);
     }
 }
 

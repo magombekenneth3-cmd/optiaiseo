@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AccessToken } from "livekit-server-sdk";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { rateLimit } from "@/lib/rate-limit/check";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
     const user = await getAuthUser(req);
@@ -11,6 +12,27 @@ export async function GET(req: NextRequest) {
 
     const limited = await rateLimit("voiceSession", user!.id);
     if (limited) return limited;
+
+    // Credit guard: verify user has sufficient credits before granting
+    // a voice AI session token. Returns HTTP 402 if credits are depleted.
+    try {
+        const dbUser = await prisma.user.findUnique({
+            where: { id: user!.id },
+            select: { credits: true },
+        });
+        if (dbUser && (dbUser.credits ?? 0) <= 0) {
+            return NextResponse.json(
+                {
+                    available: false,
+                    error: "Insufficient credits for Voice AI. Please upgrade your plan or purchase additional credits.",
+                },
+                { status: 402 }
+            );
+        }
+    } catch {
+        // If credit check fails (DB unavailable), fail open to not block
+        // paying users. Rate limiting still protects against abuse.
+    }
 
     const apiKey    = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;

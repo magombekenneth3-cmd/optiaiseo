@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 
 const TOKEN_CACHE_PREFIX = "ga4:token:";
 const TOKEN_CACHE_TTL_SECONDS = 3500;
+const REFRESH_COOLDOWN_PREFIX = "ga4:refresh_failed:";
+const REFRESH_COOLDOWN_TTL_SECONDS = 300; // 5 minutes
 
 async function getRedis() {
     try {
@@ -118,6 +120,22 @@ export async function getUserGa4Token(userId: string): Promise<string> {
         throw new Error("GA4_REFRESH_TOKEN_MISSING");
     }
 
+    // Check refresh cooldown — prevent infinite refresh loops when
+    // credentials are permanently revoked.
+    const redisClient = await getRedis();
+    if (redisClient) {
+        try {
+            const cooldownKey = `${REFRESH_COOLDOWN_PREFIX}${userId}`;
+            const cooldown = await redisClient.get<string>(cooldownKey);
+            if (cooldown) {
+                throw new Error("GA4_REAUTHORIZATION_REQUIRED");
+            }
+        } catch (err) {
+            // Re-throw our own error; swallow Redis failures
+            if ((err as Error)?.message === "GA4_REAUTHORIZATION_REQUIRED") throw err;
+        }
+    }
+
     const { google } = await import("googleapis");
     const { clientId, clientSecret } = getOAuthCredentials();
 
@@ -130,6 +148,20 @@ export async function getUserGa4Token(userId: string): Promise<string> {
         credentials = result.credentials;
     } catch (err: unknown) {
         logger.error("[ga4-token] Token refresh failed", { userId, error: formatError(err) });
+
+        // Set cooldown to prevent infinite refresh loops
+        if (redisClient) {
+            try {
+                await redisClient.set(
+                    `${REFRESH_COOLDOWN_PREFIX}${userId}`,
+                    "1",
+                    { ex: REFRESH_COOLDOWN_TTL_SECONDS },
+                );
+            } catch {
+                // Non-fatal — cooldown is best-effort
+            }
+        }
+
         throw new Error("GA4_TOKEN_REFRESH_FAILED");
     }
 

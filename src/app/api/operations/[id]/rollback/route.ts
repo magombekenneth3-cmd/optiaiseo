@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { type OperationStatus, VALID_TRANSITIONS } from "@/lib/mutations/types";
+import { assertAllKillSwitchesClear, MutationBlockedError } from "@/lib/mutations";
 
 /**
  * Known Prisma model names that support rollback.
@@ -78,11 +79,44 @@ export async function POST(
         );
     }
 
+    // Kill-switch enforcement: rollbacks must respect the same safety
+    // controls as forward mutations. If automations are paused for this
+    // site, the rollback is blocked.
+    try {
+        await assertAllKillSwitchesClear(operation.site.id);
+    } catch (ksErr: unknown) {
+        if (ksErr instanceof MutationBlockedError) {
+            logger.warn("[Operations] Rollback blocked by kill switch", {
+                operationId,
+                siteId: operation.site.id,
+                error: (ksErr as Error).message,
+            });
+            return NextResponse.json(
+                { error: `Rollback blocked: ${(ksErr as Error).message}` },
+                { status: 409 }
+            );
+        }
+        throw ksErr;
+    }
+
     // Perform rollback
     try {
         const beforeState = operation.snapshot.beforeState as Record<string, unknown>;
         const targetModel = operation.targetModel; // e.g. "Blog"
         const targetId = operation.targetId;
+
+        // Detect third-party effects that cannot be automatically reversed.
+        // The rollback only restores local DB state; remote side effects
+        // (WordPress publish, GitHub PR, IndexNow) are marked as
+        // LOCAL_ONLY so the user is aware.
+        const thirdPartyNotes: string[] = [];
+        const effects = operation.effects ?? [];
+        for (const effect of effects) {
+            const effectType = typeof effect === "object" ? (effect as any).effectType : String(effect);
+            if (["WORDPRESS_PUBLISH", "GITHUB_PR", "GHOST_PUBLISH", "MEDIUM_PUBLISH"].includes(effectType)) {
+                thirdPartyNotes.push(`${effectType}: remote asset not automatically reversed — manual cleanup may be required`);
+            }
+        }
 
         // Determine Prisma model name (lowercase first letter)
         const prismaModel = targetModel.charAt(0).toLowerCase() + targetModel.slice(1);
@@ -136,6 +170,8 @@ export async function POST(
                         rolledBackBy: session.user.id,
                         rolledBackAt: new Date().toISOString(),
                         previousStatus: operation.status,
+                        rollbackScope: thirdPartyNotes.length > 0 ? "LOCAL_ONLY" : "FULL",
+                        thirdPartyNotes: thirdPartyNotes.length > 0 ? thirdPartyNotes : undefined,
                     },
                 },
             }),

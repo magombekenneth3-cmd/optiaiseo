@@ -59,11 +59,19 @@ export async function runAgencyAutopilotJob(
         };
 
         // 3. Generate Branded White-Label PDF Executive Digest
+        //    Wrapped in a timeout guard (10s) to prevent the headless browser
+        //    from blocking the entire autopilot job if it's slow to start.
         let pdfBuffer: Buffer;
         try {
-            pdfBuffer = await generateAgencyWhiteLabelPdfReport(reportData);
+            const PDF_TIMEOUT_MS = 10_000;
+            pdfBuffer = await Promise.race([
+                generateAgencyWhiteLabelPdfReport(reportData),
+                new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error("PDF generation timed out")), PDF_TIMEOUT_MS)
+                ),
+            ]);
         } catch {
-            // Fallback to HTML report buffer when headless browser is offline in test environment
+            // Fallback to HTML report buffer when headless browser is offline/slow in test environment
             const html = buildAgencyWhiteLabelReportHtml(reportData);
             pdfBuffer = Buffer.from(html, "utf-8");
         }

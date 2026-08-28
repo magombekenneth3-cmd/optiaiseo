@@ -128,7 +128,12 @@ export async function fetchGa4Metrics(
                 : 0,
         };
     } catch (e: unknown) {
-        logger.warn("[GA4] Fetch failed", { error: (e as Error)?.message });
+        // Re-throw auth/permission errors so callers can classify them
+        const msg = (e as Error)?.message ?? "";
+        if (msg.includes("GA4_PERMISSION_DENIED")) {
+            throw e;
+        }
+        logger.warn("[GA4] Fetch failed", { error: msg });
         return null;
     }
 }

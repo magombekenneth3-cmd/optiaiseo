@@ -2,30 +2,50 @@ import type { Metadata } from "next";
 import HomeClient from "@/components/home/HomeClient";
 import { getPublicStats } from "@/app/actions/stats";
 
-
 // Stats are cached via unstable_cache (1h TTL) in src/app/actions/stats.ts
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
-
+const SITE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online"
+).replace(/\/$/, "");
 
 const PAGE_TITLE = "OptiAISEO — AI SEO Platform That Fixes Itself | Free Trial";
-const PAGE_DESC = "The AI SEO platform that tracks your brand in ChatGPT, Claude & Perplexity — and auto-fixes issues while you sleep. Start free today.";
+const PAGE_DESC =
+  "The AI SEO platform that tracks your brand in ChatGPT, Claude & Perplexity — and auto-fixes issues while you sleep. Start free today.";
+
+const IDS = {
+  organization: `${SITE_URL}/#organization`,
+  website: `${SITE_URL}/#website`,
+  webpage: `${SITE_URL}/#webpage`,
+  software: `${SITE_URL}/#software`,
+  service: `${SITE_URL}/#service`,
+  video: `${SITE_URL}/#video`,
+  faq: `${SITE_URL}/#faq`,
+} as const;
+
+/**
+ * Keep this pointed at a real brand logo.
+ *
+ * Do NOT use favicon.ico as the Organization logo.
+ * If /logo.png does not exist yet, either add it or remove
+ * the logo properties until a real logo asset exists.
+ */
+const LOGO_URL = `${SITE_URL}/logo.png`;
 
 export const metadata: Metadata = {
   title: PAGE_TITLE,
   description: PAGE_DESC,
   alternates: {
-    canonical: "/",
+    canonical: SITE_URL,
   },
   openGraph: {
     siteName: "OptiAISEO",
     title: PAGE_TITLE,
     description: PAGE_DESC,
     type: "website",
-    url: "/",
+    url: SITE_URL,
     images: [
       {
-        url: "/og-image.png",
+        url: `${SITE_URL}/og-image.png`,
         width: 1200,
         height: 630,
         alt: "OptiAISEO — Autonomous AEO & SEO Dashboard",
@@ -36,30 +56,36 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: PAGE_TITLE,
     description: PAGE_DESC,
-    images: ["/og-image.png"],
+    images: [`${SITE_URL}/og-image.png`],
   },
 };
 
+/**
+ * Organization
+ *
+ * Keep this semantic rather than turning it into a keyword list.
+ * "industry" should describe the organization's actual business,
+ * not every product feature, tool, or SEO keyword it targets.
+ */
 const organizationSchema = {
-  "@context": "https://schema.org",
   "@type": "Organization",
+  "@id": IDS.organization,
   name: "OptiAISEO",
   url: SITE_URL,
-  logo: `${SITE_URL}/favicon.ico`,
-  description:
-    "OptiAISEO is an AI-powered Generative Engine Optimization (GEO) and Answer Engine Optimization (AEO) platform that helps brands get cited in ChatGPT, Claude, Perplexity, and Google AI Overviews. It automates technical SEO audits, schema injection, AI-optimised blog generation, and brand citation tracking.",
-  // 'industry' is a non-standard extension understood by many LLMs when processing structured data
-  industry: [
-    "Artificial Intelligence Services",
-    "Generative Engine Optimization",
-    "Answer Engine Optimization",
-    "Search Engine Optimization Software",
-    "Digital Marketing Technology",
-  ],
-  areaServed: {
-    "@type": "Place",
-    name: "Global",
+  logo: {
+    "@type": "ImageObject",
+    "@id": `${SITE_URL}/#logo`,
+    url: LOGO_URL,
+    contentUrl: LOGO_URL,
   },
+  description:
+    "OptiAISEO is an AI-powered SEO, Answer Engine Optimization (AEO), and Generative Engine Optimization (GEO) platform that helps brands improve search visibility and visibility across AI-powered search experiences.",
+  industry: [
+    "Artificial Intelligence",
+    "Marketing Technology",
+    "Digital Marketing",
+    "Search Engine Optimization",
+  ],
   sameAs: [
     "https://twitter.com/aiseoseo",
     "https://linkedin.com/company/aiseoseo",
@@ -75,27 +101,210 @@ const organizationSchema = {
   },
 };
 
+/**
+ * WebSite
+ *
+ * SearchAction is intentionally omitted unless /blog?q= actually
+ * performs a real search on the public website.
+ */
 const websiteSchema = {
-  "@context": "https://schema.org",
   "@type": "WebSite",
+  "@id": IDS.website,
   name: "OptiAISEO",
   url: SITE_URL,
-  description: "Autonomous AEO & AI SEO platform — get your brand cited in ChatGPT, Claude, and Perplexity.",
-  potentialAction: {
-    "@type": "SearchAction",
-    target: `${SITE_URL}/blog?q={search_term_string}`,
-    "query-input": "required name=search_term_string",
+  description:
+    "Autonomous AEO and AI SEO platform for improving search visibility and brand citations across traditional and AI-powered search.",
+  publisher: {
+    "@id": IDS.organization,
   },
 };
 
-const webPageSchema = {
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  name: "Free SEO Audit Tool — AI Website SEO Checker | OptiAISEO",
-  description: "Run a free SEO audit on any website. OptiAISEO checks technical SEO, Core Web Vitals, schema errors, on-page issues, and competitor keyword gaps — then auto-generates code fixes.",
+/**
+ * SoftwareApplication
+ *
+ * This represents the actual OptiAISEO SaaS product.
+ *
+ * IMPORTANT:
+ * Keep these offers synchronized with the canonical pricing
+ * configuration used by the application.
+ */
+const softwareSchema = {
+  "@type": "SoftwareApplication",
+  "@id": IDS.software,
+  name: "OptiAISEO",
   url: SITE_URL,
-  datePublished: "2024-01-01",
-  dateModified: new Date().toISOString().split("T")[0],
+  description:
+    "AI-powered SEO, AEO, and GEO software for technical SEO auditing, content optimization, search visibility analysis, and AI-search citation tracking.",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+  publisher: {
+    "@id": IDS.organization,
+  },
+  offers: [
+    {
+      "@type": "Offer",
+      name: "Free Plan",
+      price: "0",
+      priceCurrency: "USD",
+      url: `${SITE_URL}/pricing`,
+      description:
+        "5 SEO audits/month, 1 site, 3 AEO checks/month, 50 credits.",
+      availability: "https://schema.org/InStock",
+    },
+    {
+      "@type": "Offer",
+      name: "Starter Plan",
+      price: "19",
+      priceCurrency: "USD",
+      url: `${SITE_URL}/pricing`,
+      billingDuration: "P1M",
+      description:
+        "15 audits, 3 sites, 10 AEO checks, rank tracking, and 150 credits/month.",
+      availability: "https://schema.org/InStock",
+    },
+    {
+      "@type": "Offer",
+      name: "Pro Plan",
+      price: "49",
+      priceCurrency: "USD",
+      url: `${SITE_URL}/pricing`,
+      billingDuration: "P1M",
+      description:
+        "50 audits, 10 sites, 50 AEO checks, Ahrefs integration, GitHub auto-fix, and 500 credits/month.",
+      availability: "https://schema.org/InStock",
+    },
+    {
+      "@type": "Offer",
+      name: "Agency Plan",
+      price: "149",
+      priceCurrency: "USD",
+      url: `${SITE_URL}/pricing`,
+      billingDuration: "P1M",
+      description:
+        "Unlimited audits, sites, and AEO checks, plus white-label exports, client portal, and 2000 credits/month.",
+      availability: "https://schema.org/InStock",
+    },
+  ],
+};
+
+/**
+ * Service
+ *
+ * This describes the commercial service/platform capabilities
+ * without pretending each capability is a separate organization.
+ */
+const serviceSchema = {
+  "@type": "Service",
+  "@id": IDS.service,
+  name: "OptiAISEO SEO, AEO & GEO Platform",
+  url: SITE_URL,
+  description:
+    "OptiAISEO provides SEO, Answer Engine Optimization (AEO), Generative Engine Optimization (GEO), technical SEO auditing, content optimization, AI-powered content generation, brand citation tracking, and competitor analysis.",
+  serviceType: "Search Engine Optimization",
+  provider: {
+    "@id": IDS.organization,
+  },
+  offers: {
+    "@type": "Offer",
+    url: `${SITE_URL}/pricing`,
+  },
+  hasOfferCatalog: {
+    "@type": "OfferCatalog",
+    name: "OptiAISEO Platform Capabilities",
+    itemListElement: [
+      {
+        "@type": "Offer",
+        itemOffered: {
+          "@type": "Service",
+          name: "Generative Engine Optimization (GEO)",
+          description:
+            "Optimize website content and entities for visibility in AI-generated search experiences.",
+        },
+      },
+      {
+        "@type": "Offer",
+        itemOffered: {
+          "@type": "Service",
+          name: "Answer Engine Optimization (AEO)",
+          description:
+            "Optimize structured content and entities for answer engines and AI assistants.",
+        },
+      },
+      {
+        "@type": "Offer",
+        itemOffered: {
+          "@type": "Service",
+          name: "Technical SEO Auditing",
+          description:
+            "Analyze technical SEO issues including crawlability, schema, broken links, and on-page problems.",
+        },
+      },
+      {
+        "@type": "Offer",
+        itemOffered: {
+          "@type": "Service",
+          name: "AI Content Optimization",
+          description:
+            "Optimize content for search visibility, topical relevance, and AI-powered search experiences.",
+        },
+      },
+      {
+        "@type": "Offer",
+        itemOffered: {
+          "@type": "Service",
+          name: "AI Content Generation",
+          description:
+            "Generate search-focused content designed to support topical authority and organic visibility.",
+        },
+      },
+      {
+        "@type": "Offer",
+        itemOffered: {
+          "@type": "Service",
+          name: "Brand Citation Tracking",
+          description:
+            "Monitor brand visibility and citations across supported AI-powered search experiences.",
+        },
+      },
+      {
+        "@type": "Offer",
+        itemOffered: {
+          "@type": "Service",
+          name: "Competitor Gap Analysis",
+          description:
+            "Identify search opportunities and content gaps relative to competitors.",
+        },
+      },
+    ],
+  },
+};
+
+/**
+ * Homepage
+ *
+ * This is a WebPage, not an Article.
+ *
+ * There should only be a datePublished/dateModified here if these
+ * dates represent real editorial/content lifecycle dates.
+ */
+const webPageSchema = {
+  "@type": "WebPage",
+  "@id": IDS.webpage,
+  url: SITE_URL,
+  name: PAGE_TITLE,
+  description: PAGE_DESC,
+  isPartOf: {
+    "@id": IDS.website,
+  },
+  about: {
+    "@id": IDS.software,
+  },
+  mainEntity: {
+    "@id": IDS.software,
+  },
+  publisher: {
+    "@id": IDS.organization,
+  },
   speakable: {
     "@type": "SpeakableSpecification",
     cssSelector: [
@@ -108,218 +317,170 @@ const webPageSchema = {
   },
   breadcrumb: {
     "@type": "BreadcrumbList",
+    "@id": `${SITE_URL}/#breadcrumb`,
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Home",
+        item: SITE_URL,
+      },
     ],
-  },
-  mainEntity: {
-    "@type": "Article",
-    headline: "Everything You Need to Know About SEO",
-    description: "A comprehensive guide covering why SEO matters, how Google Search works, content optimization, site organization, SERP appearance, and image optimization.",
-    author: {
-      "@type": "Organization",
-      name: "OptiAISEO",
-      url: SITE_URL,
-    },
-    datePublished: "2024-01-01",
-    dateModified: new Date().toISOString().split("T")[0],
-    video: {
-      "@type": "VideoObject",
-      name: "What is SEO? Search Engine Optimization Explained",
-      description: "A visual explainer covering the fundamentals of SEO — how search engines work, why rankings matter, and how to optimize your website for Google.",
-      thumbnailUrl: "https://img.youtube.com/vi/MYE6T_gd7H0/hqdefault.jpg",
-      uploadDate: "2024-01-01",
-      contentUrl: "https://www.youtube.com/watch?v=MYE6T_gd7H0",
-      embedUrl: "https://www.youtube.com/embed/MYE6T_gd7H0",
-    },
   },
 };
 
+/**
+ * Single VideoObject
+ *
+ * This video is defined once and referenced from the graph.
+ */
 const videoSchema = {
-  "@context": "https://schema.org",
   "@type": "VideoObject",
+  "@id": IDS.video,
   name: "What is SEO? Search Engine Optimization Explained",
-  description: "A visual explainer covering the fundamentals of SEO — how search engines work, why rankings matter, and how to optimize your website for Google.",
-  thumbnailUrl: "https://img.youtube.com/vi/MYE6T_gd7H0/hqdefault.jpg",
+  description:
+    "A visual explainer covering the fundamentals of SEO, how search engines work, why rankings matter, and how to optimize a website for search.",
+  thumbnailUrl:
+    "https://img.youtube.com/vi/MYE6T_gd7H0/hqdefault.jpg",
   uploadDate: "2024-01-01",
   contentUrl: "https://www.youtube.com/watch?v=MYE6T_gd7H0",
   embedUrl: "https://www.youtube.com/embed/MYE6T_gd7H0",
   publisher: {
-    "@type": "Organization",
-    name: "OptiAISEO",
-    url: SITE_URL,
-    logo: {
-      "@type": "ImageObject",
-      url: `${SITE_URL}/favicon.ico`,
-    },
+    "@id": IDS.organization,
   },
 };
 
-const softwareSchema = {
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  name: "OptiAISEO",
-  applicationCategory: "BusinessApplication",
-  operatingSystem: "Web",
-  offers: [
-    { "@type": "Offer", price: "0", priceCurrency: "USD", name: "Free Plan", description: "5 SEO audits/month, 1 site, 3 AEO checks/month, 50 credits" },
-    { "@type": "Offer", price: "19", priceCurrency: "USD", name: "Starter Plan", billingIncrement: "P1M", description: "15 audits, 3 sites, 10 AEO checks, rank tracking, 150 credits/month" },
-    { "@type": "Offer", price: "49", priceCurrency: "USD", name: "Pro Plan", billingIncrement: "P1M", description: "50 audits, 10 sites, 50 AEO checks, Ahrefs integration, GitHub auto-fix, 500 credits/month" },
-    { "@type": "Offer", price: "149", priceCurrency: "USD", name: "Agency Plan", billingIncrement: "P1M", description: "Unlimited audits, sites, AEO checks, white-label exports, client portal, 2000 credits/month" },
-  ],
-};
-
-// Explicit Service schema — AI models cite sites that clearly state what they offer
-const serviceSchema = {
-  "@context": "https://schema.org",
-  "@type": "Service",
-  name: "AI SEO & AEO Optimization Platform",
-  description:
-    "OptiAISEO provides Generative Engine Optimization (GEO), Answer Engine Optimization (AEO), technical SEO auditing, AI-powered blog generation, schema injection, brand citation tracking, and competitor gap analysis — all in one autonomous platform.",
-  serviceType: "Digital Marketing Technology",
-  provider: {
-    "@type": "Organization",
-    name: "OptiAISEO",
-    url: SITE_URL,
-  },
-  areaServed: {
-    "@type": "Place",
-    name: "Global",
-  },
-  hasOfferCatalog: {
-    "@type": "OfferCatalog",
-    name: "OptiAISEO Services",
-    itemListElement: [
-      {
-        "@type": "Offer",
-        itemOffered: {
-          "@type": "Service",
-          name: "Generative Engine Optimization (GEO)",
-          description: "Optimize your website to appear in AI-generated answers from ChatGPT, Claude, Perplexity, and Google AI Overviews.",
-        },
-      },
-      {
-        "@type": "Offer",
-        itemOffered: {
-          "@type": "Service",
-          name: "Answer Engine Optimization (AEO)",
-          description: "Structured data and entity optimization to get your brand directly cited when users ask questions of AI assistants.",
-        },
-      },
-      {
-        "@type": "Offer",
-        itemOffered: {
-          "@type": "Service",
-          name: "Automated Technical SEO Audit",
-          description: "Full crawl-based technical audit covering Core Web Vitals, schema errors, broken links, and content gaps — with auto-generated GitHub PR fixes.",
-        },
-      },
-      {
-        "@type": "Offer",
-        itemOffered: {
-          "@type": "Service",
-          name: "AI Blog & Content Generation",
-          description: "Entity-dense, schema-annotated long-form blog posts generated by AI, optimised for AI Overview inclusion and topical authority.",
-        },
-      },
-      {
-        "@type": "Offer",
-        itemOffered: {
-          "@type": "Service",
-          name: "Brand Citation & AI Visibility Tracking",
-          description: "Daily tracking of your Generative Share of Voice (gSOV) — how often your brand is cited across ChatGPT, Claude, Perplexity, and Google AI.",
-        },
-      },
-      {
-        "@type": "Offer",
-        itemOffered: {
-          "@type": "Service",
-          name: "Competitor Gap Analysis",
-          description: "Identify keywords, topics, and backlinks your competitors rank for that your site does not, and auto-generate content to close the gap.",
-        },
-      },
-    ],
-  },
-};
-
+/**
+ * FAQ content.
+ *
+ * IMPORTANT:
+ * Every answer must describe functionality that actually exists
+ * in the current production product.
+ */
 const faqItems = [
   {
     name: "What is OptiAISEO and how does it work?",
     acceptedAnswer: {
-      text: "OptiAISEO is an autonomous Answer Engine Optimization (AEO) platform. It scans your website for technical issues, automatically opens GitHub Pull Requests to fix code, and generates entity-dense AI blog content.",
+      text: "OptiAISEO is an AI-powered SEO, Answer Engine Optimization (AEO), and Generative Engine Optimization (GEO) platform. It helps analyze websites, identify search optimization opportunities, optimize content, and monitor visibility across traditional and AI-powered search experiences.",
     },
   },
   {
     name: "What is generative share of voice?",
     acceptedAnswer: {
-      text: "Generative Share of Voice (GSoV) measures how frequently your brand is cited by AI models like ChatGPT, Claude, and Perplexity. OptiAISEO tracks your GSoV daily and identifies citation gaps against your competitors.",
+      text: "Generative Share of Voice (GSoV) measures how frequently a brand is mentioned or cited in supported AI-generated search experiences. OptiAISEO uses visibility data to help identify citation and competitive gaps.",
     },
   },
   {
     name: "How do I get my brand mentioned in ChatGPT?",
     acceptedAnswer: {
-      text: "To rank in ChatGPT, you must optimize for Answer Engine Optimization (AEO). This requires implementing precise JSON-LD schema markup, building topical authority, and producing factual, entity-dense content.",
+      text: "Improving visibility in AI-powered search requires strong technical SEO, authoritative and factual content, clear entity relationships, structured data where appropriate, and consistent topical authority. OptiAISEO provides tools designed to help identify and improve these areas.",
     },
   },
   {
     name: "What is the difference between SEO and AEO?",
     acceptedAnswer: {
-      text: "Search Engine Optimization (SEO) focuses on ranking web pages in traditional search engines that provide blue links. Answer Engine Optimization (AEO) focuses on structuring data so your brand is directly cited by Generative AI models.",
+      text: "Search Engine Optimization (SEO) focuses primarily on improving visibility in traditional search engines, while Answer Engine Optimization (AEO) focuses on structuring and optimizing information so it can be understood and surfaced by answer engines and AI-powered search experiences.",
     },
   },
   {
     name: "How does the GitHub auto-fix feature work?",
     acceptedAnswer: {
-      text: "OptiAISEO analyzes your connected GitHub repository for SEO issues like missing schema or broken tags. It automatically generates the necessary code changes and creates a Pull Request for your engineering team.",
+      text: "When GitHub auto-fix is available for your connected repository and an eligible SEO issue is identified, OptiAISEO can generate code changes and create a Pull Request for review.",
     },
   },
   {
     name: "How long does SEO take to show results?",
     acceptedAnswer: {
-      text: "Honest answer: most sites see meaningful organic growth after 3–6 months of consistent work. SEO is not a one-time task — it compounds over time. Unlike paid ads that stop the moment you stop paying, rankings you earn through content, technical fixes, and backlinks can last for years. OptiAISEO accelerates the process by automating audits, schema fixes, and content generation so you build momentum faster.",
+      text: "SEO results vary by website, competition, authority, content quality, technical condition, and the changes being implemented. Many businesses should expect SEO to require several months of consistent work rather than immediate results.",
     },
   },
   {
     name: "How can I research what my competitors are ranking for?",
     acceptedAnswer: {
-      text: "Your competitors' entire content strategy is publicly visible if you know where to look. OptiAISEO's competitor gap analysis shows you exactly which keywords they rank for that you don't, which topics they write about most, and which sites link to them but not to you. You can then use that intelligence to produce better content and target the same high-value opportunities — without guessing.",
+      text: "Competitor analysis can reveal keywords, topics, content opportunities, and other search signals where competitors outperform your website. OptiAISEO provides competitor gap analysis capabilities to help identify these opportunities.",
     },
   },
   {
     name: "Do I need to set up my site before running an audit?",
     acceptedAnswer: {
-      text: "Yes — OptiAISEO audits are tied to a verified site connection. Once you add your domain (takes under 2 minutes), your first audit is queued automatically. Free accounts include 5 audits per month after setup.",
+      text: "Yes. An OptiAISEO audit requires a verified website connection. After the site is connected and setup is complete, eligible accounts can run audits according to the limits of their plan.",
     },
   },
 ];
 
 const faqSchema = {
-  "@context": "https://schema.org",
   "@type": "FAQPage",
+  "@id": IDS.faq,
+  url: SITE_URL,
+  isPartOf: {
+    "@id": IDS.website,
+  },
   mainEntity: faqItems.map((item) => ({
     "@type": "Question",
     name: item.name,
-    acceptedAnswer: { "@type": "Answer", text: item.acceptedAnswer.text },
+    acceptedAnswer: {
+      "@type": "Answer",
+      text: item.acceptedAnswer.text,
+    },
   })),
 };
 
+/**
+ * One coherent Schema.org graph.
+ *
+ * Relationships:
+ *
+ * Organization
+ *      ↓ publisher/provider
+ * WebSite
+ *      ↓ isPartOf
+ * WebPage
+ *      ↓ mainEntity/about
+ * SoftwareApplication
+ *
+ * Organization
+ *      ↓ provider
+ * Service
+ *
+ * Organization
+ *      ↓ publisher
+ * VideoObject
+ *
+ * WebSite
+ *      ↓
+ * FAQPage
+ */
+const homePageJsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    organizationSchema,
+    websiteSchema,
+    webPageSchema,
+    softwareSchema,
+    serviceSchema,
+    videoSchema,
+    faqSchema,
+  ],
+};
+
 export default async function Home() {
-  const stats = await getPublicStats().catch(() => ({ siteCount: 0, weeklySignups: 0, auditCount: 0, blogCount: 0 }));
-  try {
-    return (
-      <>
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }} />
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }} />
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(serviceSchema) }} />
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(webPageSchema) }} />
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareSchema) }} />
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(videoSchema) }} />
-        <HomeClient faqItems={faqItems} stats={stats} />
-      </>
-    );
-  } catch (err: unknown) {
-    console.error("[Home] Server Component render failed:", err);
-    throw err;
-  }
+  const stats = await getPublicStats().catch(() => ({
+    siteCount: 0,
+    weeklySignups: 0,
+    auditCount: 0,
+    blogCount: 0,
+  }));
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(homePageJsonLd),
+        }}
+      />
+
+      <HomeClient faqItems={faqItems} stats={stats} />
+    </>
+  );
 }

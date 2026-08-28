@@ -13,6 +13,43 @@ import {
 } from "@/lib/gsc";
 import { fetchGa4Metrics, type Ga4Metrics } from "@/lib/ga4";
 
+// ─────────────────────────────────────────────────────────────────
+// Error mapping: token manager error codes → user-facing statuses
+// ─────────────────────────────────────────────────────────────────
+
+type IntegrationErrorStatus =
+    | "not_connected"
+    | "reauthorization_required"
+    | "property_access_denied"
+    | "unknown_error";
+
+function classifyGscError(err: unknown): IntegrationErrorStatus {
+    const msg = (err instanceof Error ? err.message : String(err));
+    if (msg.includes("GSC_NOT_CONNECTED")) return "not_connected";
+    if (
+        msg.includes("GSC_REFRESH_TOKEN_MISSING") ||
+        msg.includes("GSC_TOKEN_REFRESH_FAILED") ||
+        msg.includes("GSC_REAUTHORIZATION_REQUIRED")
+    ) return "reauthorization_required";
+    return "unknown_error";
+}
+
+function classifyGa4Error(err: unknown): IntegrationErrorStatus {
+    const msg = (err instanceof Error ? err.message : String(err));
+    if (msg.includes("GA4_NOT_CONNECTED")) return "not_connected";
+    if (
+        msg.includes("GA4_REFRESH_TOKEN_MISSING") ||
+        msg.includes("GA4_TOKEN_REFRESH_FAILED") ||
+        msg.includes("GA4_REAUTHORIZATION_REQUIRED")
+    ) return "reauthorization_required";
+    if (msg.includes("GA4_PERMISSION_DENIED")) return "property_access_denied";
+    return "unknown_error";
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Public interface
+// ─────────────────────────────────────────────────────────────────
+
 export interface UnifiedAnalytics {
     gsc: {
         totalKeywords: number;
@@ -25,6 +62,8 @@ export interface UnifiedAnalytics {
         ctr: number;
     } | null;
     ga4: Ga4Metrics | null;
+    gscError: IntegrationErrorStatus | null;
+    ga4Error: IntegrationErrorStatus | null;
     merged: {
         organicClicksGsc: number;
         organicSessionsGa4: number;
@@ -40,19 +79,22 @@ export interface UnifiedAnalytics {
 
 export async function getUnifiedAnalytics(siteId: string): Promise<UnifiedAnalytics> {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return { gsc: null, ga4: null, merged: null };
+    if (!session?.user?.id) return { gsc: null, ga4: null, gscError: null, ga4Error: null, merged: null };
 
     const site = await prisma.site.findUnique({
         where: { id: siteId },
         select: { domain: true, userId: true, ga4PropertyId: true },
     });
 
-    if (!site) return { gsc: null, ga4: null, merged: null };
+    if (!site) return { gsc: null, ga4: null, gscError: null, ga4Error: null, merged: null };
 
     let gscData: UnifiedAnalytics["gsc"] = null;
+    let gscError: IntegrationErrorStatus | null = null;
     let ga4Data: Ga4Metrics | null = null;
+    let ga4Error: IntegrationErrorStatus | null = null;
     let gscKeywords: { keyword: string; clicks: number; impressions: number; ctr: number; position: number; url?: string }[] = [];
 
+    // ── GSC fetch (independent — GA4 runs regardless of outcome) ──
     try {
         const accessToken = await getUserGscToken(site.userId);
         const siteUrl = normaliseSiteUrl(site.domain);
@@ -74,29 +116,35 @@ export async function getUnifiedAnalytics(siteId: string): Promise<UnifiedAnalyt
             top3Count: summary.top3Count,
             ctr: totalCtr,
         };
-    } catch {
-        // GSC not connected
+    } catch (err) {
+        gscError = classifyGscError(err);
+        logger.warn("[GSC] Unified analytics fetch failed", {
+            siteId,
+            userId: site.userId,
+            errorStatus: gscError,
+            error: (err as Error)?.message,
+        });
     }
 
+    // ── GA4 fetch (independent — runs even if GSC failed) ──
     if (site.ga4PropertyId) {
         try {
             const accessToken = await getUserGa4Token(site.userId);
             ga4Data = await fetchGa4Metrics(accessToken, site.ga4PropertyId, 28);
         } catch (err) {
-            const msg = (err as Error)?.message ?? '';
-            if (msg.includes('403') || msg.includes('PERMISSION_DENIED')) {
-                logger.warn('[GA4] Permission denied — analytics.readonly scope likely missing', {
-                    siteId,
-                    userId: site.userId,
-                });
-            } else {
-                logger.warn('[GA4] Fetch failed', { siteId, error: msg });
-            }
+            ga4Error = classifyGa4Error(err);
+            logger.warn("[GA4] Unified analytics fetch failed", {
+                siteId,
+                userId: site.userId,
+                errorStatus: ga4Error,
+                error: (err as Error)?.message,
+            });
         }
     }
 
+    // ── Merge when EITHER source has data ──
     let merged: UnifiedAnalytics["merged"] = null;
-    if (gscData && ga4Data) {
+    if (gscData || ga4Data) {
         const gscByUrl = new Map<string, number>();
         for (const kw of gscKeywords) {
             if (kw.url) {
@@ -106,8 +154,10 @@ export async function getUnifiedAnalytics(siteId: string): Promise<UnifiedAnalyt
         }
 
         const ga4ByPath = new Map<string, number>();
-        for (const page of ga4Data.topPages) {
-            ga4ByPath.set(page.path, page.views);
+        if (ga4Data) {
+            for (const page of ga4Data.topPages) {
+                ga4ByPath.set(page.path, page.views);
+            }
         }
 
         const allPaths = new Set([...gscByUrl.keys(), ...ga4ByPath.keys()]);
@@ -126,17 +176,20 @@ export async function getUnifiedAnalytics(siteId: string): Promise<UnifiedAnalyt
 
         topLandingPages.sort((a, b) => (b.gscClicks + b.ga4Views) - (a.gscClicks + a.ga4Views));
 
-        const ratio = ga4Data.organicSessions > 0
-            ? parseFloat((gscData.totalClicks / ga4Data.organicSessions).toFixed(2))
+        const organicClicksGsc = gscData?.totalClicks ?? 0;
+        const organicSessionsGa4 = ga4Data?.organicSessions ?? 0;
+        const ratio = organicSessionsGa4 > 0
+            ? parseFloat((organicClicksGsc / organicSessionsGa4).toFixed(2))
             : null;
 
         merged = {
-            organicClicksGsc: gscData.totalClicks,
-            organicSessionsGa4: ga4Data.organicSessions,
+            organicClicksGsc,
+            organicSessionsGa4,
             clickToSessionRatio: ratio,
             topLandingPages: topLandingPages.slice(0, 10),
         };
     }
 
-    return { gsc: gscData, ga4: ga4Data, merged };
+    return { gsc: gscData, ga4: ga4Data, gscError, ga4Error, merged };
 }
+
