@@ -1,26 +1,19 @@
-// =============================================================================
-// FIX #18: BFS Internal Link Graph
-// Crawls up to `maxPages` pages of a domain using BFS to build a link graph.
-// Calculates relative link depth, detects orphan pages, and estimates
-// PageRank flow using a simplified iterative algorithm.
-// =============================================================================
-
 import { isSafeUrl } from "@/lib/security/safe-url";
 
 export interface LinkNode {
     url: string;
-    inboundLinks: string[];   // Which pages link TO this page
-    outboundLinks: string[];  // Which pages this page links TO
-    depth: number;            // BFS depth from seed URL
-    isOrphan: boolean;        // No internal inbound links
-    pageRankScore: number;    // Simplified PageRank (0–1)
+    inboundLinks: string[]; 
+    outboundLinks: string[];
+    depth: number;          
+    isOrphan: boolean;       
+    pageRankScore: number;   
 }
 
 export interface LinkGraphResult {
     nodes: LinkNode[];
     orphanPages: string[];
-    deepPages: string[];         // Pages at depth > 3
-    topLinkedPages: string[];    // Pages with most inbound links
+    deepPages: string[];         
+    topLinkedPages: string[];   
     pageCount: number;
     maxDepth: number;
     avgDepth: number;

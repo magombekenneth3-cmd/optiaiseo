@@ -10,8 +10,8 @@ import { logger } from "@/lib/logger";
 
 export interface CrawlIssue {
     url: string
-    type: "broken_link" | "redirect_chain" | "duplicate_title" | "missing_canonical" | "thin_content" | "slow_page" | "deep_click_depth" | "orphan_page"
-    severity: "critical" | "warning"
+    type: "broken_link" | "redirect_chain" | "duplicate_title" | "missing_canonical" | "thin_content" | "slow_page" | "deep_click_depth" | "orphan_page" | "MISSING_TITLE" | "MISSING_META_DESCRIPTION" | "MISSING_H1" | "SLOW_TTFB" | "NOINDEX_PAGE" | "CANONICAL_MISMATCH"
+    severity: "critical" | "warning" | "HIGH" | "MEDIUM" | "LOW" | "INFO" | "CRITICAL"
     details: string
 }
 

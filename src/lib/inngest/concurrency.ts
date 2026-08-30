@@ -26,6 +26,9 @@ export const CONCURRENCY = {
     pageAuditChild: 5,  // process-page-audit
     blogCitationChild: 5, // blog-citation-monitor
     competitorVelocity: 5, // competitor-velocity-tracker (weekly cron)
+    // Phase A: Agent Operating System
+    siteAnalysis: 3,       // run-site-analysis orchestrator
+    intentClassifier: 2,   // intent classification (AI reasoning)
 } as const;
 
 // Evaluated once at module import time. Catches over-budget configs before

@@ -14,6 +14,34 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ── PHASE A: AGENT OPERATING SYSTEM ENUMS ────────────────────────────────────
+
+enum AgentRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+  CANCELLED
+}
+
+enum FindingSeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FindingStatus {
+  OPEN
+  ACKNOWLEDGED
+  IN_PROGRESS
+  RESOLVED
+  REOPENED
+  IGNORED
+}
+
 model Subscription {
   id                   String    @id @default(cuid())
   userId               String    @unique
@@ -234,6 +262,9 @@ model Site {
   evidenceSnapshots       EvidenceSnapshot[]
   gscPerformance          GscDailyPerformance[]
   mutationOperations      MutationOperation[]
+  agentRuns               AgentRun[]
+  ga4DailyPerformance     Ga4DailyPerformance[]
+  actionProposals         ActionProposal[]
 
   ga4PropertyId String?
 
@@ -1307,7 +1338,9 @@ model GrowthDecision {
   impact                Json
   executionPlan         Json
   status                String    @default("ACTIVE")
-  engineVersion         String    @default("v1")
+  opportunityStatus     String    @default("OPEN") // Phase B lifecycle: OPEN → PROPOSED → APPROVED → EXECUTING → VERIFYING → VERIFIED
+  engineVersion         String    @default("v2")
+  fingerprint           String?   // Stable identity: sha256(siteId + category + resourceType + resourceId + action)
   inputPeriodStart      DateTime?
   inputPeriodEnd        DateTime?
   generatedAt           DateTime  @default(now())
@@ -1321,10 +1354,14 @@ model GrowthDecision {
 
   site       Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
   experiment Experiment?
+  sourceFindings OpportunityFinding[]
+  proposals      ActionProposal[]
 
   @@unique([siteId, url, primaryKeyword, action])
   @@index([siteId, status])
+  @@index([siteId, opportunityStatus])
   @@index([siteId, generatedAt(sort: Desc)])
+  @@index([siteId, fingerprint])
 }
 
 model Experiment {
@@ -1635,6 +1672,7 @@ model MutationOperation {
   snapshot           MutationSnapshot?
   effects            MutationEffect[]
   auditEvents        MutationAuditEvent[]
+  proposal           ActionProposal?
 
   @@index([siteId, status])
   @@index([siteId, targetModel, targetId])
@@ -1719,4 +1757,212 @@ model MutationAuditEvent {
   @@index([operationId, createdAt])
   @@index([eventType, createdAt])
   @@index([actorId, createdAt(sort: Desc)])
+}
+
+// ── PHASE A: AGENT OPERATING SYSTEM ──────────────────────────────────────────
+// Core infrastructure for the Agentic SEO Operating System.
+// Agents observe → produce Findings → backed by Evidence → feed Opportunities.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AgentRun {
+  id             String         @id @default(cuid())
+  siteId         String
+
+  agentType      String         // "DISCOVERY" | "CRAWL" | "TECHNICAL_SEO" | ...
+  status         AgentRunStatus @default(QUEUED)
+
+  // Explicit parent/child hierarchy for orchestrator → agent relationships
+  parentRunId    String?
+  parentRun      AgentRun?      @relation("AgentRunHierarchy", fields: [parentRunId], references: [id], onDelete: SetNull)
+  childRuns      AgentRun[]     @relation("AgentRunHierarchy")
+
+  startedAt      DateTime?
+  completedAt    DateTime?
+  lastHeartbeatAt DateTime?  // Updated by lease heartbeat; used for stale-run detection
+
+  itemsProcessed Int            @default(0)
+  findingCount   Int            @default(0)
+
+  tokensUsed     Int?
+  costUsd        Decimal?
+
+  triggerEvent   String?        // Inngest event name that triggered this run
+  metadata       Json?          // Input snapshot, configuration, etc.
+
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  site           Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  findings       AgentFinding[]
+
+  @@index([siteId, agentType, createdAt(sort: Desc)])
+  @@index([siteId, status])
+  @@index([parentRunId])
+  @@index([status, lastHeartbeatAt])
+}
+
+model AgentFinding {
+  id             String          @id @default(cuid())
+  agentRunId     String
+
+  // Stable identity of the underlying issue.
+  // sha256(siteId:type:resourceType:resourceId)
+  fingerprint    String
+
+  type           String          // "MISSING_META_DESCRIPTION", "QUICK_WIN", etc.
+  severity       FindingSeverity
+  status         FindingStatus   @default(OPEN)
+
+  title          String
+  description    String          @db.Text
+
+  // 0.0–1.0
+  confidence     Float
+
+  resourceType   String?         // "SITE" | "PAGE" | "QUERY" | "KEYWORD"
+  resourceId     String?         // URL, query text, keyword, etc.
+
+  recommendation String?         @db.Text
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  agentRun       AgentRun        @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+
+  evidence         FindingEvidence[]
+  opportunityLinks OpportunityFinding[]
+
+  @@index([fingerprint])
+  @@index([agentRunId])
+  @@index([type, severity])
+  @@index([status])
+  @@index([resourceType, resourceId])
+}
+
+model FindingEvidence {
+  id          String   @id @default(cuid())
+  findingId   String
+
+  sourceType  String          // "GSC" | "GA4" | "CRAWL" | "SITEMAP" | "ROBOTS" | "COMPUTED"
+  sourceId    String?         // crawlRunId, query/page/date composite, etc.
+
+  metric      String?         // "position" | "httpStatus" | "ctr" | ...
+  value       String?         // String representation
+  metadata    Json?           // Structured data for complex evidence
+
+  observedAt  DateTime @default(now())  // Provenance timestamp
+
+  finding     AgentFinding    @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([findingId])
+  @@index([sourceType, sourceId])
+}
+
+// Join table: links GrowthDecision (Opportunities) to their source Findings.
+// Enables explainability: "Why did OptiAISEO generate this recommendation?"
+model OpportunityFinding {
+  id              String   @id @default(cuid())
+
+  decisionId      String
+  findingId       String
+
+  createdAt       DateTime @default(now())
+
+  decision        GrowthDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  finding         AgentFinding   @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@unique([decisionId, findingId])
+  @@index([findingId])
+}
+
+model Ga4DailyPerformance {
+  id              String   @id @default(cuid())
+  siteId          String
+  date            String   // YYYY-MM-DD (matches GscDailyPerformance convention)
+  landingPage     String
+
+  sessions        Int      @default(0)
+  users           Int      @default(0)
+  engagedSessions Int      @default(0)
+  conversions     Float    @default(0)
+  engagementRate  Float?
+  pageviews       Int      @default(0)
+
+  fetchedAt       DateTime @default(now())
+
+  site            Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, date, landingPage])
+  @@index([siteId, date(sort: Desc)])
+  @@index([siteId, landingPage, date(sort: Desc)])
+}
+
+// ── PHASE B: ACTION PROPOSALS ─────────────────────────────────────────────────
+// Bridge between intelligence (Phase A) and execution (Phase B).
+// An ActionProposal captures exactly what will change, why, and how to verify.
+
+model ActionProposal {
+  id                  String    @id @default(cuid())
+  siteId              String
+  decisionId          String
+  operationId         String?   @unique
+  idempotencyKey      String    @unique
+
+  // What
+  actionType          String    // ActionType enum from types.ts
+  targetUrl           String
+  targetModel         String    // "Blog" | "Page" | "Site"
+  targetId            String
+
+  // The proposed change
+  proposedChanges     Json      // ProposedChange[]
+  expectedOutcome     String    @db.Text
+
+  // Risk & Confidence
+  riskLevel           String    // "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+  safetyTier          Int       @default(1) // 0 | 1 | 2 | 3
+  confidence          Float
+
+  // Lifecycle
+  status              String    @default("DRAFT")
+  // DRAFT → READY → APPROVED → EXECUTING → EXECUTED → VERIFYING → VERIFIED
+  // Terminal: REJECTED | FAILED | EXPIRED
+
+  // Approval
+  requiresApproval    Boolean   @default(true)
+  approvedBy          String?
+  approvedAt          DateTime?
+  approvalExpiresAt   DateTime?
+  approvalHash        String?   // SHA-256 of proposedChanges at approval time
+
+  // Execution Attempts
+  attemptCount        Int       @default(0)
+  maxAttempts         Int       @default(3)
+  lastAttemptAt       DateTime?
+  lastAttemptError    String?   @db.Text
+
+  // Verification
+  verificationCriteria  Json    // VerificationCriterion[]
+  verifiedAt            DateTime?
+  verificationResult    String? // "VERIFIED" | "FAILED" | "PARTIAL"
+  verificationDetails   Json?   // VerificationDetail[]
+
+  // Authorization
+  generatedBy         String    @default("system:proposal-generator")
+
+  // Timestamps
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  completedAt         DateTime?
+
+  // Relations
+  site                Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  decision            GrowthDecision    @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  operation           MutationOperation? @relation(fields: [operationId], references: [id], onDelete: SetNull)
+
+  @@index([siteId, status])
+  @@index([decisionId])
+  @@index([status, createdAt])
+  @@index([siteId, actionType])
+  @@index([approvalExpiresAt])
 }

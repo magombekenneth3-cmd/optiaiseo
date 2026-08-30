@@ -49,3 +49,6 @@ export async function runGrowthDecisionPipeline(siteId: string): Promise<{ succe
         await releaseSyncLock(siteId);
     }
 }
+
+export { generateOpportunitiesFromFindings } from "./findings-to-opportunities";
+

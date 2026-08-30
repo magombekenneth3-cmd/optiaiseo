@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 const TOKEN_CACHE_PREFIX = "gsc:token:";
 const TOKEN_CACHE_TTL_SECONDS = 3500;
 const REFRESH_COOLDOWN_PREFIX = "gsc:refresh_failed:";
-const REFRESH_COOLDOWN_TTL_SECONDS = 300; // 5 minutes
+const REFRESH_COOLDOWN_TTL_SECONDS = 300;
 
 async function getRedis() {
     try {
@@ -128,7 +128,6 @@ export async function getUserGscToken(userId: string): Promise<string> {
     } catch (err: unknown) {
         logger.error("[gsc-token] Token refresh failed", { userId, error: formatError(err) });
 
-        // Set cooldown to prevent infinite refresh loops
         if (redisClient) {
             try {
                 await redisClient.set(
@@ -137,7 +136,7 @@ export async function getUserGscToken(userId: string): Promise<string> {
                     { ex: REFRESH_COOLDOWN_TTL_SECONDS },
                 );
             } catch {
-                // Non-fatal — cooldown is best-effort
+                
             }
         }
 
