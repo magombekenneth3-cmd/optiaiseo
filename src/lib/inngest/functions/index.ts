@@ -39,3 +39,4 @@ export * from "./growth-pipeline";
 export * from "./mutation-effects";
 export * from "./site-analysis";
 export * from "./stale-run-cleanup";
+export * from "./proposals";

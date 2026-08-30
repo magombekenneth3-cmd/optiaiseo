@@ -25,6 +25,7 @@ import {
   registerEffect,
   type CreateOperationParams,
   type MutableModel,
+  type MutationType,
   ExecutionClaimError,
   MutationBlockedError,
   ConcurrentModificationError,
@@ -347,12 +348,12 @@ function proposalToMutationPayload(
 /**
  * Maps ActionType to the existing MutationType enum used by MutationOperation.
  */
-function actionTypeToMutationType(actionType: ActionType): string {
-  const map: Record<ActionType, string> = {
+function actionTypeToMutationType(actionType: ActionType): MutationType {
+  const map: Record<ActionType, MutationType> = {
     UPDATE_META_DESCRIPTION: "BLOG_CONTENT_UPDATE",
     UPDATE_TITLE_TAG: "BLOG_CONTENT_UPDATE",
     FIX_HEADING_HIERARCHY: "BLOG_CONTENT_UPDATE",
-    ADD_SCHEMA_MARKUP: "BLOG_SCHEMA_UPDATE",
+    ADD_SCHEMA_MARKUP: "BLOG_CONTENT_UPDATE",
     ADD_CANONICAL_TAG: "BLOG_CONTENT_UPDATE",
     FIX_BROKEN_LINK: "BLOG_CONTENT_UPDATE",
     ADD_INTERNAL_LINKS: "INTERNAL_LINK_CREATE",
@@ -361,10 +362,10 @@ function actionTypeToMutationType(actionType: ActionType): string {
     REDIRECT_URL: "BLOG_STATUS_UPDATE",
     CHANGE_PAGE_TITLE: "BLOG_CONTENT_UPDATE",
     PUBLISH_CONTENT: "CMS_PUBLISH",
-    REFRESH_CONTENT: "BLOG_REFRESH",
+    REFRESH_CONTENT: "BLOG_CONTENT_UPDATE",
     GENERATE_CONTENT_BRIEF: "BLOG_CONTENT_UPDATE",
     DELETE_PAGE: "BLOG_STATUS_UPDATE",
-    CONSOLIDATE_CONTENT: "CONTENT_CONSOLIDATION",
+    CONSOLIDATE_CONTENT: "BLOG_CONTENT_UPDATE",
     MASS_REDIRECT: "BLOG_STATUS_UPDATE",
     SITE_WIDE_CHANGE: "BLOG_CONTENT_UPDATE",
   };
