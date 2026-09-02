@@ -38,12 +38,11 @@ export interface PolicyDecision {
   reason: string;
 }
 
-/** Approval TTLs per safety tier (in minutes) */
+
 const APPROVAL_TTL_MINUTES: Record<SafetyTier, number> = {
-  0: 0,
-  1: 60,     // 1 hour — auto-approved, plenty of time
-  2: 1440,   // 24 hours — human needs time to review
-  3: 4320,   // 72 hours — high-risk, deliberate review window
+  1: 60,
+  2: 1440,
+  3: 4320,
 };
 
 /**

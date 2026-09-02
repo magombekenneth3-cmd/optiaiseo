@@ -18,6 +18,8 @@ import {
   getVerificationDelay,
   type ActionType,
 } from "@/lib/proposals";
+import { transitionOpportunity } from "@/lib/proposals/opportunity-lifecycle";
+import type { OpportunityStatus } from "@/lib/proposals/types";
 
 // ── 1. Proposal Generator Job ───────────────────────────────────────────────
 
@@ -164,6 +166,7 @@ export const proposalExpireCron = inngest.createFunction(
 
       let expiredCount = 0;
       for (const prop of staleProposals) {
+        // 1. Mark proposal as EXPIRED
         await (prisma as any).actionProposal.update({
           where: { id: prop.id },
           data: {
@@ -172,17 +175,32 @@ export const proposalExpireCron = inngest.createFunction(
           },
         });
 
-        // Re-open opportunity if it was APPROVED or PROPOSED
-        await (prisma.growthDecision.updateMany as any)({
-          where: {
-            id: prop.decisionId,
-            opportunityStatus: { in: ["PROPOSED", "APPROVED"] },
-          },
-          data: {
-            opportunityStatus: "EXPIRED",
-            updatedAt: now,
-          },
-        });
+        // 2. Transition opportunity through the state machine guard.
+        //    PROPOSED → EXPIRED and APPROVED → EXPIRED are valid transitions.
+        //    We attempt both possible source states — only one will match
+        //    due to the CAS guard inside transitionOpportunity().
+        const eligibleFromStatuses: OpportunityStatus[] = ["PROPOSED", "APPROVED"];
+        for (const fromStatus of eligibleFromStatuses) {
+          try {
+            const transitioned = await transitionOpportunity({
+              decisionId: prop.decisionId,
+              from: fromStatus,
+              to: "EXPIRED",
+              actorId: "system:inngest:expire-cron",
+              reason: `Approval expired for proposal ${prop.id}`,
+              proposalId: prop.id,
+            });
+            if (transitioned) break; // One source matched — no need to try the other
+          } catch {
+            // assertValidOpportunityTransition throws if the transition is invalid.
+            // This means the opportunity was already in a different state — log and skip.
+            logger.warn("[ProposalInngest] Could not transition opportunity to EXPIRED", {
+              decisionId: prop.decisionId,
+              attemptedFrom: fromStatus,
+              proposalId: prop.id,
+            });
+          }
+        }
 
         expiredCount++;
       }

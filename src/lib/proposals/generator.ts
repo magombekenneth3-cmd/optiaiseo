@@ -167,6 +167,15 @@ export async function generateProposal(
   const approvalHash = hashProposedChanges(actionType, decision.url, proposedChanges);
   const now = new Date();
 
+  // 8. Derive and persist verification URL (Amendment #5)
+  // Captured at generation time so CMS config changes after execution
+  // don't cause verification to check the wrong location.
+  const verificationUrl = await deriveVerificationUrl(
+    prisma,
+    decision.siteId,
+    decision.url
+  );
+
   // 8. Create the ActionProposal
   const proposal = await (prisma as any).actionProposal.create({
     data: {
@@ -175,6 +184,7 @@ export async function generateProposal(
       idempotencyKey,
       actionType,
       targetUrl: decision.url,
+      verificationUrl, // Persisted at generation time (Amendment #5)
       targetModel: targetEntity ? "Blog" : "Page",
       targetId: targetEntity?.id ?? decision.url,
       status: policy.autoApprove ? "APPROVED" : "READY",
@@ -478,4 +488,38 @@ function populateCriteriaValues(
 
     return criterion;
   });
+}
+
+// ── Verification URL Derivation ─────────────────────────────────────────────
+
+/**
+ * Derives the external verification URL from the site's domain.
+ * Persisted at generation time so configuration changes after execution
+ * don't cause verification to check the wrong location.
+ *
+ * Returns null if no domain is configured (verification falls back to targetUrl).
+ */
+async function deriveVerificationUrl(
+  prisma: any,
+  siteId: string,
+  targetUrl: string
+): Promise<string | null> {
+  // If targetUrl is already absolute, use it directly
+  if (targetUrl.startsWith("http://") || targetUrl.startsWith("https://")) {
+    return targetUrl;
+  }
+
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { domain: true },
+  });
+
+  if (!site?.domain) return null;
+
+  // Construct the full URL from site domain + relative path
+  const domain = site.domain.replace(/\/$/, "");
+  const protocol = domain.startsWith("http") ? "" : "https://";
+  const path = targetUrl.startsWith("/") ? targetUrl : `/${targetUrl}`;
+
+  return `${protocol}${domain}${path}`;
 }

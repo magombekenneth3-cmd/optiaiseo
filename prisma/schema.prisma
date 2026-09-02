@@ -282,6 +282,16 @@ model Site {
   effectGithubEnabled   Boolean @default(true)
   effectIndexNowEnabled Boolean @default(true)
 
+  // Autonomous execution budgets
+  dailyMutationLimit      Int      @default(10)    // Max mutations per rolling 24h
+  maxConcurrentExecutions Int      @default(2)     // Max parallel autonomous mutations
+
+  // Phase C autonomy relations
+  budgetReservations          BudgetReservation[]
+  circuitBreakers             CircuitBreaker[]
+  autonomousExecutionClaims   AutonomousExecutionClaim[]
+  executionTraces             ExecutionTrace[]
+
   @@index([userId])
   @@index([niche, operatingMode])
 }
@@ -1340,6 +1350,10 @@ model GrowthDecision {
   status                String    @default("ACTIVE")
   opportunityStatus     String    @default("OPEN") // Phase B lifecycle: OPEN → PROPOSED → APPROVED → EXECUTING → VERIFYING → VERIFIED
   engineVersion         String    @default("v2")
+
+  
+  maxProposalRetries    Int       @default(3)
+  proposalRetryCount    Int       @default(0) // Current count of retry proposals created
   fingerprint           String?   // Stable identity: sha256(siteId + category + resourceType + resourceId + action)
   inputPeriodStart      DateTime?
   inputPeriodEnd        DateTime?
@@ -1356,12 +1370,63 @@ model GrowthDecision {
   experiment Experiment?
   sourceFindings OpportunityFinding[]
   proposals      ActionProposal[]
+  scoreRecords   OpportunityScoreRecord[]
+
+  // D.1: Discovery provenance (summary metadata — not source of truth)
+  // Source of truth for multi-source provenance is:
+  //   OpportunityFinding → AgentFinding → FindingEvidence chain
+  primaryDiscoverySource  String?    // Summary: which source first found this ("GSC"|"AUDIT"|"CONTENT"|...)
+  discoveredAt            DateTime?  // When this opportunity was first discovered
+  lastRefreshedAt         DateTime?  // Last time any source refreshed evidence for this
+  expiresAt               DateTime?  // Aggregate: earliest expiry across all evidence sources
+  discoveryConfidence     Float?     // 0.0–1.0: probability the observed SEO condition EXISTS (not impact)
+
+  // D.2: Scoring metadata (summary — source of truth is OpportunityScoreRecord)
+  lastScoredAt            DateTime?  // When last scored by D.2
+  scoringVersion          String?    // Version of the scoring engine that last scored this
 
   @@unique([siteId, url, primaryKeyword, action])
   @@index([siteId, status])
   @@index([siteId, opportunityStatus])
   @@index([siteId, generatedAt(sort: Desc)])
   @@index([siteId, fingerprint])
+  @@index([siteId, expiresAt])
+  @@index([siteId, opportunityStatus, expiresAt])
+}
+
+// D.2: Durable scoring record — every scoring decision is persisted
+// Answers: "Why was this opportunity promoted/deferred/rejected at this time?"
+model OpportunityScoreRecord {
+  id                   String   @id @default(cuid())
+  opportunityId        String
+  scoringVersion       String   // "d2-v1", "d2-v2", etc.
+
+  // Score components (all 0–100)
+  impactScore          Float    // Expected SEO upside
+  confidenceScore      Float    // Confidence that acting produces predicted benefit
+  evidenceScore        Float    // Quality/quantity/freshness of evidence
+  urgencyScore         Float    // Time sensitivity
+  effortScore          Float    // Expected implementation cost
+  riskScore            Float    // Downside / uncertainty
+
+  finalScore           Float    // Weighted composite
+
+  decision             String   // "PROMOTE" | "DEFER" | "REJECT"
+  decisionReasons      Json     // [{ rule: string, details: string }]
+
+  // Evidence fencing
+  evidenceHash         String   // sha256 of canonicalized evidence at scoring time
+  evidenceVerifiedAt   DateTime? // Set when evidence re-verified before promotion
+
+  // Weights used (for reproducibility)
+  weightsUsed          Json     // { impact: 0.30, confidence: 0.20, ... }
+
+  scoredAt             DateTime @default(now())
+
+  opportunity          GrowthDecision @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId, scoredAt(sort: Desc)])
+  @@index([decision, scoredAt])
 }
 
 model Experiment {
@@ -1908,6 +1973,11 @@ model ActionProposal {
   operationId         String?   @unique
   idempotencyKey      String    @unique
 
+  // Retry lineage: if this proposal is a retry, points to the predecessor
+  previousProposalId  String?
+  previousProposal    ActionProposal?  @relation("ProposalRetryChain", fields: [previousProposalId], references: [id])
+  retryProposals      ActionProposal[] @relation("ProposalRetryChain")
+
   // What
   actionType          String    // ActionType enum from types.ts
   targetUrl           String
@@ -1920,13 +1990,14 @@ model ActionProposal {
 
   // Risk & Confidence
   riskLevel           String    // "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
-  safetyTier          Int       @default(1) // 0 | 1 | 2 | 3
+  safetyTier          Int       @default(1) // 1 | 2 | 3
   confidence          Float
 
   // Lifecycle
   status              String    @default("DRAFT")
   // DRAFT → READY → APPROVED → EXECUTING → EXECUTED → VERIFYING → VERIFIED
-  // Terminal: REJECTED | FAILED | EXPIRED
+  // VERIFIED → ROLLED_BACK (post-verification regression rollback)
+  // Terminal: REJECTED | FAILED | EXPIRED | ROLLED_BACK
 
   // Approval
   requiresApproval    Boolean   @default(true)
@@ -1943,9 +2014,15 @@ model ActionProposal {
 
   // Verification
   verificationCriteria  Json    // VerificationCriterion[]
+  verificationUrl       String? // If different from targetUrl (e.g. CMS external URL)
   verifiedAt            DateTime?
   verificationResult    String? // "VERIFIED" | "FAILED" | "PARTIAL"
   verificationDetails   Json?   // VerificationDetail[]
+
+  // Rollback
+  rolledBackBy        String?   // userId or "system" that initiated rollback
+  rolledBackAt        DateTime?
+  rollbackReason      String?   @db.Text
 
   // Authorization
   generatedBy         String    @default("system:proposal-generator")
@@ -1956,13 +2033,160 @@ model ActionProposal {
   completedAt         DateTime?
 
   // Relations
-  site                Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  decision            GrowthDecision    @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  site                Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  decision            GrowthDecision     @relation(fields: [decisionId], references: [id], onDelete: Cascade)
   operation           MutationOperation? @relation(fields: [operationId], references: [id], onDelete: SetNull)
 
   @@index([siteId, status])
   @@index([decisionId])
+  @@index([decisionId, status])
   @@index([status, createdAt])
   @@index([siteId, actionType])
   @@index([approvalExpiresAt])
+  @@index([previousProposalId])
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase C — Autonomous Execution Infrastructure
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Atomic budget reservation for daily mutation limits (rolling 24h window).
+/// Usage is derived from reservation records, NOT from mutable counters.
+model BudgetReservation {
+  id          String    @id @default(cuid())
+  siteId      String
+  operationId String?   // Linked after execution starts
+  traceId     String?   // Link to ExecutionTrace
+
+  // Lifecycle: RESERVED → CONSUMED | RELEASED
+  status      String    @default("RESERVED")
+  reservedAt  DateTime  @default(now())
+  consumedAt  DateTime?
+  releasedAt  DateTime?
+  reason      String?   // Why released (failure, timeout, budget reclaim)
+
+  site        Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, status, reservedAt])
+  @@index([siteId, reservedAt])
+}
+
+/// Durable circuit breaker state per site+channel.
+/// Prevents cascading failures from shutting down unrelated channels.
+model CircuitBreaker {
+  id                    String    @id @default(cuid())
+  siteId                String
+  channel               String    // "wordpress" | "github" | "gsc" | "indexnow"
+
+  // State machine: CLOSED → OPEN → HALF_OPEN → CLOSED
+  state                 String    @default("CLOSED")
+  consecutiveFailures   Int       @default(0)
+  consecutiveSuccesses  Int       @default(0)  // Tracked in HALF_OPEN
+  lastFailureAt         DateTime?
+  lastSuccessAt         DateTime?
+  openedAt              DateTime?
+  nextAttemptAt         DateTime? // When HALF_OPEN probe is allowed
+  halfOpenProbeInFlight Boolean   @default(false) // Only ONE worker can probe
+
+  updatedAt             DateTime  @updatedAt
+
+  site                  Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, channel])
+  @@index([state])
+}
+
+/// Idempotent execution claim — prevents duplicate autonomous executions
+/// for the same opportunity. Enforced at the database level.
+model AutonomousExecutionClaim {
+  id            String   @id @default(cuid())
+  siteId        String
+  opportunityId String   @unique  // ONE row per opportunity — upsert semantics
+  proposalId    String
+  claimedBy     String   // Worker/process ID
+  claimedAt     DateTime @default(now())
+
+  // Monotonic fencing token. Incremented on each re-acquisition.
+  // Authorization carries the generation; the Phase B boundary verifies it.
+  // After stale recovery: Worker A (gen=1) cannot cross the boundary
+  // once Worker B reclaims (gen=2).
+  generation    Int      @default(1)
+
+  // Lifecycle: ACTIVE → COMPLETED | RELEASED (then back to ACTIVE on reclaim)
+  status        String   @default("ACTIVE")
+  completedAt   DateTime?
+  releasedAt    DateTime?
+  releaseReason String?
+
+  site          Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, status])
+}
+
+/// Immutable execution trace — complete audit trail from discovery to outcome.
+/// Append-only after the authorization stage.
+model ExecutionTrace {
+  id                  String    @id @default(cuid())
+  siteId              String
+  parentTraceId       String?   // For retries linked to original
+
+  // Trigger
+  triggerType          String   // "CRON" | "EVENT" | "MANUAL"
+  triggerId            String?  // Inngest event ID or cron run ID
+
+  // Discovery
+  findingId            String?
+  findingType          String?
+
+  // Decision
+  opportunityId        String
+  opportunityScore     Float
+
+  // Proposal
+  proposalId           String?
+  actionType           String
+  safetyTier           Int
+  riskLevel            String?
+  riskScore            Int?
+
+  // Authorization
+  operatingMode        String
+  effectiveTierLimit   Int
+  policyDecision       String   // "AUTO_EXECUTE" | "NEEDS_APPROVAL" | "BLOCKED"
+  policyReason         String
+  budgetReservationId  String?
+  circuitBreakerState  String?  // "CLOSED" | "OPEN" | "HALF_OPEN"
+
+  // Execution
+  operationId          String?
+  attemptNumber        Int      @default(1)
+  executionResult      String?  // "SUCCESS" | "FAILED" | "ROLLED_BACK"
+  failureClass         String?  // From failure classifier
+  retryCount           Int      @default(0)
+
+  // Actor
+  actorType            String   // "SYSTEM" | "USER" | "APPROVAL"
+  actorId              String?
+
+  // Verification (populated later by verifier — append-only)
+  verificationStatus   String?  // "PENDING" | "INSUFFICIENT_DATA" | "IMPROVED" | "UNCHANGED" | "DEGRADED" | "INCONCLUSIVE"
+  verificationAt       DateTime?
+  metricsBaseline      Json?
+  metricsAfter         Json?
+
+  // Timestamps (immutable after creation)
+  discoveredAt         DateTime
+  authorizedAt         DateTime?
+  executedAt           DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime  @default(now())
+
+  site                 Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, createdAt(sort: Desc)])
+  @@index([opportunityId])
+  @@index([operationId])
+  @@index([verificationStatus])
+  @@index([parentTraceId])
 }

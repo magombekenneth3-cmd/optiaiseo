@@ -107,10 +107,10 @@ describe("Opportunity Lifecycle", () => {
     ).not.toThrow();
   });
 
-  it("VERIFIED is terminal — no further transitions", () => {
+  it("VERIFIED can transition to ROLLED_BACK (regression rollback)", () => {
     expect(() =>
-      assertValidOpportunityTransition("VERIFIED", "OPEN")
-    ).toThrow(OpportunityTransitionError);
+      assertValidOpportunityTransition("VERIFIED", "ROLLED_BACK")
+    ).not.toThrow();
   });
 
   it("ROLLED_BACK is terminal — no further transitions", () => {
@@ -131,7 +131,10 @@ describe("Opportunity Lifecycle", () => {
     ).toThrow(OpportunityTransitionError);
   });
 
-  it("all terminal statuses are correctly marked", () => {
+  it("all terminal statuses are correctly marked (only ROLLED_BACK is truly terminal)", () => {
+    // After Amendment #4: only statuses with zero outgoing transitions are terminal.
+    // VERIFIED and EXPIRED have outgoing transitions and are NOT terminal.
+    expect(TERMINAL_OPPORTUNITY_STATUSES).toEqual(["ROLLED_BACK"]);
     for (const status of TERMINAL_OPPORTUNITY_STATUSES) {
       expect(isTerminalOpportunityStatus(status)).toBe(true);
       const transitions = OPPORTUNITY_TRANSITIONS[status];
@@ -236,7 +239,7 @@ describe("Safety Tier Classification", () => {
 
   it("every ActionType has a safety tier", () => {
     for (const key of Object.keys(SAFETY_TIER_MAP)) {
-      expect([0, 1, 2, 3]).toContain(SAFETY_TIER_MAP[key as ActionType]);
+      expect([1, 2, 3]).toContain(SAFETY_TIER_MAP[key as ActionType]);
     }
   });
 
@@ -283,10 +286,6 @@ describe("Retry Policy", () => {
   it("Tier 3 allows 1 attempt", () => {
     expect(canRetry(0, 3)).toBe(true);
     expect(canRetry(1, 3)).toBe(false);
-  });
-
-  it("Tier 0 allows 0 attempts (read-only)", () => {
-    expect(canRetry(0, 0)).toBe(false);
   });
 
   it("computeNextRetryDelay uses exponential backoff", () => {
@@ -506,7 +505,7 @@ describe("Verification Checks", () => {
         200,
         "https://example.com"
       );
-      const result = runCheck({ check: "HAS_META_DESCRIPTION" }, page);
+      const result = runCheck({ check: "HAS_META_DESCRIPTION", severity: "CRITICAL" }, page);
       expect(result.passed).toBe(true);
     });
 
@@ -516,7 +515,7 @@ describe("Verification Checks", () => {
         200,
         "https://example.com"
       );
-      const result = runCheck({ check: "HAS_META_DESCRIPTION" }, page);
+      const result = runCheck({ check: "HAS_META_DESCRIPTION", severity: "CRITICAL" }, page);
       expect(result.passed).toBe(false);
     });
 
@@ -527,7 +526,7 @@ describe("Verification Checks", () => {
         "https://example.com"
       );
       const result = runCheck(
-        { check: "META_DESCRIPTION_MATCHES", expectedValue: "Exact match" },
+        { check: "META_DESCRIPTION_MATCHES", expectedValue: "Exact match", severity: "CRITICAL" },
         page
       );
       expect(result.passed).toBe(true);
@@ -540,7 +539,7 @@ describe("Verification Checks", () => {
         "https://example.com"
       );
       const result = runCheck(
-        { check: "META_DESCRIPTION_MATCHES", expectedValue: "Expected value" },
+        { check: "META_DESCRIPTION_MATCHES", expectedValue: "Expected value", severity: "CRITICAL" },
         page
       );
       expect(result.passed).toBe(false);
@@ -554,7 +553,7 @@ describe("Verification Checks", () => {
         "https://example.com"
       );
       const result = runCheck(
-        { check: "META_DESCRIPTION_LENGTH_VALID" },
+        { check: "META_DESCRIPTION_LENGTH_VALID", severity: "WARNING" },
         page
       );
       expect(result.passed).toBe(true);
@@ -568,7 +567,7 @@ describe("Verification Checks", () => {
         200,
         "https://example.com"
       );
-      const result = runCheck({ check: "HAS_TITLE" }, page);
+      const result = runCheck({ check: "HAS_TITLE", severity: "CRITICAL" }, page);
       expect(result.passed).toBe(true);
     });
 
@@ -579,7 +578,7 @@ describe("Verification Checks", () => {
         "https://example.com"
       );
       const result = runCheck(
-        { check: "TITLE_MATCHES", expectedValue: "Exact Title" },
+        { check: "TITLE_MATCHES", expectedValue: "Exact Title", severity: "CRITICAL" },
         page
       );
       expect(result.passed).toBe(true);
@@ -593,7 +592,7 @@ describe("Verification Checks", () => {
         200,
         "https://example.com"
       );
-      const result = runCheck({ check: "SINGLE_H1" }, page);
+      const result = runCheck({ check: "SINGLE_H1", severity: "CRITICAL" }, page);
       expect(result.passed).toBe(true);
     });
 
@@ -603,7 +602,7 @@ describe("Verification Checks", () => {
         200,
         "https://example.com"
       );
-      const result = runCheck({ check: "SINGLE_H1" }, page);
+      const result = runCheck({ check: "SINGLE_H1", severity: "CRITICAL" }, page);
       expect(result.passed).toBe(false);
     });
 
@@ -613,7 +612,7 @@ describe("Verification Checks", () => {
         200,
         "https://example.com"
       );
-      const result = runCheck({ check: "HEADING_HIERARCHY_VALID" }, page);
+      const result = runCheck({ check: "HEADING_HIERARCHY_VALID", severity: "CRITICAL" }, page);
       expect(result.passed).toBe(true);
     });
 
@@ -623,7 +622,7 @@ describe("Verification Checks", () => {
         200,
         "https://example.com"
       );
-      const result = runCheck({ check: "HEADING_HIERARCHY_VALID" }, page);
+      const result = runCheck({ check: "HEADING_HIERARCHY_VALID", severity: "CRITICAL" }, page);
       expect(result.passed).toBe(false);
     });
   });
@@ -635,7 +634,7 @@ describe("Verification Checks", () => {
         200,
         "https://example.com"
       );
-      const result = runCheck({ check: "SCHEMA_MARKUP_PRESENT" }, page);
+      const result = runCheck({ check: "SCHEMA_MARKUP_PRESENT", severity: "CRITICAL" }, page);
       expect(result.passed).toBe(true);
     });
 
@@ -645,7 +644,7 @@ describe("Verification Checks", () => {
         200,
         "https://example.com"
       );
-      const result = runCheck({ check: "SCHEMA_MARKUP_PRESENT" }, page);
+      const result = runCheck({ check: "SCHEMA_MARKUP_PRESENT", severity: "CRITICAL" }, page);
       expect(result.passed).toBe(false);
     });
   });
@@ -653,13 +652,13 @@ describe("Verification Checks", () => {
   describe("HTTP Status", () => {
     it("HTTP_STATUS_200 passes for 200", () => {
       const page = parsePage("<html></html>", 200, "https://example.com");
-      const result = runCheck({ check: "HTTP_STATUS_200" }, page);
+      const result = runCheck({ check: "HTTP_STATUS_200", severity: "CRITICAL" }, page);
       expect(result.passed).toBe(true);
     });
 
     it("HTTP_STATUS_200 fails for 404", () => {
       const page = parsePage("<html></html>", 404, "https://example.com");
-      const result = runCheck({ check: "HTTP_STATUS_200" }, page);
+      const result = runCheck({ check: "HTTP_STATUS_200", severity: "CRITICAL" }, page);
       expect(result.passed).toBe(false);
     });
   });
@@ -671,15 +670,16 @@ describe("Verification Checks", () => {
         200,
         "https://example.com"
       );
-      const { allCriticalPassed, details } = runAllChecks(
+      const { allCriticalPassed, hasWarningFailures, details } = runAllChecks(
         [
-          { check: "HAS_META_DESCRIPTION", critical: true },
-          { check: "HTTP_STATUS_200", critical: true },
-          { check: "META_DESCRIPTION_LENGTH_VALID", critical: false }, // advisory — 9 chars
+          { check: "HAS_META_DESCRIPTION", severity: "CRITICAL" },
+          { check: "HTTP_STATUS_200", severity: "CRITICAL" },
+          { check: "META_DESCRIPTION_LENGTH_VALID", severity: "WARNING" }, // advisory — 9 chars
         ],
         page
       );
       expect(allCriticalPassed).toBe(true);
+      expect(hasWarningFailures).toBe(true); // 9 chars < 50 min
       expect(details).toHaveLength(3);
     });
 
@@ -691,8 +691,8 @@ describe("Verification Checks", () => {
       );
       const { allCriticalPassed } = runAllChecks(
         [
-          { check: "HAS_META_DESCRIPTION", critical: true },
-          { check: "HTTP_STATUS_200", critical: true },
+          { check: "HAS_META_DESCRIPTION", severity: "CRITICAL" },
+          { check: "HTTP_STATUS_200", severity: "CRITICAL" },
         ],
         page
       );

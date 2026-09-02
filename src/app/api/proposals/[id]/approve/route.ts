@@ -18,6 +18,7 @@ import { inngest } from "@/lib/inngest/client";
 import { logger } from "@/lib/logger";
 import { hashProposedChanges, evaluatePolicy } from "@/lib/proposals";
 import type { ActionType, ProposedChange } from "@/lib/proposals";
+import { transitionOpportunity } from "@/lib/proposals/opportunity-lifecycle";
 
 export async function POST(
   req: NextRequest,
@@ -81,16 +82,15 @@ export async function POST(
     });
 
     // Transition opportunity: PROPOSED → APPROVED
-    await prisma.growthDecision.updateMany({
-      where: {
-        id: proposal.decisionId,
-        // cast needed until Prisma client is regenerated
-        ...(({ opportunityStatus: "PROPOSED" }) as any),
-      },
-      data: {
-        ...(({ opportunityStatus: "APPROVED" }) as any),
-        updatedAt: now,
-      },
+    // Route through transitionOpportunity() to enforce the state machine guard
+    // and produce an audit event. Raw updateMany is explicitly prohibited here.
+    await transitionOpportunity({
+      decisionId: proposal.decisionId,
+      from: "PROPOSED",
+      to: "APPROVED",
+      actorId: `user:${userId}`,
+      reason: comment ? `Human approval: ${comment}` : "Human approval via dashboard",
+      proposalId: proposal.id,
     });
 
     // Trigger execution via Inngest

@@ -1,14 +1,3 @@
-/**
- * Mutation Operation Lifecycle — Public API
- *
- * This barrel export is the canonical import path for the mutation library.
- * All mutations in the system should flow through these functions.
- *
- * Usage:
- *   import { createOperation, executeOperation } from "@/lib/mutations";
- */
-
-// Core operation lifecycle
 export {
   createOperation,
   approveOperation,
@@ -47,8 +36,17 @@ export {
 export {
   atomicVersionedUpdate,
   claimExecution,
+  renewLease,
   type MutableModel,
 } from "./concurrency";
+
+// Heartbeat
+export {
+  startOperationHeartbeat,
+  LeaseLostError,
+  type HeartbeatHandle,
+  type HeartbeatOptions,
+} from "./heartbeat";
 
 // Snapshots
 export {

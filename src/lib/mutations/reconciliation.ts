@@ -16,6 +16,7 @@ import { Prisma } from "@prisma/client";
 import { logger } from "@/lib/logger";
 import { appendAuditEvent } from "./audit";
 import { checkOperationCompletion } from "./operation";
+import { releaseStaleActiveClaims } from "@/lib/autonomy/execution-claim";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -252,6 +253,7 @@ export interface ReconcileBatchResult {
   irreversible: number;
   operationsCompleted: number;
   stuckOperationsRecovered: number;
+  staleClaimsRecovered: number;
 }
 
 /**
@@ -437,13 +439,23 @@ export async function reconcileEffects(
   }
 
   // Recover stuck EXECUTING operations (crashed workers)
-  const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+  // Uses executionLeaseExpiresAt (not claimedAt) — this is what the heartbeat renews.
+  // Recovery window: 2 minutes AFTER lease expiry (not claim time).
+  const now = new Date();
   const stuckOps = await (prisma as any).mutationOperation.findMany({
     where: {
       status: "EXECUTING",
-      executionClaimedAt: { lte: twoMinutesAgo },
+      executionLeaseExpiresAt: { lte: new Date(now.getTime() - 2 * 60 * 1000) },
     },
-    select: { id: true, executionClaimedBy: true, executionClaimedAt: true },
+    select: {
+      id: true,
+      executionClaimedBy: true,
+      executionClaimedAt: true,
+      executionLeaseExpiresAt: true,
+      targetModel: true,
+      targetId: true,
+      expectedVersion: true,
+    },
   });
 
   if (stuckOps.length > 0) {
@@ -456,22 +468,109 @@ export async function reconcileEffects(
     );
 
     for (const op of stuckOps) {
-      await (prisma as any).mutationOperation.update({
-        where: { id: op.id },
-        data: {
-          status: "APPROVED",
-          executionClaimedBy: null,
-          executionClaimedAt: null,
-          executionLeaseExpiresAt: null,
-        },
-      });
+      // CRITICAL: Determine whether the mutation actually committed.
+      // If the target entity's version was incremented, the DB transaction
+      // succeeded even though the worker crashed before writing COMMITTED.
+      // Blindly resetting to APPROVED would cause a DUPLICATE MUTATION.
+      let mutationCommitted = false;
+      try {
+        const targetState = await fetchTargetVersion(
+          prisma,
+          op.targetModel,
+          op.targetId
+        );
+        if (targetState && targetState.version > op.expectedVersion) {
+          // Version was bumped → the atomic versioned update succeeded.
+          // The mutation is applied. Transition to COMMITTED, not APPROVED.
+          mutationCommitted = true;
+        }
+      } catch (versionCheckErr) {
+        // If we can't check the version, DO NOT reset to APPROVED.
+        // Fail closed: mark as FAILED so a human investigates.
+        logger.error("[Reconciliation] Version check failed — failing closed", {
+          operationId: op.id,
+          error: (versionCheckErr as Error)?.message,
+        });
 
-      await appendAuditEvent(op.id, "EXECUTION_RECOVERED", "system:reconciler", {
-        previousWorker: op.executionClaimedBy,
-        claimedAt: op.executionClaimedAt,
-        reason: "Worker lease expired — returning to APPROVED for retry",
-      });
+        await (prisma as any).mutationOperation.update({
+          where: { id: op.id },
+          data: {
+            status: "FAILED",
+            completedAt: new Date(),
+            executionClaimedBy: null,
+            executionClaimedAt: null,
+            executionLeaseExpiresAt: null,
+          },
+        });
+
+        await appendAuditEvent(op.id, "EXECUTION_RECOVERED", "system:reconciler", {
+          previousWorker: op.executionClaimedBy,
+          leaseExpiredAt: op.executionLeaseExpiresAt,
+          recoveryAction: "FAILED (version check error — fail closed)",
+          error: (versionCheckErr as Error)?.message,
+        });
+        continue;
+      }
+
+      if (mutationCommitted) {
+        // DB mutation DID commit — advance to COMMITTED so effects can proceed.
+        // Do NOT reset to APPROVED (that would re-execute the already-applied mutation).
+        await (prisma as any).mutationOperation.update({
+          where: { id: op.id },
+          data: {
+            status: "COMMITTED",
+            executionClaimedBy: null,
+            executionClaimedAt: null,
+            executionLeaseExpiresAt: null,
+          },
+        });
+
+        await appendAuditEvent(op.id, "EXECUTION_RECOVERED", "system:reconciler", {
+          previousWorker: op.executionClaimedBy,
+          leaseExpiredAt: op.executionLeaseExpiresAt,
+          recoveryAction: "COMMITTED (version check confirmed mutation applied)",
+          expectedVersion: op.expectedVersion,
+        });
+
+        logger.info("[Reconciliation] Recovered operation as COMMITTED (mutation verified)", {
+          operationId: op.id,
+        });
+      } else {
+        // Version unchanged → mutation never applied. Safe to reset to APPROVED.
+        await (prisma as any).mutationOperation.update({
+          where: { id: op.id },
+          data: {
+            status: "APPROVED",
+            executionClaimedBy: null,
+            executionClaimedAt: null,
+            executionLeaseExpiresAt: null,
+          },
+        });
+
+        await appendAuditEvent(op.id, "EXECUTION_RECOVERED", "system:reconciler", {
+          previousWorker: op.executionClaimedBy,
+          leaseExpiredAt: op.executionLeaseExpiresAt,
+          recoveryAction: "APPROVED (version unchanged — mutation never applied, safe to retry)",
+          expectedVersion: op.expectedVersion,
+        });
+
+        logger.info("[Reconciliation] Recovered operation as APPROVED (safe to retry)", {
+          operationId: op.id,
+        });
+      }
     }
+  }
+
+  // ── Recover stale autonomous execution claims (crashed workers) ──────────
+  // This is the higher-level coordination lock. Underlying MutationOperations
+  // have their own heartbeat/lease recovery above.
+  let staleClaimsRecovered = 0;
+  try {
+    staleClaimsRecovered = await releaseStaleActiveClaims();
+  } catch (claimErr) {
+    logger.error("[Reconciliation] Error recovering stale autonomous claims", {
+      error: (claimErr as Error)?.message,
+    });
   }
 
   const result: ReconcileBatchResult = {
@@ -482,9 +581,38 @@ export async function reconcileEffects(
     irreversible,
     operationsCompleted,
     stuckOperationsRecovered: stuckOps.length,
+    staleClaimsRecovered,
   };
 
   logger.info("[Reconciliation] Batch complete", { ...result });
 
   return result;
+}
+
+// ── Recovery Helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Fetches the current version of a target entity for reconciler version-checking.
+ * Used to determine whether a stuck EXECUTING operation's mutation actually committed.
+ *
+ * Uses the same model → table mapping as atomicVersionedUpdate.
+ */
+async function fetchTargetVersion(
+  prisma: any,
+  targetModel: string,
+  targetId: string
+): Promise<{ version: number } | null> {
+  switch (targetModel) {
+    case "Blog": {
+      const blog = await prisma.blog.findUnique({
+        where: { id: targetId },
+        select: { version: true },
+      });
+      return blog ? { version: blog.version } : null;
+    }
+    default:
+      throw new Error(
+        `[fetchTargetVersion] Unknown target model: ${targetModel}`
+      );
+  }
 }

@@ -83,7 +83,7 @@ export async function atomicVersionedUpdate(
     if (!(config.allowedColumns as readonly string[]).includes(key)) {
       throw new Error(
         `[atomicVersionedUpdate] Column "${key}" is not allowed for model "${model}". ` +
-          `Allowed: ${config.allowedColumns.join(", ")}`
+        `Allowed: ${config.allowedColumns.join(", ")}`
       );
     }
   }
@@ -200,5 +200,58 @@ export async function claimExecution(
     operationId,
     workerId,
   });
+  return false;
+}
+/**
+ * Atomically renews the execution lease for an operation.
+ *
+ * Token-based ownership: the UPDATE succeeds ONLY when:
+ *   - status = 'EXECUTING'  (operation is still running)
+ *   - executionClaimedBy = workerId  (this worker owns it)
+ *
+ * If affectedRows === 0, the lease has been taken by another worker or
+ * recovered by the reconciler. The caller MUST stop all mutation work.
+ *
+ * @param operationId    - The operation whose lease to renew
+ * @param workerId       - Owning worker identity (serves as lease token)
+ * @param leaseDurationMs - New lease duration from now (default: 60s)
+ * @returns true if renewal succeeded, false if ownership was lost
+ */
+export async function renewLease(
+  operationId: string,
+  workerId: string,
+  leaseDurationMs: number = 60_000
+): Promise<boolean> {
+  const { prisma } = await import("@/lib/prisma");
+
+  const newLeaseExpires = new Date(Date.now() + leaseDurationMs);
+  const now = new Date();
+
+  const affectedRows: number = await (prisma as any).$executeRawUnsafe(
+    `UPDATE "MutationOperation"
+     SET "executionLeaseExpiresAt" = $1,
+         "updatedAt" = $2
+     WHERE "id" = $3
+       AND "status" = 'EXECUTING'
+       AND "executionClaimedBy" = $4`,
+    newLeaseExpires,
+    now,
+    operationId,
+    workerId
+  );
+
+  if (affectedRows === 1) {
+    logger.info("[renewLease] Lease renewed", {
+      operationId,
+      workerId,
+      newLeaseExpires,
+    });
+    return true;
+  }
+
+  logger.error(
+    "[renewLease] Lease renewal failed — ownership lost or operation recovered",
+    { operationId, workerId }
+  );
   return false;
 }

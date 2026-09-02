@@ -21,14 +21,9 @@ export type ActionType =
   | "MASS_REDIRECT"
   | "SITE_WIDE_CHANGE";
 
-// ── Safety Tiers ────────────────────────────────────────────────────────────
-//
-// Tier 0 — Read only (analyze, report, recommend). No mutation.
-// Tier 1 — Low-risk automatic. Auto-execute under policy.
-// Tier 2 — Approval required. Human must approve before execution.
-// Tier 3 — High-risk. Explicit approval + stronger verification.
 
-export type SafetyTier = 0 | 1 | 2 | 3;
+
+export type SafetyTier = 1 | 2 | 3;
 
 export const SAFETY_TIER_MAP: Record<ActionType, SafetyTier> = {
   UPDATE_META_DESCRIPTION: 1,
@@ -79,20 +74,29 @@ export const OPPORTUNITY_TRANSITIONS: Record<
   OpportunityStatus,
   OpportunityStatus[]
 > = {
-  OPEN: ["PROPOSED", "EXPIRED"],
+  OPEN: ["PROPOSED"],
   PROPOSED: ["APPROVED", "REJECTED", "EXPIRED"],
-  APPROVED: ["EXECUTING", "EXPIRED"],
+  // APPROVED → REJECTED: user rejects before execution starts (Amendment #4)
+  APPROVED: ["EXECUTING", "REJECTED", "EXPIRED"],
   EXECUTING: ["VERIFYING", "FAILED"],
   VERIFYING: ["VERIFIED", "FAILED"],
-  VERIFIED: [],                           // Terminal ✓
-  FAILED: ["OPEN", "ROLLED_BACK"],         // Can re-open or rollback
-  REJECTED: ["OPEN"],                      // Can re-open with new proposal
-  ROLLED_BACK: [],                         // Terminal ✓
-  EXPIRED: ["OPEN"],                       // Can re-open
+  // VERIFIED allows rollback when a regression is discovered post-execution
+  VERIFIED: ["ROLLED_BACK"],
+  FAILED: ["OPEN", "ROLLED_BACK"],       // retry (→ OPEN) or rollback (→ ROLLED_BACK)
+  REJECTED: ["OPEN"],                    // re-open after rejection
+  ROLLED_BACK: [],                       // terminal — no further transitions
+  // EXPIRED → OPEN: handled by proposalExpireCron re-opening the opportunity
+  EXPIRED: ["OPEN"],
 };
 
+// Terminal = no outgoing transitions in OPPORTUNITY_TRANSITIONS.
+// Only ROLLED_BACK is truly terminal — every other status has at least one
+// valid outgoing transition.
+//
+// Note: VERIFIED and EXPIRED are NOT in this list despite being "end-states"
+// in the happy path — both allow further transitions (VERIFIED → ROLLED_BACK,
+// EXPIRED → OPEN) and must not be treated as dead-ends by the state machine.
 export const TERMINAL_OPPORTUNITY_STATUSES: OpportunityStatus[] = [
-  "VERIFIED",
   "ROLLED_BACK",
 ];
 
@@ -107,6 +111,8 @@ export type ProposalStatus =
   | "EXECUTED"
   | "VERIFYING"
   | "VERIFIED"
+  | "ROLLED_BACK"
+  | "ROLLBACK_PARTIAL"  // DB restored but ≥1 external effect compensation failed
   | "FAILED"
   | "EXPIRED";
 
@@ -119,18 +125,47 @@ export const PROPOSAL_TRANSITIONS: Record<
   APPROVED: ["EXECUTING", "EXPIRED"],
   REJECTED: [],
   EXECUTING: ["EXECUTED", "FAILED"],
-  EXECUTED: ["VERIFYING"],
+  EXECUTED: ["VERIFYING", "ROLLED_BACK", "ROLLBACK_PARTIAL"],
   VERIFYING: ["VERIFIED", "FAILED"],
-  VERIFIED: [],
+  // A verified proposal can be rolled back if a regression is detected later.
+  // ROLLBACK_PARTIAL is also possible when external compensation is incomplete.
+  VERIFIED: ["ROLLED_BACK", "ROLLBACK_PARTIAL"],
+  // Allow retry of compensation from ROLLBACK_PARTIAL.
+  ROLLBACK_PARTIAL: ["ROLLED_BACK"],
+  ROLLED_BACK: [],
   FAILED: [],
   EXPIRED: [],
 };
 
 export const TERMINAL_PROPOSAL_STATUSES: ProposalStatus[] = [
-  "VERIFIED",
+  "ROLLED_BACK",
   "REJECTED",
   "FAILED",
   "EXPIRED",
+  // ROLLBACK_PARTIAL is NOT terminal — compensation can be retried.
+];
+
+// ── Rollback Eligibility ────────────────────────────────────────────────────────────
+
+/**
+ * Statuses from which a proposal can be rolled back.
+ * EXECUTING is explicitly excluded — rolling back while a mutation is in flight
+ * creates a race between the ActionRunner and the compensation handler.
+ * ROLLBACK_PARTIAL is included so partial compensation can be re-attempted.
+ */
+export const ROLLBACK_ELIGIBLE_PROPOSAL_STATUSES: ProposalStatus[] = [
+  "VERIFIED",
+  "FAILED",
+  "EXECUTED",
+  "ROLLBACK_PARTIAL",
+];
+
+/**
+ * Statuses from which an opportunity can be rolled back.
+ */
+export const ROLLBACK_ELIGIBLE_OPPORTUNITY_STATUSES: OpportunityStatus[] = [
+  "VERIFIED",
+  "FAILED",
 ];
 
 // ── Proposed Change ─────────────────────────────────────────────────────────
@@ -160,13 +195,19 @@ export type VerificationCheckType =
   | "ROBOTS_META_UNCHANGED"
   | "CANONICAL_UNCHANGED"
   | "PAGE_INDEXABLE"
-  | "CONTENT_CONTAINS_KEYWORD";
+  | "PAGE_NOT_INDEXABLE"
+  | "CONTENT_CONTAINS_KEYWORD"
+  | "REDIRECT_STATUS_MATCHES"   
+  | "REDIRECT_LOCATION_MATCHES"  
+  | "REDIRECT_TARGET_HEALTHY"    
+  | "PAGE_REMOVED";              
+
 
 export interface VerificationCriterion {
   check: VerificationCheckType;
   expectedValue?: string;
   targetUrl?: string;
-  critical?: boolean;
+  severity: "CRITICAL" | "WARNING";
 }
 
 export type VerificationOutcome = "VERIFIED" | "FAILED" | "PARTIAL";
@@ -185,80 +226,86 @@ export const VERIFICATION_CRITERIA_MAP: Record<
   VerificationCriterion[]
 > = {
   UPDATE_META_DESCRIPTION: [
-    { check: "HAS_META_DESCRIPTION", critical: true },
-    { check: "META_DESCRIPTION_MATCHES", critical: true },
-    { check: "META_DESCRIPTION_LENGTH_VALID", critical: false },
-    { check: "HTTP_STATUS_200", critical: true },
-    { check: "CANONICAL_UNCHANGED", critical: true },
-    { check: "ROBOTS_META_UNCHANGED", critical: true },
+    { check: "HAS_META_DESCRIPTION", severity: "CRITICAL" },
+    { check: "META_DESCRIPTION_MATCHES", severity: "CRITICAL" },
+    { check: "META_DESCRIPTION_LENGTH_VALID", severity: "WARNING" },
+    { check: "HTTP_STATUS_200", severity: "CRITICAL" },
+    { check: "CANONICAL_UNCHANGED", severity: "CRITICAL" },
+    { check: "ROBOTS_META_UNCHANGED", severity: "CRITICAL" },
   ],
   UPDATE_TITLE_TAG: [
-    { check: "HAS_TITLE", critical: true },
-    { check: "TITLE_MATCHES", critical: true },
-    { check: "HTTP_STATUS_200", critical: true },
-    { check: "CANONICAL_UNCHANGED", critical: true },
+    { check: "HAS_TITLE", severity: "CRITICAL" },
+    { check: "TITLE_MATCHES", severity: "CRITICAL" },
+    { check: "HTTP_STATUS_200", severity: "CRITICAL" },
+    { check: "CANONICAL_UNCHANGED", severity: "CRITICAL" },
   ],
   FIX_HEADING_HIERARCHY: [
-    { check: "HAS_H1", critical: true },
-    { check: "SINGLE_H1", critical: true },
-    { check: "HEADING_HIERARCHY_VALID", critical: true },
-    { check: "HTTP_STATUS_200", critical: true },
+    { check: "HAS_H1", severity: "CRITICAL" },
+    { check: "SINGLE_H1", severity: "CRITICAL" },
+    { check: "HEADING_HIERARCHY_VALID", severity: "CRITICAL" },
+    { check: "HTTP_STATUS_200", severity: "CRITICAL" },
   ],
   ADD_SCHEMA_MARKUP: [
-    { check: "SCHEMA_MARKUP_PRESENT", critical: true },
-    { check: "SCHEMA_MARKUP_VALID", critical: false },
-    { check: "HTTP_STATUS_200", critical: true },
+    { check: "SCHEMA_MARKUP_PRESENT", severity: "CRITICAL" },
+    { check: "SCHEMA_MARKUP_VALID", severity: "WARNING" },
+    { check: "HTTP_STATUS_200", severity: "CRITICAL" },
   ],
   ADD_CANONICAL_TAG: [
-    { check: "HAS_CANONICAL", critical: true },
-    { check: "CANONICAL_MATCHES", critical: true },
-    { check: "HTTP_STATUS_200", critical: true },
+    { check: "HAS_CANONICAL", severity: "CRITICAL" },
+    { check: "CANONICAL_MATCHES", severity: "CRITICAL" },
+    { check: "HTTP_STATUS_200", severity: "CRITICAL" },
   ],
   FIX_BROKEN_LINK: [
-    { check: "HTTP_STATUS_200", critical: true },
+    { check: "HTTP_STATUS_200", severity: "CRITICAL" },
   ],
   ADD_INTERNAL_LINKS: [
-    { check: "INTERNAL_LINK_EXISTS", critical: true },
-    { check: "HTTP_STATUS_200", critical: true },
+    { check: "INTERNAL_LINK_EXISTS", severity: "CRITICAL" },
+    { check: "HTTP_STATUS_200", severity: "CRITICAL" },
   ],
   CHANGE_CANONICAL: [
-    { check: "HAS_CANONICAL", critical: true },
-    { check: "CANONICAL_MATCHES", critical: true },
-    { check: "HTTP_STATUS_200", critical: true },
-    { check: "PAGE_INDEXABLE", critical: true },
+    { check: "HAS_CANONICAL", severity: "CRITICAL" },
+    { check: "CANONICAL_MATCHES", severity: "CRITICAL" },
+    { check: "HTTP_STATUS_200", severity: "CRITICAL" },
+    { check: "PAGE_INDEXABLE", severity: "CRITICAL" },
   ],
   MODIFY_ROBOTS_META: [
-    { check: "HTTP_STATUS_200", critical: true },
+    { check: "HTTP_STATUS_200", severity: "CRITICAL" },
   ],
   REDIRECT_URL: [
-    { check: "HTTP_STATUS_200", critical: true },
+    { check: "REDIRECT_STATUS_MATCHES", severity: "CRITICAL", expectedValue: "301" },
+    { check: "REDIRECT_LOCATION_MATCHES", severity: "CRITICAL" },
+    { check: "REDIRECT_TARGET_HEALTHY", severity: "CRITICAL" },
+    { check: "PAGE_INDEXABLE", severity: "WARNING" },
   ],
   CHANGE_PAGE_TITLE: [
-    { check: "HAS_TITLE", critical: true },
-    { check: "TITLE_MATCHES", critical: true },
-    { check: "HTTP_STATUS_200", critical: true },
-    { check: "CANONICAL_UNCHANGED", critical: true },
+    { check: "HAS_TITLE", severity: "CRITICAL" },
+    { check: "TITLE_MATCHES", severity: "CRITICAL" },
+    { check: "HTTP_STATUS_200", severity: "CRITICAL" },
+    { check: "CANONICAL_UNCHANGED", severity: "CRITICAL" },
   ],
   PUBLISH_CONTENT: [
-    { check: "HTTP_STATUS_200", critical: true },
-    { check: "PAGE_INDEXABLE", critical: true },
-    { check: "HAS_META_DESCRIPTION", critical: false },
-    { check: "HAS_TITLE", critical: true },
-    { check: "HAS_CANONICAL", critical: false },
+    { check: "HTTP_STATUS_200", severity: "CRITICAL" },
+    { check: "PAGE_INDEXABLE", severity: "CRITICAL" },
+    { check: "HAS_META_DESCRIPTION", severity: "WARNING" },
+    { check: "HAS_TITLE", severity: "CRITICAL" },
+    { check: "HAS_CANONICAL", severity: "WARNING" },
   ],
   REFRESH_CONTENT: [
-    { check: "HTTP_STATUS_200", critical: true },
-    { check: "CONTENT_CONTAINS_KEYWORD", critical: false },
-    { check: "CANONICAL_UNCHANGED", critical: true },
+    { check: "HTTP_STATUS_200", severity: "CRITICAL" },
+    { check: "CONTENT_CONTAINS_KEYWORD", severity: "WARNING" },
+    { check: "CANONICAL_UNCHANGED", severity: "CRITICAL" },
   ],
   GENERATE_CONTENT_BRIEF: [],
-  DELETE_PAGE: [],
+  DELETE_PAGE: [
+    { check: "PAGE_REMOVED", severity: "CRITICAL" },        // 404 or 410
+    { check: "PAGE_NOT_INDEXABLE", severity: "WARNING" },
+  ],
   CONSOLIDATE_CONTENT: [
-    { check: "HTTP_STATUS_200", critical: true },
+    { check: "HTTP_STATUS_200", severity: "CRITICAL" },
   ],
   MASS_REDIRECT: [],
   SITE_WIDE_CHANGE: [
-    { check: "HTTP_STATUS_200", critical: true },
+    { check: "HTTP_STATUS_200", severity: "CRITICAL" },
   ],
 };
 
@@ -285,24 +332,21 @@ export interface RetryPolicy {
 }
 
 export const RETRY_POLICIES: Record<SafetyTier, RetryPolicy> = {
-  0: {
-    maxAttempts: 0,
-    baseDelayMs: 0,
-    maxDelayMs: 0,
-    backoffFactor: 0,
-  },
+  // Tier 1: Low-risk — up to 3 automated retries with exponential backoff
   1: {
     maxAttempts: 3,
     baseDelayMs: 30_000,
     maxDelayMs: 600_000,
     backoffFactor: 2,
   },
+  // Tier 2: Human-approved — 2 attempts max (human re-approves each time)
   2: {
     maxAttempts: 2,
     baseDelayMs: 60_000,
     maxDelayMs: 900_000,
     backoffFactor: 2,
   },
+  // Tier 3: High-risk — 1 attempt only, must create a new proposal to retry
   3: {
     maxAttempts: 1,
     baseDelayMs: 0,
@@ -458,5 +502,19 @@ export class ProposalMaxAttemptsError extends Error {
       `Proposal ${proposalId} has reached maximum attempts (${maxAttempts})`
     );
     this.name = "ProposalMaxAttemptsError";
+  }
+}
+
+export class RetryChainExhaustedError extends Error {
+  public readonly decisionId: string;
+  public readonly maxRetries: number;
+
+  constructor(decisionId: string, maxRetries: number) {
+    super(
+      `Opportunity ${decisionId} has exhausted its retry budget (${maxRetries} retries)`
+    );
+    this.name = "RetryChainExhaustedError";
+    this.decisionId = decisionId;
+    this.maxRetries = maxRetries;
   }
 }

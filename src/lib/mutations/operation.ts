@@ -41,6 +41,7 @@ import {
   claimExecution,
   type MutableModel,
 } from "./concurrency";
+import { startOperationHeartbeat, LeaseLostError } from "./heartbeat";
 import { generateOperationKey, generateEffectKey } from "./idempotency";
 import { assertAllKillSwitchesClear, assertEffectChannelEnabled } from "./kill-switch";
 import { calculateOperationRisk, requiresApproval } from "./risk-engine";
@@ -93,6 +94,27 @@ export async function createOperation(
 
   // Kill switch check — fail fast before any DB writes
   await assertAllKillSwitchesClear(params.siteId);
+
+  // REPORT_ONLY enforcement — system actors cannot create mutations
+  // when the site is in REPORT_ONLY mode. This is a multi-layer defense:
+  // even if the autonomy gate is bypassed, the lifecycle itself rejects.
+  if (params.actorType === "SYSTEM" || params.actorType === "CRON") {
+    const site = await prisma.site.findUnique({
+      where: { id: params.siteId },
+      select: { operatingMode: true },
+    });
+
+    if (site?.operatingMode === "REPORT_ONLY") {
+      logger.warn("[MutationOp] REPORT_ONLY enforcement — blocking system mutation", {
+        siteId: params.siteId,
+        actorType: params.actorType,
+        mutationType: params.mutationType,
+      });
+      throw new MutationBlockedError(
+        `Site ${params.siteId} is in REPORT_ONLY mode — system-initiated mutations are blocked`
+      );
+    }
+  }
 
   // Idempotency key
   const idempotencyKey = generateOperationKey(params.mutationType, {
@@ -289,6 +311,8 @@ export interface ExecuteOperationResult {
   operationId: string;
   status: OperationStatus;
   error?: string;
+  /** True if this worker lost its execution lease during the operation. */
+  leaseLost?: boolean;
 }
 
 /**
@@ -320,6 +344,20 @@ export async function executeOperation(
   }
 
   await appendAuditEvent(operationId, "EXECUTING", workerId, { workerId });
+
+  // Start background lease heartbeat — renews every 20s (well before 60s lease).
+  // If renewal fails (another worker claimed, or reconciler recovered), leaseLost
+  // becomes true and the worker must not write COMMITTED.
+  const heartbeat = startOperationHeartbeat(operationId, workerId, {
+    intervalMs: 20_000,
+    leaseDurationMs: 60_000,
+    onLeaseLost: (opId, wId) => {
+      logger.error("[MutationOp] Lease lost during execution — aborting", {
+        operationId: opId,
+        workerId: wId,
+      });
+    },
+  });
 
   try {
     // Run the actual mutation inside a transaction
@@ -389,6 +427,18 @@ export async function executeOperation(
       return { newVersion };
     });
 
+    // Critical: check lease before declaring success.
+    // The transaction committed, but if the lease was concurrently recovered,
+    // another worker may re-execute. We surface this as an error so the caller
+    // does not proceed to register effects or transition the proposal.
+    if (heartbeat.leaseLost) {
+      logger.error("[MutationOp] Lease lost after transaction committed — not declaring success", {
+        operationId,
+        workerId,
+      });
+      throw new LeaseLostError(operationId, workerId);
+    }
+
     logger.info("[MutationOp] Execution committed", {
       operationId,
       newVersion: result.newVersion,
@@ -402,6 +452,21 @@ export async function executeOperation(
     };
   } catch (error) {
     // Handle specific error types
+    if (error instanceof LeaseLostError) {
+      // Lease was lost — the reconciler will determine true final state.
+      // Do NOT transition to FAILED: the DB mutation may have committed.
+      await appendAuditEvent(operationId, "LEASE_LOST", workerId, {
+        error: error.message,
+      });
+      return {
+        success: false,
+        operationId,
+        status: "EXECUTING",  // Leave in EXECUTING — reconciler takes over
+        error: error.message,
+        leaseLost: true,
+      };
+    }
+
     if (error instanceof ConcurrentModificationError) {
       await transitionToTerminal(prisma, operationId, "STALE", workerId, {
         error: error.message,
@@ -454,6 +519,10 @@ export async function executeOperation(
       status: "FAILED",
       error: errorMessage,
     };
+  } finally {
+    // Always stop the heartbeat — even on success, even on error.
+    // Failing to stop would keep renewing a completed operation's lease.
+    heartbeat.stop();
   }
 }
 

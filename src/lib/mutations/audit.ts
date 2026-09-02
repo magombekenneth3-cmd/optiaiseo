@@ -35,7 +35,8 @@ export type AuditEventType =
   | "KILL_SWITCH_BLOCKED"
   | "COMPENSATION_STARTED"
   | "COMPENSATION_COMPLETED"
-  | "EXECUTION_RECOVERED";
+  | "EXECUTION_RECOVERED"
+  | "LEASE_LOST";
 
 /**
  * Appends an immutable audit event to the operation.

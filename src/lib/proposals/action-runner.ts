@@ -148,15 +148,30 @@ export async function runAction(
     };
   }
 
-  // 4. Increment attemptCount + transition to EXECUTING
-  await (prisma as any).actionProposal.update({
-    where: { id: input.proposalId },
+  // 4. Atomic CAS: only transition to EXECUTING if still APPROVED
+  // Prevents duplicate execution when Inngest retries or multiple workers race.
+  // Second layer: MutationOperation.idempotencyKey UNIQUE constraint in createOperation().
+  const casResult = await (prisma as any).actionProposal.updateMany({
+    where: {
+      id: input.proposalId,
+      status: "APPROVED", // CAS guard — fails if another worker already claimed it
+    },
     data: {
       status: "EXECUTING",
       attemptCount: { increment: 1 },
       lastAttemptAt: new Date(),
     },
   });
+
+  if (casResult.count === 0) {
+    // Another worker already claimed this proposal, or status changed
+    return {
+      proposalId: input.proposalId,
+      operationId: null,
+      status: "FAILED",
+      error: "Proposal already claimed by another worker (CAS guard)",
+    };
+  }
 
   // 5. Transition opportunity → EXECUTING
   await transitionOpportunity({

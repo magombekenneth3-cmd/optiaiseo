@@ -1,11 +1,4 @@
-// =============================================================================
-// VERIFICATION CHECKS — Individual HTML/HTTP Verification Implementations
-//
-// Each VerificationCheckType has a concrete implementation that inspects
-// parsed HTML to determine whether a fix was actually applied.
-//
-// These checks are used by the Verification Loop to close the feedback loop.
-// =============================================================================
+
 
 import { parse, HTMLElement } from "node-html-parser";
 import {
@@ -27,9 +20,6 @@ export interface ParsedPage {
   fetchedUrl: string;
 }
 
-/**
- * Parses raw HTML + HTTP metadata into a PageContext for verification checks.
- */
 export function parsePage(
   html: string,
   httpStatus: number,
@@ -70,13 +60,16 @@ export function runCheck(
 export function runAllChecks(
   criteria: VerificationCriterion[],
   page: ParsedPage
-): { details: VerificationDetail[]; allCriticalPassed: boolean } {
+): { details: VerificationDetail[]; allCriticalPassed: boolean; hasWarningFailures: boolean } {
   const details = criteria.map((c) => runCheck(c, page));
   const allCriticalPassed = criteria.every((criterion, i) => {
-    if (criterion.critical === false) return true; // advisory — doesn't count
+    if (criterion.severity === "WARNING") return true; // advisory — doesn't block verification
     return details[i].passed;
   });
-  return { details, allCriticalPassed };
+  const hasWarningFailures = criteria.some((criterion, i) => {
+    return criterion.severity === "WARNING" && !details[i].passed;
+  });
+  return { details, allCriticalPassed, hasWarningFailures };
 }
 
 // ── Check Implementations ───────────────────────────────────────────────────
@@ -421,6 +414,89 @@ const CHECK_HANDLERS: Record<VerificationCheckType, CheckHandler> = {
       message: found
         ? `Keyword "${keyword}" found in page content`
         : `Keyword "${keyword}" not found in page content`,
+    };
+  },
+
+  // ── Redirect Checks ────────────────────────────────────────────────────
+
+  REDIRECT_STATUS_MATCHES: (criterion, page) => {
+    const expected = criterion.expectedValue ?? "301";
+    const passed = String(page.httpStatus) === expected;
+    return {
+      check: "REDIRECT_STATUS_MATCHES",
+      passed,
+      actualValue: String(page.httpStatus),
+      expectedValue: expected,
+      message: passed
+        ? `Redirect status ${page.httpStatus} matches expected ${expected}`
+        : `Expected redirect status ${expected}, got ${page.httpStatus}`,
+    };
+  },
+
+  REDIRECT_LOCATION_MATCHES: (criterion, page) => {
+    const actualUrl = page.fetchedUrl;
+    const expected = criterion.expectedValue ?? "";
+    const passed = actualUrl === expected || actualUrl.endsWith(expected);
+    return {
+      check: "REDIRECT_LOCATION_MATCHES",
+      passed,
+      actualValue: actualUrl,
+      expectedValue: expected,
+      message: passed
+        ? `Redirect target matches: ${actualUrl}`
+        : `Redirect target mismatch: expected "${expected}", got "${actualUrl}"`,
+    };
+  },
+
+  REDIRECT_TARGET_HEALTHY: (_criterion, page) => {
+    const healthy = page.httpStatus >= 200 && page.httpStatus < 400;
+    return {
+      check: "REDIRECT_TARGET_HEALTHY",
+      passed: healthy,
+      actualValue: String(page.httpStatus),
+      message: healthy
+        ? `Redirect target is healthy (HTTP ${page.httpStatus})`
+        : `Redirect target is unhealthy (HTTP ${page.httpStatus})`,
+    };
+  },
+
+  // ── Delete / Removal Checks ────────────────────────────────────────────
+  // Amendment #8: These are response-level checks, not HTML checks.
+
+  PAGE_REMOVED: (_criterion, page) => {
+    const removed = page.httpStatus === 404 || page.httpStatus === 410;
+    return {
+      check: "PAGE_REMOVED",
+      passed: removed,
+      actualValue: String(page.httpStatus),
+      message: removed
+        ? `Page correctly removed (HTTP ${page.httpStatus})`
+        : `Page still accessible (HTTP ${page.httpStatus}), expected 404 or 410`,
+    };
+  },
+
+  PAGE_NOT_INDEXABLE: (_criterion, page) => {
+    // If the page returns 404/410, it's inherently not indexable — PASS
+    // (no HTML document to inspect for noindex)
+    if (page.httpStatus === 404 || page.httpStatus === 410) {
+      return {
+        check: "PAGE_NOT_INDEXABLE",
+        passed: true,
+        actualValue: `HTTP ${page.httpStatus} (page removed)`,
+        message: `Page returns ${page.httpStatus} — inherently not indexable`,
+      };
+    }
+    // Otherwise, check for noindex in robots meta
+    const robotsMeta = page.root.querySelector("meta[name='robots']");
+    const content = robotsMeta?.getAttribute("content")?.toLowerCase() ?? "";
+    const hasNoindex = content.includes("noindex");
+    return {
+      check: "PAGE_NOT_INDEXABLE",
+      passed: hasNoindex,
+      actualValue: hasNoindex ? "noindex" : "indexable",
+      message: hasNoindex
+        ? "Page has noindex directive"
+        : `Page is still indexable (robots meta: "${content || "none"}")`,
     };
   },
 };

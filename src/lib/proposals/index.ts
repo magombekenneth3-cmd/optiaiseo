@@ -27,6 +27,8 @@ export {
   PROPOSAL_TRANSITIONS,
   TERMINAL_OPPORTUNITY_STATUSES,
   TERMINAL_PROPOSAL_STATUSES,
+  ROLLBACK_ELIGIBLE_PROPOSAL_STATUSES,
+  ROLLBACK_ELIGIBLE_OPPORTUNITY_STATUSES,
   VERIFICATION_CRITERIA_MAP,
   VERIFICATION_DELAYS,
   RETRY_POLICIES,
@@ -40,6 +42,7 @@ export {
   ProposalApprovalExpiredError,
   ProposalApprovalHashMismatchError,
   ProposalMaxAttemptsError,
+  RetryChainExhaustedError,
 } from "./types";
 
 // Opportunity Lifecycle
@@ -91,3 +94,17 @@ export {
   runAllChecks,
   type ParsedPage,
 } from "./verification-checks";
+
+// Retry Chain
+export {
+  retryProposal,
+  type RetryProposalInput,
+  type RetryProposalResult,
+} from "./retry";
+
+// Rollback
+export {
+  rollbackProposal,
+  type RollbackProposalInput,
+  type RollbackProposalResult,
+} from "./rollback";

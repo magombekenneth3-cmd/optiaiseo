@@ -1,17 +1,3 @@
-// =============================================================================
-// VERIFICATION LOOP — Closed-Loop Outcome Verification
-//
-// After an action is executed, the verification loop:
-//   1. Fetches the target URL
-//   2. Parses the HTML
-//   3. Runs each verification criterion check
-//   4. Updates the proposal with verification results
-//   5. Transitions the proposal and opportunity to VERIFIED or FAILED
-//
-// This is the most important Phase B component. Without it, the system
-// would claim success merely because it attempted a fix.
-// =============================================================================
-
 import { logger } from "@/lib/logger";
 import {
   type ActionType,
@@ -38,18 +24,6 @@ export interface VerificationOutput {
   durationMs: number;
 }
 
-/**
- * Runs the full verification loop for an executed proposal.
- *
- * 1. Load the ActionProposal (must be in EXECUTED or VERIFYING status)
- * 2. Fetch the target URL via HTTP GET
- * 3. Parse HTML and run all verification criteria
- * 4. Compute outcome: VERIFIED, FAILED, or PARTIAL
- * 5. Persist results to the proposal
- * 6. Transition proposal → VERIFIED or FAILED
- * 7. Transition opportunity → VERIFIED or FAILED
- * 8. If VERIFIED, mark source findings as RESOLVED
- */
 export async function verifyProposal(
   input: VerificationInput
 ): Promise<VerificationOutput> {
@@ -102,7 +76,8 @@ export async function verifyProposal(
   let httpStatus: number;
 
   try {
-    const response = await fetchTargetUrl(proposal.targetUrl);
+    const fetchUrl = proposal.verificationUrl ?? proposal.targetUrl;
+    const response = await fetchTargetUrl(fetchUrl);
     html = response.html;
     httpStatus = response.status;
   } catch (fetchErr) {
@@ -148,18 +123,16 @@ export async function verifyProposal(
   }
 
   // 4. Run verification checks
-  const page = parsePage(html, httpStatus, proposal.targetUrl);
-  const { details, allCriticalPassed } = runAllChecks(criteria, page);
+  const page = parsePage(html, httpStatus, proposal.verificationUrl ?? proposal.targetUrl);
+  const { details, allCriticalPassed, hasWarningFailures } = runAllChecks(criteria, page);
 
-  // 5. Compute outcome
-  const allPassed = details.every((d) => d.passed);
   const outcome: VerificationOutcome = allCriticalPassed
-    ? allPassed
-      ? "VERIFIED"
-      : "PARTIAL"
+    ? hasWarningFailures
+      ? "PARTIAL"
+      : "VERIFIED"
     : "FAILED";
 
-  // Treat PARTIAL as VERIFIED (advisory checks failed but critical passed)
+  // PARTIAL is treated as VERIFIED: critical checks passed, only advisory warnings failed
   const effectiveOutcome = outcome === "PARTIAL" ? "VERIFIED" : outcome;
 
   logger.info("[Verification] Checks completed", {
@@ -337,13 +310,12 @@ async function transitionProposalStatus(
   proposalId: string,
   newStatus: string
 ): Promise<void> {
+  const terminalStatuses = ["VERIFIED", "FAILED", "REJECTED", "EXPIRED", "ROLLED_BACK"];
   await prisma.actionProposal.update({
     where: { id: proposalId },
     data: {
       status: newStatus,
-      ...(["VERIFIED", "FAILED", "REJECTED", "EXPIRED"].includes(newStatus)
-        ? { completedAt: new Date() }
-        : {}),
+      ...(terminalStatuses.includes(newStatus) ? { completedAt: new Date() } : {}),
     },
   });
 }

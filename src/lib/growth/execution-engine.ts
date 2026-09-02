@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 import { getPersistedDecisions } from "@/lib/growth/decision-persistence";
 import { performOneClickAutoFix } from "@/lib/autofix/fixer";
-import { triggerInstantIndexing } from "@/lib/indexing/indexnow";
 import { recordExperimentBaseline } from "@/lib/experiments/tracker";
 import { logger } from "@/lib/logger";
 import { acquireSyncLock, releaseSyncLock } from "@/lib/growth/decision-lock";
@@ -303,11 +302,10 @@ export async function executeGrowthDecision(
         // ── 7. Mark Decision as EXECUTED (atomic guard) ──────────────────────
         await markDecisionExecuted(decisionId, siteId, targetUrl);
 
-        // ── 8. Fire-and-forget side effects ──────────────────────────────────
-        try {
-            await triggerInstantIndexing(siteId, [targetUrl]);
-        } catch { /* Fail open */ }
-
+        // ── 8. Fire-and-forget side effects (non-mutation bookkeeping) ────────
+        // NOTE: IndexNow is already registered as a QUEUED effect above (step 6).
+        // Do NOT call triggerInstantIndexing() directly here — that would duplicate
+        // the external API call. The effect processor dispatches it.
         try {
             await recordExperimentBaseline(decisionId, siteId, targetUrl, actionExecuted);
         } catch { /* Fail open */ }
