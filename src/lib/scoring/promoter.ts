@@ -1,18 +1,3 @@
-/**
- * Phase D.2 — Promoter
- *
- * The ONLY place CANDIDATE → OPEN transition happens.
- * Centralizes the atomic promotion with all pre-conditions.
- *
- * Pre-conditions (all must be true):
- *   1. Current status is CANDIDATE
- *   2. Evidence hash matches (not stale)
- *   3. Candidate is not expired (expiresAt > now)
- *   4. Score record exists with decision = PROMOTE
- *
- * Uses WHERE { id, opportunityStatus: "CANDIDATE" } to prevent double-promotion.
- */
-
 import type { ScoringResult, PromotionResult } from "./types";
 import { verifyEvidenceBeforePromotion } from "./evidence-fencing";
 import { prisma } from "@/lib/prisma";
@@ -20,13 +5,6 @@ import { logger } from "@/lib/logger";
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
-/**
- * Atomically promotes a CANDIDATE to OPEN.
- *
- * This is the single, centralized CANDIDATE → OPEN transition point.
- * All other code paths are forbidden from setting opportunityStatus to OPEN
- * for a record that was CANDIDATE.
- */
 export async function promoteCandidateToOpen(
   opportunityId: string,
   scoreResult: ScoringResult,
@@ -126,6 +104,26 @@ export async function promoteCandidateToOpen(
 
     // 5. Mark evidence as verified on the score record
     await markEvidenceVerified(scoreResult.opportunityId, now);
+
+    // 6. Emit domain event for D.3 planning pipeline
+    try {
+      const { inngest } = await import("@/lib/inngest/client");
+      await inngest.send({
+        name: "opportunity.opened",
+        data: {
+          opportunityId,
+          siteId: candidate.siteId, // from DB, not scoreResult
+          finalScore: scoreResult.finalScore,
+          scoringVersion: scoreResult.scoringVersion,
+        },
+      });
+    } catch (eventErr: unknown) {
+      // Non-critical: D.3 reconciliation will catch stranded OPEN records
+      logger.warn("[Promoter] Failed to emit opportunity.opened event", {
+        opportunityId,
+        error: (eventErr as Error)?.message,
+      });
+    }
 
     logger.info("[Promoter] CANDIDATE → OPEN", {
       opportunityId,

@@ -2027,6 +2027,9 @@ model ActionProposal {
   // Authorization
   generatedBy         String    @default("system:proposal-generator")
 
+  // Extensible metadata (D.4 LLM audit envelope, etc.)
+  metadata            Json?
+
   // Timestamps
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt

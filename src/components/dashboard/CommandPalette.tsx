@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Search, LayoutDashboard, Globe, ClipboardList, TrendingUp,
   MonitorSmartphone, Zap, Mic, FileText, Calendar, TrendingDown,
-  CreditCard, Settings, ArrowRight, X
+  CreditCard, Settings, ArrowRight, X, Bot
 } from "lucide-react";
 
 interface Command {
@@ -32,6 +32,7 @@ const COMMANDS: Command[] = [
   { id: "refresh",        label: "Content Refresh",    description: "Update stale content",    href: "/dashboard/refresh",            icon: ClipboardList,   keywords: ["refresh", "update", "stale"] },
   { id: "decay",          label: "Content Decay",      description: "Find declining pages",    href: "/dashboard/content-decay",      icon: TrendingDown,    keywords: ["decay", "decline", "traffic"] },
   { id: "healing",        label: "Self-Healing Log",   description: "Automated fix audit trail", href: "/dashboard/healing",           icon: Zap,             keywords: ["healing", "fix", "autopilot", "log"] },
+  { id: "autopilot",      label: "Autopilot Center",   description: "AI pipeline command center", href: "/dashboard/autopilot",         icon: Bot,             keywords: ["autopilot", "ai", "pipeline", "proposals", "autonomous", "bot"] },
   { id: "billing",        label: "Plans & Billing",    description: "Manage subscription",     href: "/dashboard/billing",            icon: CreditCard,      keywords: ["billing", "plan", "upgrade", "pay"] },
   { id: "settings",       label: "Settings",           description: "Account settings",        href: "/dashboard/settings",           icon: Settings,        keywords: ["settings", "account", "profile"] },
 ];

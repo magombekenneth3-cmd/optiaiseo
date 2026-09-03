@@ -19,8 +19,9 @@ import { transitionOpportunity } from "@/lib/proposals/opportunity-lifecycle";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -32,7 +33,7 @@ export async function POST(
     const reason = (body?.reason as string) ?? "Rejected by user";
 
     const proposal = await (prisma as any).actionProposal.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
     if (!proposal) {
       return NextResponse.json({ error: "Proposal not found" }, { status: 404 });
@@ -58,7 +59,7 @@ export async function POST(
 
     // Transition proposal → REJECTED
     await (prisma as any).actionProposal.update({
-      where: { id: params.id },
+      where: { id },
       data: { status: "REJECTED", completedAt: now, lastAttemptError: reason },
     });
 
@@ -101,7 +102,7 @@ export async function POST(
     });
   } catch (err: unknown) {
     logger.error("[ProposalsAPI] POST /reject failed", {
-      id: params.id,
+      id,
       error: (err as Error)?.message,
     });
     return NextResponse.json(

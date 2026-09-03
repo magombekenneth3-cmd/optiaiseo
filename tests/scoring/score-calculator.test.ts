@@ -34,7 +34,7 @@ function makeInput(overrides?: Partial<ScoringInput>): ScoringInput {
         sourceType: "GSC",
         metric: "position",
         value: "8.5",
-        observedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+        observedAt: new Date(Date.now() - 12 * 60 * 60 * 1000), // 12h ago (safely within 1-day freshness bucket)
       },
     ],
     existingScore: null,
