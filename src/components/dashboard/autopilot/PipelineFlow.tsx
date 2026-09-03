@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Loader2, Circle, Sparkles } from "lucide-react";
+import { CheckCircle2, Loader2, Circle, Activity } from "lucide-react";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -20,14 +20,14 @@ export interface PipelineState {
 // ── Constants ───────────────────────────────────────────────────────────────
 
 export const PIPELINE_STAGES: PipelineStage[] = [
-  { id: "discovery",   label: "Discovery",     shortLabel: "D.1", description: "Identify SEO opportunities" },
-  { id: "scoring",     label: "Scoring",       shortLabel: "D.2", description: "Score by impact & urgency" },
-  { id: "planning",    label: "Planning",      shortLabel: "D.3", description: "Generate action plan" },
-  { id: "llm",         label: "Enhancement",   shortLabel: "D.4", description: "AI-powered optimization" },
-  { id: "draft",       label: "Draft",         shortLabel: "DR",  description: "Proposal ready for review" },
-  { id: "authorized",  label: "Authorized",    shortLabel: "AU",  description: "Approved for execution" },
-  { id: "executing",   label: "Executing",     shortLabel: "EX",  description: "Mutation in progress" },
-  { id: "verified",    label: "Verified",      shortLabel: "VR",  description: "Changes confirmed" },
+  { id: "discovery",   label: "Discovered",    shortLabel: "1", description: "Identified SEO opportunity" },
+  { id: "scoring",     label: "Scored",        shortLabel: "2", description: "Ranked by impact & urgency" },
+  { id: "planning",    label: "Planned",       shortLabel: "3", description: "Action plan generated" },
+  { id: "llm",         label: "AI Enhanced",   shortLabel: "4", description: "Optimized with AI" },
+  { id: "draft",       label: "Draft",         shortLabel: "5", description: "Proposal ready for review" },
+  { id: "authorized",  label: "Authorized",    shortLabel: "6", description: "Approved for execution" },
+  { id: "executing",   label: "Executing",     shortLabel: "7", description: "Mutation in progress" },
+  { id: "verified",    label: "Verified",      shortLabel: "8", description: "Changes confirmed" },
 ];
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -40,14 +40,11 @@ export function PipelineFlow({
   onStageClick: (stageId: string) => void;
 }) {
   return (
-    <div className="card-surface p-5 fade-in-up">
+    <div className="card-surface p-4">
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
-        <Sparkles className="w-4 h-4 text-violet-400" />
-        <h3 className="text-sm font-semibold text-foreground">Pipeline Flow</h3>
-        <span className="text-xs text-muted-foreground ml-auto">
-          D.1 → D.2 → D.3 → D.4 → Draft → Auth → Exec → Verify
-        </span>
+      <div className="flex items-center gap-2 mb-3">
+        <Activity className="w-4 h-4 text-muted-foreground" />
+        <h3 className="text-xs font-semibold text-foreground">Pipeline Status</h3>
       </div>
 
       {/* Pipeline visualization */}
@@ -70,11 +67,11 @@ export function PipelineFlow({
                 {/* Circle */}
                 <div
                   className={`
-                    w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all duration-300
+                    w-7 h-7 rounded-full flex items-center justify-center border-2 transition-colors
                     ${isCompleted
                       ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400"
                       : isActive
-                        ? "bg-brand/15 border-brand/50 text-brand glow-active"
+                        ? "bg-brand/15 border-brand/50 text-brand"
                         : isSelected
                           ? "bg-violet-500/15 border-violet-500/40 text-violet-400"
                           : "bg-muted/30 border-border text-muted-foreground/40"
@@ -102,16 +99,6 @@ export function PipelineFlow({
                           ? "text-violet-400"
                           : "text-muted-foreground/50"
                     }
-                  `}
-                >
-                  {stage.shortLabel}
-                </span>
-
-                {/* Full label on hover */}
-                <span
-                  className={`
-                    text-[9px] whitespace-nowrap transition-all opacity-0 group-hover:opacity-100 absolute -bottom-4
-                    ${isCompleted ? "text-emerald-400/70" : isActive ? "text-brand/70" : "text-muted-foreground/40"}
                   `}
                 >
                   {stage.label}

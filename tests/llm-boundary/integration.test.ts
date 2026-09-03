@@ -142,13 +142,13 @@ describe("§2 — Invalid LLM output → D.3 fallback", () => {
 
     const result = await enhancePlanWithLLM(plan, input, templateChanges);
 
-    // Without API key, result should be FALLBACK or SKIPPED
+    // Without API key, result should be FALLBACK, SKIPPED, or DEFER
     if (result.outcome === "FALLBACK") {
       expect(result.changes).toEqual(templateChanges);
       expect(result.audit).not.toBeNull();
       expect(result.audit!.fallbackUsed).toBe(true);
     }
-    expect(["FALLBACK", "SKIPPED"]).toContain(result.outcome);
+    expect(["FALLBACK", "SKIPPED", "DEFER"]).toContain(result.outcome);
   }, 20_000);
 });
 

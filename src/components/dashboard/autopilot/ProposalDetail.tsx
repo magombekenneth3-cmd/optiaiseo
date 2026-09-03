@@ -89,10 +89,9 @@ function timeAgo(dateStr: string): string {
 }
 
 const SAFETY_CONFIG: Record<number, { label: string; color: string; warning: string }> = {
-  1: { label: "Tier 1 — LOW",      color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20", warning: "" },
-  2: { label: "Tier 2 — MEDIUM",   color: "text-amber-400 bg-amber-500/10 border-amber-500/20",      warning: "" },
-  3: { label: "Tier 3 — HIGH",     color: "text-orange-400 bg-orange-500/10 border-orange-500/20",    warning: "⚠ High safety tier — review changes carefully before approving." },
-  4: { label: "Tier 4 — CRITICAL", color: "text-rose-400 bg-rose-500/10 border-rose-500/20",          warning: "🚨 Critical safety tier — approval requires careful verification of all proposed changes." },
+  1: { label: "Tier 1 — Low",     color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20", warning: "" },
+  2: { label: "Tier 2 — Medium",  color: "text-amber-400 bg-amber-500/10 border-amber-500/20",      warning: "" },
+  3: { label: "Tier 3 — High",    color: "text-orange-400 bg-orange-500/10 border-orange-500/20",    warning: "⚠ High safety tier — review all proposed changes carefully before approving." },
 };
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -149,28 +148,23 @@ export function ProposalDetail({
         </button>
       </div>
 
-      {/* AI Enhancement Badge */}
-      <div className="flex flex-wrap gap-2">
-        {proposal.isAiEnhanced ? (
-          <span className="ai-badge text-xs px-3 py-1">
-            <Sparkles className="w-3 h-3" />
-            AI Enhanced
-            {proposal.llm?.confidence != null && (
-              <span className="ml-1 opacity-70">({Math.round(proposal.llm.confidence * 100)}%)</span>
-            )}
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-muted/50 text-muted-foreground border border-border">
-            <Settings2 className="w-3 h-3" />
-            Deterministic {proposal.llm?.fallbackUsed ? "(Fallback)" : ""}
-          </span>
-        )}
-
-        {/* Safety tier */}
-        <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border ${safetyInfo.color}`}>
+      {/* Provenance line */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className={`inline-flex items-center gap-1.5 font-medium px-2.5 py-1 rounded-full border ${safetyInfo.color}`}>
           <Shield className="w-3 h-3" />
           {safetyInfo.label}
         </span>
+        {proposal.isAiEnhanced ? (
+          <span className="inline-flex items-center gap-1 font-medium px-2 py-0.5 rounded-full bg-violet-500/8 text-violet-400/60 border border-violet-500/15 text-[10px]">
+            <Sparkles className="w-2.5 h-2.5" />
+            AI enhanced{proposal.llm?.confidence != null ? ` (${Math.round(proposal.llm.confidence * 100)}%)` : ""}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 font-medium px-2 py-0.5 rounded-full bg-muted/40 text-muted-foreground/50 border border-border/50 text-[10px]">
+            <Settings2 className="w-2.5 h-2.5" />
+            Template{proposal.llm?.fallbackUsed ? " (fallback)" : ""}
+          </span>
+        )}
       </div>
 
       {/* Safety warning */}

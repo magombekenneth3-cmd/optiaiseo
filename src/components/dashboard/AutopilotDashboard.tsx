@@ -7,13 +7,11 @@ import {
   RefreshCw,
   Loader2,
   Filter,
-  Sparkles,
   Activity,
   CheckCircle2,
   XCircle,
   Clock,
   Shield,
-  TrendingUp,
   ArrowUpDown,
 } from "lucide-react";
 import { PipelineFlow, type PipelineState } from "./autopilot/PipelineFlow";
@@ -71,23 +69,21 @@ function StatCard({
   value,
   icon: Icon,
   color,
-  delay,
 }: {
   label: string;
   value: number;
   icon: React.ElementType;
   color: string;
-  delay: number;
 }) {
   return (
-    <div className="metric-card fade-in-up" style={{ animationDelay: `${delay}ms` }}>
+    <div className="metric-card">
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center shrink-0">
           <Icon className={`w-4 h-4 ${color}`} />
         </div>
         <div>
           <p className="text-[11px] text-muted-foreground font-medium">{label}</p>
-          <p className={`text-xl font-bold ${color} animate-count`}>{value}</p>
+          <p className={`text-xl font-bold ${color}`}>{value}</p>
         </div>
       </div>
     </div>
@@ -278,22 +274,21 @@ export function AutopilotDashboard() {
   const activeCount = (statusCounts["EXECUTING"] ?? 0) + (statusCounts["APPROVED"] ?? 0);
   const completedCount = (statusCounts["COMPLETED"] ?? 0) + (statusCounts["VERIFIED"] ?? 0);
   const failedCount = (statusCounts["FAILED"] ?? 0) + (statusCounts["REJECTED"] ?? 0);
-  const aiEnhancedCount = proposals.filter((p) => p.isAiEnhanced).length;
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-7xl mx-auto">
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between fade-in-up">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-brand/20 border border-violet-500/20 flex items-center justify-center">
-            <Bot className="w-5 h-5 text-violet-400" />
+          <div className="w-10 h-10 rounded-xl bg-muted/30 border border-border flex items-center justify-center">
+            <Bot className="w-5 h-5 text-foreground/70" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
+            <h1 className="text-lg font-bold tracking-tight">
               Autopilot Command Center
             </h1>
             <p className="text-muted-foreground text-xs mt-0.5">
-              AI-driven discovery → scoring → planning → optimization pipeline
+              Autonomous pipeline monitoring & authorization
             </p>
           </div>
         </div>
@@ -308,19 +303,18 @@ export function AutopilotDashboard() {
       </div>
 
       {/* ── Stats Row ───────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <StatCard label="Proposals" value={total} icon={Activity} color="text-foreground" delay={0} />
-        <StatCard label="Pending" value={draftCount} icon={Clock} color="text-blue-400" delay={40} />
-        <StatCard label="Active" value={activeCount} icon={Shield} color="text-cyan-400" delay={80} />
-        <StatCard label="Completed" value={completedCount} icon={CheckCircle2} color="text-emerald-400" delay={120} />
-        <StatCard label="AI Enhanced" value={aiEnhancedCount} icon={Sparkles} color="text-violet-400" delay={160} />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard label="Proposals" value={total} icon={Activity} color="text-foreground" />
+        <StatCard label="Pending" value={draftCount} icon={Clock} color="text-blue-400" />
+        <StatCard label="Active" value={activeCount} icon={Shield} color="text-cyan-400" />
+        <StatCard label="Completed" value={completedCount} icon={CheckCircle2} color="text-emerald-400" />
       </div>
 
       {/* ── Pipeline Flow ───────────────────────────────────────────────── */}
       <PipelineFlow state={pipelineState} onStageClick={handlePipelineStageClick} />
 
       {/* ── Filter + Sort Bar ───────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 fade-in-up" style={{ animationDelay: "60ms" }}>
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
           <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
           {FILTER_TABS.map((tab) => {
@@ -426,13 +420,12 @@ export function AutopilotDashboard() {
               </div>
             </div>
           ) : (
-            proposals.map((proposal, idx) => (
+            proposals.map((proposal) => (
               <ProposalCard
                 key={proposal.id}
                 proposal={proposal}
                 isSelected={selectedId === proposal.id}
                 onClick={() => loadDetail(proposal.id)}
-                animationDelay={idx * 30}
               />
             ))
           )}
@@ -462,14 +455,8 @@ export function AutopilotDashboard() {
 
       {/* ── Footer info ─────────────────────────────────────────────────── */}
       {!loading && proposals.length > 0 && (
-        <div className="flex items-center justify-between text-[10px] text-muted-foreground/40 py-2">
-          <span>
-            Showing {proposals.length} of {total} proposals
-          </span>
-          <span className="flex items-center gap-1.5">
-            <TrendingUp className="w-3 h-3" />
-            Pipeline: D.1 → D.2 → D.3 → D.4 → Draft → Auth → Exec → Verify
-          </span>
+        <div className="text-[10px] text-muted-foreground/40 py-2">
+          Showing {proposals.length} of {total} proposals
         </div>
       )}
     </div>

@@ -99,7 +99,16 @@ async function releasePartialReservations(
 // ── Main Authorization Function ─────────────────────────────────────────────
 
 /**
- * Evaluates all six authorization gates sequentially.
+ * Evaluates all authorization gates sequentially.
+ *
+ * Gate 0: Global kill switch
+ * Gate 1: Operating mode
+ * Gate 1.5: Hourly rate limit (env-driven backstop)
+ * Gate 2: Effective tier limit
+ * Gate 3: Atomic budget reservation
+ * Gate 4: Atomic concurrency check
+ * Gate 5: Circuit breaker
+ * Gate 6: Idempotent execution claim
  *
  * Returns AUTHORIZED with reservation IDs if all gates pass.
  * Returns NEEDS_APPROVAL or BLOCKED if any gate fails.
@@ -110,9 +119,26 @@ export async function authorize(
   req: AuthorizationRequest
 ): Promise<AuthorizationDecision> {
   const { prisma } = await import("@/lib/prisma");
+  const { getAutonomousConfig } = await import("@/lib/config/env-validator");
   const partial: PartialReservations = {};
 
   try {
+    // ── Gate 0: Global Kill Switch ──────────────────────────────────────
+    const autonomousConfig = getAutonomousConfig();
+
+    if (autonomousConfig.globalKillSwitch) {
+      logger.warn("[PolicyGate] Global kill switch is active — blocking all autonomous authorizations", {
+        siteId: req.siteId,
+        proposalId: req.proposalId,
+      });
+      return {
+        authorized: false,
+        action: "BLOCKED",
+        reason: "Global autonomous kill switch is active — all autonomous mutations are halted",
+        failedGate: "kill_switch",
+      };
+    }
+
     // ── Gate 1: Operating Mode ────────────────────────────────────────────
     const site = await (prisma as any).site.findUnique({
       where: { id: req.siteId },
@@ -139,6 +165,34 @@ export async function authorize(
         reason: `Site is in REPORT_ONLY mode — no autonomous mutations allowed`,
         failedGate: "operating_mode",
       };
+    }
+
+    // ── Gate 1.5: Hourly Rate Limit ──────────────────────────────────────
+    // Environment-driven backstop: limits total proposals created per hour
+    // for this site, independent of the per-site dailyMutationLimit.
+    const maxPerHour = autonomousConfig.maxProposalsPerHour;
+    if (maxPerHour > 0) {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const recentCount = await (prisma as any).actionProposal.count({
+        where: {
+          siteId: req.siteId,
+          createdAt: { gte: oneHourAgo },
+        },
+      });
+
+      if (recentCount >= maxPerHour) {
+        logger.info("[PolicyGate] Hourly rate limit reached", {
+          siteId: req.siteId,
+          recentCount,
+          maxPerHour,
+        });
+        return {
+          authorized: false,
+          action: "BLOCKED",
+          reason: `Hourly proposal rate limit reached (${recentCount}/${maxPerHour})`,
+          failedGate: "rate_limit",
+        };
+      }
     }
 
     // ── Gate 2: Effective Tier Limit ──────────────────────────────────────

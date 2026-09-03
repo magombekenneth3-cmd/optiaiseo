@@ -59,7 +59,6 @@ const SAFETY_LABELS: Record<number, { label: string; color: string }> = {
   1: { label: "LOW",      color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
   2: { label: "MEDIUM",   color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
   3: { label: "HIGH",     color: "text-orange-400 bg-orange-500/10 border-orange-500/20" },
-  4: { label: "CRITICAL", color: "text-rose-400 bg-rose-500/10 border-rose-500/20" },
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -88,12 +87,10 @@ export function ProposalCard({
   proposal,
   isSelected,
   onClick,
-  animationDelay = 0,
 }: {
   proposal: ProposalSummary;
   isSelected: boolean;
   onClick: () => void;
-  animationDelay?: number;
 }) {
   const statusCfg = STATUS_CONFIG[proposal.status] ?? STATUS_CONFIG.DRAFT;
   const StatusIcon = statusCfg.icon;
@@ -104,13 +101,11 @@ export function ProposalCard({
     <button
       onClick={onClick}
       className={`
-        w-full text-left card-surface p-4 transition-all duration-200
-        hover:border-brand/25 hover:shadow-[0_4px_20px_rgba(16,185,129,0.06)]
+        w-full text-left card-surface p-4 transition-colors
+        hover:border-foreground/10
         ${statusCfg.border}
-        ${isSelected ? "border-brand/40 ring-1 ring-brand/20 shadow-[0_4px_20px_rgba(16,185,129,0.08)]" : ""}
-        fade-in-up
+        ${isSelected ? "border-brand/40 ring-1 ring-brand/20" : ""}
       `}
-      style={{ animationDelay: `${animationDelay}ms` }}
       aria-pressed={isSelected}
     >
       {/* Top row: action type + time */}
@@ -151,16 +146,16 @@ export function ProposalCard({
               T{proposal.safetyTier ?? 1}
             </span>
 
-            {/* AI Enhanced / Deterministic badge */}
+            {/* AI Enhanced / Deterministic — small provenance badge */}
             {proposal.isAiEnhanced ? (
-              <span className="ai-badge">
-                <Sparkles className="w-2.5 h-2.5" />
-                AI Enhanced
+              <span className="inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-violet-500/8 text-violet-400/70 border border-violet-500/15">
+                <Sparkles className="w-2 h-2" />
+                AI
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted/50 text-muted-foreground border border-border">
-                <Settings2 className="w-2.5 h-2.5" />
-                Deterministic
+              <span className="inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-muted/40 text-muted-foreground/50 border border-border/50">
+                <Settings2 className="w-2 h-2" />
+                Template
               </span>
             )}
           </div>
