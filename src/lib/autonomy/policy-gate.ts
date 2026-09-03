@@ -140,7 +140,7 @@ export async function authorize(
     }
 
     // ── Gate 1: Operating Mode ────────────────────────────────────────────
-    const site = await (prisma as any).site.findUnique({
+    const site = await prisma.site.findUnique({
       where: { id: req.siteId },
       select: {
         operatingMode: true,
@@ -173,7 +173,7 @@ export async function authorize(
     const maxPerHour = autonomousConfig.maxProposalsPerHour;
     if (maxPerHour > 0) {
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      const recentCount = await (prisma as any).actionProposal.count({
+      const recentCount = await prisma.actionProposal.count({
         where: {
           siteId: req.siteId,
           createdAt: { gte: oneHourAgo },
