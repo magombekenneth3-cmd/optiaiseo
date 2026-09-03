@@ -38,10 +38,11 @@ function getSiteOrigin(): URL {
 }
 const SITE_ORIGIN = getSiteOrigin();
 
+
 // ── Updated: aligned with H1 theme (ChatGPT citation / AI visibility) ──────
-const SITE_TITLE = "OptiAISEO: AI SEO for ChatGPT Citation & Visibility";
+const SITE_TITLE = "OptiAISEO: Fix ChatGPT Citation Gaps | AI SEO Platform";
 const SITE_DESC =
-  "Boost your online presence and ensure your brand is cited by ChatGPT. OptiAISEO is an AI SEO platform designed to fix visibility issues and improve search rankings.";
+  "OptiAISEO helps your site get cited by AI like ChatGPT. Our AI SEO platform identifies and fixes citation gaps, ensuring your content is recognized. Start your free trial.";
 
 export const metadata: Metadata = {
   metadataBase: SITE_ORIGIN,
