@@ -14,7 +14,8 @@ interface Props {
     aeoChecksThisMonth: number;
     keywordsTracked: number;
     prsThisMonth: number;
-    creditsRemaining: number;
+    creditsUsed: number;
+    creditsBalance: number;
     creditLimit: number;
 }
 
@@ -33,11 +34,12 @@ export function CreditValueSummary({
     aeoChecksThisMonth,
     keywordsTracked,
     prsThisMonth,
-    creditsRemaining,
+    creditsUsed,
+    creditsBalance,
     creditLimit,
 }: Props) {
     const usedPct = creditLimit > 0
-        ? Math.min(100, Math.round(((creditLimit - creditsRemaining) / creditLimit) * 100))
+        ? Math.min(100, Math.round((creditsUsed / creditLimit) * 100))
         : 0;
 
     const items: CreditSummaryItem[] = [
@@ -95,7 +97,7 @@ export function CreditValueSummary({
                     href="/dashboard/billing"
                     className="text-xs text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
                 >
-                    {creditsRemaining} left
+                    {creditsBalance} left
                 </Link>
             </div>
 
@@ -127,7 +129,7 @@ export function CreditValueSummary({
             {/* Credit bar */}
             <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between text-[10px] text-muted-foreground font-medium">
-                    <span>{creditLimit - creditsRemaining} credits used</span>
+                    <span>{creditsUsed} credits used</span>
                     <span>{usedPct}% of {creditLimit}</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-border overflow-hidden">

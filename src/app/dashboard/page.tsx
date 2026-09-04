@@ -6,17 +6,10 @@ import {
   GitBranch,
   FileText,
   ArrowRight,
-  Zap,
   AlertCircle,
-  Sparkles,
-  Mic,
-  Search,
-  Target,
-  Info,
   MonitorSmartphone,
 } from "lucide-react";
 import { MetricCard } from "@/components/dashboard/MetricCard";
-import { AuditChart } from "@/components/dashboard/AuditChart";
 import { extractAuditMetrics } from "@/lib/audit/helpers";
 import { getCachedDashboardMetricsForUser } from "@/lib/cache/dashboard";
 import { OnboardingInline } from "@/components/dashboard/OnboardingInline";
@@ -310,6 +303,7 @@ export default async function DashboardPage() {
   const auditCreditsUsed   = creditHistoryThisMonth.filter((h) => h.action.includes("audit")).length;
   const blogCreditsUsed    = creditHistoryThisMonth.filter((h) => h.action.includes("blog")).length;
   const aeoCreditsUsed     = creditHistoryThisMonth.filter((h) => h.action.includes("aeo")).length;
+  const creditsUsedThisMonth = creditHistoryThisMonth.reduce((sum, h) => sum + h.cost, 0);
 
   // Organic traffic delta (latest - previous snapshot)
   const organicTrafficDelta =
@@ -330,7 +324,7 @@ export default async function DashboardPage() {
       <DashboardHeroHeader
         domain={primarySiteDomain ?? user.sites[0]?.domain ?? ""}
         lastAuditDate={audits[0] ? new Date(audits[0].runTimestamp).toLocaleDateString() : null}
-        seoScore={avgSeoScore}
+        seoScore={latestScore ?? 0}
         aeoScore={aeoScore}
         clicksDeltaPct={organicTrafficDelta !== null ? Math.round(organicTrafficDelta) : null}
         rankDelta={rankWin ? rankWin.delta : null}
@@ -368,23 +362,7 @@ export default async function DashboardPage() {
         />
       )}
 
-      {/* ── GitHub auto-fix nudge (shown when onboarding done + no repo linked) ── */}
-      {onboardingDone && hasSites && !primarySiteHasGithub && (
-        <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-zinc-700/40 bg-zinc-800/20">
-          <GitBranch className="w-4 h-4 text-zinc-400 mt-0.5 shrink-0" />
-          <div className="flex-1 text-sm text-zinc-400">
-            <span className="font-semibold text-zinc-200">Enable AI auto-fix PRs</span> — connect a GitHub repo so the AI can open nightly pull requests with generated SEO fixes, ready for your review.
-          </div>
-          {primarySiteId && (
-            <Link
-              href={`/dashboard/sites/${primarySiteId}`}
-              className="shrink-0 text-xs font-semibold text-zinc-300 border border-zinc-600 px-3 py-1.5 rounded-lg hover:bg-zinc-700/50 transition-colors whitespace-nowrap"
-            >
-              Connect GitHub
-            </Link>
-          )}
-        </div>
-      )}
+
 
       {/* ── Win celebration (client — shows once per win) ─────────────────── */}
       {rankWin && (
@@ -405,104 +383,8 @@ export default async function DashboardPage() {
           topIssue={topIssueLabel ?? undefined}
         />
       )}
-      {/* ── Hero Welcome ──────────────────────────────────────────────── */}
-      <div className="fade-in-up flex flex-col gap-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              {statusHeadline}
-            </h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              {isNewUser
-                ? "Let's get your first site up and running."
-                : `You're managing ${siteIds.length} site${siteIds.length !== 1 ? "s" : ""}. Here's your overview.`}
-            </p>
-          </div>
-          {!isNewUser && (
-            <Link
-              href="/dashboard/audits"
-              className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-500 text-white font-semibold rounded-xl text-sm transition-all hover:bg-emerald-600"
-            >
-              <ArrowRight className="w-4 h-4" />
-              View All Audits
-            </Link>
-          )}
-        </div>
-
-        {/* Inline onboarding wizard — only shown to new users with no sites */}
-        {isNewUser && <OnboardingInline />}
-      </div>
-
-      {/* ── Insight of the Day (Spotlight) ─────────────────────── */}
-      {!isNewUser && hasAudits && (() => {
-        let insightTitle = "All clear";
-        let insightDesc = "Your sites are healthy. Keep publishing great content.";
-        let insightCta = "Write a post";
-        let insightHref = "/dashboard/blogs";
-        let color = "emerald";
-
-        if (pendingPrsCount > 0) {
-          insightTitle = "Technical Debt Alert";
-          insightDesc = `You have ${pendingPrsCount} critical SEO issues that can be automatically fixed via our one-click PR integration.`;
-          insightCta = "Review Fixes";
-          insightHref = "/dashboard/audits";
-          color = "rose";
-        } else if (aeoScore < 50 && aeoScore > 0) {
-          insightTitle = "Low AI Brand Recognition";
-          insightDesc = "Your Generative Share of Voice is below industry average. AI engines like ChatGPT do not confidently answer queries about your brand.";
-          insightCta = "View Details";
-          insightHref = "/dashboard/aeo";
-          color = "amber";
-        } else if (blogsThisWeek === 0) {
-          insightTitle = "Content Velocity Dropping";
-          insightDesc = "Search and AI engines favor fresh content. You haven't generated any new articles this week.";
-          insightCta = "Generate Content";
-          insightHref = "/dashboard/blogs";
-          color = "blue";
-        } else {
-          // All checks pass — show contextual growth prompt for engaged users
-          const growthPrompts = [
-            { title: "Your site health is strong", desc: "Target a competitor keyword cluster you're not ranking for to find your next growth opportunity.", cta: "Research Keywords →", href: "/dashboard/keywords" },
-            { title: "Content published this week", desc: "Analyse your top competitor's content strategy to find your next angle.", cta: "View Keywords →", href: "/dashboard/keywords" },
-            { title: "AEO score is solid", desc: "Run a fresh audit to catch any new technical issues before they compound.", cta: "Run Audit →", href: "/dashboard/audits" },
-          ];
-          const insightIndex = (parseInt(user.id.replace(/\D/g, "").slice(-4) || "0", 10) + new Date().getDate()) % growthPrompts.length;
-          const prompt = growthPrompts[insightIndex];
-          insightTitle = prompt.title;
-          insightDesc = prompt.desc;
-          insightCta = prompt.cta;
-          insightHref = prompt.href;
-          color = "emerald";
-        }
-
-        const colorClasses = {
-          emerald: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 border-l-4 border-l-emerald-500",
-          rose: "bg-rose-500/10 border-rose-500/20 text-rose-400 border-l-4 border-l-rose-500 shadow-[0_4px_24px_-8px_rgba(239,68,68,0.15)]",
-          amber: "bg-amber-500/10 border-amber-500/20 text-amber-500 border-l-4 border-l-amber-500 shadow-[0_4px_24px_-8px_rgba(245,158,11,0.15)]",
-          blue: "bg-blue-500/10 border-blue-500/20 text-blue-400 border-l-4 border-l-blue-500",
-        };
-
-        return (
-          <div className={`fade-in-up w-full p-5 rounded-r-2xl border-y border-r ${colorClasses[color as keyof typeof colorClasses]} mb-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 transition-all hover:translate-x-1`}>
-            <div className="flex gap-4 items-start">
-              <div className={`mt-1 p-2.5 rounded-xl bg-background border border-current shrink-0 shadow-sm`}>
-                <Sparkles className="w-5 h-5 opacity-90" />
-              </div>
-              <div>
-                <div className={`text-xs items-center flex gap-1.5 font-bold uppercase tracking-widest opacity-70 mb-1.5`}>
-                  <div className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                  Insight of the Day
-                </div>
-                <h3 className="text-xl font-bold text-foreground mb-1 tracking-tight">{insightTitle}</h3>
-                <p className="text-sm opacity-80 max-w-xl leading-relaxed">{insightDesc}</p>
-              </div>
-            </div>
-            <Link href={insightHref} className={`shrink-0 w-full md:w-auto text-center px-6 py-3 font-extrabold text-xs rounded-xl bg-foreground text-background shadow-md hover:scale-105 active:scale-95 transition-all`}>
-              {insightCta} &rarr;
-            </Link>
-          </div>
-        );
-      })()}
+      {/* Inline onboarding wizard — only shown to new users with no sites */}
+      {isNewUser && <OnboardingInline />}
 
 
       {/* ── Quick Win Card ─────────────────────────────────────────── */}
@@ -668,107 +550,10 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* ── Next Steps — Contextual Action Guide ─────────────────────── */}
-      {(() => {
-        type NextStep = { icon: React.ElementType; title: string; desc: string; href: string; cta: string; color: string; bg: string; };
-        const steps: NextStep[] = [];
-        if (!hasSites) {
-          steps.push({ icon: Zap, title: "Add your first domain", desc: "Connect a website to unlock SEO audits, AEO tracking, and AI blog generation.", href: "/dashboard/sites/new", cta: "Add Site →", color: "text-emerald-400", bg: "border-emerald-500/20 bg-emerald-500/5" });
-        }
-        if (hasSites && !hasAudits) {
-          steps.push({ icon: AlertCircle, title: "Your first audit is being prepared", desc: "We've queued your first scan automatically. Check the audits page for progress — usually ready in under 60 seconds.", href: "/dashboard/audits", cta: "Check Audit Progress →", color: "text-amber-400", bg: "border-amber-500/20 bg-amber-500/5" });
-        }
-        const hasErrors = audits.some((a) => {
-          type AuditRec = { priority: string };
-          type AuditIssue = { severity?: string };
-          type AuditIssueList = AuditIssue[] | { recommendations?: AuditRec[] };
-          const list = a.issueList as AuditIssueList;
-          return Array.isArray(list)
-            ? list.some((i) => i.severity === "error")
-            : Array.isArray((list as { recommendations?: AuditRec[] }).recommendations) &&
-            (list as { recommendations: AuditRec[] }).recommendations.some((r) => r.priority === "High");
-        });
-        if (hasSites && hasAudits && hasErrors) {
-          steps.push({ icon: Target, title: "Fix critical SEO issues", desc: "Your latest audit found high-priority issues. Review and apply one-click fixes.", href: `/dashboard/audits/${audits[0]?.id || ""}`, cta: "Fix Issues →", color: "text-red-400", bg: "border-red-500/20 bg-red-500/5" });
-        }
-        if (hasSites && blogsThisWeek === 0) {
-          steps.push({ icon: FileText, title: "Generate your first blog post", desc: "AI-generated, SEO-optimised content with humanization pass for <35% AI detection score.", href: "/dashboard/blogs", cta: "Create Post →", color: "text-purple-400", bg: "border-purple-500/20 bg-purple-500/5" });
-        }
-        if (aeoScore === 0 && hasSites) {
-          steps.push({ icon: Search, title: "Check your AEO visibility", desc: "See how Gemini, ChatGPT, and Perplexity answer questions about your site.", href: "/dashboard/aeo", cta: "Run AEO Scan →", color: "text-blue-400", bg: "border-blue-500/20 bg-blue-500/5" });
-        }
-        const shown = steps.slice(0, 3);
-        if (shown.length === 0) return null;
-        return (
-          <div className="fade-in-up fade-in-up-2">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-              Your Next Steps
-            </h3>
-            <div className={`grid gap-3 ${shown.length === 1 ? "grid-cols-1" :
-                shown.length === 2 ? "grid-cols-2" :
-                  "grid-cols-1 sm:grid-cols-3"
-              }`}>
-              {shown.map((step, i) => (
-                <Link key={i} href={step.href} className={`flex flex-col gap-3 p-4 rounded-xl border ${step.bg} transition-all hover:-translate-y-0.5 group`}>
-                  <div className="flex items-center gap-2">
-                    <div className={`w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0`}>
-                      <step.icon className={`w-4 h-4 ${step.color}`} />
-                    </div>
-                    <span className={`text-xs font-bold uppercase tracking-wider ${step.color}`}>
-                      Step {i + 1}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{step.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{step.desc}</p>
-                  </div>
-                  <span className={`text-xs font-bold ${step.color}`}>{step.cta}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
 
-      {/* ── Charts + Pending ──────────────────────────────────────────── */}
+
+      {/* ── Pending Approvals + Credits ────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in-up fade-in-up-3">
-        {/* Chart */}
-        <div className="lg:col-span-2 card-surface p-4 md:p-6 flex flex-col min-h-[180px] md:min-h-[380px]">
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-base font-semibold">SEO Score Trend</h3>
-            <span className="text-xs font-medium text-muted-foreground px-2 py-0.5 bg-muted/40 rounded-full border border-border">
-              Last 14 audits
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground mb-5">
-            Average score across all domains over time
-          </p>
-          <div className="flex-1 w-full min-h-0">
-            {chartData.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center gap-3 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-muted/40 border border-border flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    No audit data yet
-                  </p>
-                  <p className="text-xs text-muted-foreground/60 mt-0.5">
-                    Your score trend will appear here after your first audit.
-                  </p>
-                </div>
-                <Link
-                  href="/dashboard/audits"
-                  className="text-xs text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1"
-                >
-                  Run your first audit <ArrowRight className="w-3 h-3" />
-                </Link>
-              </div>
-            ) : (
-              <AuditChart data={chartData} />
-            )}
-          </div>
-        </div>
 
         {/* Pending Approvals */}
         <div className="card-surface p-6 flex flex-col">
@@ -846,7 +631,8 @@ export default async function DashboardPage() {
             aeoChecksThisMonth={aeoCreditsUsed}
             keywordsTracked={hasTrackedKeywords ? 1 : 0}
             prsThisMonth={prsCreatedThisMonth}
-            creditsRemaining={user.credits}
+            creditsUsed={creditsUsedThisMonth}
+            creditsBalance={user.credits}
             creditLimit={160}
           />
         )}
@@ -908,34 +694,10 @@ export default async function DashboardPage() {
           ))}
         </div>
 
-        {/* ── Ask AI Assistant CTA ───────────────────────────────────────────── */}
-        <Link
-          href="/dashboard/voice"
-          className="mt-5 flex items-center gap-4 p-5 rounded-xl border border-border bg-card hover:border-indigo-500/30 hover:bg-accent transition-all duration-200 group"
-        >
-          <div className="w-9 h-9 rounded-lg bg-accent border border-border flex items-center justify-center shrink-0">
-            <Sparkles className="w-5 h-5 text-foreground" />
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-bold text-foreground">
-              Ask the AI Assistant — Your AI SEO Copilot
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Speak or type to audit, research keywords, analyze competitors &
-              more
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="flex items-center gap-1 text-xs font-bold text-indigo-400 uppercase tracking-widest px-2 py-1 rounded-md bg-indigo-500/15 border border-indigo-500/20">
-              <Mic className="w-3 h-3" /> Live
-            </span>
-            <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-indigo-400 transition-colors" />
-          </div>
-        </Link>
       </div>
 
       {/* ── 2.1: 6-Month Metric Trend Chart ─────────────────────────────── */}
-      {metricTrend.length > 0 && (
+      {(metricTrend.length > 0 || chartData.length > 0) && (
         <MetricTrendChart
           data={metricTrend.map(m => ({
             capturedAt: m.capturedAt.toISOString(),
@@ -945,6 +707,7 @@ export default async function DashboardPage() {
             schemaScore: m.schemaScore,
             organicTraffic: m.organicTraffic,
           }))}
+          auditData={chartData}
           className="fade-in-up"
         />
       )}
