@@ -664,3 +664,95 @@ export const cronDailyExperimentEval = inngest.createFunction(
     },
 );
 
+// ────────────────────────────────────────────────────────────────────────────
+// D.6: Weekly Learning Loop — aggregates experiment outcomes into learned signals
+// Runs every Sunday at 06:00 UTC — after experiment evaluation cron
+// ────────────────────────────────────────────────────────────────────────────
+
+export const cronWeeklyLearningLoop = inngest.createFunction(
+    {
+        id: "cron-weekly-learning-loop",
+        name: "Cron: Weekly D.6 Learning Loop",
+        retries: 1,
+        triggers: [{ cron: "0 6 * * 0" }],
+    },
+    async ({ step }) => {
+        const { aggregateOutcomesByAction } = await import("@/lib/learning/aggregator");
+        const { generateSignals } = await import("@/lib/learning/signal-generator");
+        const { validateSignal } = await import("@/lib/learning/signal-validator");
+        const { persistAndActivateSignal, persistActionPerformance } = await import("@/lib/learning/signal-registry");
+
+        // 1. Get all sites with D.5 experiments
+        const sites = await step.run("fetch-sites-with-experiments", async () => {
+            try {
+                const rows = await (prisma as any).experiment.findMany({
+                    where: { outcome: { not: null } },
+                    select: { siteId: true },
+                    distinct: ["siteId"],
+                });
+                return rows.map((r: any) => r.siteId as string);
+            } catch {
+                return [];
+            }
+        });
+
+        if (sites.length === 0) {
+            logger.info("[CronLearningLoop] No sites with D.5 experiments");
+            return { sites: 0, signals: 0 };
+        }
+
+        // 2. Process each site
+        let totalSignals = 0;
+
+        for (const siteId of sites) {
+            const result = await step.run(`learn-site-${siteId}`, async () => {
+                let siteSignals = 0;
+
+                try {
+                    // Aggregate outcomes by action type
+                    const aggregations = await aggregateOutcomesByAction(siteId);
+
+                    for (const agg of aggregations) {
+                        // Persist performance snapshot
+                        await persistActionPerformance(agg);
+
+                        // Generate signals
+                        const signals = generateSignals(agg);
+
+                        for (const signal of signals) {
+                            // Validate before activation
+                            const validation = validateSignal(signal, agg);
+                            if (validation.valid) {
+                                await persistAndActivateSignal(siteId, signal);
+                                siteSignals++;
+                            } else {
+                                logger.warn("[CronLearningLoop] Signal failed validation", {
+                                    siteId,
+                                    actionType: signal.actionType,
+                                    signalType: signal.signalType,
+                                    violations: validation.violations,
+                                });
+                            }
+                        }
+                    }
+                } catch (err: unknown) {
+                    logger.error("[CronLearningLoop] Failed to process site", {
+                        siteId,
+                        error: (err as Error)?.message,
+                    });
+                }
+
+                return siteSignals;
+            });
+
+            totalSignals += result;
+        }
+
+        logger.info("[CronLearningLoop] Learning loop complete", {
+            sites: sites.length,
+            totalSignals,
+        });
+
+        return { sites: sites.length, signals: totalSignals };
+    },
+);

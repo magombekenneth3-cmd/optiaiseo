@@ -24,6 +24,7 @@ import type {
 } from "./types";
 import { DEFAULT_WEIGHTS } from "./types";
 import { FRESHNESS_POLICIES } from "@/lib/discovery/freshness";
+import type { LearnedSignalMap } from "@/lib/learning/signal-registry";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -59,15 +60,22 @@ const ACTION_RISK: Record<string, number> = {
 
 /**
  * Computes all score components for a candidate.
+ *
+ * @param signals — Optional D.6 learned signals. When provided, risk and
+ *                  confidence scores receive additive adjustments from ACTIVE
+ *                  signals. When omitted, behavior is identical to pre-D.6.
  */
-export function computeScoreComponents(input: ScoringInput): ScoreComponents {
+export function computeScoreComponents(
+  input: ScoringInput,
+  signals?: LearnedSignalMap
+): ScoreComponents {
   return {
     impactScore: clamp(computeImpactScore(input)),
-    confidenceScore: clamp(computeConfidenceScore(input)),
+    confidenceScore: clamp(computeConfidenceScore(input, signals)),
     evidenceScore: clamp(computeEvidenceScore(input)),
     urgencyScore: clamp(computeUrgencyScore(input)),
     effortScore: clamp(computeEffortScore(input)),
-    riskScore: clamp(computeRiskScore(input)),
+    riskScore: clamp(computeRiskScore(input, signals)),
   };
 }
 
@@ -136,8 +144,11 @@ function computeImpactScore(input: ScoringInput): number {
  *
  * NOT discoveryConfidence (that's "does the condition exist?").
  * This is "if we act, will we get the expected result?"
+ *
+ * D.6: If a CONFIDENCE_ADJUSTMENT signal exists for this action type,
+ * it is applied as an additive adjustment (positive or negative).
  */
-function computeConfidenceScore(input: ScoringInput): number {
+function computeConfidenceScore(input: ScoringInput, signals?: LearnedSignalMap): number {
   let score = 30; // Base
 
   // Multi-source evidence increases confidence
@@ -159,6 +170,12 @@ function computeConfidenceScore(input: ScoringInput): number {
     (e) => e.metric && ["position", "impressions", "clicks", "ctr"].includes(e.metric)
   );
   if (hasQuantitative) score += 10;
+
+  // D.6: Apply learned confidence adjustment
+  const confSignal = signals?.get(`CONFIDENCE_ADJUSTMENT:${input.action}`);
+  if (confSignal) {
+    score += confSignal.adjustment;
+  }
 
   return score;
 }
@@ -237,8 +254,12 @@ function computeEffortScore(input: ScoringInput): number {
 
 /**
  * Risk: Downside / uncertainty.
+ *
+ * D.6: If a RISK_ADJUSTMENT signal exists for this action type,
+ * it is applied as an additive adjustment (positive increases risk,
+ * negative decreases risk).
  */
-function computeRiskScore(input: ScoringInput): number {
+function computeRiskScore(input: ScoringInput, signals?: LearnedSignalMap): number {
   let score = ACTION_RISK[input.action] ?? 30;
 
   // Higher traffic pages = higher risk (more to lose)
@@ -248,6 +269,12 @@ function computeRiskScore(input: ScoringInput): number {
 
   // Low evidence = higher risk
   if (input.evidenceItems.length <= 1) score += 15;
+
+  // D.6: Apply learned risk adjustment
+  const riskSignal = signals?.get(`RISK_ADJUSTMENT:${input.action}`);
+  if (riskSignal) {
+    score += riskSignal.adjustment;
+  }
 
   return score;
 }

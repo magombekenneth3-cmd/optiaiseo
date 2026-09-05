@@ -16,6 +16,7 @@ import { hashScoringEvidence } from "./evidence-fencing";
 import { promoteCandidateToOpen } from "./promoter";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import { getActiveSignalsMap } from "@/lib/learning/signal-registry";
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -38,8 +39,17 @@ export async function scoreCandidate(
   // 2. Hash evidence at scoring time
   const evidenceHash = hashScoringEvidence(input);
 
-  // 3. Compute score components
-  const components = computeScoreComponents(input);
+  // 2b. D.6: Load learned signals for this site
+  let signals;
+  try {
+    signals = await getActiveSignalsMap(input.siteId);
+  } catch {
+    // Non-critical — score without signals if registry unavailable
+    signals = undefined;
+  }
+
+  // 3. Compute score components (with optional D.6 signal adjustments)
+  const components = computeScoreComponents(input, signals);
 
   // 4. Calculate final score
   const finalScore = calculateFinalScore(components, DEFAULT_WEIGHTS);

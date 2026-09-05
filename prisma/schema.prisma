@@ -265,6 +265,8 @@ model Site {
   agentRuns               AgentRun[]
   ga4DailyPerformance     Ga4DailyPerformance[]
   actionProposals         ActionProposal[]
+  actionPerformances      ActionPerformance[]
+  learnedSignals          LearnedSignal[]
 
   ga4PropertyId String?
 
@@ -2283,4 +2285,70 @@ model ExecutionTrace {
   @@index([operationId])
   @@index([verificationStatus])
   @@index([parentTraceId])
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// D.6: Learning Loop — ActionPerformance + LearnedSignal
+// ────────────────────────────────────────────────────────────────────────────
+
+model ActionPerformance {
+  id                String   @id @default(cuid())
+  siteId            String
+  actionType        String
+
+  // Aggregated outcomes
+  totalExperiments  Int
+  wins              Int
+  losses            Int
+  inconclusive      Int
+  aborted           Int
+  winRate           Float    // wins / (wins + losses)
+
+  // Metric averages (across WIN/LOSS only)
+  avgPositionDelta  Float?
+  avgClicksLift     Float?
+  avgCtrLift        Float?
+  avgConfidence     Float?
+
+  // Version
+  computedAt        DateTime @default(now())
+  computedVersion   String   @default("d6-v1")
+  experimentCount   Int      // Snapshot of how many experiments contributed
+
+  site              Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, actionType])
+  @@index([siteId])
+}
+
+model LearnedSignal {
+  id                String   @id @default(cuid())
+  siteId            String
+  signalType        String   // RISK_ADJUSTMENT | CONFIDENCE_ADJUSTMENT | EFFORT_ADJUSTMENT
+  actionType        String
+
+  // Signal value
+  adjustment        Float    // Positive = increase, negative = decrease
+  magnitude         String   // MINOR | MODERATE | MAJOR
+
+  // Provenance
+  derivedFrom       Int      // Number of experiments backing this signal
+  winRate           Float    // Win rate at time of derivation
+  reason            String   // Human-readable explanation
+
+  // Lifecycle: PROPOSED → ACTIVE → SUPERSEDED | REVOKED
+  status            String   @default("PROPOSED")
+  version           Int      @default(1)
+  activatedAt       DateTime?
+  supersededAt      DateTime?
+  supersededBy      String?  // ID of the signal that replaced this one
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  site              Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, signalType, actionType, status])
+  @@index([siteId, status])
+  @@index([siteId, actionType])
 }
