@@ -49,19 +49,31 @@ function buildHref(base: string, siteId: string | null): string {
     return base;
 }
 
-const NAV_ITEMS = [
+/* ── Grouped nav items ─────────────────────────────────────────────────────── */
+const OVERVIEW_ITEMS = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true, contextSiteId: false },
-    { name: "My Sites", href: "/dashboard/sites", icon: Globe, exact: false, contextSiteId: false },
+];
+
+const OPTIMIZE_ITEMS = [
     { name: "SEO Audits", href: "/dashboard/audits", icon: ClipboardList, exact: false, contextSiteId: true },
     { name: "Keywords", href: "/dashboard/keywords", icon: TrendingUp, exact: false, contextSiteId: true },
     { name: "Competitors", href: "/dashboard/competitors", icon: Crosshair, exact: false, contextSiteId: true },
+];
+
+const AI_SEARCH_ITEMS = [
     { name: "AI Visibility", href: "/dashboard/aeo", icon: MonitorSmartphone, exact: true, contextSiteId: true },
-    { name: "Citation History", href: "/dashboard/aeo/proofs", icon: History, exact: false, contextSiteId: true, indent: true },
-    { name: "Wikidata Entity", href: "/dashboard/aeo/entity", icon: Globe, exact: false, contextSiteId: true, indent: true },
-    { name: "Operations", href: "/dashboard/operations", icon: Activity, exact: false, contextSiteId: true },
-    { name: "Autopilot", href: "/dashboard/autopilot", icon: Bot, exact: false, contextSiteId: true },
+    { name: "Citation History", href: "/dashboard/aeo/proofs", icon: History, exact: false, contextSiteId: true },
+    { name: "Wikidata Entity", href: "/dashboard/aeo/entity", icon: Globe, exact: false, contextSiteId: true },
+];
+
+const CONTENT_ITEMS = [
     { name: "AI Content", href: "/dashboard/blogs", icon: FileText, exact: false, contextSiteId: false },
     { name: "Programmatic SEO", href: "/dashboard/pseo", icon: Zap, exact: false, contextSiteId: false },
+];
+
+const AUTOMATION_ITEMS = [
+    { name: "Autopilot", href: "/dashboard/autopilot", icon: Bot, exact: false, contextSiteId: true },
+    { name: "Operations", href: "/dashboard/operations", icon: Activity, exact: false, contextSiteId: true },
 ];
 
 const ACCOUNT_ITEMS = [
@@ -69,7 +81,12 @@ const ACCOUNT_ITEMS = [
     { name: "Refer & Earn",href: "/dashboard/referral", icon: Gift,        exact: false, contextSiteId: false },
     { name: "Settings",    href: "/dashboard/settings", icon: Settings,    exact: false, contextSiteId: false },
     { name: "API & Docs",  href: "/api-docs",            icon: Code,        exact: false, contextSiteId: false },
-    { name: "Talk to Aria",href: "/dashboard/voice",    icon: Mic,         exact: false, contextSiteId: false },
+];
+
+/* Items moved to collapsed "More" section */
+const MORE_NAV_ITEMS = [
+    { name: "My Sites", href: "/dashboard/sites", icon: Globe, exact: false, contextSiteId: false },
+    { name: "Talk to Aria", href: "/dashboard/voice", icon: Mic, exact: false, contextSiteId: false },
 ];
 
 const SECONDARY_ITEMS = [
@@ -86,6 +103,9 @@ const SECONDARY_ITEMS = [
     { name: "Auto-Heal Log", href: "/dashboard/healing", icon: Zap, contextSiteId: true, group: "technical" },
     { name: "Team", href: "/dashboard/team", icon: Users, contextSiteId: false, group: "strategy" },
 ];
+
+/* Flat list used for collapsed-sidebar icon rendering and active-route detection */
+const ALL_PRIMARY_ITEMS = [...OVERVIEW_ITEMS, ...OPTIMIZE_ITEMS, ...AI_SEARCH_ITEMS, ...CONTENT_ITEMS, ...AUTOMATION_ITEMS, ...MORE_NAV_ITEMS];
 
 interface Site { id: string; domain: string; grade?: string | null; }
 
@@ -376,94 +396,83 @@ function SidebarNavInner({
                 <SitePickerDropdown sites={sites} activeSiteId={siteId} />
             )}
 
-            {/* Primary nav — grouped */}
-            <div className={`space-y-0.5 ${isCollapsed ? "flex flex-col items-center" : ""}`}>
-                {/* Top-level items */}
-                {NAV_ITEMS.filter(i => i.name === "Dashboard" || i.name === "My Sites").map((item) => {
+            {/* ── OVERVIEW ─────────────────────────────────────── */}
+            {!isCollapsed && <NavSectionLabel>Overview</NavSectionLabel>}
+            <div className={isCollapsed ? "flex flex-col items-center" : ""}>
+                {OVERVIEW_ITEMS.map((item) => {
                     const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
-                    const isActive = item.exact
-                        ? pathname === item.href
-                        : pathname === item.href || pathname.startsWith(item.href + "/");
-                    const missingContext = item.contextSiteId && !siteId;
+                    const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
                     return (
-                        <NavLink
-                            key={item.name}
-                            item={item}
-                            href={href}
-                            isActive={isActive}
-                            missingContext={!!missingContext}
-                            isCollapsed={isCollapsed}
-                        />
-                    );
-                })}
-
-                {/* OPTIMIZE group */}
-                {!isCollapsed && <NavSectionLabel>OPTIMIZE</NavSectionLabel>}
-                {NAV_ITEMS.filter(i => {
-                    const baseMatch = ["SEO Audits", "Keywords", "Competitors", "AI Visibility", "Operations", "Autopilot"].includes(i.name);
-                    if (isCollapsed) return baseMatch;
-                    return baseMatch || ["Citation History", "Wikidata Entity"].includes(i.name);
-                }).map((item) => {
-                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
-                    const isActive = item.href === "/dashboard/aeo"
-                        ? (pathname === "/dashboard/aeo" || /\/dashboard\/sites\/[^/]+\/aeo/.test(pathname))
-                        : item.exact
-                            ? pathname === item.href
-                            : pathname === item.href || pathname.startsWith(item.href + "/");
-                    const missingContext = item.contextSiteId && !siteId;
-                    return (
-                        <NavLink
-                            key={item.name}
-                            item={item}
-                            href={href}
-                            isActive={isActive}
-                            missingContext={!!missingContext}
-                            isCollapsed={isCollapsed}
-                        />
-                    );
-                })}
-
-                {/* Content group */}
-                {!isCollapsed && <NavSectionLabel>Content</NavSectionLabel>}
-                {NAV_ITEMS.filter(i => i.name === "AI Content" || i.name === "Programmatic SEO").map((item) => {
-                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
-                    const isActive = item.exact
-                        ? pathname === item.href
-                        : pathname === item.href || pathname.startsWith(item.href + "/");
-                    const missingContext = item.contextSiteId && !siteId;
-                    return (
-                        <NavLink
-                            key={item.name}
-                            item={item}
-                            href={href}
-                            isActive={isActive}
-                            missingContext={!!missingContext}
-                            isCollapsed={isCollapsed}
-                        />
+                        <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={false} isCollapsed={isCollapsed} />
                     );
                 })}
             </div>
 
-            {/* More tools — collapsible; icon-only in collapsed sidebar */}
+            {/* ── OPTIMIZE ─────────────────────────────────────── */}
+            {!isCollapsed && <NavSectionLabel>Optimize</NavSectionLabel>}
+            <div className={isCollapsed ? "flex flex-col items-center" : ""}>
+                {OPTIMIZE_ITEMS.map((item) => {
+                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
+                    const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
+                    const missingContext = item.contextSiteId && !siteId;
+                    return (
+                        <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed={isCollapsed} />
+                    );
+                })}
+            </div>
+
+            {/* ── AI SEARCH ────────────────────────────────────── */}
+            {!isCollapsed && <NavSectionLabel>AI Search</NavSectionLabel>}
+            <div className={isCollapsed ? "flex flex-col items-center" : ""}>
+                {AI_SEARCH_ITEMS.map((item) => {
+                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
+                    const isActive = item.href === "/dashboard/aeo"
+                        ? (pathname === "/dashboard/aeo" || /\/dashboard\/sites\/[^/]+\/aeo/.test(pathname))
+                        : item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
+                    const missingContext = item.contextSiteId && !siteId;
+                    return (
+                        <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed={isCollapsed} />
+                    );
+                })}
+            </div>
+
+            {/* ── CONTENT ──────────────────────────────────────── */}
+            {!isCollapsed && <NavSectionLabel>Content</NavSectionLabel>}
+            <div className={isCollapsed ? "flex flex-col items-center" : ""}>
+                {CONTENT_ITEMS.map((item) => {
+                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
+                    const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
+                    const missingContext = item.contextSiteId && !siteId;
+                    return (
+                        <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed={isCollapsed} />
+                    );
+                })}
+            </div>
+
+            {/* ── AUTOMATION ───────────────────────────────────── */}
+            {!isCollapsed && <NavSectionLabel>Automation</NavSectionLabel>}
+            <div className={isCollapsed ? "flex flex-col items-center" : ""}>
+                {AUTOMATION_ITEMS.map((item) => {
+                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
+                    const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
+                    const missingContext = item.contextSiteId && !siteId;
+                    return (
+                        <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed={isCollapsed} />
+                    );
+                })}
+            </div>
+
+            {/* ── MORE (collapsible) ───────────────────────────── */}
             {isCollapsed ? (
-                /* In collapsed sidebar: show each tool icon individually with tooltip */
                 <div className="pt-1 flex flex-col items-center space-y-0.5">
-                    {moreOpen && SECONDARY_ITEMS.map((item) => {
+                    {moreOpen && [...MORE_NAV_ITEMS, ...SECONDARY_ITEMS].map((item) => {
                         const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
                         const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                         const missingContext = item.contextSiteId && !siteId;
                         return (
-                            <NavLink
-                                key={item.name}
-                                item={item}
-                                href={href}
-                                isActive={isActive}
-                                missingContext={!!missingContext}
-                                isCollapsed
-                            />
+                            <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed />
                         );
                     })}
-                    {/* Collapsed more-tools toggle */}
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger
@@ -471,54 +480,48 @@ function SidebarNavInner({
                                 aria-expanded={moreOpen}
                                 className="p-2 rounded-lg text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors"
                             >
-                                <ChevronDown
-                                    className={`w-4 h-4 transition-transform duration-200 ${moreOpen ? "rotate-180" : ""}`}
-                                    aria-hidden="true"
-                                />
+                                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${moreOpen ? "rotate-180" : ""}`} aria-hidden="true" />
                             </TooltipTrigger>
-                            <TooltipContent side="right" className="text-xs">{moreOpen ? "Hide tools" : "More tools"}</TooltipContent>
+                            <TooltipContent side="right" className="text-xs">{moreOpen ? "Hide more" : "More"}</TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
                 </div>
             ) : (
-                /* Expanded: full collapsible group */
                 <div className="pt-1">
                     <button
                         onClick={() => setMoreOpen(o => !o)}
                         aria-expanded={moreOpen}
                         aria-controls="more-tools-list"
-                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground/60 hover:bg-sidebar-accent hover:text-foreground transition-all"
+                        className="w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium text-muted-foreground/60 hover:bg-sidebar-accent hover:text-foreground transition-all"
                     >
-                        <ChevronDown
-                            className={`w-3.5 h-3.5 transition-transform duration-200 ${moreOpen ? "rotate-180" : ""}`}
-                            aria-hidden="true"
-                        />
-                        <span className="text-xs font-semibold tracking-wide uppercase">More tools</span>
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${moreOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+                        <span className="text-xs font-semibold tracking-wide uppercase">More</span>
                         {isSecondaryActive && (
                             <span className="ml-auto w-1.5 h-1.5 rounded-full bg-brand shrink-0" aria-hidden="true" />
                         )}
                     </button>
 
                     {moreOpen && (
-                        <div id="more-tools-list" className="space-y-0.5 mt-0.5 pl-2">
+                        <div id="more-tools-list" className="space-y-0.5 mt-0.5">
+                            {MORE_NAV_ITEMS.map((item) => {
+                                const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
+                                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                                return (
+                                    <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={false} />
+                                );
+                            })}
                             {(["strategy", "content", "technical"] as const).map(group => {
                                 const groupItems = SECONDARY_ITEMS.filter(i => i.group === group);
                                 const groupLabel = group === "strategy" ? "Strategy" : group === "content" ? "Content" : "Technical";
                                 return (
                                     <div key={group}>
-                                        <p className="px-3 pt-2.5 pb-0.5 text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest select-none">{groupLabel}</p>
+                                        <p className="px-3 pt-3 pb-0.5 text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest select-none">{groupLabel}</p>
                                         {groupItems.map((item) => {
                                             const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
                                             const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                                             const missingContext = item.contextSiteId && !siteId;
                                             return (
-                                                <NavLink
-                                                    key={item.name}
-                                                    item={item}
-                                                    href={href}
-                                                    isActive={isActive}
-                                                    missingContext={!!missingContext}
-                                                />
+                                                <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} />
                                             );
                                         })}
                                     </div>
@@ -529,7 +532,7 @@ function SidebarNavInner({
                 </div>
             )}
 
-            {/* Account section */}
+            {/* ── Account ──────────────────────────────────────── */}
             {!isCollapsed && (
                 <div className="pt-1">
                     <NavSectionLabel>Account</NavSectionLabel>
@@ -537,13 +540,7 @@ function SidebarNavInner({
                         {ACCOUNT_ITEMS.map((item) => {
                             const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                             return (
-                                <NavLink
-                                    key={item.name}
-                                    item={item}
-                                    href={item.href}
-                                    isActive={isActive}
-                                    missingContext={false}
-                                />
+                                <NavLink key={item.name} item={item} href={item.href} isActive={isActive} missingContext={false} />
                             );
                         })}
                     </div>
@@ -554,14 +551,7 @@ function SidebarNavInner({
                     {ACCOUNT_ITEMS.map((item) => {
                         const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                         return (
-                            <NavLink
-                                key={item.name}
-                                item={item}
-                                href={item.href}
-                                isActive={isActive}
-                                missingContext={false}
-                                isCollapsed
-                            />
+                            <NavLink key={item.name} item={item} href={item.href} isActive={isActive} missingContext={false} isCollapsed />
                         );
                     })}
                 </div>
@@ -573,7 +563,7 @@ function SidebarNavInner({
                     <NavSectionLabel>Admin</NavSectionLabel>
                     <Link
                         href="/admin"
-                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all relative ${pathname.startsWith("/admin")
+                        className={`flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-all relative ${pathname.startsWith("/admin")
                                 ? "bg-violet-500/10 text-violet-300"
                                 : "text-violet-400/60 hover:bg-violet-500/10 hover:text-violet-300"
                             }`}

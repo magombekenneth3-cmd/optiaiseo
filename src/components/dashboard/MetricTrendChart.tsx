@@ -30,24 +30,18 @@ interface AuditDataPoint {
 type MetricKey = "overallScore" | "aeoScore" | "coreWebVitals" | "schemaScore" | "organicTraffic";
 type TabKey = MetricKey | "auditTrend";
 
-const METRICS: { key: MetricKey; label: string; color: string; unit?: string }[] = [
-    { key: "overallScore",   label: "SEO Score",       color: "#10b981" },
-    { key: "aeoScore",       label: "AEO Score",       color: "#6366f1" },
-    { key: "coreWebVitals",  label: "Core Web Vitals", color: "#f59e0b" },
-    { key: "schemaScore",    label: "Schema Score",    color: "#8b5cf6" },
-    { key: "organicTraffic", label: "Organic Traffic", color: "#06b6d4", unit: "clicks" },
+const TABS: { key: TabKey; label: string; color: string; unit?: string; metricKey?: MetricKey }[] = [
+    { key: "overallScore",   label: "SEO Score",       color: "#10b981", metricKey: "overallScore" },
+    { key: "aeoScore",       label: "AEO Visibility",  color: "#6366f1", metricKey: "aeoScore" },
+    { key: "organicTraffic", label: "Organic Traffic",  color: "#06b6d4", unit: "clicks", metricKey: "organicTraffic" },
+    { key: "auditTrend",     label: "Rankings",         color: "#f59e0b" },
 ];
-
-const AUDIT_TAB = { key: "auditTrend" as const, label: "Last 14 Audits", color: "#10b981" };
 
 function formatDate(iso: string) {
     const d = new Date(iso);
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-/**
- * Deduplicate date labels: if "Aug 24" appears twice, the second becomes "Aug 24 (2)".
- */
 function deduplicateDates(dates: string[]): string[] {
     const counts = new Map<string, number>();
     return dates.map((d) => {
@@ -88,14 +82,12 @@ export function MetricTrendChart({ data, auditData, className = "" }: MetricTren
 
     const isAuditTab = activeTab === "auditTrend";
 
-    // Build chart data for the active tab
     let chartData: { date: string; value: number | null }[];
     let activeColor: string;
     let activeUnit: string | undefined;
     let first: number | null;
     let last: number | null;
     let headerLabel: string;
-    let pointCount: number;
 
     if (isAuditTab && hasAuditData) {
         const rawDates = auditData!.map(d => d.name);
@@ -104,26 +96,25 @@ export function MetricTrendChart({ data, auditData, className = "" }: MetricTren
             date: dedupedDates[i],
             value: d.score,
         }));
-        activeColor = AUDIT_TAB.color;
+        activeColor = TABS.find(t => t.key === "auditTrend")!.color;
         activeUnit = undefined;
         first = auditData![0]?.score ?? null;
         last = auditData![auditData!.length - 1]?.score ?? null;
-        headerLabel = "Last 14 Audits";
-        pointCount = auditData!.length;
+        headerLabel = "SEO Performance";
     } else {
-        const metric = METRICS.find(m => m.key === activeTab)!;
+        const tab = TABS.find(t => t.key === activeTab)!;
+        const metricKey = tab.metricKey ?? "overallScore";
         const rawDates = data.map(d => formatDate(d.capturedAt));
         const dedupedDates = deduplicateDates(rawDates);
         chartData = data.map((d, i) => ({
             date: dedupedDates[i],
-            value: d[activeTab as MetricKey] ?? null,
+            value: d[metricKey] ?? null,
         }));
-        activeColor = metric.color;
-        activeUnit = metric.unit;
-        first = data[0]?.[activeTab as MetricKey] ?? null;
-        last = data[data.length - 1]?.[activeTab as MetricKey] ?? null;
-        headerLabel = "6-Month Trend";
-        pointCount = data.length;
+        activeColor = tab.color;
+        activeUnit = tab.unit;
+        first = data[0]?.[metricKey] ?? null;
+        last = data[data.length - 1]?.[metricKey] ?? null;
+        headerLabel = "SEO Performance";
     }
 
     const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) => {
@@ -138,23 +129,14 @@ export function MetricTrendChart({ data, auditData, className = "" }: MetricTren
         );
     };
 
-    // Build tabs list: metrics + optional audit tab
-    const allTabs: { key: TabKey; label: string; color: string }[] = [
-        ...METRICS,
-        ...(hasAuditData ? [AUDIT_TAB] : []),
-    ];
-
     return (
-        <div className={`card-elevated p-5 ${className}`}>
+        <div className={`border border-border rounded-[10px] bg-card p-5 ${className}`}>
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 min-w-0">
-                <div>
-                    <h3 className="text-sm font-semibold text-foreground">{headerLabel}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">{pointCount} data points</p>
-                </div>
+                <h3 className="text-[13px] font-semibold text-foreground">{headerLabel}</h3>
                 <div className="flex items-center gap-1.5">
                     {last != null && (
-                        <span className="text-lg font-bold" style={{ color: activeColor }}>
+                        <span className="text-lg font-bold tabular-nums" style={{ color: activeColor }}>
                             {last.toFixed(0)}{activeUnit ? " " + activeUnit : ""}
                         </span>
                     )}
@@ -162,35 +144,40 @@ export function MetricTrendChart({ data, auditData, className = "" }: MetricTren
                 </div>
             </div>
 
-            {/* Metric selector tabs */}
-            <div className="flex gap-1.5 flex-wrap mb-4">
-                {allTabs.map(m => (
+            {/* Tab selector — underline style */}
+            <div className="flex gap-4 mb-4 border-b border-border">
+                {TABS.map(t => (
                     <button
-                        key={m.key}
-                        onClick={() => setActiveTab(m.key)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors ${
-                            activeTab === m.key
-                                ? "text-background font-semibold"
-                                : "text-muted-foreground hover:text-foreground bg-accent/40 hover:bg-accent"
+                        key={t.key}
+                        onClick={() => setActiveTab(t.key)}
+                        className={`pb-2 text-xs font-medium transition-colors relative ${
+                            activeTab === t.key
+                                ? "text-foreground"
+                                : "text-muted-foreground hover:text-foreground"
                         }`}
-                        style={activeTab === m.key ? { background: m.color } : {}}
                     >
-                        {m.label}
+                        {t.label}
+                        {activeTab === t.key && (
+                            <span
+                                className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full"
+                                style={{ background: t.color }}
+                            />
+                        )}
                     </button>
                 ))}
             </div>
 
             {/* Chart */}
-            <div style={{ height: 'clamp(200px, 40vw, 320px)' }}>
+            <div style={{ height: 'clamp(180px, 35vw, 280px)' }}>
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                         <defs>
                             <linearGradient id={`gradient-${activeTab}`} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%"  stopColor={activeColor} stopOpacity={0.2} />
+                                <stop offset="5%"  stopColor={activeColor} stopOpacity={0.15} />
                                 <stop offset="95%" stopColor={activeColor} stopOpacity={0}   />
                             </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
                         <XAxis
                             dataKey="date"
                             tick={{ fill: "#6b7280", fontSize: 10 }}

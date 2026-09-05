@@ -61,24 +61,24 @@
 
 /* ── Dark mode ─────────────────────────────────────────────────────────────── */
 .dark {
-  --background: #0a0a0c;
+  --background: #09090b;
   --foreground: #f4f4f5;
-  --card: #111113;
+  --card: #0f0f12;
   --card-foreground: #f4f4f5;
-  --popover: #18181b;
+  --popover: #16161a;
   --popover-foreground: #f4f4f5;
   --primary: #f4f4f5;
   --primary-foreground: #09090b;
-  --secondary: #27272a;
+  --secondary: #1c1c20;
   --secondary-foreground: #f4f4f5;
-  --muted: #1c1c1f;
+  --muted: #151518;
   --muted-foreground: #a1a1aa;
-  --accent: #1e1e21;
+  --accent: #1a1a1e;
   --accent-foreground: #f4f4f5;
   --destructive: #f87171;
   --destructive-foreground: #09090b;
-  --border: rgba(255, 255, 255, 0.07);
-  --input: rgba(255, 255, 255, 0.07);
+  --border: rgba(255, 255, 255, 0.06);
+  --input: rgba(255, 255, 255, 0.06);
   --ring: #10b981;
 
   /* Brand & Status */
@@ -91,13 +91,13 @@
   --info: #60a5fa;
 
   /* Sidebar */
-  --sidebar: #111113;
+  --sidebar: #0c0c0e;
   --sidebar-foreground: #f4f4f5;
   --sidebar-primary: #f4f4f5;
   --sidebar-primary-foreground: #09090b;
-  --sidebar-accent: #1a1a1e;
+  --sidebar-accent: #161619;
   --sidebar-accent-foreground: #f4f4f5;
-  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-border: rgba(255, 255, 255, 0.05);
   --sidebar-ring: #52525b;
 }
 
@@ -232,62 +232,50 @@
 .card-surface {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) * 1.4);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 10px;
+  transition: border-color 0.2s ease;
 }
 
 .card-elevated {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) * 1.4);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.dark .card-elevated {
-  box-shadow: 0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
+  border-radius: 10px;
+  transition: border-color 0.2s ease;
 }
 
 .card-surface:hover,
 .card-elevated:hover {
-  border-color: rgba(0, 0, 0, 0.20);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  border-color: rgba(0, 0, 0, 0.16);
 }
 .dark .card-surface:hover,
 .dark .card-elevated:hover {
-  border-color: rgba(255, 255, 255, 0.11);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+  border-color: rgba(255, 255, 255, 0.10);
 }
 
-/* Metric card — stat blocks with lift-on-hover */
+/* Metric card — stat blocks, subtle border hover only */
 .metric-card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) * 1.4);
-  padding: 1.25rem 1.5rem;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 0.875rem;
-  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  gap: 0.5rem;
+  transition: border-color 0.2s ease;
 }
 .metric-card:hover {
-  border-color: rgba(16, 185, 129, 0.28);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.10);
-}
-.dark .metric-card:hover {
-  box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+  border-color: rgba(16, 185, 129, 0.22);
 }
 
 /* Skeleton placeholder for metric cards */
 .metric-card-skeleton {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) * 1.4);
-  padding: 1.25rem 1.5rem;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 0.875rem;
+  gap: 0.5rem;
 }
 
 /* ── Button system ─────────────────────────────────────────────────────────── */
