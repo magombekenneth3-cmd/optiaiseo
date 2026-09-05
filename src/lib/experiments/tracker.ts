@@ -1,3 +1,17 @@
+/**
+ * Legacy Experiment Tracker (pre-D.5)
+ *
+ * This module handles experiments in the old before/after format:
+ *   status: RECORDED → EVALUATING → COMPLETED | INSUFFICIENT_DATA
+ *
+ * D.5 experiments use a different lifecycle (DRAFT → RUNNING → COMPLETED | ABORTED)
+ * and are handled by the evaluator.ts module.
+ *
+ * Both formats coexist in the same Experiment table. The schema keeps all
+ * legacy fields (decisionId, targetUrl, baseline, lift, etc.) as optional
+ * columns for backward compatibility.
+ */
+
 import { logger } from "@/lib/logger";
 import { getRedis } from "@/lib/redis"; // write-through cache only
 import { prisma } from "@/lib/prisma";

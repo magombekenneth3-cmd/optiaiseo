@@ -520,8 +520,71 @@ export const cronWeeklyGrowthPipeline = inngest.createFunction(
 
 
 // ────────────────────────────────────────────────────────────────────────────
+// D.5: Experiment Measurement — daily GSC metric collection for running experiments
+// Runs daily at 04:30 UTC — before evaluation cron at 05:00 UTC
+// ────────────────────────────────────────────────────────────────────────────
+
+export const cronDailyExperimentMeasurement = inngest.createFunction(
+    {
+        id: "cron-daily-experiment-measurement",
+        name: "Cron: Daily Experiment Measurement",
+        retries: 1,
+        triggers: [{ cron: "30 4 * * *" }],
+    },
+    async ({ step }) => {
+        const { measureRunningExperiments } = await import("@/lib/experiments/measurement");
+
+        const results = await step.run("measure-running-experiments", async () => {
+            try {
+                return await measureRunningExperiments();
+            } catch (err: unknown) {
+                logger.error("[CronExperimentMeasurement] Measurement failed", {
+                    error: (err as Error)?.message,
+                });
+                return [];
+            }
+        });
+
+        logger.info(`[CronExperimentMeasurement] Recorded ${results.length} measurements`);
+        return { measured: results.length };
+    },
+);
+
+// ────────────────────────────────────────────────────────────────────────────
+// D.5: Experiment Safety Enforcement — auto-abort experiments with violations
+// Runs daily at 04:45 UTC — after measurement, before evaluation
+// ────────────────────────────────────────────────────────────────────────────
+
+export const cronDailyExperimentSafety = inngest.createFunction(
+    {
+        id: "cron-daily-experiment-safety",
+        name: "Cron: Daily Experiment Safety Enforcement",
+        retries: 1,
+        triggers: [{ cron: "45 4 * * *" }],
+    },
+    async ({ step }) => {
+        const { enforceSafetyOnAllExperiments } = await import("@/lib/experiments/safety");
+
+        const result = await step.run("enforce-experiment-safety", async () => {
+            try {
+                return await enforceSafetyOnAllExperiments();
+            } catch (err: unknown) {
+                logger.error("[CronExperimentSafety] Safety enforcement failed", {
+                    error: (err as Error)?.message,
+                });
+                return { checked: 0, aborted: 0 };
+            }
+        });
+
+        logger.info("[CronExperimentSafety] Safety enforcement complete", result);
+        return result;
+    },
+);
+
+// ────────────────────────────────────────────────────────────────────────────
 // Experiment Auto-Evaluation: daily scan for mature experiments
 // Runs daily at 05:00 UTC — queries PostgreSQL (source of truth)
+// Handles both legacy (tracker.ts) and D.5 (evaluator.ts) experiment formats
 // ────────────────────────────────────────────────────────────────────────────
 
 export const cronDailyExperimentEval = inngest.createFunction(
@@ -533,7 +596,9 @@ export const cronDailyExperimentEval = inngest.createFunction(
     },
     async ({ step }) => {
         const { evaluate28DayExperimentLift } = await import("@/lib/experiments/tracker");
+        const { evaluateMaturedExperiments } = await import("@/lib/experiments/evaluator");
 
+        // 1. Legacy experiments (status: RECORDED/EVALUATING with evaluationDate)
         const readyExperiments = await step.run("fetch-mature-experiments", async () => {
             try {
                 const rows = await (prisma as any).experiment.findMany({
@@ -550,33 +615,52 @@ export const cronDailyExperimentEval = inngest.createFunction(
             }
         });
 
-        if (readyExperiments.length === 0) {
-            logger.info("[CronExperimentEval] No mature experiments to evaluate");
-            return { evaluated: 0 };
+        let legacyEvaluated = 0;
+
+        if (readyExperiments.length > 0) {
+            await step.run("evaluate-legacy-experiments", async () => {
+                for (const expId of readyExperiments) {
+                    try {
+                        const result = await evaluate28DayExperimentLift(expId);
+                        if (result.status === "COMPLETED") legacyEvaluated++;
+                        logger.info("[CronExperimentEval] Evaluated legacy experiment", {
+                            expId,
+                            status: result.status,
+                            positionDelta: result.lift?.positionDelta,
+                        });
+                    } catch (err: unknown) {
+                        logger.warn("[CronExperimentEval] Failed to evaluate legacy", {
+                            expId,
+                            error: (err as Error)?.message,
+                        });
+                    }
+                }
+            });
         }
 
-        let evaluated = 0;
-
-        await step.run("evaluate-experiments", async () => {
-            for (const expId of readyExperiments) {
-                try {
-                    const result = await evaluate28DayExperimentLift(expId);
-                    if (result.status === "COMPLETED") evaluated++;
-                    logger.info("[CronExperimentEval] Evaluated experiment", {
-                        expId,
-                        status: result.status,
-                        positionDelta: result.lift?.positionDelta,
-                    });
-                } catch (err: unknown) {
-                    logger.warn("[CronExperimentEval] Failed to evaluate", {
-                        expId,
-                        error: (err as Error)?.message,
-                    });
-                }
+        // 2. D.5 experiments (status: RUNNING with endsAt past)
+        const d5Result = await step.run("evaluate-d5-experiments", async () => {
+            try {
+                return await evaluateMaturedExperiments();
+            } catch (err: unknown) {
+                logger.warn("[CronExperimentEval] D.5 evaluation failed", {
+                    error: (err as Error)?.message,
+                });
+                return { evaluated: 0, outcomes: { WIN: 0, LOSS: 0, INCONCLUSIVE: 0, ABORTED: 0 } };
             }
         });
 
-        logger.info(`[CronExperimentEval] Auto-evaluated ${evaluated}/${readyExperiments.length} experiments`);
-        return { evaluated, total: readyExperiments.length };
+        logger.info("[CronExperimentEval] Evaluation complete", {
+            legacyEvaluated,
+            legacyTotal: readyExperiments.length,
+            d5Evaluated: d5Result.evaluated,
+            d5Outcomes: d5Result.outcomes,
+        });
+
+        return {
+            legacy: { evaluated: legacyEvaluated, total: readyExperiments.length },
+            d5: d5Result,
+        };
     },
 );
+

@@ -12,6 +12,7 @@
 //     → executeOperation()
 //     → registerEffect()
 //     → Capture result
+//     → Link experiment variant (D.5)
 //     → Schedule verification
 //
 // Agents never directly mutate production resources.
@@ -259,6 +260,36 @@ export async function runAction(
         status: "EXECUTED",
       },
     });
+
+    // 10b. D.5: Link operation to experiment variant (if applicable)
+    try {
+      const experimentVariant = await (prisma as any).experimentVariant.findUnique({
+        where: { proposalId: input.proposalId },
+        select: { id: true, experimentId: true },
+      });
+
+      if (experimentVariant) {
+        await (prisma as any).experimentVariant.update({
+          where: { id: experimentVariant.id },
+          data: {
+            operationId: operation.id,
+            executedAt: new Date(),
+          },
+        });
+
+        logger.info("[ActionRunner] Linked operation to experiment variant", {
+          proposalId: input.proposalId,
+          experimentId: experimentVariant.experimentId,
+          operationId: operation.id,
+        });
+      }
+    } catch (expErr) {
+      // Non-critical — experiment linkage failure does not block execution
+      logger.warn("[ActionRunner] Failed to link experiment variant", {
+        proposalId: input.proposalId,
+        error: (expErr as Error)?.message,
+      });
+    }
 
     // 11. Register side effects (best-effort)
     try {

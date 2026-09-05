@@ -1,3 +1,11 @@
+/**
+ * Cross-Experiment Insights
+ *
+ * Reads from both legacy (tracker.ts) and D.5 (evaluator.ts) experiment formats.
+ * Legacy: Experiment rows with status COMPLETED and lift JSON
+ * D.5:    Experiment rows with outcome WIN/LOSS/INCONCLUSIVE and ExperimentVariant metrics
+ */
+
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 

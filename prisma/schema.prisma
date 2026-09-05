@@ -1430,24 +1430,115 @@ model OpportunityScoreRecord {
 }
 
 model Experiment {
-  id             String   @id
-  decisionId     String   @unique
-  siteId         String
-  targetUrl      String
-  actionExecuted String
-  executedAt     DateTime
-  evaluationDate DateTime
-  status         String   @default("RECORDED") // RECORDED | EVALUATING | COMPLETED | INSUFFICIENT_DATA
-  baseline       Json
-  lift           Json?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  siteId               String
+  opportunityId        String
 
-  site     Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  decision GrowthDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  // Hypothesis
+  hypothesis           String   @db.Text
+  successMetric        String   // "position_delta" | "clicks_lift" | "ctr_lift" | "impressions_lift"
+  successThreshold     Float    // e.g. 5.0 (position improvement) or 10.0 (% lift)
 
+  // Lifecycle: DRAFT → RUNNING → COMPLETED | ABORTED | PAUSED
+  status               String   @default("DRAFT")
+  statusReason         String?
+
+  // Immutable config (set at creation, never modified)
+  configVersion        String   @default("d5-v1")
+  configHash           String   // sha256 of canonical config — immutability proof
+  maxDurationDays      Int      @default(28)
+  maxMutationCount     Int      @default(1)
+  maxBudgetUnits       Int      @default(1)
+
+  // Timing
+  startedAt            DateTime?
+  endsAt               DateTime?  // startedAt + maxDurationDays
+  completedAt          DateTime?
+
+  // Outcome (populated on completion)
+  outcome              String?   // WIN | LOSS | INCONCLUSIVE | ABORTED
+  outcomeConfidence    Float?    // 0.0-1.0
+  outcomeDetails       Json?
+
+  // Legacy compat: old tracker fields (populated for backward compat)
+  decisionId           String?   @unique  // Links to GrowthDecision (optional for new experiments)
+  targetUrl            String?
+  actionExecuted       String?
+  executedAt           DateTime?
+  evaluationDate       DateTime?
+  baseline             Json?
+  lift                 Json?
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  site                 Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  decision             GrowthDecision? @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  variants             ExperimentVariant[]
+  measurements         ExperimentMeasurement[]
+
+  @@unique([siteId, opportunityId])
   @@index([siteId, status])
+  @@index([siteId, outcome])
+  @@index([endsAt, status])
   @@index([evaluationDate, status])
+}
+
+model ExperimentVariant {
+  id                   String   @id @default(cuid())
+  experimentId         String
+  variantKey           String   // "control" | "treatment_a" | "treatment_b"
+  isControl            Boolean  @default(false)
+
+  // Target
+  targetUrl            String
+  targetKeyword        String?
+  actionType           String?  // null for control
+  actionParameters     Json?    // null for control
+
+  // Deterministic assignment hash: sha256(experimentId + variantKey + targetUrl)
+  assignmentHash       String
+  assignedAt           DateTime @default(now())
+
+  // Execution link (null for control)
+  proposalId           String?  @unique
+  operationId          String?  @unique
+  executedAt           DateTime?
+
+  // Baseline snapshot (captured at experiment start)
+  baselineMetrics      Json?    // { position, clicks, impressions, ctr }
+  baselineWindow       String?  // "2025-08-01:2025-08-28"
+
+  // Post metrics (captured at evaluation)
+  postMetrics          Json?
+  postWindow           String?
+
+  experiment           Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+
+  @@unique([experimentId, variantKey])
+  @@index([experimentId])
+  @@index([proposalId])
+}
+
+model ExperimentMeasurement {
+  id                   String   @id @default(cuid())
+  experimentId         String
+  variantKey           String
+  measurementDay       Int      // Day number since experiment start (0, 7, 14, 21, 28)
+
+  // Metrics
+  position             Float?
+  clicks               Int?
+  impressions          Int?
+  ctr                  Float?
+  indexedStatus        Boolean?
+
+  measuredAt           DateTime @default(now())
+
+  experiment           Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+
+  @@unique([experimentId, variantKey, measurementDay])
+  @@index([experimentId, measuredAt])
 }
 
 model SerpGapAnalysis {
