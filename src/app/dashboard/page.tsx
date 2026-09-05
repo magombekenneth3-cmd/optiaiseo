@@ -100,75 +100,14 @@ export default async function DashboardPage() {
     statusHeadline = `All sites healthy — last audit ${new Date(audits[0].runTimestamp).toLocaleDateString()}`;
   }
 
-  // Free-tier audit usage (limit = 5/month)
-  const FREE_AUDIT_LIMIT = 5;
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
-  const auditsThisMonth = audits.filter(a => new Date(a.runTimestamp) >= startOfMonth).length;
-
-  // Evaluated top-to-bottom; the first matching branch wins. Every combination
-  // of (sites, audits, score) is covered explicitly — no catch-all fallback
-  // that could incorrectly show "connect your first domain" to existing users.
-  const dashState: DashboardState = (() => {
-    if (siteIds.length === 0) return "no_site";            // no sites yet
-    if (audits.length === 0) return "no_audit";            // site exists, no audits yet
-    if (latestScore !== null && latestScore >= 90 && pendingPrsCount === 0)
-      return "all_done";                                    // perfect score, nothing pending
-    return "audit_complete";                               // has site + audits (± pending PRs)
-  })();
 
   const primarySiteId = user.sites[0]?.id ?? null;
   const metricTrend = primarySiteId
     ? await getMetricTrend(primarySiteId, 6).catch(() => [])
     : [];
-  const benchmarkContext = primarySiteId
-    ? await getSiteBenchmarkContext(primarySiteId).catch(() => null)
-    : null;
-  const leaderboardPosition = primarySiteId
-    ? await getSiteLeaderboardPosition(primarySiteId).catch(() => null)
-    : null;
-
-  let uptimeCardData: UptimeCardData | null = null;
-  if (primarySiteId) {
-    try {
-      const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const uptimeAlerts = await prisma.uptimeAlert.findMany({
-        where: { siteId: primarySiteId, createdAt: { gte: since7d } },
-        orderBy: { createdAt: "asc" },
-        select: { createdAt: true, resolvedAt: true, durationMs: true },
-      });
-
-      // Build a 7-bucket daily map (today = index 6)
-      const weekHistory: boolean[] = Array(7).fill(true);
-      const now = Date.now();
-      for (const alert of uptimeAlerts) {
-        const daysAgo = Math.floor((now - new Date(alert.createdAt).getTime()) / 86400000);
-        const idx = 6 - Math.min(daysAgo, 6);
-        weekHistory[idx] = false;
-      }
-
-      const totalChecks = Math.max(1, Math.round(7 * 24 * 60 / 5)); // 5-min intervals
-      const downtimeEvents = uptimeAlerts.length;
-      const uptimePct = Math.max(0, Math.min(100, ((totalChecks - downtimeEvents) / totalChecks) * 100));
-
-      const currentlyDown = uptimeAlerts.some(
-        (a) => !a.resolvedAt && (now - new Date(a.createdAt).getTime()) < 10 * 60 * 1000
-      );
-
-      const lastDown = uptimeAlerts.at(-1);
-
-      uptimeCardData = {
-        uptimePct: parseFloat(uptimePct.toFixed(1)),
-        avgResponseMs: null, // stored in durationMs on the check, not the alert
-        isDown: currentlyDown,
-        lastDownAt: lastDown ? new Date(lastDown.createdAt).toISOString() : null,
-        weekHistory,
-      };
-    } catch {
-      // Non-critical — silently skip
-    }
-  }
 
   type IssueItem = { status: string; label?: string; title?: string };
   type IssueCategory = { items?: IssueItem[] };
