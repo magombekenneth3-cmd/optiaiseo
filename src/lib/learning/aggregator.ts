@@ -40,12 +40,17 @@ export async function aggregateOutcomesByAction(
   siteId: string,
   decayPolicy: DecayPolicy = DEFAULT_DECAY_POLICY
 ): Promise<ActionOutcomeAggregation[]> {
-  // ── 1. Load all D.5 experiments with variants ─────────────────────────
+  // ── 1. Load all COMPLETED D.5 experiments with valid outcomes ────────
+  //
+  // Gate 1 contract: Only experiments with status === "COMPLETED" are
+  // eligible for learning aggregation.  We also require outcome ∈
+  // {WIN, LOSS, INCONCLUSIVE, ABORTED} to exclude legacy rows or
+  // future states that might populate outcome before completion.
   const experiments = await (prisma as any).experiment.findMany({
     where: {
       siteId,
-      // D.5 experiments have an outcome field; legacy experiments do not
-      outcome: { not: null },
+      status: "COMPLETED",
+      outcome: { in: ["WIN", "LOSS", "INCONCLUSIVE", "ABORTED"] },
     },
     select: {
       id: true,

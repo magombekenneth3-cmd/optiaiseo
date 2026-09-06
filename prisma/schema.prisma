@@ -2348,7 +2348,15 @@ model LearnedSignal {
 
   site              Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
-  @@unique([siteId, signalType, actionType, status])
+  // Uniqueness for ACTIVE signals is enforced by:
+  //   1. PostgreSQL partial unique index: learned_signal_one_active
+  //      ON "LearnedSignal" ("siteId", "signalType", "actionType") WHERE "status" = 'ACTIVE'
+  //   2. Transactional fencing in persistAndActivateSignal (supersedes existing ACTIVE)
+  //
+  // We do NOT use @@unique([siteId, signalType, actionType, status]) because
+  // that would limit history to one SUPERSEDED, one REVOKED, etc. per key.
+
   @@index([siteId, status])
   @@index([siteId, actionType])
+  @@index([siteId, signalType, actionType])
 }
