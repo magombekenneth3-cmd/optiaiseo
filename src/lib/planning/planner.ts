@@ -118,15 +118,15 @@ export async function loadPlanningInput(
     },
     scoreRecord: scoreRecord
       ? {
-          id: scoreRecord.id,
-          finalScore: scoreRecord.finalScore,
-          decision: scoreRecord.decision,
-          evidenceHash: scoreRecord.evidenceHash,
-          scoringVersion: scoreRecord.scoringVersion,
-          impactScore: scoreRecord.impactScore,
-          confidenceScore: scoreRecord.confidenceScore,
-          urgencyScore: scoreRecord.urgencyScore,
-        }
+        id: scoreRecord.id,
+        finalScore: scoreRecord.finalScore,
+        decision: scoreRecord.decision,
+        evidenceHash: scoreRecord.evidenceHash,
+        scoringVersion: scoreRecord.scoringVersion,
+        impactScore: scoreRecord.impactScore,
+        confidenceScore: scoreRecord.confidenceScore,
+        urgencyScore: scoreRecord.urgencyScore,
+      }
       : null,
     evidence,
     site: {

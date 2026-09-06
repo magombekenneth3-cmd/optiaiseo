@@ -267,6 +267,7 @@ model Site {
   actionProposals         ActionProposal[]
   actionPerformances      ActionPerformance[]
   learnedSignals          LearnedSignal[]
+  portfolioAllocations    PortfolioAllocation[]
 
   ga4PropertyId String?
 
@@ -1373,6 +1374,7 @@ model GrowthDecision {
   sourceFindings OpportunityFinding[]
   proposals      ActionProposal[]
   scoreRecords   OpportunityScoreRecord[]
+  portfolioAllocations PortfolioAllocation[]
 
   // D.1: Discovery provenance (summary metadata — not source of truth)
   // Source of truth for multi-source provenance is:
@@ -1422,6 +1424,9 @@ model OpportunityScoreRecord {
 
   // Weights used (for reproducibility)
   weightsUsed          Json     // { impact: 0.30, confidence: 0.20, ... }
+
+  // D.6 learning provenance — which learning version influenced this score
+  learningVersion      String?  // e.g. "d6-v1" or null if scored before D.6
 
   scoredAt             DateTime @default(now())
 
@@ -2359,4 +2364,46 @@ model LearnedSignal {
   @@index([siteId, status])
   @@index([siteId, actionType])
   @@index([siteId, signalType, actionType])
+}
+
+// Phase D.7: Durable portfolio allocation record
+// Answers: "Why did the system choose opportunity A instead of B?"
+//
+// D.7 produces SELECTED / DEFERRED / EXCLUDED decisions.
+// D.3 reads SELECTED allocations.
+// Phase C remains the authority for budget, concurrency, and claims.
+model PortfolioAllocation {
+  id                 String   @id @default(cuid())
+  siteId             String
+  opportunityId      String
+
+  cycleId            String      // Deterministic: "d7-{siteId}-{YYYYMMDD}"
+  optimizerVersion   String      // "d7-v1"
+
+  decision           String      // SELECTED | DEFERRED | EXCLUDED
+  rank               Int?        // 1-indexed rank within selected
+  utilityScore       Float?
+
+  reasonCodes        Json        // ["SCORE_THRESHOLD", "RESOURCE_CONFLICT", ...]
+
+  // Provenance — binds to exact D.2 evaluation
+  scoreRecordId      String
+  evidenceHash       String
+  learningVersion    String?     // D.6 version that influenced the D.2 score
+
+  // Fencing
+  constraintSnapshot Json        // Full PortfolioConstraints used
+  candidateSnapshot  Json        // AllocationCandidate at decision time
+
+  experimentPreference String?   // EXPERIMENT_PREFERRED | STANDARD_PREFERRED | NOT_EXPERIMENT_ELIGIBLE
+
+  allocatedAt        DateTime    @default(now())
+  expiresAt          DateTime    // Allocation validity window
+
+  site               Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  opportunity        GrowthDecision @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, opportunityId])
+  @@index([siteId, decision, expiresAt])
+  @@index([siteId, cycleId])
 }

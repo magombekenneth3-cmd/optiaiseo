@@ -17,6 +17,7 @@ import { promoteCandidateToOpen } from "./promoter";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { getActiveSignalsMap } from "@/lib/learning/signal-registry";
+import { LEARNING_VERSION } from "@/lib/learning/types";
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -41,8 +42,11 @@ export async function scoreCandidate(
 
   // 2b. D.6: Load learned signals for this site
   let signals;
+  let learningVersion: string | null = null;
   try {
     signals = await getActiveSignalsMap(input.siteId);
+    // If we loaded signals (even if empty), record the learning version
+    learningVersion = LEARNING_VERSION;
   } catch {
     // Non-critical — score without signals if registry unavailable
     signals = undefined;
@@ -74,6 +78,7 @@ export async function scoreCandidate(
     scoringVersion: SCORING_VERSION,
     scoredAt: now,
     weightsUsed: { ...DEFAULT_WEIGHTS },
+    learningVersion,
   };
 
   // 7. Persist durable score record
@@ -219,6 +224,7 @@ async function persistScoreRecord(result: ScoringResult): Promise<void> {
         decisionReasons: result.decisionReasons,
         evidenceHash: result.evidenceHash,
         weightsUsed: result.weightsUsed,
+        learningVersion: result.learningVersion,
         scoredAt: result.scoredAt,
       },
     });

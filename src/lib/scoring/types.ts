@@ -68,6 +68,7 @@ export interface ScoringResult {
   decisionReasons: DecisionReason[];
   evidenceHash: string;
   scoringVersion: string;
+  learningVersion: string | null;
   scoredAt: Date;
   weightsUsed: ScoringWeights;
 }

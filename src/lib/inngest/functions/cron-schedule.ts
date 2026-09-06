@@ -756,3 +756,75 @@ export const cronWeeklyLearningLoop = inngest.createFunction(
         return { sites: sites.length, signals: totalSignals };
     },
 );
+
+// ────────────────────────────────────────────────────────────────────────────
+// D.7 PORTFOLIO ALLOCATION — 06:30 UTC daily
+//
+// Cron ordering:
+//   04:30 D.5 measurement
+//   04:45 D.5 safety
+//   05:00 D.5 evaluation
+//   06:00 D.6 learning (Sunday only)
+//   06:30 D.7 portfolio allocation (daily)
+//
+// INVARIANT: D.7 chooses priority and allocation intent.
+//   It NEVER reserves budget, claims execution, transitions lifecycle, or mutates a site.
+// ────────────────────────────────────────────────────────────────────────────
+
+export const cronDailyPortfolioAllocation = inngest.createFunction(
+    {
+        id: "cron-daily-portfolio-allocation",
+        name: "Cron: Daily D.7 Portfolio Allocation",
+        retries: 1,
+        triggers: [{ cron: "30 6 * * *" }],
+    },
+    async ({ step }) => {
+        const { allocatePortfolioForSite } = await import("@/lib/portfolio/allocator");
+
+        // 1. Get all active sites with OPEN opportunities
+        const sites = await step.run("fetch-sites-with-open-opportunities", async () => {
+            try {
+                const rows = await (prisma as any).growthDecision.findMany({
+                    where: { opportunityStatus: "OPEN" },
+                    select: { siteId: true },
+                    distinct: ["siteId"],
+                });
+                return rows.map((r: any) => r.siteId as string);
+            } catch {
+                return [];
+            }
+        });
+
+        if (sites.length === 0) {
+            logger.info("[CronPortfolio] No sites with OPEN opportunities");
+            return { sites: 0, allocations: 0 };
+        }
+
+        // 2. Allocate for each site
+        let totalSelected = 0;
+
+        for (const siteId of sites) {
+            const result = await step.run(`allocate-site-${siteId}`, async () => {
+                try {
+                    const allocation = await allocatePortfolioForSite(siteId);
+                    return allocation?.diagnostics.selectedCount ?? 0;
+                } catch (err: unknown) {
+                    logger.error("[CronPortfolio] Failed to allocate for site", {
+                        siteId,
+                        error: (err as Error)?.message,
+                    });
+                    return 0;
+                }
+            });
+
+            totalSelected += result;
+        }
+
+        logger.info("[CronPortfolio] Portfolio allocation complete", {
+            sites: sites.length,
+            totalSelected,
+        });
+
+        return { sites: sites.length, allocations: totalSelected };
+    },
+);
