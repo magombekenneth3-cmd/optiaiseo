@@ -42,6 +42,7 @@ import { selectActionType } from "./action-taxonomy";
 import { getPlanner } from "./action-planners";
 import { validatePlanningInput, validatePlan } from "./validator";
 import { verifyPlanningEvidenceFence } from "./planning-fence";
+import { checkPortfolioGate } from "./portfolio-gate";
 import {
   createDraftProposal,
   type DraftProposalResult,
@@ -178,6 +179,25 @@ export async function planOpportunity(
       decision: inputValidation.decision,
       plan: null,
       reasons: inputValidation.reasons,
+      opportunityId,
+      proposalId: null,
+      proposalStatus: null,
+    };
+  }
+
+  // 2.5 Portfolio gate — if portfolio optimization is enabled for this site,
+  //     verify this opportunity has a SELECTED allocation and the fence holds.
+  //     When portfolio optimization is disabled (default), this is a passthrough.
+  const portfolioCheck = await checkPortfolioGate(input.opportunity.id, input.site.id);
+  if (portfolioCheck.gated) {
+    logger.info("[Planner] Portfolio gate blocked planning", {
+      opportunityId,
+      reasons: portfolioCheck.reasons,
+    });
+    return {
+      decision: "DEFER",
+      plan: null,
+      reasons: portfolioCheck.reasons,
       opportunityId,
       proposalId: null,
       proposalStatus: null,

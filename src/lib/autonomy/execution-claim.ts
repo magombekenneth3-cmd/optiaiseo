@@ -1,28 +1,3 @@
-/**
- * Idempotent Execution Claim — Prevents duplicate autonomous executions.
- *
- * INVARIANT: One opportunity → one claim row → one active execution at a time.
- *
- * SCHEMA:
- * AutonomousExecutionClaim has @@unique([opportunityId]) — exactly one row per
- * opportunity. Claims are UPDATED in place, not deleted and recreated.
- *
- * FENCING MODEL:
- * Each claim has a monotonically increasing `generation` counter.
- * When a stale claim is released and re-acquired:
- *   Worker A: generation=1 (released by reconciler)
- *   Worker B: generation=2 (re-acquired)
- *   Worker A tries to cross Phase B boundary → generation mismatch → ABORT
- *
- * The authorization decision carries { claimId, workerId, generation }.
- * Before crossing the Phase B mutation boundary, the executor calls
- * `verifyClaimBeforeExecution(claimId, workerId, generation)`.
- *
- * CONCURRENCY MODEL:
- * Uses pg_advisory_xact_lock per-opportunity to serialize claim operations.
- * The @@unique([opportunityId]) constraint provides a database-level fallback.
- */
-
 import { Prisma } from "@prisma/client";
 import { logger } from "@/lib/logger";
 import { hostname } from "os";

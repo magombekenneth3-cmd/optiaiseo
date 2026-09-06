@@ -151,9 +151,9 @@ describe("§5 rollback — guards", () => {
     const nullOp: string | null = null;
     const emptyOp: string | null = "";
     const undefOp: string | undefined = undefined;
-    expect(!nullOp).toBe(true);    // falsy → guard fires
-    expect(!emptyOp).toBe(true);   // empty string → guard fires
-    expect(!undefOp).toBe(true);   // undefined → guard fires
+    expect(!nullOp).toBe(true);
+    expect(!emptyOp).toBe(true);
+    expect(!undefOp).toBe(true);
   });
 });
 

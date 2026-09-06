@@ -172,14 +172,7 @@ export async function runDiscovery(
   }
 }
 
-// ── Persistence ─────────────────────────────────────────────────────────────
 
-/**
- * Persists a new CANDIDATE opportunity from a resolved signal.
- *
- * INVARIANT: status = "CANDIDATE", NOT "OPEN".
- * Only D.2 scoring promotes CANDIDATE → OPEN.
- */
 async function persistCandidate(
   siteId: string,
   signal: ResolvedSignal,

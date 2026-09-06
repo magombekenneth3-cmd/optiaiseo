@@ -2,12 +2,22 @@
  * Phase D.7.4 — Portfolio Allocation Service
  *
  * Orchestrates portfolio allocation for a single site:
- *   1. Fetches OPEN opportunities with latest PROMOTE score records
- *   2. Loads site constraints
- *   3. Loads active D.5 experiments for conflict exclusion
- *   4. Builds AllocationCandidate[]
- *   5. Runs deterministic optimizer
- *   6. Persists PortfolioAllocation records
+ *   1. Fetches site constraints (outside transaction — kill switch check)
+ *   2. Acquires per-site advisory lock (serializes concurrent allocators)
+ *   3. Loads OPEN opportunities with latest PROMOTE score records
+ *   4. Loads active D.5 experiments for conflict exclusion
+ *   5. Builds AllocationCandidate[]
+ *   6. Runs deterministic optimizer
+ *   7. Persists PortfolioAllocation records
+ *
+ * CONCURRENCY MODEL:
+ *   The allocation is serialized by pg_advisory_xact_lock(PORTFOLIO_LOCK_NAMESPACE, siteHash).
+ *   All concurrent allocators for the same site block at the lock.
+ *   Candidates are loaded INSIDE the lock so the optimizer always sees
+ *   authoritative state. The entire cycle commits atomically.
+ *
+ *   Invariant: For a given (siteId, cycleId), exactly one authoritative
+ *   allocation computation may commit.
  *
  * INVARIANTS:
  *   - Only queries OPEN opportunities (not CANDIDATE, not PROMOTED)
@@ -18,7 +28,6 @@
 
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { LEARNING_VERSION } from "@/lib/learning/types";
 import {
   type AllocationCandidate,
   type PortfolioConstraints,
@@ -28,6 +37,27 @@ import {
   generateCycleId,
 } from "./types";
 import { type ActiveExperimentConflict, optimizePortfolio } from "./optimizer";
+
+// ── Advisory Lock ───────────────────────────────────────────────────────────
+
+/**
+ * Distinct namespace from budget (737001), concurrency (737002), claims (737003).
+ * Used with pg_advisory_xact_lock to serialize portfolio allocations per site.
+ */
+const PORTFOLIO_LOCK_NAMESPACE = 737004;
+
+/**
+ * Converts a CUID string to a stable 32-bit integer for pg_advisory_xact_lock.
+ * Matches the pattern in budget-enforcer.ts and concurrency-lease.ts.
+ */
+function siteIdToInt(siteId: string): number {
+  let hash = 0;
+  for (let i = 0; i < siteId.length; i++) {
+    const char = siteId.charCodeAt(i);
+    hash = ((hash << 5) - hash + char) | 0;
+  }
+  return hash;
+}
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -42,7 +72,7 @@ export async function allocatePortfolioForSite(
 ): Promise<PortfolioAllocationResult | null> {
   const now = new Date();
 
-  // ── 1. Load site constraints ──────────────────────────────────────────
+  // ── 1. Load site constraints (outside transaction — fast fail) ────────
   const site = await (prisma as any).site.findUnique({
     where: { id: siteId },
     select: {
@@ -73,8 +103,89 @@ export async function allocatePortfolioForSite(
     ...constraintOverrides,
   };
 
-  // ── 2. Load OPEN opportunities with latest PROMOTE score records ──────
-  const opportunities = await (prisma as any).growthDecision.findMany({
+  // ── 2–7. Serialized transaction: lock → load → optimize → persist ────
+  //
+  // The advisory lock ensures that for a given (siteId, cycleId), exactly
+  // one authoritative allocation computation may commit. All concurrent
+  // allocators for the same site block at the lock until the winner commits.
+  //
+  // Candidates and experiments are loaded INSIDE the lock so the optimizer
+  // always sees authoritative state — no mixed-cycle races.
+
+  const siteHash = siteIdToInt(siteId);
+
+  const result = await prisma.$transaction(async (tx: any) => {
+    // ── 2. Acquire per-site advisory lock ──────────────────────────────
+    // Uses $executeRawUnsafe because pg_advisory_xact_lock returns void,
+    // which Prisma's $queryRawUnsafe cannot deserialize.
+    await tx.$executeRawUnsafe(
+      `SELECT pg_advisory_xact_lock($1::integer, $2::integer)`,
+      PORTFOLIO_LOCK_NAMESPACE,
+      siteHash
+    );
+
+    // ── 3. Load OPEN opportunities with latest PROMOTE score records ───
+    const candidates = await loadCandidates(tx, siteId);
+
+    if (candidates.length === 0) {
+      logger.info("[PortfolioAllocator] No candidates with PROMOTE scores", { siteId });
+      return null;
+    }
+
+    // ── 4. Load active D.5 experiments for conflict exclusion ──────────
+    const activeExperiments = await loadActiveExperiments(tx, siteId);
+    const existingExperimentSlots = activeExperiments.length;
+
+    // ── 5. Run optimizer ──────────────────────────────────────────────
+    const allocationResult = optimizePortfolio(
+      candidates,
+      constraints,
+      activeExperiments,
+      existingExperimentSlots,
+      undefined,  // Default weights
+      now,
+      siteId
+    );
+
+    // ── 6. Persist PortfolioAllocation records ────────────────────────
+    await persistAllocations(tx, allocationResult, now);
+
+    return allocationResult;
+  }, {
+    // Transaction timeout: 30s for the transaction body (generous for large candidate sets).
+    // maxWait: 15s to wait for a connection from the pool under concurrent load.
+    timeout: 30000,
+    maxWait: 15000,
+  });
+
+  if (result) {
+    logger.info("[PortfolioAllocator] Allocation complete", {
+      siteId,
+      cycleId: result.cycleId,
+      selected: result.diagnostics.selectedCount,
+      deferred: result.diagnostics.deferredCount,
+      excluded: result.diagnostics.excludedCount,
+      durationMs: result.diagnostics.durationMs,
+    });
+  }
+
+  return result;
+}
+
+// ── Candidate Loading ───────────────────────────────────────────────────────
+
+/**
+ * Loads OPEN opportunities with their latest PROMOTE score records
+ * and transforms them into AllocationCandidate[].
+ *
+ * Accepts a transaction client to ensure loading happens inside
+ * the serialized advisory lock section.
+ */
+async function loadCandidates(
+  tx: any,
+  siteId: string
+): Promise<AllocationCandidate[]> {
+  const opportunities = await tx.growthDecision.findMany({
     where: {
       siteId,
       opportunityStatus: "OPEN",
@@ -86,7 +197,6 @@ export async function allocatePortfolioForSite(
       action: true,
       primaryCategory: true,
       expiresAt: true,
-      createdAt: true,
       generatedAt: true,
       scoreRecords: {
         where: { decision: "PROMOTE" },
@@ -107,16 +217,6 @@ export async function allocatePortfolioForSite(
     },
   });
 
-  if (opportunities.length === 0) {
-    logger.info("[PortfolioAllocator] No OPEN opportunities for site", { siteId });
-    return null;
-  }
-
-  // ── 3. Load active D.5 experiments for conflict exclusion ─────────────
-  const activeExperiments = await loadActiveExperiments(siteId);
-  const existingExperimentSlots = activeExperiments.length;
-
-  // ── 4. Build AllocationCandidate[] ────────────────────────────────────
   const candidates: AllocationCandidate[] = [];
 
   for (const opp of opportunities) {
@@ -141,47 +241,23 @@ export async function allocatePortfolioForSite(
       url: opp.url,
       evidenceHash: scoreRecord.evidenceHash,
       expiresAt: opp.expiresAt ? new Date(opp.expiresAt) : null,
-      createdAt: opp.createdAt ? new Date(opp.createdAt) : new Date(opp.generatedAt),
+      createdAt: new Date(opp.generatedAt),
       experimentEligibility: isExperimentEligible(opp.action),
     });
   }
 
-  if (candidates.length === 0) {
-    logger.info("[PortfolioAllocator] No candidates with PROMOTE scores", { siteId });
-    return null;
-  }
-
-  // ── 5. Run optimizer ──────────────────────────────────────────────────
-  const result = optimizePortfolio(
-    candidates,
-    constraints,
-    activeExperiments,
-    existingExperimentSlots,
-    undefined,  // Default weights
-    now,
-    siteId
-  );
-
-  // ── 6. Persist PortfolioAllocation records ────────────────────────────
-  await persistAllocations(result, now);
-
-  logger.info("[PortfolioAllocator] Allocation complete", {
-    siteId,
-    cycleId: result.cycleId,
-    selected: result.diagnostics.selectedCount,
-    deferred: result.diagnostics.deferredCount,
-    excluded: result.diagnostics.excludedCount,
-    durationMs: result.diagnostics.durationMs,
-  });
-
-  return result;
+  return candidates;
 }
 
 // ── D.5 Conflict Loading ────────────────────────────────────────────────────
 
-async function loadActiveExperiments(siteId: string): Promise<ActiveExperimentConflict[]> {
+/**
+ * Loads active D.5 experiments for a site.
+ * Accepts a transaction client for serialized loading.
+ */
+async function loadActiveExperiments(tx: any, siteId: string): Promise<ActiveExperimentConflict[]> {
   try {
-    const experiments = await (prisma as any).experiment.findMany({
+    const experiments = await tx.experiment.findMany({
       where: {
         siteId,
         status: { in: ["DRAFT", "RUNNING"] },
@@ -232,7 +308,12 @@ function isExperimentEligible(action: string): boolean {
 
 // ── Persistence ─────────────────────────────────────────────────────────────
 
+/**
+ * Persists all allocation decisions atomically within the serialized transaction.
+ * Accepts a transaction client to ensure persistence happens inside the advisory lock.
+ */
 async function persistAllocations(
+  tx: any,
   result: PortfolioAllocationResult,
   now: Date
 ): Promise<void> {
@@ -249,7 +330,7 @@ async function persistAllocations(
   // Batch persist — skip duplicates (idempotent)
   for (const d of allDecisions) {
     try {
-      await (prisma as any).portfolioAllocation.upsert({
+      await tx.portfolioAllocation.upsert({
         where: {
           cycleId_opportunityId: {
             cycleId: result.cycleId,

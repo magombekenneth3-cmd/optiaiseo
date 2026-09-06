@@ -1,22 +1,4 @@
-/**
- * Phase D.1 — Discovery Types
- *
- * Core type definitions for the autonomous opportunity discovery system.
- *
- * CONFIDENCE SEMANTICS:
- *   confidence: number  // 0.0–1.0
- *   Meaning: probability that the underlying observed SEO condition EXISTS.
- *
- *   Examples:
- *     0.95 — GSC shows position 12.3 with 500 impressions (high data quality)
- *     0.70 — Audit detects thin content based on word count heuristic
- *     0.40 — Content staleness based on updatedAt alone (no GSC confirmation)
- *
- *   This is NOT:
- *     - probability this action will increase traffic (D.2 impact scoring)
- *     - priority or urgency (D.2 ranking)
- *     - expected ROI (D.7 portfolio optimization)
- */
+
 
 import type { OpportunityCategory, GrowthAction } from "@/lib/opportunity-engine/types";
 
@@ -24,12 +6,12 @@ import type { OpportunityCategory, GrowthAction } from "@/lib/opportunity-engine
 
 /** Each source has its own cadence, freshness policy, and detector */
 export type DiscoverySource =
-  | "GSC"           // Google Search Console metrics
-  | "CRAWL"         // Technical crawl findings
-  | "AUDIT"         // Agent audit findings
-  | "COMPETITOR"    // Competitor intelligence
-  | "CONTENT"       // Content quality/staleness analysis
-  | "PERFORMANCE";  // GA4/Core Web Vitals
+  | "GSC"
+  | "CRAWL"
+  | "AUDIT"
+  | "COMPETITOR"
+  | "CONTENT"
+  | "PERFORMANCE";
 
 export const DISCOVERY_SOURCES: readonly DiscoverySource[] = [
   "GSC", "CRAWL", "AUDIT", "COMPETITOR", "CONTENT", "PERFORMANCE",

@@ -1,19 +1,3 @@
-/**
- * D.7 — Portfolio Optimizer Unit Tests
- *
- * 30 required tests covering:
- *   - Determinism (1–3)
- *   - Input filtering (4–6)
- *   - Conflict fencing (7–9)
- *   - Constraints (10–14)
- *   - D.6 boundary (15–16)
- *   - Edge cases (17–18)
- *   - Concurrency (19–21)
- *   - Safety boundary (22–26)
- *   - Fencing (27–29)
- *   - Regression (30)
- */
-
 import { describe, it, expect } from "vitest";
 import {
   type AllocationCandidate,
@@ -241,37 +225,36 @@ describe("D.7 Constraints", () => {
     expect(selectedHighRisk.length).toBeLessThanOrEqual(2);
   });
 
-  it("13. Category exposure cap enforced (projected formula)", () => {
-    // 4 candidates all QUICK_WIN, maxCategoryExposurePct = 0.40
-    // With projected formula: first candidate → (0+1)/(0+1) = 1.0 > 0.40... but we need to be smart
-    // Actually (0+1)/(0+1) = 1.0 for the first candidate, which would be > 0.40
-    // So let's set a more reasonable test: 2 categories
+  it("13. Category exposure cap enforced (bootstrap: first-in-category always admitted)", () => {
+    // BOOTSTRAP EXCEPTION: The first candidate in any category is always admitted
+    // because currentCategoryCount === 0 skips the cap check entirely.
+    // Without this exception, a maxCategoryExposurePct below 100% would prevent
+    // the very first portfolio selection. This is not strict enforcement of
+    // maxCategoryExposurePct at every intermediate step — it's a deliberate
+    // bootstrap exception that kicks in only for the first member of each category.
+    //
+    // After the first member, the projected formula applies:
+    //   projectedPct = (currentCategoryCount + 1) / (selectedCount + 1)
+    //   If projectedPct > maxCategoryExposurePct → DEFERRED
     const qw1 = makeCandidate({ opportunityId: "qw-1", category: "QUICK_WIN", finalScore: 90 });
     const qw2 = makeCandidate({ opportunityId: "qw-2", category: "QUICK_WIN", finalScore: 85 });
     const qw3 = makeCandidate({ opportunityId: "qw-3", category: "QUICK_WIN", finalScore: 80 });
     const dec1 = makeCandidate({ opportunityId: "dec-1", category: "DECLINING", finalScore: 75 });
     const dec2 = makeCandidate({ opportunityId: "dec-2", category: "DECLINING", finalScore: 70 });
 
-    const result = optimizePortfolio(
-      [qw1, qw2, qw3, dec1, dec2],
-      makeConstraints({ maxCategoryExposurePct: 0.50 }),
-      [], 0, DEFAULT_UTILITY_WEIGHTS, NOW
-    );
-
-    // With projected formula and 50% cap:
-    // qw-1: projected = 1/1 = 1.0 > 0.50 → BUT first candidate, projected formula accepts
-    // Actually no: (0+1)/(0+1) = 1.0 > 0.50 → DEFERRED
-    // So the first candidate of ANY category gets deferred if cap < 1.0... that's wrong
-    // The projected formula should work with current selected count BEFORE adding
-    // Let me re-read the formula: projectedPct = (currentCategoryCount + 1) / (selectedCount + 1)
-    // First candidate: (0 + 1) / (0 + 1) = 1.0
-    // That IS > 0.50, but conceptually 1/1 = 100% is fine for a single selection
-    // So cap should be permissive enough: let's test with 0.60 cap and verify behavior
+    // With 60% cap:
+    // qw-1 (QUICK_WIN): currentCategoryCount=0 → bootstrap → SELECTED
+    // qw-2 (QUICK_WIN): projected = (1+1)/(1+1) = 1.0 > 0.60 → DEFERRED
+    // qw-3 (QUICK_WIN): projected = (1+1)/(1+1) = 1.0 > 0.60 → DEFERRED
+    // dec-1 (DECLINING): currentCategoryCount=0 → bootstrap → SELECTED
+    // dec-2 (DECLINING): projected = (1+1)/(2+1) = 0.67 > 0.60 → DEFERRED
+    // OR qw-2 (QUICK_WIN): projected = (1+1)/(2+1) = 0.67 > 0.60 → DEFERRED (after dec-1)
     const result2 = optimizePortfolio(
       [qw1, qw2, qw3, dec1, dec2],
       makeConstraints({ maxCategoryExposurePct: 0.60 }),
       [], 0, DEFAULT_UTILITY_WEIGHTS, NOW
     );
+
 
     // Verify category exposure cap prevents over-concentration
     const selectedQW = result2.selected.filter(s => s.candidateSnapshot.category === "QUICK_WIN");

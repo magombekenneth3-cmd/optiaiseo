@@ -1,22 +1,3 @@
-/**
- * Phase D.3 — Planning Validation
- *
- * 10 pre-conditions checked before a plan is accepted.
- * Invalid plans are rejected/deferred, NEVER silently repaired.
- *
- * Evaluation order:
- *   1.  Opportunity is OPEN                → REJECT
- *   2.  Opportunity isn't expired           → REJECT
- *   3.  Evidence is still fresh             → DEFER
- *   4.  Score record exists                 → DEFER
- *   5.  Score decision = PROMOTE            → DEFER
- *   6.  Action type is allowed for category → REJECT
- *   7.  Target resource exists              → DEFER
- *   8.  Target resource belongs to site     → REJECT
- *   9.  Required parameters exist           → REJECT
- *   10. Evidence supports selected action   → DEFER
- */
-
 import type {
   PlanningInput,
   ActionPlan,
@@ -35,10 +16,6 @@ export interface ValidationResult {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
-/**
- * Validates planning input before a plan is generated.
- * Returns PLAN if all checks pass, or DEFER/REJECT with reasons.
- */
 export function validatePlanningInput(
   input: PlanningInput,
   now: Date = new Date()

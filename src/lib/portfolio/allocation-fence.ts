@@ -1,38 +1,9 @@
-/**
- * Phase D.7.4 — Allocation Fencing
- *
- * Validates that a SELECTED PortfolioAllocation is still actionable
- * before D.3 planning consumes it.
- *
- * CHECKS:
- *   1. Opportunity still OPEN
- *   2. Not expired
- *   3. Same scoreRecordId (D.2 score unchanged)
- *   4. Same evidenceHash (evidence unchanged)
- *   5. Same siteId
- *   6. Allocation not expired
- *   7. No active D.5 experiment conflict created after allocation
- *
- * If any check fails → allocation is STALE and must not be consumed.
- *
- * INVARIANTS:
- *   - Read-only: never modifies the allocation or opportunity
- *   - D.3 calls this before planning from a SELECTED allocation
- */
-
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import type { AllocationFenceCheck } from "./types";
 import { allocationConflictKey } from "./types";
 
-// ── Public API ──────────────────────────────────────────────────────────────
 
-/**
- * Validates a SELECTED allocation before D.3 planning consumes it.
- *
- * Returns { valid: true } if the allocation is still actionable,
- * or { valid: false, reason: "..." } if any check fails.
- */
 export async function validateAllocationFence(
   allocationId: string,
   now: Date = new Date()

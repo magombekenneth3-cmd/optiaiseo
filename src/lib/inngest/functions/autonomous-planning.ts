@@ -91,6 +91,8 @@ export const autonomousPlanningReconcile = inngest.createFunction(
     // Find OPEN opportunities without active proposals
     const unplanned = await step.run("find-unplanned-open", async () => {
       const { prisma } = await import("@/lib/prisma");
+      const { isPortfolioOptimizationEnabled } = await import("@/lib/planning/portfolio-gate");
+      const portfolioEnabled = isPortfolioOptimizationEnabled();
 
       // Get all OPEN opportunities
       const openOpportunities = await (prisma as any).growthDecision.findMany({
@@ -115,9 +117,26 @@ export const autonomousPlanningReconcile = inngest.createFunction(
           select: { id: true },
         });
 
-        if (!activeProposal) {
-          result.push(opp);
+        if (activeProposal) continue;
+
+        // Portfolio gate: when enabled, only reconcile opportunities
+        // that have a current SELECTED allocation for today's cycle.
+        // This prevents wasted planning work on DEFERRED/EXCLUDED opportunities.
+        if (portfolioEnabled) {
+          const selectedAllocation = await (prisma as any).portfolioAllocation.findFirst({
+            where: {
+              opportunityId: opp.id,
+              siteId: opp.siteId,
+              decision: "SELECTED",
+              expiresAt: { gt: new Date() },
+            },
+            select: { id: true },
+          });
+
+          if (!selectedAllocation) continue;
         }
+
+        result.push(opp);
       }
 
       return result;

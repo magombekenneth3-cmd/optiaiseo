@@ -1,12 +1,3 @@
-/**
- * Phase D.1 — Content Source Detector
- *
- * Analyzes published blog content for staleness, thin content, and missing
- * metadata. Triggered alongside audit detection via `audit.completed`.
- *
- * Read-only — no mutations, no proposals.
- */
-
 import { createHash } from "node:crypto";
 import type { RawDiscoverySignal, DiscoveryEvidence } from "../types";
 import { prisma } from "@/lib/prisma";
@@ -29,17 +20,10 @@ function createFingerprint(siteId: string, category: string, resourceType: strin
 
 function estimateWordCount(content: string): number {
   if (!content) return 0;
-  // Strip HTML tags for more accurate count
   const text = content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
   return text.split(/\s+/).filter((w) => w.length > 0).length;
 }
 
-// ── Public API ──────────────────────────────────────────────────────────────
-
-/**
- * Detects content-quality discovery signals from published blogs.
- * Checks: staleness, thin content, missing meta descriptions.
- */
 export async function detectContentSignals(
   siteId: string,
   sourceRunId: string,

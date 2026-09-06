@@ -1,17 +1,9 @@
-/**
- * Diff-Based Risk Scoring Engine
- *
- * Computes a numeric risk score (0-100) and categorical risk level
- * based on the actual mutation diff, not just the action type.
- *
- * See: implementation_plan.md v2.1 — Phase 2
- */
+
 
 import type { RiskLevel } from "./types";
 import { logger } from "@/lib/logger";
 
-// ── Protected Surfaces ──────────────────────────────────────────────────────
-// Fields whose mutation should raise risk level to at least HIGH.
+
 const PROTECTED_FIELDS = new Set([
   "canonical",
   "canonicalUrl",
@@ -23,7 +15,6 @@ const PROTECTED_FIELDS = new Set([
   "slug",
 ]);
 
-// Fields that affect external SEO surfaces (moderate risk increase)
 const SEO_SENSITIVE_FIELDS = new Set([
   "schemaMarkup",
   "metaDescription",
