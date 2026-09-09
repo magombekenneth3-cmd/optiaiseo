@@ -1,8 +1,3 @@
-// ── CANONICAL SCHEMA ──────────────────────────────────────────────────────────
-// This is the single source of truth for the database schema.
-// Do NOT create backup copies of this file (they cause confusion and conflicts).
-// To view schema changes over time: git log -- prisma/schema.prisma
-// ─────────────────────────────────────────────────────────────────────────────
 
 generator client {
   provider      = "prisma-client-js"
@@ -14,7 +9,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ── PHASE A: AGENT OPERATING SYSTEM ENUMS ────────────────────────────────────
 
 enum AgentRunStatus {
   QUEUED
@@ -150,7 +144,7 @@ model User {
   commissions            Commission[]
   embedLeads             EmbedLead[]
   credits                Int                      @default(50)
-  creditsLockedAt        DateTime? // Set when grace expires — credits become read-only until top-up/resub
+  creditsLockedAt        DateTime?
   voiceSessions          VoiceSession[]
   wpApiKey               String?                  @unique
   apiKeys                ApiKey[]
@@ -177,7 +171,7 @@ model Site {
   userId                  String
   viewerId                String?
   domain                  String
-  brandName               String? // User-supplied display name override, e.g. "Search Atlas"
+  brandName               String?
   targetKeyword           String?
   operatingMode           String                   @default("REPORT_ONLY")
   githubRepoUrl           String?
@@ -277,19 +271,15 @@ model Site {
   pseoTemplates PseoTemplate[]
   pseoPages     PseoPage[]
 
-  // Site-level mutation kill switch — pauses all automated mutations for this site
   automationsPaused     Boolean @default(false)
 
-  // Per-channel effect kill switches (default: enabled)
   effectCmsEnabled      Boolean @default(true)
   effectGithubEnabled   Boolean @default(true)
   effectIndexNowEnabled Boolean @default(true)
 
-  // Autonomous execution budgets
-  dailyMutationLimit      Int      @default(10)    // Max mutations per rolling 24h
-  maxConcurrentExecutions Int      @default(2)     // Max parallel autonomous mutations
+  dailyMutationLimit      Int      @default(10)
+  maxConcurrentExecutions Int      @default(2)
 
-  // Phase C autonomy relations
   budgetReservations          BudgetReservation[]
   circuitBreakers             CircuitBreaker[]
   autonomousExecutionClaims   AutonomousExecutionClaim[]
@@ -375,29 +365,26 @@ model AiShareOfVoice {
   brandMentioned       Boolean  @default(false)
   competitorsMentioned String[] @default([])
   recordedAt           DateTime @default(now())
-  // Gap 1 — persisted from live citation-gap analysis so cached path skips Gemini
-  gapReason            String? // GapReason enum value
+  gapReason            String?
   gapExplanation       String?
   gapFix               String?
   embeddingGapSignals  String[] @default([])
-  // Gap 2 — mention confidence for false-negative detection (0.0–1.0; null = binary check)
   mentionConfidence    Float?
   site                 Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId, keyword])
   @@index([recordedAt])
-  @@index([siteId, mentionConfidence]) // low-confidence queries
+  @@index([siteId, mentionConfidence])
   @@index([siteId, modelName, recordedAt(sort: Desc)])
 }
 
-// Gap 2 — user-flagged brand mention corrections (false positive / false negative)
 model MentionCorrectionLog {
   id           String   @id @default(cuid())
   siteId       String
   keyword      String
   modelName    String
-  correctValue Boolean // true = brand WAS mentioned, false = was NOT mentioned
-  rawSnippet   String? // first 500 chars of the model response
+  correctValue Boolean
+  rawSnippet   String?
   flaggedAt    DateTime @default(now())
   site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -552,7 +539,7 @@ model Blog {
   sourceLinks          InternalLink[]    @relation("SourceLinks")
   targetLinks          InternalLink[]    @relation("TargetLinks")
   site                 Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  version              Int               @default(1) // optimistic concurrency token
+  version              Int               @default(1)
 
   @@unique([siteId, slug])
   @@index([siteId])
@@ -586,11 +573,10 @@ model TrendingTopic {
   keywords  String[]
   newsData  Json
   fetchedAt DateTime @default(now())
-  // Rows older than 30 days are stale; purged by the weekly cron job
   expiresAt DateTime @default(dbgenerated("now() + interval '30 days'"))
 
   @@index([fetchedAt(sort: Desc)])
-  @@index([expiresAt]) // purge job filter
+  @@index([expiresAt])
 }
 
 model MarketCategory {
@@ -713,7 +699,7 @@ model AeoSnapshot {
 
   @@unique([siteId, createdAt])
   @@index([siteId])
-  @@index([siteId, createdAt(sort: Desc)]) // AEO trend chart queries
+  @@index([siteId, createdAt(sort: Desc)])
   @@index([createdAt])
 }
 
@@ -732,8 +718,8 @@ model AeoReport {
   generativeShareOfVoice Int        @default(0)
   multiEngineScore       Json?
   multiModelResults      Json?
-  layerScores            Json? // { aeo: number, geo: number, aio: number }
-  diagnosis              Json? // AeoDiagnosis | null
+  layerScores            Json?
+  diagnosis              Json?
   site                   Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
   proofs                 AeoProof[]
 
@@ -1307,16 +1293,14 @@ model HealingPlan {
   @@index([status])
 }
 
-// Credit audit ledger — written after every consumeCredits call.
-// Never blocks the primary action (fire-and-forget insert).
 model CreditHistory {
   id           String   @id @default(cuid())
   userId       String
-  action       String // CreditAction key e.g. "blog_generation"
-  label        String // Human-readable label e.g. "Blog Generation"
-  cost         Int // Credits deducted (0 for free actions)
-  balanceAfter Int // credits remaining after deduction
-  metadata     Json? // e.g. { siteId, blogId } for traceability
+  action       String
+  label        String
+  cost         Int
+  balanceAfter Int
+  metadata     Json?
   createdAt    DateTime @default(now())
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1327,9 +1311,9 @@ model CreditHistory {
 model CreditLedger {
   id          String   @id @default(cuid())
   userId      String
-  amount      Int // Positive for top-up/refund, negative for consumption
-  type        String // "BLOG_GEN", "REFUND_FAILED_GEN", "CREDIT_PURCHASE"
-  referenceId String // Unique key e.g. "refund:blog_gen:clx12345"
+  amount      Int
+  type        String
+  referenceId String
   reason      String?
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1351,23 +1335,22 @@ model GrowthDecision {
   impact                Json
   executionPlan         Json
   status                String    @default("ACTIVE")
-  opportunityStatus     String    @default("OPEN") // Phase B lifecycle: OPEN → PROPOSED → APPROVED → EXECUTING → VERIFYING → VERIFIED
+  opportunityStatus     String    @default("OPEN")
   engineVersion         String    @default("v2")
 
   
   maxProposalRetries    Int       @default(3)
-  proposalRetryCount    Int       @default(0) // Current count of retry proposals created
-  fingerprint           String?   // Stable identity: sha256(siteId + category + resourceType + resourceId + action)
+  proposalRetryCount    Int       @default(0)
+  fingerprint           String?
   inputPeriodStart      DateTime?
   inputPeriodEnd        DateTime?
   generatedAt           DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  // Approval metadata (populated when a human approves this decision)
   approvedBy            String?
   approvedAt            DateTime?
   approvalExpiresAt     DateTime?
-  mutationHash          String?   // SHA-256 of the canonical executable mutation
+  mutationHash          String?
 
   site       Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
   experiment Experiment?
@@ -1376,18 +1359,14 @@ model GrowthDecision {
   scoreRecords   OpportunityScoreRecord[]
   portfolioAllocations PortfolioAllocation[]
 
-  // D.1: Discovery provenance (summary metadata — not source of truth)
-  // Source of truth for multi-source provenance is:
-  //   OpportunityFinding → AgentFinding → FindingEvidence chain
-  primaryDiscoverySource  String?    // Summary: which source first found this ("GSC"|"AUDIT"|"CONTENT"|...)
-  discoveredAt            DateTime?  // When this opportunity was first discovered
-  lastRefreshedAt         DateTime?  // Last time any source refreshed evidence for this
-  expiresAt               DateTime?  // Aggregate: earliest expiry across all evidence sources
-  discoveryConfidence     Float?     // 0.0–1.0: probability the observed SEO condition EXISTS (not impact)
+  primaryDiscoverySource  String?
+  discoveredAt            DateTime?
+  lastRefreshedAt         DateTime?
+  expiresAt               DateTime?
+  discoveryConfidence     Float?
 
-  // D.2: Scoring metadata (summary — source of truth is OpportunityScoreRecord)
-  lastScoredAt            DateTime?  // When last scored by D.2
-  scoringVersion          String?    // Version of the scoring engine that last scored this
+  lastScoredAt            DateTime?
+  scoringVersion          String?
 
   @@unique([siteId, url, primaryKeyword, action])
   @@index([siteId, status])
@@ -1398,35 +1377,29 @@ model GrowthDecision {
   @@index([siteId, opportunityStatus, expiresAt])
 }
 
-// D.2: Durable scoring record — every scoring decision is persisted
-// Answers: "Why was this opportunity promoted/deferred/rejected at this time?"
 model OpportunityScoreRecord {
   id                   String   @id @default(cuid())
   opportunityId        String
-  scoringVersion       String   // "d2-v1", "d2-v2", etc.
+  scoringVersion       String
 
-  // Score components (all 0–100)
-  impactScore          Float    // Expected SEO upside
-  confidenceScore      Float    // Confidence that acting produces predicted benefit
-  evidenceScore        Float    // Quality/quantity/freshness of evidence
-  urgencyScore         Float    // Time sensitivity
-  effortScore          Float    // Expected implementation cost
-  riskScore            Float    // Downside / uncertainty
+  impactScore          Float
+  confidenceScore      Float
+  evidenceScore        Float
+  urgencyScore         Float
+  effortScore          Float
+  riskScore            Float
 
-  finalScore           Float    // Weighted composite
+  finalScore           Float
 
-  decision             String   // "PROMOTE" | "DEFER" | "REJECT"
-  decisionReasons      Json     // [{ rule: string, details: string }]
+  decision             String
+  decisionReasons      Json
 
-  // Evidence fencing
-  evidenceHash         String   // sha256 of canonicalized evidence at scoring time
-  evidenceVerifiedAt   DateTime? // Set when evidence re-verified before promotion
+  evidenceHash         String
+  evidenceVerifiedAt   DateTime?
 
-  // Weights used (for reproducibility)
-  weightsUsed          Json     // { impact: 0.30, confidence: 0.20, ... }
+  weightsUsed          Json
 
-  // D.6 learning provenance — which learning version influenced this score
-  learningVersion      String?  // e.g. "d6-v1" or null if scored before D.6
+  learningVersion      String?
 
   scoredAt             DateTime @default(now())
 
@@ -1441,34 +1414,28 @@ model Experiment {
   siteId               String
   opportunityId        String?
 
-  // Hypothesis
   hypothesis           String   @db.Text
-  successMetric        String   // "position_delta" | "clicks_lift" | "ctr_lift" | "impressions_lift"
-  successThreshold     Float    // e.g. 5.0 (position improvement) or 10.0 (% lift)
+  successMetric        String
+  successThreshold     Float
 
-  // Lifecycle: DRAFT → RUNNING → COMPLETED | ABORTED | PAUSED
   status               String   @default("DRAFT")
   statusReason         String?
 
-  // Immutable config (set at creation, never modified)
   configVersion        String   @default("d5-v1")
-  configHash           String   // sha256 of canonical config — immutability proof
+  configHash           String
   maxDurationDays      Int      @default(28)
   maxMutationCount     Int      @default(1)
   maxBudgetUnits       Int      @default(1)
 
-  // Timing
   startedAt            DateTime?
-  endsAt               DateTime?  // startedAt + maxDurationDays
+  endsAt               DateTime?
   completedAt          DateTime?
 
-  // Outcome (populated on completion)
-  outcome              String?   // WIN | LOSS | INCONCLUSIVE | ABORTED
-  outcomeConfidence    Float?    // 0.0-1.0
+  outcome              String?
+  outcomeConfidence    Float?
   outcomeDetails       Json?
 
-  // Legacy compat: old tracker fields (populated for backward compat)
-  decisionId           String?   @unique  // Links to GrowthDecision (optional for new experiments)
+  decisionId           String?   @unique
   targetUrl            String?
   actionExecuted       String?
   executedAt           DateTime?
@@ -1494,29 +1461,24 @@ model Experiment {
 model ExperimentVariant {
   id                   String   @id @default(cuid())
   experimentId         String
-  variantKey           String   // "control" | "treatment_a" | "treatment_b"
+  variantKey           String
   isControl            Boolean  @default(false)
 
-  // Target
   targetUrl            String
   targetKeyword        String?
-  actionType           String?  // null for control
-  actionParameters     Json?    // null for control
+  actionType           String?
+  actionParameters     Json?
 
-  // Deterministic assignment hash: sha256(experimentId + variantKey + targetUrl)
   assignmentHash       String
   assignedAt           DateTime @default(now())
 
-  // Execution link (null for control)
   proposalId           String?  @unique
   operationId          String?  @unique
   executedAt           DateTime?
 
-  // Baseline snapshot (captured at experiment start)
-  baselineMetrics      Json?    // { position, clicks, impressions, ctr }
-  baselineWindow       String?  // "2025-08-01:2025-08-28"
+  baselineMetrics      Json?
+  baselineWindow       String?
 
-  // Post metrics (captured at evaluation)
   postMetrics          Json?
   postWindow           String?
 
@@ -1531,9 +1493,8 @@ model ExperimentMeasurement {
   id                   String   @id @default(cuid())
   experimentId         String
   variantKey           String
-  measurementDay       Int      // Day number since experiment start (0, 7, 14, 21, 28)
+  measurementDay       Int
 
-  // Metrics
   position             Float?
   clicks               Int?
   impressions          Int?
@@ -1556,7 +1517,6 @@ model SerpGapAnalysis {
   clientUrl              String
   clientPosition         Int
   status                 String    @default("PENDING")
-  // PENDING | SCRAPING | PLANNING | COMPLETED | FAILED
   gapReport              Json?
   implementationPlan     Json?
   serpFormat             String?
@@ -1616,7 +1576,7 @@ model KeywordSerpAnalysis {
 
   @@unique([siteId, keyword])
   @@index([siteId])
-  @@index([siteId, status]) // purge job + dashboard status filter
+  @@index([siteId, status])
   @@index([expiresAt])
 }
 
@@ -1682,7 +1642,7 @@ model RssSocialPost {
   siteId       String
   articleUrl   String
   articleTitle String
-  posts        Json // Store the generated SocialPost[] JSON array
+  posts        Json
   createdAt    DateTime @default(now())
   site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -1723,12 +1683,12 @@ model GscDailyPerformance {
   siteId      String
   url         String
   keyword     String
-  date        String // YYYY-MM-DD (string for composite index efficiency)
+  date        String
   clicks      Int      @default(0)
   impressions Int      @default(0)
   ctr         Float    @default(0)
   position    Float    @default(0)
-  device      String   @default("ALL") // ALL, DESKTOP, MOBILE, TABLET
+  device      String   @default("ALL")
   fetchedAt   DateTime @default(now())
   site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -1776,61 +1736,46 @@ model PseoPage {
   @@index([siteId, status])
 }
 
-// ── MUTATION OPERATION LIFECYCLE ──────────────────────────────────────────────
-// Central abstraction for ALL mutations in the system.
-// See: implementation_plan.md v2.1
-// ─────────────────────────────────────────────────────────────────────────────
 
 model MutationOperation {
   id                 String   @id @default(cuid())
   siteId             String
   idempotencyKey     String   @unique
 
-  // Actor + Authorization snapshot
-  actorId            String   // userId or "system:inngest" or "system:cron"
-  actorType          String   // "USER" | "SYSTEM" | "CRON"
-  authorizedBy       String?  // policy or userId that granted permission
-  authPolicyVersion  String?  // e.g. "rbac-v3" — auditable: "why was this allowed?"
+  actorId            String
+  actorType          String
+  authorizedBy       String?
+  authPolicyVersion  String?
   authorizedAt       DateTime?
 
-  // What
-  mutationType       String   // "BLOG_CONTENT_UPDATE" | "CMS_PUBLISH" | "GITHUB_PR" | ...
-  targetModel        String   // "Blog" | "Site" | "InternalLink"
-  targetId           String   // e.g. blog.id
-  expectedVersion    Int      // optimistic concurrency: version we expect on target
+  mutationType       String
+  targetModel        String
+  targetId           String
+  expectedVersion    Int
 
-  // Canonical mutation
-  mutationPayload    Json     // The exact executable mutation (patch object)
-  mutationHash       String   // SHA-256 of canonicalized mutationPayload
+  mutationPayload    Json
+  mutationHash       String
 
-  // Risk
-  riskLevel          String   // "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
-  riskScore          Int      // 0-100
-  affectedFields     String[] // ["content", "schemaMarkup"]
+  riskLevel          String
+  riskScore          Int
+  affectedFields     String[]
   diffSizeBytes      Int      @default(0)
 
-  // Lifecycle
-  // PROPOSED → PENDING_APPROVAL → APPROVED → EXECUTING → COMMITTED → EFFECTS_PENDING → COMPLETED
-  // Terminal: REJECTED | EXPIRED | CANCELLED | FAILED | STALE | COMPLETED_WITH_ERRORS
   status             String   @default("PROPOSED")
 
-  // Execution claim (prevents two workers executing the same operation)
-  executionClaimedBy       String?   // worker/process ID that claimed execution
+  executionClaimedBy       String?
   executionClaimedAt       DateTime?
-  executionLeaseExpiresAt  DateTime? // lease expires → another worker can reclaim
+  executionLeaseExpiresAt  DateTime?
 
-  // Approval (populated when status reaches APPROVED)
   approvedBy         String?
   approvedAt         DateTime?
   approvalExpiresAt  DateTime?
-  approvalHash       String?  // SHA-256 of canonical mutation AT approval time
+  approvalHash       String?
 
-  // Metadata
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   completedAt        DateTime?
 
-  // Relations — onDelete: Restrict prevents cascade-destroying audit history
   site               Site              @relation(fields: [siteId], references: [id], onDelete: Restrict)
   snapshot           MutationSnapshot?
   effects            MutationEffect[]
@@ -1847,14 +1792,13 @@ model MutationOperation {
 model MutationSnapshot {
   id              String   @id @default(cuid())
   operationId     String   @unique
-  targetModel     String   // "Blog"
-  targetId        String   // e.g. blog.id
-  targetVersion   Int      // version AT snapshot time (before mutation)
-  beforeState     Json     // full state before mutation
-  afterState      Json?    // full state after (null until COMMITTED)
+  targetModel     String
+  targetId        String
+  targetVersion   Int
+  beforeState     Json
+  afterState      Json?
   createdAt       DateTime @default(now())
 
-  // Cascade from operation only (operation itself uses Restrict from Site)
   operation       MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
 
   @@index([targetModel, targetId, targetVersion])
@@ -1866,30 +1810,22 @@ model MutationEffect {
   operationId        String
   idempotencyKey     String   @unique
 
-  // What
-  effectType         String   // "CMS_PUBLISH" | "INDEXNOW" | "GITHUB_PR" | "GOOGLE_INDEXING"
-  platform           String?  // "WORDPRESS" | "GHOST" | "SHOPIFY" | ... (for CMS effects)
-  payload            Json     // platform-specific parameters
+  effectType         String
+  platform           String?
+  payload            Json
 
-  // Lifecycle
-  // QUEUED → DISPATCHED → CONFIRMED | FAILED | IRREVERSIBLE_DISPATCHED
-  // QUEUED → CANCELLED
   status             String   @default("QUEUED")
 
-  // Confirmation strategy
-  confirmationMode   String   @default("POLL")        // "POLL" | "READ_AFTER_WRITE" | "NONE"
-  compensationPolicy String   @default("IRREVERSIBLE") // "ROLLBACK_SUPPORTED" | "ROLLBACK_PARTIAL" | "COMPENSATION_ONLY" | "IRREVERSIBLE"
+  confirmationMode   String   @default("POLL")
+  compensationPolicy String   @default("IRREVERSIBLE")
 
-  // External tracking
-  externalId         String?  // WordPress post ID, GitHub PR URL, etc.
+  externalId         String?
   externalError      String?
 
-  // Retry
   attempts           Int      @default(0)
   maxAttempts        Int      @default(5)
   nextRetryAt        DateTime?
 
-  // Timestamps
   dispatchedAt       DateTime?
   confirmedAt        DateTime?
   failedAt           DateTime?
@@ -1906,15 +1842,11 @@ model MutationEffect {
 model MutationAuditEvent {
   id            String   @id @default(cuid())
   operationId   String
-  eventType     String   // "CREATED" | "RISK_ASSESSED" | "APPROVAL_REQUESTED" |
-                         // "APPROVED" | "REJECTED" | "EXECUTING" | "COMMITTED" |
-                         // "EFFECT_DISPATCHED" | "EFFECT_CONFIRMED" | "STALE" |
-                         // "FAILED" | "ROLLED_BACK" | "COMPLETED_WITH_ERRORS"
-  actorId       String   // who triggered this event
-  details       Json?    // event-specific metadata
+  eventType     String
+  actorId       String
+  details       Json?
   createdAt     DateTime @default(now())
 
-  // Append-only: no UPDATE or DELETE operations exposed through mutation library
   operation     MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
 
   @@index([operationId, createdAt])
@@ -1922,26 +1854,21 @@ model MutationAuditEvent {
   @@index([actorId, createdAt(sort: Desc)])
 }
 
-// ── PHASE A: AGENT OPERATING SYSTEM ──────────────────────────────────────────
-// Core infrastructure for the Agentic SEO Operating System.
-// Agents observe → produce Findings → backed by Evidence → feed Opportunities.
-// ─────────────────────────────────────────────────────────────────────────────
 
 model AgentRun {
   id             String         @id @default(cuid())
   siteId         String
 
-  agentType      String         // "DISCOVERY" | "CRAWL" | "TECHNICAL_SEO" | ...
+  agentType      String
   status         AgentRunStatus @default(QUEUED)
 
-  // Explicit parent/child hierarchy for orchestrator → agent relationships
   parentRunId    String?
   parentRun      AgentRun?      @relation("AgentRunHierarchy", fields: [parentRunId], references: [id], onDelete: SetNull)
   childRuns      AgentRun[]     @relation("AgentRunHierarchy")
 
   startedAt      DateTime?
   completedAt    DateTime?
-  lastHeartbeatAt DateTime?  // Updated by lease heartbeat; used for stale-run detection
+  lastHeartbeatAt DateTime?
 
   itemsProcessed Int            @default(0)
   findingCount   Int            @default(0)
@@ -1949,8 +1876,8 @@ model AgentRun {
   tokensUsed     Int?
   costUsd        Decimal?
 
-  triggerEvent   String?        // Inngest event name that triggered this run
-  metadata       Json?          // Input snapshot, configuration, etc.
+  triggerEvent   String?
+  metadata       Json?
 
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -1968,22 +1895,19 @@ model AgentFinding {
   id             String          @id @default(cuid())
   agentRunId     String
 
-  // Stable identity of the underlying issue.
-  // sha256(siteId:type:resourceType:resourceId)
   fingerprint    String
 
-  type           String          // "MISSING_META_DESCRIPTION", "QUICK_WIN", etc.
+  type           String
   severity       FindingSeverity
   status         FindingStatus   @default(OPEN)
 
   title          String
   description    String          @db.Text
 
-  // 0.0–1.0
   confidence     Float
 
-  resourceType   String?         // "SITE" | "PAGE" | "QUERY" | "KEYWORD"
-  resourceId     String?         // URL, query text, keyword, etc.
+  resourceType   String?
+  resourceId     String?
 
   recommendation String?         @db.Text
 
@@ -2006,14 +1930,14 @@ model FindingEvidence {
   id          String   @id @default(cuid())
   findingId   String
 
-  sourceType  String          // "GSC" | "GA4" | "CRAWL" | "SITEMAP" | "ROBOTS" | "COMPUTED"
-  sourceId    String?         // crawlRunId, query/page/date composite, etc.
+  sourceType  String
+  sourceId    String?
 
-  metric      String?         // "position" | "httpStatus" | "ctr" | ...
-  value       String?         // String representation
-  metadata    Json?           // Structured data for complex evidence
+  metric      String?
+  value       String?
+  metadata    Json?
 
-  observedAt  DateTime @default(now())  // Provenance timestamp
+  observedAt  DateTime @default(now())
 
   finding     AgentFinding    @relation(fields: [findingId], references: [id], onDelete: Cascade)
 
@@ -2021,8 +1945,6 @@ model FindingEvidence {
   @@index([sourceType, sourceId])
 }
 
-// Join table: links GrowthDecision (Opportunities) to their source Findings.
-// Enables explainability: "Why did OptiAISEO generate this recommendation?"
 model OpportunityFinding {
   id              String   @id @default(cuid())
 
@@ -2041,7 +1963,7 @@ model OpportunityFinding {
 model Ga4DailyPerformance {
   id              String   @id @default(cuid())
   siteId          String
-  date            String   // YYYY-MM-DD (matches GscDailyPerformance convention)
+  date            String
   landingPage     String
 
   sessions        Int      @default(0)
@@ -2060,9 +1982,6 @@ model Ga4DailyPerformance {
   @@index([siteId, landingPage, date(sort: Desc)])
 }
 
-// ── PHASE B: ACTION PROPOSALS ─────────────────────────────────────────────────
-// Bridge between intelligence (Phase A) and execution (Phase B).
-// An ActionProposal captures exactly what will change, why, and how to verify.
 
 model ActionProposal {
   id                  String    @id @default(cuid())
@@ -2071,69 +1990,53 @@ model ActionProposal {
   operationId         String?   @unique
   idempotencyKey      String    @unique
 
-  // Retry lineage: if this proposal is a retry, points to the predecessor
   previousProposalId  String?
   previousProposal    ActionProposal?  @relation("ProposalRetryChain", fields: [previousProposalId], references: [id])
   retryProposals      ActionProposal[] @relation("ProposalRetryChain")
 
-  // What
-  actionType          String    // ActionType enum from types.ts
+  actionType          String
   targetUrl           String
-  targetModel         String    // "Blog" | "Page" | "Site"
+  targetModel         String
   targetId            String
 
-  // The proposed change
-  proposedChanges     Json      // ProposedChange[]
+  proposedChanges     Json
   expectedOutcome     String    @db.Text
 
-  // Risk & Confidence
-  riskLevel           String    // "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
-  safetyTier          Int       @default(1) // 1 | 2 | 3
+  riskLevel           String
+  safetyTier          Int       @default(1)
   confidence          Float
 
-  // Lifecycle
   status              String    @default("DRAFT")
-  // DRAFT → READY → APPROVED → EXECUTING → EXECUTED → VERIFYING → VERIFIED
-  // VERIFIED → ROLLED_BACK (post-verification regression rollback)
-  // Terminal: REJECTED | FAILED | EXPIRED | ROLLED_BACK
 
-  // Approval
   requiresApproval    Boolean   @default(true)
   approvedBy          String?
   approvedAt          DateTime?
   approvalExpiresAt   DateTime?
-  approvalHash        String?   // SHA-256 of proposedChanges at approval time
+  approvalHash        String?
 
-  // Execution Attempts
   attemptCount        Int       @default(0)
   maxAttempts         Int       @default(3)
   lastAttemptAt       DateTime?
   lastAttemptError    String?   @db.Text
 
-  // Verification
-  verificationCriteria  Json    // VerificationCriterion[]
-  verificationUrl       String? // If different from targetUrl (e.g. CMS external URL)
+  verificationCriteria  Json
+  verificationUrl       String?
   verifiedAt            DateTime?
-  verificationResult    String? // "VERIFIED" | "FAILED" | "PARTIAL"
-  verificationDetails   Json?   // VerificationDetail[]
+  verificationResult    String?
+  verificationDetails   Json?
 
-  // Rollback
-  rolledBackBy        String?   // userId or "system" that initiated rollback
+  rolledBackBy        String?
   rolledBackAt        DateTime?
   rollbackReason      String?   @db.Text
 
-  // Authorization
   generatedBy         String    @default("system:proposal-generator")
 
-  // Extensible metadata (D.4 LLM audit envelope, etc.)
   metadata            Json?
 
-  // Timestamps
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   completedAt         DateTime?
 
-  // Relations
   site                Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
   decision            GrowthDecision     @relation(fields: [decisionId], references: [id], onDelete: Cascade)
   operation           MutationOperation? @relation(fields: [operationId], references: [id], onDelete: SetNull)
@@ -2148,24 +2051,17 @@ model ActionProposal {
 }
 
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Phase C — Autonomous Execution Infrastructure
-// ═══════════════════════════════════════════════════════════════════════════════
-
-/// Atomic budget reservation for daily mutation limits (rolling 24h window).
-/// Usage is derived from reservation records, NOT from mutable counters.
 model BudgetReservation {
   id          String    @id @default(cuid())
   siteId      String
-  operationId String?   // Linked after execution starts
-  traceId     String?   // Link to ExecutionTrace
+  operationId String?
+  traceId     String?
 
-  // Lifecycle: RESERVED → CONSUMED | RELEASED
   status      String    @default("RESERVED")
   reservedAt  DateTime  @default(now())
   consumedAt  DateTime?
   releasedAt  DateTime?
-  reason      String?   // Why released (failure, timeout, budget reclaim)
+  reason      String?
 
   site        Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -2173,22 +2069,19 @@ model BudgetReservation {
   @@index([siteId, reservedAt])
 }
 
-/// Durable circuit breaker state per site+channel.
-/// Prevents cascading failures from shutting down unrelated channels.
 model CircuitBreaker {
   id                    String    @id @default(cuid())
   siteId                String
-  channel               String    // "wordpress" | "github" | "gsc" | "indexnow"
+  channel               String
 
-  // State machine: CLOSED → OPEN → HALF_OPEN → CLOSED
   state                 String    @default("CLOSED")
   consecutiveFailures   Int       @default(0)
-  consecutiveSuccesses  Int       @default(0)  // Tracked in HALF_OPEN
+  consecutiveSuccesses  Int       @default(0)
   lastFailureAt         DateTime?
   lastSuccessAt         DateTime?
   openedAt              DateTime?
-  nextAttemptAt         DateTime? // When HALF_OPEN probe is allowed
-  halfOpenProbeInFlight Boolean   @default(false) // Only ONE worker can probe
+  nextAttemptAt         DateTime?
+  halfOpenProbeInFlight Boolean   @default(false)
 
   updatedAt             DateTime  @updatedAt
 
@@ -2198,23 +2091,16 @@ model CircuitBreaker {
   @@index([state])
 }
 
-/// Idempotent execution claim — prevents duplicate autonomous executions
-/// for the same opportunity. Enforced at the database level.
 model AutonomousExecutionClaim {
   id            String   @id @default(cuid())
   siteId        String
-  opportunityId String   @unique  // ONE row per opportunity — upsert semantics
+  opportunityId String   @unique
   proposalId    String
-  claimedBy     String   // Worker/process ID
+  claimedBy     String
   claimedAt     DateTime @default(now())
 
-  // Monotonic fencing token. Incremented on each re-acquisition.
-  // Authorization carries the generation; the Phase B boundary verifies it.
-  // After stale recovery: Worker A (gen=1) cannot cross the boundary
-  // once Worker B reclaims (gen=2).
   generation    Int      @default(1)
 
-  // Lifecycle: ACTIVE → COMPLETED | RELEASED (then back to ACTIVE on reclaim)
   status        String   @default("ACTIVE")
   completedAt   DateTime?
   releasedAt    DateTime?
@@ -2225,58 +2111,47 @@ model AutonomousExecutionClaim {
   @@index([siteId, status])
 }
 
-/// Immutable execution trace — complete audit trail from discovery to outcome.
-/// Append-only after the authorization stage.
 model ExecutionTrace {
   id                  String    @id @default(cuid())
   siteId              String
-  parentTraceId       String?   // For retries linked to original
+  parentTraceId       String?
 
-  // Trigger
-  triggerType          String   // "CRON" | "EVENT" | "MANUAL"
-  triggerId            String?  // Inngest event ID or cron run ID
+  triggerType          String
+  triggerId            String?
 
-  // Discovery
   findingId            String?
   findingType          String?
 
-  // Decision
   opportunityId        String
   opportunityScore     Float
 
-  // Proposal
   proposalId           String?
   actionType           String
   safetyTier           Int
   riskLevel            String?
   riskScore            Int?
 
-  // Authorization
   operatingMode        String
   effectiveTierLimit   Int
-  policyDecision       String   // "AUTO_EXECUTE" | "NEEDS_APPROVAL" | "BLOCKED"
+  policyDecision       String
   policyReason         String
   budgetReservationId  String?
-  circuitBreakerState  String?  // "CLOSED" | "OPEN" | "HALF_OPEN"
+  circuitBreakerState  String?
 
-  // Execution
   operationId          String?
   attemptNumber        Int      @default(1)
-  executionResult      String?  // "SUCCESS" | "FAILED" | "ROLLED_BACK"
-  failureClass         String?  // From failure classifier
+  executionResult      String?
+  failureClass         String?
   retryCount           Int      @default(0)
 
-  // Actor
-  actorType            String   // "SYSTEM" | "USER" | "APPROVAL"
+  actorType            String
   actorId              String?
 
-  // Verification (populated later by verifier — append-only)
-  verificationStatus   String?  // "PENDING" | "INSUFFICIENT_DATA" | "IMPROVED" | "UNCHANGED" | "DEGRADED" | "INCONCLUSIVE"
+  verificationStatus   String?
   verificationAt       DateTime?
   metricsBaseline      Json?
   metricsAfter         Json?
 
-  // Timestamps (immutable after creation)
   discoveredAt         DateTime
   authorizedAt         DateTime?
   executedAt           DateTime?
@@ -2292,33 +2167,27 @@ model ExecutionTrace {
   @@index([parentTraceId])
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// D.6: Learning Loop — ActionPerformance + LearnedSignal
-// ────────────────────────────────────────────────────────────────────────────
 
 model ActionPerformance {
   id                String   @id @default(cuid())
   siteId            String
   actionType        String
 
-  // Aggregated outcomes
   totalExperiments  Int
   wins              Int
   losses            Int
   inconclusive      Int
   aborted           Int
-  winRate           Float    // wins / (wins + losses)
+  winRate           Float
 
-  // Metric averages (across WIN/LOSS only)
   avgPositionDelta  Float?
   avgClicksLift     Float?
   avgCtrLift        Float?
   avgConfidence     Float?
 
-  // Version
   computedAt        DateTime @default(now())
   computedVersion   String   @default("d6-v1")
-  experimentCount   Int      // Snapshot of how many experiments contributed
+  experimentCount   Int
 
   site              Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -2329,76 +2198,58 @@ model ActionPerformance {
 model LearnedSignal {
   id                String   @id @default(cuid())
   siteId            String
-  signalType        String   // RISK_ADJUSTMENT | CONFIDENCE_ADJUSTMENT | EFFORT_ADJUSTMENT
+  signalType        String
   actionType        String
 
-  // Signal value
-  adjustment        Float    // Positive = increase, negative = decrease
-  magnitude         String   // MINOR | MODERATE | MAJOR
+  adjustment        Float
+  magnitude         String
 
-  // Provenance
-  derivedFrom       Int      // Number of experiments backing this signal
-  winRate           Float    // Win rate at time of derivation
-  reason            String   // Human-readable explanation
+  derivedFrom       Int
+  winRate           Float
+  reason            String
 
-  // Lifecycle: PROPOSED → ACTIVE → SUPERSEDED | REVOKED
   status            String   @default("PROPOSED")
   version           Int      @default(1)
   activatedAt       DateTime?
   supersededAt      DateTime?
-  supersededBy      String?  // ID of the signal that replaced this one
+  supersededBy      String?
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   site              Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
-  // Uniqueness for ACTIVE signals is enforced by:
-  //   1. PostgreSQL partial unique index: learned_signal_one_active
-  //      ON "LearnedSignal" ("siteId", "signalType", "actionType") WHERE "status" = 'ACTIVE'
-  //   2. Transactional fencing in persistAndActivateSignal (supersedes existing ACTIVE)
-  //
-  // We do NOT use @@unique([siteId, signalType, actionType, status]) because
-  // that would limit history to one SUPERSEDED, one REVOKED, etc. per key.
 
   @@index([siteId, status])
   @@index([siteId, actionType])
   @@index([siteId, signalType, actionType])
 }
 
-// Phase D.7: Durable portfolio allocation record
-// Answers: "Why did the system choose opportunity A instead of B?"
-//
-// D.7 produces SELECTED / DEFERRED / EXCLUDED decisions.
-// D.3 reads SELECTED allocations.
-// Phase C remains the authority for budget, concurrency, and claims.
 model PortfolioAllocation {
   id                 String   @id @default(cuid())
   siteId             String
   opportunityId      String
 
-  cycleId            String      // Deterministic: "d7-{siteId}-{YYYYMMDD}"
-  optimizerVersion   String      // "d7-v1"
+  cycleId            String
+  optimizerVersion   String
 
-  decision           String      // SELECTED | DEFERRED | EXCLUDED
-  rank               Int?        // 1-indexed rank within selected
+  decision           String
+  rank               Int?
   utilityScore       Float?
 
-  reasonCodes        Json        // ["SCORE_THRESHOLD", "RESOURCE_CONFLICT", ...]
+  reasonCodes        Json
 
-  // Provenance — binds to exact D.2 evaluation
   scoreRecordId      String
   evidenceHash       String
-  learningVersion    String?     // D.6 version that influenced the D.2 score
+  learningVersion    String?
 
-  // Fencing
-  constraintSnapshot Json        // Full PortfolioConstraints used
-  candidateSnapshot  Json        // AllocationCandidate at decision time
+  constraintSnapshot Json
+  candidateSnapshot  Json
 
-  experimentPreference String?   // EXPERIMENT_PREFERRED | STANDARD_PREFERRED | NOT_EXPERIMENT_ELIGIBLE
+  experimentPreference String?
 
   allocatedAt        DateTime    @default(now())
-  expiresAt          DateTime    // Allocation validity window
+  expiresAt          DateTime
 
   site               Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
   opportunity        GrowthDecision @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
