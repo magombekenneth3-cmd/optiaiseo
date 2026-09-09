@@ -164,6 +164,11 @@ export function IntegrationsPanel({
                         accountLabel={github?.accountLabel}
                         lastSyncAt={github?.lastSyncAt}
                         configErrors={github?.configErrors ?? []}
+                        connectAction="/api/auth/signin/github?callbackUrl=%2Fdashboard%2Fsettings%3Ftab%3Dintegrations"
+                        onDisconnect={async () => {
+                            const res = await fetch("/api/settings/disconnect-github", { method: "POST" });
+                            if (!res.ok) throw new Error("Failed to disconnect");
+                        }}
                     />
 
                     {/* ── Ghost CMS ── */}
@@ -175,6 +180,7 @@ export function IntegrationsPanel({
                         accountLabel={ghost?.accountLabel}
                         lastSyncAt={ghost?.lastSyncAt}
                         configErrors={ghost?.configErrors ?? []}
+                        connectAction={`/dashboard/sites/${firstSiteId}#ghost`}
                     />
 
                     {/* ── Hashnode ── */}
@@ -186,6 +192,7 @@ export function IntegrationsPanel({
                         accountLabel={hashnode?.accountLabel}
                         lastSyncAt={hashnode?.lastSyncAt}
                         configErrors={hashnode?.configErrors ?? []}
+                        connectAction={`/dashboard/sites/${firstSiteId}#hashnode`}
                     />
 
                     {/* ── Moz (uses existing card but wrapped) ── */}

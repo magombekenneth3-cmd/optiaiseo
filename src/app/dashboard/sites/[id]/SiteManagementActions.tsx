@@ -47,7 +47,7 @@ export function SiteManagementActions({
     const [isSavingToken, setIsSavingToken] = useState(false);
 
     const [coreServices, setCoreServices] = useState(initialCoreServices || "");
-    const [_isSavingServices, setIsSavingServices] = useState(false);
+    const [isSavingServices, setIsSavingServices] = useState(false);
 
     const [techStack, setTechStack] = useState(initialTechStack || "nextjs");
     const [isSavingStack, setIsSavingStack] = useState(false);
@@ -112,7 +112,7 @@ export function SiteManagementActions({
         }
     };
 
-    const _handleSaveCoreServices = async () => {
+    const handleSaveCoreServices = async () => {
         setIsSavingServices(true);
         const coreResult = await saveCoreServices(siteId, coreServices);
         setIsSavingServices(false);
@@ -342,6 +342,13 @@ export function SiteManagementActions({
                         />
                         <div className="flex items-center justify-between">
                             <span className="text-xs text-muted-foreground">{coreServices.length}/2000</span>
+                            <button
+                                onClick={handleSaveCoreServices}
+                                disabled={isSavingServices}
+                                className="shrink-0 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-500/30"
+                            >
+                                {isSavingServices ? "Saving..." : "Save"}
+                            </button>
                         </div>
                     </div>
                 ) : (
