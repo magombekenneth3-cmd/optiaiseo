@@ -925,7 +925,6 @@ export default function AeoPage() {
               <div key={q} className="aeo-faq-item" id={`faq-${i}`}>
                 <button
                   className="aeo-faq-q"
-                  onClick={undefined}
                   aria-expanded="false"
                   data-faq-index={i}
                 >
@@ -968,9 +967,15 @@ export default function AeoPage() {
               var item = btn.closest('.aeo-faq-item');
               var isOpen = item.classList.contains('open');
               // close all
-              document.querySelectorAll('.aeo-faq-item').forEach(function (el) { el.classList.remove('open'); });
+              document.querySelectorAll('.aeo-faq-item').forEach(function (el) {
+                el.classList.remove('open');
+                el.querySelector('[data-faq-index]').setAttribute('aria-expanded', 'false');
+              });
               // toggle clicked
-              if (!isOpen) item.classList.add('open');
+              if (!isOpen) {
+                item.classList.add('open');
+                btn.setAttribute('aria-expanded', 'true');
+              }
             });
           });
         })();
