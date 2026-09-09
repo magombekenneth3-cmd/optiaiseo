@@ -64,7 +64,7 @@ export interface RawDiscoverySignal {
   resourceId: string;           // URL, query text, keyword, etc.
   url?: string;
   keyword?: string;
-  confidence: number;           // 0.0–1.0: probability the observed condition exists
+  confidence: number;           // 0.0-1.0: probability the observed condition EXISTS. This is NOT an impact score.
   evidence: DiscoveryEvidence[];
   metadata?: Record<string, unknown>;
 }

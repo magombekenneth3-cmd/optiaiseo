@@ -9,8 +9,9 @@ export default defineConfig({
         globals: true,
         // Point at the tests directory — keeps test files out of src
         include: ["tests/**/*.{test,spec}.{ts,tsx}"],
-        // Exclude Playwright e2e tests (they run separately via playwright)
         exclude: ["tests/e2e/**", "node_modules/**"],
+        fileParallelism: false,
+        testTimeout: 30_000,
         coverage: {
             provider: "v8",
             reporter: ["text", "json-summary"],
