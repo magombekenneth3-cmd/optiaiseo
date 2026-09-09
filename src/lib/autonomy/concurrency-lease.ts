@@ -59,11 +59,10 @@ export async function checkConcurrencySlot(siteId: string): Promise<ConcurrencyC
   const siteHash = siteIdToInt(siteId);
 
   const result = await prisma.$transaction(async (tx: any) => {
-    // Belt: advisory lock
-    await tx.$queryRawUnsafe(
-      `SELECT pg_advisory_xact_lock($1, $2)`,
-      CONCURRENCY_LOCK_NAMESPACE,
-      siteHash
+    // Belt: advisory lock (single-arg form for Railway PG compatibility)
+    const lockKey = BigInt(CONCURRENCY_LOCK_NAMESPACE) * BigInt(2147483647) + BigInt(siteHash >>> 0);
+    await tx.$executeRawUnsafe(
+      `SELECT pg_advisory_xact_lock(${lockKey.toString()})`
     );
 
     // Suspenders: lock Site row

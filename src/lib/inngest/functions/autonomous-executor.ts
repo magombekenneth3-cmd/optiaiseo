@@ -241,7 +241,7 @@ export const autonomousExecutorSite = inngest.createFunction(
 
 // ── Opportunity Processing ──────────────────────────────────────────────────
 
-interface ProcessOpportunityParams {
+export interface ProcessOpportunityParams {
   siteId: string;
   site: { operatingMode: string };
   opportunity: {
@@ -253,7 +253,8 @@ interface ProcessOpportunityParams {
   triggerType: "CRON" | "EVENT" | "MANUAL";
 }
 
-async function processOpportunity(params: ProcessOpportunityParams) {
+/** @internal Exported for D.8 E2E testing — not part of public API */
+export async function processOpportunity(params: ProcessOpportunityParams) {
   const { siteId, site, opportunity, triggerType } = params;
 
   // Skip opportunities that already have active proposals

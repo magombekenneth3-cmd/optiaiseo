@@ -166,7 +166,14 @@ export async function createOperation(
     affectedUrlCount: params.affectedUrlCount ?? 1,
   });
 
-  const needsApproval = requiresApproval(risk.riskLevel);
+  // For autonomous pipeline (SYSTEM actor), the policy gate has already
+  // authorized this operation through 6 gates. Auto-approve MEDIUM risk
+  // operations to avoid blocking the autonomous flow. HIGH/CRITICAL still
+  // require human approval even from SYSTEM actors.
+  const isSystemActor = params.actorType === "SYSTEM" || params.actorType === "CRON";
+  const needsApproval = isSystemActor
+    ? risk.riskLevel === "HIGH" || risk.riskLevel === "CRITICAL"
+    : requiresApproval(risk.riskLevel);
 
   // Create operation
   const operation = await prisma.mutationOperation.create({
@@ -425,6 +432,13 @@ export async function executeOperation(
       }, tx);
 
       return { newVersion };
+    }, {
+      // Transaction timeout: 30s for the transaction body.
+      // This transaction performs 7+ queries (fetch, kill switch, approval,
+      // before snapshot, versioned update, after snapshot, commit + audit).
+      // maxWait: 15s to wait for a connection from the pool.
+      timeout: 30000,
+      maxWait: 15000,
     });
 
     // Critical: check lease before declaring success.

@@ -83,7 +83,7 @@ export async function loadPlanningInput(
         },
       },
       scoreRecords: {
-        orderBy: { createdAt: "desc" },
+        orderBy: { scoredAt: "desc" },
         take: 1,
       },
     },
@@ -111,7 +111,7 @@ export async function loadPlanningInput(
       siteId: decision.siteId,
       url: decision.url,
       primaryKeyword: decision.primaryKeyword ?? "",
-      category: decision.category ?? decision.action,
+      category: decision.primaryCategory ?? decision.action,
       action: decision.action,
       opportunityStatus: decision.opportunityStatus ?? "OPEN",
       expiresAt: decision.expiresAt,

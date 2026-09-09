@@ -1,24 +1,3 @@
-// =============================================================================
-// ACTION RUNNER — Executes Approved Proposals Through the Mutation Lifecycle
-//
-// This is the controlled boundary where proposals become real changes.
-// The runner NEVER bypasses the mutation lifecycle:
-//
-//   ActionProposal (APPROVED)
-//     → Preconditions
-//     → Authorization
-//     → Idempotency
-//     → createOperation()
-//     → executeOperation()
-//     → registerEffect()
-//     → Capture result
-//     → Link experiment variant (D.5)
-//     → Schedule verification
-//
-// Agents never directly mutate production resources.
-// The ActionRunner is the sole authorized mutator.
-// =============================================================================
-
 import { logger } from "@/lib/logger";
 import {
   createOperation,

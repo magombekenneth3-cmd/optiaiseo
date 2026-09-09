@@ -118,10 +118,10 @@ export async function allocatePortfolioForSite(
     // ── 2. Acquire per-site advisory lock ──────────────────────────────
     // Uses $executeRawUnsafe because pg_advisory_xact_lock returns void,
     // which Prisma's $queryRawUnsafe cannot deserialize.
+    // Single-arg form for Railway PG compatibility.
+    const lockKey = BigInt(PORTFOLIO_LOCK_NAMESPACE) * BigInt(2147483647) + BigInt(siteHash >>> 0);
     await tx.$executeRawUnsafe(
-      `SELECT pg_advisory_xact_lock($1::integer, $2::integer)`,
-      PORTFOLIO_LOCK_NAMESPACE,
-      siteHash
+      `SELECT pg_advisory_xact_lock(${lockKey.toString()})`
     );
 
     // ── 3. Load OPEN opportunities with latest PROMOTE score records ───

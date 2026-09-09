@@ -124,10 +124,11 @@ export async function reserveBudget(
     // Belt: PostgreSQL advisory lock scoped to this transaction.
     // Blocks all concurrent budget operations for this site.
     // Released automatically when the transaction commits/rolls back.
-    await tx.$queryRawUnsafe(
-      `SELECT pg_advisory_xact_lock($1, $2)`,
-      BUDGET_LOCK_NAMESPACE,
-      siteHash
+    // Use $executeRawUnsafe (not $queryRawUnsafe) because pg_advisory_xact_lock
+    // returns void, which Prisma cannot deserialize from $queryRaw.
+    const lockKey = BigInt(BUDGET_LOCK_NAMESPACE) * BigInt(2147483647) + BigInt(siteHash >>> 0);
+    await tx.$executeRawUnsafe(
+      `SELECT pg_advisory_xact_lock(${lockKey.toString()})`
     );
 
     // Suspenders: Lock the Site row to serialize even if advisory locks
@@ -143,9 +144,7 @@ export async function reserveBudget(
 
     const limit = site.dailyMutationLimit as number;
 
-    // Count active reservations in the rolling window.
-    // This count is now serialized — no other worker can be between
-    // their count and their insert for this site.
+
     const used = await tx.budgetReservation.count({
       where: {
         siteId,

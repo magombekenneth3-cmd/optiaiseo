@@ -93,11 +93,10 @@ export async function claimExecution(
 
   try {
     const claim = await prisma.$transaction(async (tx: any) => {
-      // Advisory lock on the opportunity
-      await tx.$queryRawUnsafe(
-        `SELECT pg_advisory_xact_lock($1, $2)`,
-        CLAIM_LOCK_NAMESPACE,
-        oppHash
+      // Advisory lock on the opportunity (single-arg form for Railway PG compatibility)
+      const lockKey = BigInt(CLAIM_LOCK_NAMESPACE) * BigInt(2147483647) + BigInt(oppHash >>> 0);
+      await tx.$executeRawUnsafe(
+        `SELECT pg_advisory_xact_lock(${lockKey.toString()})`
       );
 
       // Check existing claim
