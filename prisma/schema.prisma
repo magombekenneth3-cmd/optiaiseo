@@ -1439,7 +1439,7 @@ model OpportunityScoreRecord {
 model Experiment {
   id                   String   @id @default(cuid())
   siteId               String
-  opportunityId        String
+  opportunityId        String?
 
   // Hypothesis
   hypothesis           String   @db.Text

@@ -62,12 +62,10 @@ export async function runAction(
     input.workerId ?? `worker:${process.pid}:${Date.now()}`;
   const { prisma } = await import("@/lib/prisma");
 
-  // 1. Load proposal
   const proposal = await (prisma as any).actionProposal.findUniqueOrThrow({
     where: { id: input.proposalId },
   });
 
-  // Must be APPROVED
   if (proposal.status !== "APPROVED") {
     if (proposal.status === "READY") {
       return {
@@ -96,7 +94,6 @@ export async function runAction(
   });
 
   if (!approvalResult.valid) {
-    // Transition to EXPIRED if TTL exceeded
     if (approvalResult.reason?.includes("expired")) {
       await (prisma as any).actionProposal.update({
         where: { id: input.proposalId },

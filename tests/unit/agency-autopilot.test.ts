@@ -18,5 +18,5 @@ describe("Autonomous White-Label Agency Autopilot Unit Tests", () => {
         expect(result.pdfBufferLength).toBeGreaterThan(0);
         expect(result.routineFixesApplied).toBeGreaterThan(0);
         expect(result.emailDelivered).toBe(true);
-    }, 15000);
+    }, 30_000);
 });

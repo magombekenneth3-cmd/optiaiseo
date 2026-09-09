@@ -1,20 +1,3 @@
-/**
- * D.8.1.1 — Provider Test Adapter (D.4 / Gemini Stub)
- *
- * Controllable LLM provider stub for D.8 failure injection tests.
- *
- * Modes:
- *   SUCCESS          — Returns a valid enhancement response
- *   NOT_FOUND        — Simulates Gemini 404 (RESOURCE_GONE classification)
- *   TIMEOUT          — Simulates request timeout (TRANSIENT classification)
- *   RATE_LIMITED     — Simulates 429 (TRANSIENT classification)
- *   MALFORMED_OUTPUT — Returns structurally invalid JSON (LLM_MALFORMED_OUTPUT)
- *   DELAYED_SUCCESS  — Waits for a configurable delay before returning SUCCESS.
- *                      Allows the test to mutate evidence while "in flight".
- *
- * Classification: UNIT / MOCKED
- */
-
 export type ProviderMode =
   | "SUCCESS"
   | "NOT_FOUND"

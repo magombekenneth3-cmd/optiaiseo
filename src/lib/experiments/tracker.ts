@@ -183,8 +183,10 @@ async function readDbExperiment(experimentId: string): Promise<ExperimentRecord 
     try {
         const row = await (prisma as any).experiment.findUnique({ where: { id: experimentId } });
         if (row) return dbRowToExperiment(row);
-    } catch {
-        // DB unavailable — fall through to in-memory store
+    } catch (dbErr: unknown) {
+        logger.warn("[ExperimentTracker] DB read failed for experiment — falling back to in-memory", {
+            experimentId, error: (dbErr as Error)?.message,
+        });
     }
     // Fallback: check in-memory store
     return memoryStore.get(experimentId) ?? null;
@@ -498,8 +500,10 @@ export async function getSiteExperimentSummary(
             where: { siteId },
         });
         experiments = rows.map(dbRowToExperiment);
-    } catch {
-        // DB unavailable — fall through to in-memory store
+    } catch (dbErr: unknown) {
+        logger.warn("[ExperimentTracker] DB read failed for site experiments — falling back to in-memory", {
+            siteId, error: (dbErr as Error)?.message,
+        });
     }
 
     // Merge in-memory experiments that may not be in DB

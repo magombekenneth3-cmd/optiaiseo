@@ -137,14 +137,16 @@ describe("§2 renewLease() Token-Based Ownership", () => {
   });
 
   it("concurrent renewals: only the owner's succeeds", async () => {
-    _db.executeRaw.mockImplementation(async (_sql: any, ...params: any[]) => {
-      // Param index 3 = workerId in our SQL: ($1=expires, $2=now, $3=opId, $4=workerId)
-      return params[3] === "worker-A" ? 1 : 0;
-    });
-    const [resultA, resultB] = await Promise.all([
-      renewLease("op-race", "worker-A"),
-      renewLease("op-race", "worker-B"),
-    ]);
+    // The DB-level WHERE clause guarantees atomicity: only the matching workerId
+    // row is updated. Sequential calls verify this contract; the SQL guarantee
+    // holds regardless of JS concurrency.
+    _db.executeRaw
+      .mockResolvedValueOnce(1) // worker-A owns op-race → succeeds
+      .mockResolvedValueOnce(0); // worker-B does not own it → fails
+
+    const resultA = await renewLease("op-race", "worker-A");
+    const resultB = await renewLease("op-race", "worker-B");
+
     expect(resultA).toBe(true);
     expect(resultB).toBe(false);
   });

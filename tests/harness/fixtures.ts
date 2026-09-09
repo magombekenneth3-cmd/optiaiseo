@@ -1,17 +1,3 @@
-/**
- * D.8.1.1 — Fixture Factories
- *
- * Deterministic, isolated seed helpers for all D.8 test suites.
- * Every factory accepts explicit IDs so tests control isolation.
- *
- * Usage:
- *   const ctx = makeTestContext("my-test");
- *   await seedSite(prisma, ctx.siteId, ctx.userId);
- *   await seedOpportunity(prisma, ctx, { action: "UPDATE_META_DESCRIPTION" });
- *
- * Infrastructure: LIVE_DB (all factories write to DB)
- */
-
 import type { PrismaClient } from "@prisma/client";
 
 // ── Test Context ─────────────────────────────────────────────────────────────
@@ -89,6 +75,8 @@ export interface OpportunityOverrides {
   opportunityStatus?: string;
   url?: string;
   expiresAt?: Date | null;
+  discoveryConfidence?: number;
+  score?: Record<string, unknown>;
 }
 
 export async function seedOpportunity(
@@ -108,7 +96,8 @@ export async function seedOpportunity(
       action: overrides.action ?? "UPDATE_META_DESCRIPTION",
       primaryCategory: overrides.primaryCategory ?? "QUICK_WIN",
       opportunityCategories: [overrides.primaryCategory ?? "QUICK_WIN"],
-      score: { finalScore: 80 },
+      score: overrides.score ?? { finalScore: 80 },
+      discoveryConfidence: overrides.discoveryConfidence ?? null,
       whyNow: { reason: "test" },
       impact: { expectedUplift: 10 },
       executionPlan: { steps: [] },
@@ -160,6 +149,75 @@ export async function seedScoreRecord(
   return record.id;
 }
 
+// ── Source Finding (AgentRun → AgentFinding → OpportunityFinding) ─────────────
+
+export interface FindingOverrides {
+  findingId?: string;
+  agentRunId?: string;
+  findingType?: string;
+  severity?: "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  confidence?: number;
+}
+
+/**
+ * Seeds the full evidence chain: AgentRun → AgentFinding → OpportunityFinding.
+ * Required for planOpportunity() to pass the NO_EVIDENCE validation check.
+ */
+export async function seedFinding(
+  db: any,
+  ctx: TestContext,
+  opportunityId: string,
+  overrides: FindingOverrides = {}
+): Promise<string> {
+  const agentRunId = overrides.agentRunId ?? ctx.id("agent-run");
+  const findingId = overrides.findingId ?? ctx.id("finding");
+  const fingerprint = `fp:${ctx.siteId}:${findingId}`;
+
+  // 1. AgentRun
+  await db.agentRun.upsert({
+    where: { id: agentRunId },
+    update: {},
+    create: {
+      id: agentRunId,
+      siteId: ctx.siteId,
+      agentType: "DISCOVERY",
+      status: "COMPLETED",
+      startedAt: new Date(),
+      completedAt: new Date(),
+      findingCount: 1,
+    },
+  });
+
+  // 2. AgentFinding
+  await db.agentFinding.upsert({
+    where: { id: findingId },
+    update: {},
+    create: {
+      id: findingId,
+      agentRunId,
+      fingerprint,
+      type: overrides.findingType ?? "MISSING_META_DESCRIPTION",
+      severity: overrides.severity ?? "MEDIUM",
+      status: "OPEN",
+      title: "D8 Test Finding",
+      description: "Seeded by D.8 test harness",
+      confidence: overrides.confidence ?? 0.85,
+      resourceType: "PAGE",
+      resourceId: `https://${ctx.siteId}.d8-test.local/page`,
+    },
+  });
+
+  // 3. OpportunityFinding (join table)
+  await db.opportunityFinding.create({
+    data: {
+      decisionId: opportunityId,
+      findingId,
+    },
+  });
+
+  return findingId;
+}
+
 // ── Portfolio Allocation ──────────────────────────────────────────────────────
 
 export interface AllocationOverrides {
@@ -168,7 +226,9 @@ export interface AllocationOverrides {
   scoreRecordId?: string;
   evidenceHash?: string;
   expiresAt?: Date;
-  reason?: string;
+  allocatedAt?: Date;
+  reasonCodes?: string[];
+  candidateSnapshot?: Record<string, unknown>;
 }
 
 export async function seedAllocation(
@@ -184,14 +244,21 @@ export async function seedAllocation(
       siteId: ctx.siteId,
       opportunityId,
       cycleId,
+      optimizerVersion: "d7-v1",
       decision: overrides.decision ?? "SELECTED",
       rank: overrides.rank ?? 1,
       scoreRecordId,
       evidenceHash: overrides.evidenceHash ?? `hash-${opportunityId}`,
-      candidateSnapshot: { finalScore: 80, riskScore: 20 },
+      candidateSnapshot: overrides.candidateSnapshot ?? {
+        finalScore: 80,
+        riskScore: 20,
+        resourceType: "PAGE",
+        resourceId: `https://${ctx.siteId}.d8-test.local/page`,
+      },
       constraintSnapshot: { dailyMutationLimit: 10, maxConcurrentExecutions: 3 },
-      reason: overrides.reason ?? "D8 fixture",
+      reasonCodes: overrides.reasonCodes ?? ["SCORE_ELIGIBLE"],
       expiresAt: overrides.expiresAt ?? new Date(Date.now() + 86400_000),
+      ...(overrides.allocatedAt ? { allocatedAt: overrides.allocatedAt } : {}),
     },
   });
   return record.id;
@@ -237,17 +304,26 @@ export async function seedProposal(
       confidence: 0.85,
       status: overrides.status ?? "DRAFT",
       requiresApproval: overrides.requiresApproval ?? false,
+      verificationCriteria: [],
     },
   });
   return proposalId;
 }
 
 // ── Experiment (D.5) ──────────────────────────────────────────────────────────
+//
+// IMPORTANT: The live DB Experiment table uses a LEGACY schema:
+//   id, decisionId, siteId, targetUrl, actionExecuted, executedAt,
+//   evaluationDate, status, baseline, lift, createdAt, updatedAt
+//
+// The Prisma schema definition is AHEAD of the applied migration.
+// This fixture seeds using only columns that exist in the live DB.
+//
 
 export interface ExperimentOverrides {
   experimentId?: string;
   status?: string;
-  url?: string;
+  targetUrl?: string;
 }
 
 export async function seedExperiment(
@@ -257,36 +333,22 @@ export async function seedExperiment(
   overrides: ExperimentOverrides = {}
 ): Promise<string> {
   const experimentId = overrides.experimentId ?? ctx.id("experiment");
-  const configPayload = {
-    siteId: ctx.siteId,
-    opportunityId,
-    hypothesis: "D8 test experiment",
-    successMetric: "clicks_lift",
-    successThreshold: 10,
-    maxDurationDays: 28,
-    maxMutationCount: 1,
-    maxBudgetUnits: 1,
-  };
-  const configHash = Buffer.from(JSON.stringify(configPayload)).toString("base64").slice(0, 44);
 
-  await db.experiment.upsert({
-    where: { id: experimentId },
-    update: {},
-    create: {
-      id: experimentId,
-      siteId: ctx.siteId,
-      opportunityId,
-      hypothesis: "D8 test experiment",
-      successMetric: "clicks_lift",
-      successThreshold: 10,
-      status: overrides.status ?? "RUNNING",
-      configVersion: "d5-v1",
-      configHash,
-      maxDurationDays: 28,
-      maxMutationCount: 1,
-      maxBudgetUnits: 1,
-    },
-  });
+  // Use raw SQL to bypass Prisma model validation (schema ahead of migration)
+  // Include ALL 12 columns from live DB — none may be NULL in legacy schema
+  await db.$executeRawUnsafe(
+    `INSERT INTO "Experiment"
+       ("id", "decisionId", "siteId", "targetUrl", "actionExecuted",
+        "executedAt", "evaluationDate", "status", "baseline", "lift",
+        "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, $4, 'D8_TEST', NOW(), NOW(), $5, '{}', '{}', NOW(), NOW())
+     ON CONFLICT ("id") DO NOTHING`,
+    experimentId,
+    opportunityId,
+    ctx.siteId,
+    overrides.targetUrl ?? `https://${ctx.siteId}.d8-test.local/page`,
+    overrides.status ?? "RUNNING",
+  );
   return experimentId;
 }
 
@@ -335,21 +397,37 @@ export async function seedTrace(
  */
 export async function cleanupContext(db: any, ctx: TestContext): Promise<void> {
   // Cascade order: allocations → score records → opportunities → proposals → traces → site → user
-  try { await db.portfolioAllocation.deleteMany({ where: { siteId: ctx.siteId } }); } catch {}
-  try { await db.autonomousExecutionClaim.deleteMany({ where: { siteId: ctx.siteId } }); } catch {}
-  try { await db.budgetReservation.deleteMany({ where: { siteId: ctx.siteId } }); } catch {}
-  try { await db.executionTrace.deleteMany({ where: { siteId: ctx.siteId } }); } catch {}
+  try { await db.portfolioAllocation.deleteMany({ where: { siteId: ctx.siteId } }); } catch { }
+  try { await db.autonomousExecutionClaim.deleteMany({ where: { siteId: ctx.siteId } }); } catch { }
+  try { await db.budgetReservation.deleteMany({ where: { siteId: ctx.siteId } }); } catch { }
+  try { await db.executionTrace.deleteMany({ where: { siteId: ctx.siteId } }); } catch { }
   try {
     const opps = await db.growthDecision.findMany({ where: { siteId: ctx.siteId }, select: { id: true } });
     const ids = opps.map((o: any) => o.id);
     if (ids.length) {
       await db.opportunityScoreRecord.deleteMany({ where: { opportunityId: { in: ids } } });
       await db.actionProposal.deleteMany({ where: { decisionId: { in: ids } } });
-      await db.experiment.deleteMany({ where: { opportunityId: { in: ids } } });
+      try { await db.opportunityFinding.deleteMany({ where: { decisionId: { in: ids } } }); } catch { }
+      // Use raw SQL — live DB uses decisionId, not opportunityId
+      try {
+        await db.$executeRawUnsafe(
+          `DELETE FROM "Experiment" WHERE "decisionId" = ANY($1::text[])`,
+          ids,
+        );
+      } catch { /* column may not exist in all environments */ }
       await db.growthDecision.deleteMany({ where: { siteId: ctx.siteId } });
     }
-  } catch {}
-  try { await db.circuitBreaker.deleteMany({ where: { siteId: ctx.siteId } }); } catch {}
-  try { await db.site.deleteMany({ where: { id: ctx.siteId } }); } catch {}
-  try { await db.user.deleteMany({ where: { id: ctx.userId } }); } catch {}
+  } catch { }
+  // Clean up findings: AgentFinding (via AgentRun.siteId) → AgentRun
+  try {
+    const runs = await db.agentRun.findMany({ where: { siteId: ctx.siteId }, select: { id: true } });
+    const runIds = runs.map((r: any) => r.id);
+    if (runIds.length) {
+      await db.agentFinding.deleteMany({ where: { agentRunId: { in: runIds } } });
+      await db.agentRun.deleteMany({ where: { id: { in: runIds } } });
+    }
+  } catch { }
+  try { await db.circuitBreaker.deleteMany({ where: { siteId: ctx.siteId } }); } catch { }
+  try { await db.site.deleteMany({ where: { id: ctx.siteId } }); } catch { }
+  try { await db.user.deleteMany({ where: { id: ctx.userId } }); } catch { }
 }

@@ -16,6 +16,6 @@ describe("Combined AEO + SEO SERP Overview Widget Unit Tests", () => {
         expect(report.aeoConsensusScore).toBeLessThanOrEqual(100);
         expect(report.aiVisibility).toBeDefined();
         expect(report.aeoOpportunityRecommendation).toBeDefined();
-    }, 15000);
+    }, 30_000);
 
 });

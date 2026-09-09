@@ -19,7 +19,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 const SHOULD_RUN = process.env.D7_CONCURRENCY_TEST === "true";
 
-// Helper to conditionally skip
 const testIf = SHOULD_RUN ? it : it.skip;
 
 describe("D.7 Concurrent Allocator — Database Integration", () => {
@@ -110,7 +109,6 @@ describe("D.7 Concurrent Allocator — Database Integration", () => {
 
     const { prisma } = await import("@/lib/prisma");
 
-    // Clean up in reverse dependency order
     await (prisma as any).portfolioAllocation.deleteMany({
       where: { siteId: TEST_SITE_ID },
     });
@@ -135,8 +133,6 @@ describe("D.7 Concurrent Allocator — Database Integration", () => {
     async () => {
       const { allocatePortfolioForSite } = await import("@/lib/portfolio/allocator");
       const { prisma } = await import("@/lib/prisma");
-
-      // Fire N concurrent allocations simultaneously
       const promises = Array.from({ length: CONCURRENT_WORKERS }, () =>
         allocatePortfolioForSite(TEST_SITE_ID).catch((err) => ({
           error: err.message,
@@ -144,8 +140,6 @@ describe("D.7 Concurrent Allocator — Database Integration", () => {
       );
 
       const results = await Promise.all(promises);
-
-      // ── Separate transient network errors from concurrency bugs ───────
       const allErrors = results.filter(
         (r) => r && typeof r === "object" && "error" in r
       );
@@ -153,10 +147,7 @@ describe("D.7 Concurrent Allocator — Database Integration", () => {
         (r: any) => !r.error.includes("Can't reach database server")
           && !r.error.includes("Unable to start a transaction")
       );
-      // Concurrency bugs (duplicate keys, constraint violations, etc.) = FAIL
       expect(concurrencyErrors).toEqual([]);
-
-      // ── Verify: at least 2 successful results (proves serialization) ──
       const validResults = results.filter((r) => r !== null && !("error" in r));
       expect(validResults.length).toBeGreaterThanOrEqual(2);
 
@@ -166,7 +157,6 @@ describe("D.7 Concurrent Allocator — Database Integration", () => {
       expect(cycleIds.size).toBe(1);
       const cycleId = [...cycleIds][0];
 
-      // ── Verify: no duplicate allocation rows ─────────────────────────
       const allocations = await (prisma as any).portfolioAllocation.findMany({
         where: { siteId: TEST_SITE_ID, cycleId },
         orderBy: { rank: "asc" },
@@ -175,13 +165,9 @@ describe("D.7 Concurrent Allocator — Database Integration", () => {
       const uniqueOppIds = new Set(allocations.map((a: any) => a.opportunityId));
       expect(allocations.length).toBe(uniqueOppIds.size); // No duplicates
 
-      // ── Verify: every opportunity has exactly one allocation ──────────
       expect(uniqueOppIds.size).toBe(OPPORTUNITY_COUNT);
 
-      // ── Verify: consistent decisions and ranks ───────────────────────
-      // All results that returned a value should agree on rankings
       for (const r of validResults as any[]) {
-        // Each result's selected list should have the same opportunityIds
         const selectedIds = r.selected.map((s: any) => s.opportunityId).sort();
         const referenceSelectedIds = validResults[0]
           ? (validResults[0] as any).selected.map((s: any) => s.opportunityId).sort()
@@ -189,13 +175,10 @@ describe("D.7 Concurrent Allocator — Database Integration", () => {
         expect(selectedIds).toEqual(referenceSelectedIds);
       }
 
-      // ── Verify: no constraint over-allocation ────────────────────────
       const selectedCount = allocations.filter(
         (a: any) => a.decision === "SELECTED"
       ).length;
-      expect(selectedCount).toBeLessThanOrEqual(10); // dailyMutationLimit
-
-      // ── Verify: ranks are sequential and unique among SELECTED ───────
+      expect(selectedCount).toBeLessThanOrEqual(10);
       const selectedAllocations = allocations
         .filter((a: any) => a.decision === "SELECTED")
         .sort((a: any, b: any) => a.rank - b.rank);
@@ -210,6 +193,6 @@ describe("D.7 Concurrent Allocator — Database Integration", () => {
         `${allocations.length} total allocations, 0 duplicates`
       );
     },
-    60000 // 60s timeout for DB operations
+    60000
   );
 });
