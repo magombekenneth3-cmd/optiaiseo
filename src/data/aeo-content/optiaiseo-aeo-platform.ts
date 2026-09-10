@@ -1,0 +1,18 @@
+import type { AeoGuideContent } from "./types";
+
+export const content: AeoGuideContent = {
+  slug: "optiaiseo-aeo-platform",
+  intro: "OptiAISEO is the only all-in-one platform built specifically for answer engine optimization — combining AEO audits, AI Share of Voice tracking, schema markup generation, and GEO monitoring in a single workflow.",
+  sections: [
+    { heading: "What OptiAISEO Does", body: "OptiAISEO audits your content for answer-readiness, identifies pages missing structured data and FAQ schema, tracks how often your brand is cited across ChatGPT, Perplexity, Gemini, and Google AI Overviews, generates fix recommendations with one-click schema output, and monitors your AI Share of Voice against competitors. It's the only platform that covers the complete AEO workflow — from audit to action to measurement — without requiring a stack of separate tools." },
+    { heading: "Core Features", body: "AEO Audit: scan any URL for answer-readiness gaps — missing schema, weak content structure, no FAQ block, thin E-E-A-T signals. AI Share of Voice: automated weekly tracking of your citation frequency across all major AI platforms for your target keyword set. Schema Generator: one-click FAQPage, HowTo, and Article JSON-LD output for any audited page. Competitor Analysis: compare your AI citation rate against up to 5 competitors on the same keyword set. GEO Tracking: monitor brand mention frequency in AI-generated content, separate from formal citations." },
+    { heading: "How It Compares to Traditional SEO Tools", body: "Semrush, Ahrefs, and Moz are excellent for traditional SEO — keyword research, backlink analysis, rank tracking. None of them track AI citation rates, monitor brand mentions in AI outputs, or generate AEO-specific schema fixes. They're essential for the SEO foundation but have a blind spot for everything that happens in the AI search layer. OptiAISEO is designed to complement traditional SEO tools, not replace them." },
+    { heading: "Pricing and Plans", body: "OptiAISEO starts at $29/month for individuals and freelancers, covering 1 domain and 50 tracked keywords. The Growth plan ($79/month) covers 3 domains and 200 keywords, adding competitor AI tracking. The Agency plan ($199/month) supports 10 domains, 500 keywords, white-label reporting, and API access. All plans include a 14-day free trial. Annual billing provides 20% discount." },
+    { heading: "Getting Started", body: "To get started: add your domain, enter your 20 most important keywords, and run your first AEO audit. Within 24 hours, you'll have a prioritized list of pages to fix and your baseline AI citation rate. The audit report identifies which pages are most likely to appear in AI answers with targeted improvements and which pages need structural rebuilding. Most users see measurable citation improvements within 4–6 weeks of implementing the top recommendations." },
+  ],
+  faqs: [
+    { q: "What AI platforms does OptiAISEO track?", a: "OptiAISEO tracks citations and brand mentions across Google AI Overviews, ChatGPT (with browsing), Perplexity AI, and Gemini. Coverage of additional platforms is added as AI search expands." },
+    { q: "Does OptiAISEO work for any industry?", a: "Yes. OptiAISEO's AEO audit framework and citation tracking are industry-agnostic. The platform is used by SaaS companies, e-commerce stores, professional services firms, agencies, and content publishers." },
+    { q: "Can I use OptiAISEO if I'm already using Semrush or Ahrefs?", a: "Yes — OptiAISEO is designed to complement traditional SEO tools. Import your keyword lists from Semrush or Ahrefs and use OptiAISEO for the AI-specific monitoring layer those tools don't cover." },
+  ],
+};

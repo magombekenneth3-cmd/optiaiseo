@@ -1,0 +1,19 @@
+import type { AeoGuideContent } from "./types";
+
+export const content: AeoGuideContent = {
+  slug: "how-to-appear-in-google-ai-overviews",
+  intro: "Getting your content cited in Google AI Overviews requires a combination of traditional ranking strength and AEO-specific formatting. This step-by-step guide covers the exact process for earning AI Overview citations in 2026.",
+  sections: [
+    { heading: "Step 1: Rank on Page One First", body: "Google AI Overviews predominantly cite sources that already rank on page one for the target query. Before optimizing for AI citations specifically, ensure your page has solid traditional SEO fundamentals — relevant content, strong backlinks, good Core Web Vitals, and proper on-page optimization. If you're not on page one, AI Overview optimization is premature." },
+    { heading: "Step 2: Structure Content as Direct Answers", body: "Place a concise, 2–3 sentence direct answer to the page's target query within the first 200 words. Don't bury the answer after a lengthy introduction. AI Overview's retrieval system scans for clear, extractable answers — if your answer requires reading three paragraphs of context first, a competitor's cleaner answer will be cited instead." },
+    { heading: "Step 3: Use Question-Format Headings", body: "Structure your H2 and H3 headings as questions that users actually search for. AI systems treat headings as queries and the following paragraph as the answer. For example, instead of 'Pricing Considerations,' use 'How Much Does X Cost?' followed by a direct answer paragraph. This heading-answer pattern aligns with how the AI retrieval pipeline parses content." },
+    { heading: "Step 4: Implement FAQ and Article Schema", body: "Add FAQPage JSON-LD schema for pages that answer multiple related questions. Use Article schema with proper headline, datePublished, dateModified, and author fields. These markup types give Google's AI explicit signals about your content's structure. Validate your implementation using Google's Rich Results Test before deploying." },
+    { heading: "Step 5: Build Depth, Not Just Breadth", body: "AI Overviews favor sources that demonstrate comprehensive coverage of a topic. Create a cluster of supporting pages around your core topic, interlinked with descriptive anchor text. A single page answering one question is useful; a topic cluster of 8–12 interlinked pages covering every angle signals authority that the AI system can verify." },
+    { heading: "Step 6: Monitor and Iterate", body: "Use Google Search Console to identify which queries trigger AI Overviews for your domain. Cross-reference with OptiAISEO's AI Overview tracking to see your citation rate over time. Focus iteration on pages that rank well traditionally but don't get cited — they typically need better answer formatting, more specific data points, or additional FAQ schema." },
+  ],
+  faqs: [
+    { q: "How long does it take to appear in AI Overviews?", a: "If your page already ranks on page one, AEO formatting changes can result in AI Overview citations within 2–4 weeks after Google re-crawls and re-indexes the page. New pages without existing ranking authority take longer — typically 2–3 months to build sufficient signals." },
+    { q: "Does every Google search show an AI Overview?", a: "No. AI Overviews appear for roughly 30% of Google searches in 2026, primarily for informational and research queries. Navigational and transactional queries rarely trigger them." },
+    { q: "Can I force Google to show my page in AI Overviews?", a: "No. There's no guaranteed way to force inclusion. You can optimize for selection by following the steps above, but Google's AI determines which sources to cite based on relevance, authority, and content structure. Consistent optimization increases your probability significantly." },
+  ],
+};

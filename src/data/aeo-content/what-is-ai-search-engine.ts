@@ -1,0 +1,18 @@
+import type { AeoGuideContent } from "./types";
+
+export const content: AeoGuideContent = {
+  slug: "what-is-ai-search-engine",
+  intro: "AI search engines use large language models and retrieval-augmented generation to understand natural-language questions and synthesize direct answers from web content. This guide explains how they work, how they differ from traditional search, and why they're reshaping how users find information.",
+  sections: [
+    { heading: "What Is an AI Search Engine?", body: "An AI search engine is a platform that uses large language models (LLMs) to understand user queries in natural language and generate synthesized answers — rather than returning a list of blue links. Examples include ChatGPT with web browsing, Perplexity AI, Google with AI Overviews, and Microsoft Copilot. These systems retrieve relevant web pages, then generate a coherent answer that cites its sources." },
+    { heading: "How AI Search Engines Process Queries", body: "Traditional search engines match keywords to indexed pages. AI search engines go further: they parse the semantic meaning of a query, retrieve candidate documents via a retrieval-augmented generation (RAG) pipeline, evaluate source authority and relevance, then synthesize a response that draws on multiple sources. The output is a generated paragraph — not a ranked list — with optional source citations." },
+    { heading: "Key AI Search Platforms in 2026", body: "The major AI search platforms are Google AI Overviews (integrated directly into Google Search results), ChatGPT with browsing (OpenAI's conversational search), Perplexity AI (purpose-built AI search with source citations), Gemini (Google's standalone AI assistant), and Microsoft Copilot (integrated into Bing and Microsoft 365). Each has different source selection criteria, citation patterns, and user bases." },
+    { heading: "How AI Search Differs from Traditional Search", body: "Traditional search returns ten ranked links and lets the user choose. AI search synthesizes a single answer and cites its sources inline. This means users may never visit your website — but your brand still gets exposure through citations. The implication for publishers is clear: content must be structured for extraction and citation, not just for ranking. Being the source an AI quotes is the new visibility metric." },
+    { heading: "What This Means for Content Creators", body: "Content creators need to optimize for two audiences simultaneously: traditional crawlers that index and rank pages, and AI systems that extract and cite information. This means using clear question-answer formatting, implementing structured data markup, building topical authority through comprehensive coverage, and monitoring AI citation rates alongside traditional ranking metrics." },
+  ],
+  faqs: [
+    { q: "What are the main AI search engines?", a: "The major AI search engines in 2026 are Google AI Overviews, ChatGPT with web browsing, Perplexity AI, Gemini, and Microsoft Copilot. Each synthesizes answers from web content rather than returning traditional ranked link lists." },
+    { q: "Do AI search engines replace Google?", a: "Not yet. AI search supplements traditional search — Google itself integrates AI Overviews into its results. Most users still use traditional search for navigational and transactional queries, while AI search is growing fastest for informational and research queries." },
+    { q: "Can I see which AI search engines cite my content?", a: "Yes. Tools like OptiAISEO track AI citations across ChatGPT, Perplexity, Gemini, and Google AI Overviews. You can also manually test by querying your target keywords in each platform and checking whether your brand appears in the generated answers." },
+  ],
+};

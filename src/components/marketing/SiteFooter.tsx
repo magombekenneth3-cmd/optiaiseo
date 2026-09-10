@@ -37,6 +37,7 @@ const FOOTER_LINKS = [
       { href: "/free/gso-checker",  label: "Free AI Checker" },
       { href: "/free/reddit-seo",   label: "Reddit SEO Finder" },
       { href: "/tools",             label: "SEO Tool Guides" },
+      { href: "/aeo-guide",         label: "AEO Guides" },
       { href: "/blog",              label: "SEO Blog" },
       { href: "/leaderboard",       label: "AI SEO Leaderboard" },
     ],

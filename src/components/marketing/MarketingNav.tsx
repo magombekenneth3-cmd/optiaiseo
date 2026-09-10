@@ -33,6 +33,7 @@ const NAV_LINKS: NavLink[] = [
   { href: "/vs", label: "Compare" },
   { href: "/pricing", label: "Pricing" },
   { href: "/guide", label: "Guides" },
+  { href: "/aeo-guide", label: "AEO Guides" },
   { href: "/blog", label: "Blog" },
 ];
 

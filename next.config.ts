@@ -156,6 +156,33 @@ const nextConfig: NextConfig = {
         destination: 'https://optiaiseo.online/:path*',
         permanent: true,
       },
+
+      // ── AEO guide consolidation — 301 redirects ─────────────────────────
+      // 21 consolidated slugs → their canonical pages.
+      // See: aeo_url_classification.md for the full decision matrix.
+      { source: '/aeo-guide/aeo-beginners-guide',           destination: '/aeo-guide/what-is-answer-engine-optimization', permanent: true },
+      { source: '/aeo-guide/indirect-aeo-benefits',         destination: '/aeo-guide/what-is-answer-engine-optimization', permanent: true },
+      { source: '/aeo-guide/generative-ai-seo-2026',        destination: '/aeo-guide/what-is-generative-engine-optimization', permanent: true },
+      { source: '/aeo-guide/how-ai-search-engines-work',    destination: '/aeo-guide/what-is-ai-search-engine', permanent: true },
+      { source: '/aeo-guide/rank-in-google-sge',            destination: '/aeo-guide/how-to-appear-in-google-ai-overviews', permanent: true },
+      { source: '/aeo-guide/how-to-get-cited-in-chatgpt',   destination: '/aeo-guide/how-to-rank-in-chatgpt-search', permanent: true },
+      { source: '/aeo-guide/chatgpt-seo-strategy',          destination: '/aeo-guide/how-to-rank-in-chatgpt-search', permanent: true },
+      { source: '/aeo-guide/perplexity-seo-strategy',       destination: '/aeo-guide/how-to-rank-in-perplexity-ai', permanent: true },
+      { source: '/aeo-guide/optimize-for-llm-citations',    destination: '/aeo-guide/llm-seo-strategy', permanent: true },
+      { source: '/aeo-guide/seo-vs-aeo-vs-geo',             destination: '/aeo-guide/answer-engine-optimization-vs-seo', permanent: true },
+      { source: '/aeo-guide/traditional-seo-vs-ai-search',  destination: '/aeo-guide/answer-engine-optimization-vs-seo', permanent: true },
+      { source: '/aeo-guide/ai-answers-vs-google-results',  destination: '/aeo-guide/featured-snippets-vs-ai-answers', permanent: true },
+      { source: '/aeo-guide/optimize-content-for-ai-search', destination: '/aeo-guide/how-to-optimize-for-answer-engines', permanent: true },
+      { source: '/aeo-guide/ai-search-traffic-strategy',    destination: '/aeo-guide/aeo-strategy-2026', permanent: true },
+      { source: '/aeo-guide/answer-engine-ranking-factors',  destination: '/aeo-guide/ai-search-ranking-factors', permanent: true },
+      { source: '/aeo-guide/schema-markup-aeo-guide',       destination: '/aeo-guide/structured-data-for-ai-search', permanent: true },
+      { source: '/aeo-guide/faq-schema-ai-search',          destination: '/aeo-guide/structured-data-for-ai-search', permanent: true },
+      { source: '/aeo-guide/best-ai-seo-tools-aeo',         destination: '/aeo-guide/answer-engine-optimization-tools', permanent: true },
+      { source: '/aeo-guide/aeo-tools-free',                destination: '/aeo-guide/answer-engine-optimization-tools', permanent: true },
+      { source: '/aeo-guide/aeo-tools-comparison',           destination: '/aeo-guide/answer-engine-optimization-tools', permanent: true },
+      { source: '/aeo-guide/ai-share-of-voice',             destination: '/aeo-guide/ai-citation-tracking', permanent: true },
+      // Removed page — no appropriate canonical; redirect to hub.
+      { source: '/aeo-guide/aeo-india',                     destination: '/aeo-guide', permanent: false },
     ];
   },
 };
