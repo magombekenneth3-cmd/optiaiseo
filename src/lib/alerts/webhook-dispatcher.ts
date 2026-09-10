@@ -52,7 +52,7 @@ function buildSlackBody(payload: WebhookPayload): object {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: `*AISEO · ${payload.domain}*\n${payload.summary}`,
+              text: `*OptiAISEO · ${payload.domain}*\n${payload.summary}`,
             },
           },
           ...(fields.length > 0

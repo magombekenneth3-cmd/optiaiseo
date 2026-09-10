@@ -40,7 +40,7 @@ function maskEmail(email: string): string {
 }
 
 const buildPrHtml = (data: PrNotificationData): string => {
-  const baseUrl = process.env.NEXTAUTH_URL ?? "";
+  const baseUrl = process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online";
   const domain = escapeHtml(data.domain);
   const repoName = escapeHtml(data.repoName);
   const prUrl = escapeHtml(data.prUrl);
@@ -75,8 +75,7 @@ const buildPrHtml = (data: PrNotificationData): string => {
   </div>
   <div class="footer">
     <p>You're receiving this because you have OptiAISEO Self-Healing enabled.</p>
-    <p><a href="${baseUrl}/dashboard/settings?tab=notifications">Manage email preferences</a></p>
-    <p><a href="${baseUrl}/dashboard/settings?tab=notifications">Unsubscribe</a></p>
+    <p><a href="${baseUrl}/dashboard/settings?tab=notifications">Manage notification preferences</a></p>
   </div>
 </body>
 </html>
@@ -84,7 +83,7 @@ const buildPrHtml = (data: PrNotificationData): string => {
 };
 
 const buildPrText = (data: PrNotificationData): string =>
-  `New PR created for ${data.domain}: ${data.prUrl}\n\nRepository: ${data.repoName}\nFixes: ${data.fixCount}\n\nManage preferences: ${process.env.NEXTAUTH_URL ?? ""}/dashboard/settings?tab=notifications`;
+  `New PR created for ${data.domain}: ${data.prUrl}\n\nRepository: ${data.repoName}\nFixes: ${data.fixCount}\n\nManage notification preferences: ${process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online"}/dashboard/settings?tab=notifications`;
 
 export const sendPrNotification = async (
   toEmail: string,
@@ -110,7 +109,7 @@ export const sendPrNotification = async (
     return { success: false, error: "Invalid PR URL." };
   }
 
-  const baseUrl = process.env.NEXTAUTH_URL ?? "";
+  const baseUrl = process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online";
 
   try {
     const result = await getResend().emails.send({
@@ -121,6 +120,8 @@ export const sendPrNotification = async (
       text: buildPrText(data),
       headers: {
         "List-Unsubscribe": `<${baseUrl}/dashboard/settings?tab=notifications>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        "Precedence": "bulk",
       },
     });
     logger.debug(`[Email] Sent PR notification to ${maskEmail(toEmail)}`, { result });

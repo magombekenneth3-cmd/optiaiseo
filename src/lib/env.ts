@@ -80,6 +80,7 @@ const envSchema = z.object({
     GOOGLE_SEARCH_CX: z.string().optional(),
     UNSPLASH_ACCESS_KEY: z.string().optional(),
     RESEND_FROM_DOMAIN: z.string().optional(),
+    EMAIL_FOOTER_ADDRESS: z.string().optional(),
     BROWSERLESS_URL: z.string().url().optional(),
     GITHUB_TOKEN: z.string().optional(),
     MOZ_API_TOKEN: z.string().optional(),

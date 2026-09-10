@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
 <body style="background:#0d1117;color:#9ca3af;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;">
   <div>
     <h1 style="color:#e5e7eb;font-size:24px;margin-bottom:12px;">You&#39;ve been unsubscribed</h1>
-    <p>You won&#39;t receive any more email sequences from AISEO.</p>
+    <p>You won&#39;t receive any more email sequences from OptiAISEO.</p>
     <p style="margin-top:24px;font-size:14px;">
       <a href="/dashboard/settings" style="color:#10b981;text-decoration:underline;">
         Manage notification settings

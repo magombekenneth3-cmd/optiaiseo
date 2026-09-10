@@ -34,7 +34,7 @@ describe("Roadmap Feature Enhancements Unit Tests", () => {
         expect(match?.targetUrl).toBe("/blog/guide-ai-seo");
     });
 
-    it("should dispatch white-label executive email digest cleanly", async () => {
+    it("should fail explicitly when email service is not configured", async () => {
         const res = await dispatchWhiteLabelExecutiveDigest({
             recipientEmail: "client@test.com",
             clientSiteName: "Test Client",
@@ -44,6 +44,8 @@ describe("Roadmap Feature Enhancements Unit Tests", () => {
         });
 
         expect(res).toBeDefined();
-        expect(res.success).toBe(true);
+        expect(res.success).toBe(false);
+        expect(res.messageId).toBe("");
+        expect(res.error).toContain("Email service not configured");
     });
 });

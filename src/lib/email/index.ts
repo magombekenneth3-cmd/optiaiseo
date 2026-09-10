@@ -270,7 +270,7 @@ const buildDigestHtml = (data: SEODigestData): string => `
   </div>
   <div class="footer">
     <p>You're receiving this because you have an active OptiAISEO subscription.</p>
-    <p><a href="${process.env.NEXTAUTH_URL}/dashboard/settings">Manage email preferences</a></p>
+    <p><a href="${process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online"}/dashboard/settings?tab=notifications">Manage notification preferences</a></p>
   </div>
 </body>
 </html>
@@ -288,7 +288,7 @@ const buildDigestText = (data: SEODigestData): string => [
   ``,
   `Top Page: ${data.topPage.url} — ${data.topPage.clicks} clicks`,
   ``,
-  `Manage preferences: ${process.env.NEXTAUTH_URL}/dashboard/settings`,
+  `Manage notification preferences: ${process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online"}/dashboard/settings?tab=notifications`,
 ].join("\n");
 
 export const sendSEODigest = async (
@@ -412,7 +412,7 @@ export async function sendAuditCompleteEmail(params: {
       <a href="${auditUrl}" style="display:inline-block;background:#16a34a;color:#fff;font-weight:700;font-size:14px;padding:14px 32px;border-radius:12px;text-decoration:none;">View Full Audit Report →</a>
     </div>
     <div style="padding:0 24px;text-align:center;">
-      <p style="font-size:11px;color:#52525b;margin:0;">You're receiving this because you ran a manual audit on OptiAISEO.</p>
+      <p style="font-size:11px;color:#52525b;margin:0;">This is a one-time notification triggered by your manual audit request.</p>
     </div>
   </div>
 </body>

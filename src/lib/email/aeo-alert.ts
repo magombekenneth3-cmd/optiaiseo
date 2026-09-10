@@ -9,6 +9,16 @@ function resend(): Resend {
 
 const SITE_URL = (process.env.NEXTAUTH_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
 const FROM = `OptiAISEO <noreply@${process.env.RESEND_FROM_DOMAIN}>`;
+const UNSUB_SETTINGS = `${SITE_URL}/dashboard/settings?tab=notifications`;
+const FOOTER_ADDRESS = process.env.EMAIL_FOOTER_ADDRESS ?? "";
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
 export interface AeoDropData {
   domain: string;
@@ -84,7 +94,7 @@ function buildDropHtml(data: AeoDropData): string {
       </div>
     </div>
   </div>
-  <div class="footer"><a href="${SITE_URL}/dashboard/settings" style="color:#6b7280">Manage preferences</a> · 1 Infinity Loop, Cupertino CA 95014</div>
+  <div class="footer"><a href="${UNSUB_SETTINGS}" style="color:#6b7280">Manage notification preferences</a>${FOOTER_ADDRESS ? ` · ${escapeHtml(FOOTER_ADDRESS)}` : ""}</div>
 </div>
 </body></html>`;
 }
@@ -93,8 +103,8 @@ function buildDigestHtml(data: AeoWeeklyDigestData): string {
   const scoreDelta = data.currentScore - data.previousScore;
   const sovDelta = Math.round(data.gSovPct - data.previousGSovPct);
   const scoreCol = scoreColor(data.currentScore);
-  const gainList = data.gainedQueries.slice(0, 3).map((q) => `<li>${q}</li>`).join("") || "<li>No new gains this week</li>";
-  const lostList = data.lostQueries.slice(0, 3).map((q) => `<li>${q}</li>`).join("") || "<li>No citations lost this week</li>";
+  const gainList = data.gainedQueries.slice(0, 3).map((q) => `<li>${escapeHtml(q)}</li>`).join("") || "<li>No new gains this week</li>";
+  const lostList = data.lostQueries.slice(0, 3).map((q) => `<li>${escapeHtml(q)}</li>`).join("") || "<li>No citations lost this week</li>";
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">${BASE_STYLES}</head><body>
 <div class="wrap">
@@ -126,13 +136,13 @@ function buildDigestHtml(data: AeoWeeklyDigestData): string {
     ${data.topFix ? `
     <div class="section" style="border-top:1px solid #1f2937;background:#0d1f16">
       <div class="label" style="color:#10b981">Top recommended fix</div>
-      <p style="font-size:13px;color:#d1fae5;margin-top:6px">${data.topFix}</p>
+      <p style="font-size:13px;color:#d1fae5;margin-top:6px">${escapeHtml(data.topFix)}</p>
     </div>` : ""}
     <div class="section" style="border-top:1px solid #1f2937;text-align:center">
       <a href="${SITE_URL}/dashboard/aeo?siteId=${data.siteId}" class="btn">View full dashboard</a>
     </div>
   </div>
-  <div class="footer"><a href="${SITE_URL}/dashboard/settings" style="color:#6b7280">Unsubscribe</a> · 1 Infinity Loop, Cupertino CA 95014</div>
+  <div class="footer"><a href="${UNSUB_SETTINGS}" style="color:#6b7280">Manage notification preferences</a>${FOOTER_ADDRESS ? ` · ${escapeHtml(FOOTER_ADDRESS)}` : ""}</div>
 </div>
 </body></html>`;
 }
@@ -148,14 +158,28 @@ export async function sendAeoDropAlert(toEmail: string, data: AeoDropData, idemp
   if (envErr) { logger.warn(`[Email] ${envErr} — drop alert not sent`); return { success: false, error: envErr }; }
   try {
     const refKey = idempotencyKey ?? `aeo-drop-${data.domain}-${Date.now()}`;
+    const dropText = [
+      `AEO Score Alert — ${data.domain}`,
+      "",
+      `Score dropped: ${data.currentScore}/100 (down ${data.dropAmount} from ${data.previousScore})`,
+      "Your AI citation rate may be declining.",
+      "",
+      `View full report: ${SITE_URL}/dashboard/aeo`,
+      "",
+      `Manage notification preferences: ${UNSUB_SETTINGS}`,
+    ].join("\n");
     await resend().emails.send({
       from: FROM,
       to: toEmail,
       subject: `⚠️ AEO score alert for ${data.domain}`,
       html: buildDropHtml(data),
+      text: dropText,
       headers: {
         "X-Entity-Ref-ID": refKey,
         "Idempotency-Key": refKey,
+        "List-Unsubscribe": `<${UNSUB_SETTINGS}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        "Precedence": "bulk",
       },
     });
     return { success: true };
@@ -170,14 +194,39 @@ export async function sendAeoWeeklyDigest(toEmail: string, data: AeoWeeklyDigest
   if (envErr) { logger.warn(`[Email] ${envErr} — digest not sent`); return { success: false, error: envErr }; }
   try {
     const refKey = idempotencyKey ?? `aeo-digest-${data.siteId}-${new Date().toISOString().slice(0, 10)}`;
+    const scoreDelta = data.currentScore - data.previousScore;
+    const sovDelta = Math.round(data.gSovPct - data.previousGSovPct);
+    const digestText = [
+      `Weekly AEO Report — ${data.domain}`,
+      "",
+      `AEO Score: ${data.currentScore}/100 (${scoreDelta >= 0 ? "+" : ""}${scoreDelta} pts)`,
+      `Gen. Share of Voice: ${data.gSovPct}% (${sovDelta >= 0 ? "+" : ""}${sovDelta} pts)`,
+      "",
+      ...(data.gainedQueries.length > 0
+        ? ["Queries gained:", ...data.gainedQueries.slice(0, 3).map(q => `  + ${q}`)]
+        : ["No new query gains this week"]),
+      "",
+      ...(data.lostQueries.length > 0
+        ? ["Queries lost:", ...data.lostQueries.slice(0, 3).map(q => `  - ${q}`)]
+        : ["No citations lost this week"]),
+      ...(data.topFix ? ["", `Top recommended fix: ${data.topFix}`] : []),
+      "",
+      `View full dashboard: ${SITE_URL}/dashboard/aeo?siteId=${data.siteId}`,
+      "",
+      `Manage notification preferences: ${UNSUB_SETTINGS}`,
+    ].join("\n");
     await resend().emails.send({
       from: FROM,
       to: toEmail,
       subject: `Your weekly AEO report — ${data.domain}`,
       html: buildDigestHtml(data),
+      text: digestText,
       headers: {
         "X-Entity-Ref-ID": refKey,
         "Idempotency-Key": refKey,
+        "List-Unsubscribe": `<${UNSUB_SETTINGS}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        "Precedence": "bulk",
       },
     });
     return { success: true };
