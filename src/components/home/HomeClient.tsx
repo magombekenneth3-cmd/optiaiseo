@@ -1,139 +1,66 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
 import Link from "next/link";
-
-const DashboardMockup = dynamic(
-  () => import("@/components/home/DashboardMockup").then((m) => ({ default: m.DashboardMockup })),
-  { ssr: false, loading: () => <div className="w-full h-72 rounded-xl bg-card animate-pulse" aria-hidden="true" /> }
-);
-const TrafficGrowth3D = dynamic(
-  () => import("@/components/home/TrafficGrowth3D").then((m) => ({ default: m.TrafficGrowth3D })),
-  { ssr: false, loading: () => <div className="w-full h-48 rounded-xl bg-card animate-pulse" aria-hidden="true" /> }
-);
-const FloatContainer = dynamic(
-  () => import("@/components/home/FloatingMiniatures").then((m) => ({ default: m.FloatContainer })),
-  { ssr: false }
-);
-const IsoServerMiniature = dynamic(
-  () => import("@/components/home/FloatingMiniatures").then((m) => ({ default: m.IsoServerMiniature })),
-  { ssr: false }
-);
-const IsoDatabaseMiniature = dynamic(
-  () => import("@/components/home/FloatingMiniatures").then((m) => ({ default: m.IsoDatabaseMiniature })),
-  { ssr: false }
-);
 import {
   Activity,
-  GitPullRequest,
-  FileEdit,
-  TrendingUp,
+  ArrowRight,
+  BarChart3,
+  Bot,
   Check,
   ChevronDown,
-  ShieldCheck,
-  Zap,
-  Mic,
-  Bot,
-  Eye,
+  CircleCheck,
+  FileText,
+  Gauge,
+  GitPullRequest,
+  Globe2,
   Menu,
-  X,
-  ArrowRight,
+  Mic,
+  ScanSearch,
+  Search,
+  ShieldCheck,
   Sparkles,
+  Target,
+  TrendingUp,
+  UploadCloud,
+  WandSparkles,
+  X,
+  Zap,
 } from "lucide-react";
 
 interface FaqItem {
   name: string;
-  acceptedAnswer: { text: string };
+  acceptedAnswer: {
+    text: string;
+  };
 }
 
 interface HomeClientProps {
   faqItems: FaqItem[];
-  stats: { siteCount: number; weeklySignups: number; auditCount: number; blogCount: number };
+  stats: {
+    siteCount: number;
+    weeklySignups: number;
+    auditCount: number;
+    blogCount: number;
+  };
 }
-
-const INTEGRATIONS = [
-  { name: "Google Gemini", abbr: "Gemini" },
-  { name: "GitHub", abbr: "GitHub" },
-  { name: "Google Search Console", abbr: "GSC" },
-  { name: "LiveKit", abbr: "LiveKit" },
-  { name: "Stripe", abbr: "Stripe" },
-  { name: "Next.js", abbr: "Next.js" },
-  { name: "OpenAI", abbr: "OpenAI" },
-  { name: "Anthropic", abbr: "Claude" },
-  { name: "Perplexity", abbr: "Perplx" },
-];
-
-const FEATURES = [
-  {
-    icon: Mic,
-    title: "Fix in 60 seconds",
-    desc: "Tell Aria what's broken. She reads the audit, writes the code, opens a GitHub PR — while you're still talking.",
-    badge: "Unique to OptiAISEO",
-    badgeColor: "bg-emerald-500/10 text-emerald-400 border-emerald-500/25",
-  },
-  {
-    icon: GitPullRequest,
-    title: "Zero manual fixes",
-    desc: "Missing schema, broken meta tags, Core Web Vital failures — all patched by pull request. Your engineer just clicks merge.",
-    badge: "Autonomous",
-    badgeColor: "bg-blue-500/10 text-blue-400 border-blue-500/25",
-  },
-  {
-    icon: Bot,
-    title: "Know your AI rank",
-    desc: "See exactly how often ChatGPT, Claude, Perplexity, and Google AI cite your brand — and who's beating you.",
-    badge: "AI Search",
-    badgeColor: "bg-purple-500/10 text-purple-400 border-purple-500/25",
-  },
-  {
-    icon: FileEdit,
-    title: "Content AI engines quote",
-    desc: "Entity-dense posts with built-in schema. Written to be cited by AI, not just ranked by Google.",
-    badge: "Content",
-    badgeColor: "bg-amber-500/10 text-amber-400 border-amber-500/25",
-  },
-];
-
-const STEPS = [
-  {
-    step: "1",
-    title: "Connect",
-    desc: "Add your domain and optionally link your GitHub repo. Takes under 2 minutes.",
-  },
-  {
-    step: "2",
-    title: "Verify",
-    desc: "Complete your site setup. OptiAISEO verifies your domain, connects Google Search Console, and queues your first full crawl.",
-  },
-  {
-    step: "3",
-    title: "Fix",
-    desc: "Review auto-generated GitHub PRs or let Aria walk you through each fix by voice.",
-  },
-  {
-    step: "4",
-    title: "Dominate",
-    desc: "Watch your GSoV and organic rankings climb as content and fixes compound over time.",
-  },
-];
 
 const PLANS = [
   {
     name: "Free",
     price: { monthly: "$0", annual: "$0" },
-    desc: "Connect your site and explore the full platform. No credit card needed.",
+    desc: "Connect your site and see how visible your brand is in AI search.",
     features: [
-      "5 audits per month",
       "1 website",
+      "5 audits per month",
+      "Basic AI visibility check",
       "3 AI blog posts per month",
       "Google Search Console integration",
-      "Basic AI visibility check",
       "50 credits / month",
     ],
-    cta: "Start for free",
+    cta: "Start free",
     ctaHref: "/signup",
     highlight: false,
     badge: null,
@@ -141,16 +68,15 @@ const PLANS = [
   {
     name: "Starter",
     price: { monthly: "$19", annual: "$15" },
-    desc: "For solo creators and small sites ready to grow in AI search.",
+    desc: "For creators and small sites building consistent search visibility.",
     features: [
-      "150 credits / month",
       "3 websites",
       "15 audits / month",
+      "150 credits / month",
       "30 AI blog posts / month",
-      "Ubersuggest keyword data",
       "On-page optimisation",
       "Rank tracking",
-      "Competitor tracking (2 per site)",
+      "Competitor tracking",
     ],
     cta: "Start Starter trial",
     ctaHref: "/signup?plan=starter",
@@ -160,18 +86,18 @@ const PLANS = [
   {
     name: "Pro",
     price: { monthly: "$49", annual: "$39" },
-    desc: "Full automation for growing teams who want to win in AI search.",
+    desc: "For growing teams that want AI visibility, automation, and measurable outcomes.",
     features: [
-      "500 credits / month",
       "10 websites",
+      "500 credits / month",
       "30 audits / month",
       "Unlimited AI blog posts",
       "GitHub auto-fix PRs",
-      "GSoV tracking across 4 AI engines",
+      "AI visibility across 4 engines",
       "Competitor gap analysis",
       "Aria voice agent",
     ],
-    cta: "Start Pro trial — connect your site free",
+    cta: "Start Pro trial",
     ctaHref: "/signup?plan=pro",
     highlight: true,
     badge: "Most popular",
@@ -179,10 +105,10 @@ const PLANS = [
   {
     name: "Agency",
     price: { monthly: "$149", annual: "$119" },
-    desc: "For agencies managing multiple clients at scale.",
+    desc: "For agencies managing multiple clients and websites at scale.",
     features: [
-      "2,000 credits / month",
       "Unlimited websites",
+      "2,000 credits / month",
       "300 audits / month",
       "Unlimited AI blog posts",
       "All Pro features",
@@ -196,16 +122,314 @@ const PLANS = [
   },
 ];
 
+const WORKFLOW = [
+  {
+    step: "01",
+    title: "Find the gaps",
+    desc: "Discover where AI search engines are missing, ignoring, or under-citing your brand.",
+    icon: Search,
+  },
+  {
+    step: "02",
+    title: "Fix the content",
+    desc: "Generate the pages, schema, entity signals, and technical fixes needed to close the gaps.",
+    icon: FileText,
+  },
+  {
+    step: "03",
+    title: "Publish",
+    desc: "Push approved changes to your CMS or ship them through GitHub pull requests.",
+    icon: UploadCloud,
+  },
+  {
+    step: "04",
+    title: "Measure",
+    desc: "Track whether ChatGPT, Claude, Perplexity, and Google AI start citing you more often.",
+    icon: BarChart3,
+  },
+];
+
+const CAPABILITIES = [
+  {
+    icon: ScanSearch,
+    eyebrow: "AI visibility",
+    title: "Know where AI finds you",
+    desc: "Track citations, mentions, and visibility across major answer engines from one dashboard.",
+  },
+  {
+    icon: Target,
+    eyebrow: "Opportunities",
+    title: "See exactly what you're missing",
+    desc: "Find high-value prompts, topics, pages, and entities where competitors are winning citations.",
+  },
+  {
+    icon: WandSparkles,
+    eyebrow: "Automatic fixes",
+    title: "Turn insight into action",
+    desc: "Generate schema, content, metadata, internal links, and GitHub fixes without a manual ticket queue.",
+  },
+  {
+    icon: Gauge,
+    eyebrow: "Measurement",
+    title: "Prove the change worked",
+    desc: "Compare before and after visibility so every optimization has a measurable outcome.",
+  },
+];
+
+const ENGINE_ROWS = [
+  { name: "ChatGPT", short: "GPT", score: 81, delta: "+28%" },
+  { name: "Perplexity", short: "P", score: 67, delta: "+18%" },
+  { name: "Claude", short: "C", score: 61, delta: "+22%" },
+  { name: "Google AI", short: "G", score: 54, delta: "+19%" },
+];
+
+const COMPETITOR_ROWS = [
+  { name: "ChatGPT", yourBrand: 14, competitorA: 38, competitorB: 27 },
+  { name: "Perplexity", yourBrand: 9, competitorA: 31, competitorB: 22 },
+  { name: "Claude", yourBrand: 11, competitorA: 26, competitorB: 19 },
+  { name: "Google AI", yourBrand: 7, competitorA: 29, competitorB: 18 },
+];
+
+function BrandMark({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <div
+        className={`flex shrink-0 items-center justify-center rounded-lg bg-white text-black ${compact ? "h-7 w-7" : "h-8 w-8"
+          }`}
+      >
+        <span className="text-[10px] font-black tracking-tight">AI</span>
+      </div>
+      <div className="leading-none">
+        <div className="text-sm font-bold tracking-tight text-white">OptiAISEO</div>
+        {!compact && (
+          <div className="mt-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-emerald-400">
+            AI SEO Platform
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function VisibilityDashboard() {
+  return (
+    <div className="relative mx-auto w-full max-w-[670px]">
+      <div className="absolute -inset-8 rounded-[40px] bg-emerald-400/10 blur-3xl" aria-hidden="true" />
+
+      <div className="relative overflow-hidden rounded-[22px] border border-emerald-400/35 bg-[#0a1014] p-2 shadow-[0_35px_90px_rgba(0,0,0,0.45)]">
+        <div className="grid min-h-[470px] grid-cols-[118px_1fr] overflow-hidden rounded-[17px] border border-white/5 bg-[#0c1318]">
+          <aside className="hidden border-r border-white/5 bg-[#0a1014] p-3 sm:block">
+            <div className="mb-5 flex items-center gap-2 px-1">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-white text-[8px] font-black text-black">
+                AI
+              </div>
+              <span className="text-[11px] font-bold text-white">OptiAISEO</span>
+            </div>
+
+            <div className="space-y-1">
+              {["Overview", "Competitors", "Opportunities", "Content", "Publishing", "Reports", "Settings"].map(
+                (item, index) => (
+                  <div
+                    key={item}
+                    className={`rounded-md px-2 py-2 text-[9px] ${index === 0
+                      ? "bg-emerald-400/15 font-semibold text-emerald-200"
+                      : "text-white/45"
+                      }`}
+                  >
+                    {item}
+                  </div>
+                ),
+              )}
+            </div>
+          </aside>
+
+          <div className="min-w-0 p-3 sm:p-4">
+            <div className="rounded-xl border border-white/5 bg-[#101a20] p-4">
+              <div className="text-[10px] font-semibold text-white/55">AI Visibility Score</div>
+              <div className="mt-2 flex items-end justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-4xl font-black tracking-tight text-white">42</span>
+                  <ArrowRight className="h-5 w-5 text-white/25" />
+                  <span className="text-4xl font-black tracking-tight text-emerald-400">78</span>
+                  <span className="mb-1 text-xs font-bold text-emerald-400">+36</span>
+                </div>
+                <svg className="hidden h-16 w-32 sm:block" viewBox="0 0 140 60" aria-hidden="true">
+                  <polyline
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="text-emerald-400"
+                    points="0,48 18,45 36,47 52,39 69,34 84,24 99,21 114,10 126,9 140,3"
+                  />
+                </svg>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+              {ENGINE_ROWS.map((engine) => (
+                <div key={engine.name} className="rounded-xl border border-white/5 bg-[#101a20] p-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white/5 text-[8px] font-black text-white/60">
+                      {engine.short}
+                    </div>
+                    <span className="truncate text-[9px] text-white/55">{engine.name}</span>
+                  </div>
+                  <div className="mt-3 text-2xl font-bold text-white">{engine.score}%</div>
+                  <div className="mt-1 text-[8px] font-semibold text-emerald-400">{engine.delta}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 flex items-center justify-between rounded-xl border border-emerald-400/10 bg-emerald-400/10 p-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-300 text-black">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-semibold text-white">17 citation opportunities found</div>
+                  <div className="mt-1 truncate text-[8px] text-white/40">
+                    Your brand is missing from 17 relevant AI queries.
+                  </div>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 shrink-0 text-emerald-300" />
+            </div>
+
+            <div className="mt-3 rounded-xl border border-white/5 bg-[#101a20] p-3">
+              <div className="mb-3 text-[10px] font-semibold text-white/65">Recent activity</div>
+              <div className="space-y-3">
+                {[
+                  ["Published 3 optimized pages", "2h ago"],
+                  ["Updated structured data", "4h ago"],
+                  ["New citation detected (ChatGPT)", "6h ago"],
+                ].map(([label, time]) => (
+                  <div key={label} className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <CircleCheck className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                      <span className="truncate text-[9px] text-white/55">{label}</span>
+                    </div>
+                    <span className="shrink-0 text-[8px] text-white/30">{time}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-2 text-right text-[8px] text-white/25">Example dashboard</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ComparisonTable() {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#101a20]">
+      <div className="border-b border-white/8 px-5 py-4 text-sm font-semibold text-white">
+        AI citations comparison
+      </div>
+
+      <div className="overflow-x-auto">
+        <div className="min-w-[560px] p-4">
+          <div className="grid grid-cols-[1.2fr_repeat(3,1fr)] gap-1 px-3 pb-2 text-[10px] font-semibold text-white/45">
+            <span />
+            <span className="text-center text-emerald-300">Your Brand</span>
+            <span className="text-center">Competitor A</span>
+            <span className="text-center">Competitor B</span>
+          </div>
+
+          {COMPETITOR_ROWS.map((row) => (
+            <div
+              key={row.name}
+              className="grid grid-cols-[1.2fr_repeat(3,1fr)] items-center gap-1 border-t border-white/5 px-3 py-3"
+            >
+              <div className="text-xs font-medium text-white/70">{row.name}</div>
+              <div className="rounded-md bg-emerald-400/10 py-2 text-center text-xs font-bold text-emerald-300">
+                {row.yourBrand}
+              </div>
+              <div className="py-2 text-center text-xs font-semibold text-white/60">{row.competitorA}</div>
+              <div className="py-2 text-center text-xs font-semibold text-white/60">{row.competitorB}</div>
+            </div>
+          ))}
+
+          <div className="mt-2 grid grid-cols-[1.2fr_repeat(3,1fr)] items-center gap-1 rounded-lg bg-white/[0.035] px-3 py-3">
+            <div className="text-xs font-semibold text-white">AI Visibility Score</div>
+            <div className="rounded-md bg-emerald-400/20 py-2 text-center text-sm font-black text-emerald-300">34</div>
+            <div className="py-2 text-center text-sm font-black text-emerald-300">78</div>
+            <div className="py-2 text-center text-sm font-black text-white/70">61</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-5 pb-4 text-right text-[10px] text-white/30">Example comparison data</div>
+    </div>
+  );
+}
+
+function ResultPreview() {
+  return (
+    <div className="rounded-2xl border border-black/10 bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
+      <div className="flex items-center gap-2 border-b border-black/5 pb-4">
+        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-black text-[9px] font-black text-white">
+          AI
+        </div>
+        <span className="text-xs font-semibold text-zinc-900">AI answer preview</span>
+      </div>
+
+      <div className="mt-5 rounded-full bg-zinc-100 px-4 py-2 text-[10px] text-zinc-600">
+        Best project management tools for remote teams
+      </div>
+
+      <p className="mt-5 text-[10px] leading-5 text-zinc-500">
+        Here are some of the top project management tools for remote teams:
+      </p>
+
+      <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50/60 p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[8px] font-black text-white">
+            1
+          </div>
+          <div>
+            <div className="text-xs font-bold text-zinc-900">Your brand</div>
+            <div className="mt-1 text-[10px] text-zinc-500">
+              Strong entity coverage, clear supporting content, and structured data.
+            </div>
+            <div className="mt-2 flex items-center gap-1 text-[9px] font-semibold text-emerald-600">
+              <CircleCheck className="h-3 w-3" />
+              Cited from your website
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {["Competitor A", "Competitor B"].map((name, index) => (
+          <div key={name} className="flex items-center gap-3 px-3 py-2 text-[10px] text-zinc-400">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-100 text-[8px]">
+              {index + 2}
+            </div>
+            {name}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function HomeClient({ faqItems, stats }: HomeClientProps) {
   const { data: session, status } = useSession();
   const router = useRouter();
+
   const [isScrolled, setIsScrolled] = useState(false);
-  const [scrollProgress, setScrollProgress] = useState(0);
-  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
-  const [billingAnnual, setBillingAnnual] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [solutionsOpen, setSolutionsOpen] = useState(false);
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
+  const [billingAnnual, setBillingAnnual] = useState(false);
+  const [website, setWebsite] = useState("");
+
   const solutionsRef = useRef<HTMLDivElement>(null);
+  const resourcesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (status === "authenticated" && session?.user) {
@@ -213,114 +437,124 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
     }
   }, [status, session, router]);
 
-  const getPrice = (plan: (typeof PLANS)[0]) =>
-    billingAnnual ? plan.price.annual : plan.price.monthly;
-
   useEffect(() => {
-    const onScroll = () => {
-      setIsScrolled(window.scrollY > 20);
-      const doc = document.documentElement;
-      const progress = (window.scrollY / (doc.scrollHeight - doc.clientHeight)) * 100;
-      setScrollProgress(Math.min(100, progress));
-    };
+    const onScroll = () => setIsScrolled(window.scrollY > 16);
+    onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   useEffect(() => {
     document.body.style.overflow = mobileNavOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [mobileNavOpen]);
 
   useEffect(() => {
-    if (!mobileNavOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMobileNavOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [mobileNavOpen]);
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
 
-  useEffect(() => {
-    if (!solutionsOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSolutionsOpen(false);
-    };
-    const onMouse = (e: MouseEvent) => {
-      if (solutionsRef.current && !solutionsRef.current.contains(e.target as Node)) {
+      if (solutionsRef.current && !solutionsRef.current.contains(target)) {
         setSolutionsOpen(false);
       }
+
+      if (resourcesRef.current && !resourcesRef.current.contains(target)) {
+        setResourcesOpen(false);
+      }
     };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("mousedown", onMouse);
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileNavOpen(false);
+        setSolutionsOpen(false);
+        setResourcesOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+
     return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("mousedown", onMouse);
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
     };
-  }, [solutionsOpen]);
+  }, []);
+
+  const getPrice = (plan: (typeof PLANS)[number]) =>
+    billingAnnual ? plan.price.annual : plan.price.monthly;
+
+  const visibilityHref = website.trim()
+    ? `/free/gso-checker?url=${encodeURIComponent(website.trim())}`
+    : "/free/gso-checker";
+
+  const metricItems = [
+    {
+      value: stats.siteCount > 0 ? `${stats.siteCount.toLocaleString()}+` : "100+",
+      label: "Sites connected",
+      icon: Globe2,
+    },
+    {
+      value:
+        stats.auditCount > 1000
+          ? `${Math.round(stats.auditCount / 1000)}k+`
+          : stats.auditCount > 0
+            ? `${stats.auditCount.toLocaleString()}+`
+            : "1,000+",
+      label: "Audits completed",
+      icon: ScanSearch,
+    },
+    {
+      value: stats.blogCount > 0 ? `${stats.blogCount.toLocaleString()}+` : "500+",
+      label: "Pages & posts created",
+      icon: FileText,
+    },
+    {
+      value: stats.weeklySignups > 0 ? `${stats.weeklySignups.toLocaleString()}+` : "Growing",
+      label: "New users this week",
+      icon: TrendingUp,
+    },
+  ];
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background">
-
-      {/* ── Navigation ─────────────────────────────────────────────────────── */}
-      <nav
-        aria-label="Main navigation"
-        className={`fixed top-0 w-full z-50 transition-all duration-300 ${isScrolled
-          ? "bg-background/95 backdrop-blur-sm border-b border-brand/20"
-          : "bg-transparent border-transparent py-2"
+    <div className="min-h-screen overflow-x-hidden bg-[#f7f9f8] text-zinc-950">
+      {/* Navigation */}
+      <header
+        className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${isScrolled
+          ? "border-b border-white/8 bg-[#071013]/90 shadow-lg shadow-black/10 backdrop-blur-xl"
+          : "bg-[#071013]"
           }`}
       >
-        <div className="relative max-w-7xl mx-auto px-6 h-16 flex items-center justify-between overflow-hidden">
-          <Link
-            href="/"
-            aria-label="OptiAISEO home"
-            className="flex items-center gap-2.5"
-          >
-            <div className="w-8 h-8 rounded-lg bg-foreground flex items-center justify-center shrink-0">
-              <span className="font-black text-background text-[11px] tracking-tight">
-                AI
-              </span>
-            </div>
-            <div className="flex flex-col leading-none">
-              <span className="font-bold text-sm tracking-tight">OptiAISEO</span>
-              <span className="text-[10px] font-semibold text-brand tracking-wider uppercase leading-none">
-                AEO & AI SEO Platform
-              </span>
-            </div>
+        <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-6">
+          <Link href="/" aria-label="OptiAISEO home">
+            <BrandMark />
           </Link>
 
-          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
-            <Link href="/aria" className="hover:text-foreground transition-colors flex items-center gap-1.5 font-semibold text-emerald-500">
-              <Mic className="w-3.5 h-3.5" /> Aria Copilot
-            </Link>
-            {/* Solutions dropdown */}
-            <div className="relative" ref={solutionsRef}>
+          <nav className="hidden items-center gap-7 text-[13px] font-medium text-white/70 lg:flex">
+            <div ref={solutionsRef} className="relative">
               <button
-                onClick={() => setSolutionsOpen(o => !o)}
+                type="button"
+                onClick={() => setSolutionsOpen((open) => !open)}
+                className="inline-flex items-center gap-1.5 transition-colors hover:text-white"
                 aria-expanded={solutionsOpen}
-                aria-controls="solutions-dropdown"
-                className="hover:text-foreground transition-colors flex items-center gap-1"
               >
-                Solutions <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${solutionsOpen ? "rotate-180" : ""}`} />
+                Solutions
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${solutionsOpen ? "rotate-180" : ""}`} />
               </button>
+
               {solutionsOpen && (
-                <div
-                  id="solutions-dropdown"
-                  role="menu"
-                  className="absolute top-full left-0 mt-2 w-52 bg-card border border-border rounded-xl shadow-xl p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150"
-                >
+                <div className="absolute left-0 top-full mt-3 w-56 rounded-xl border border-white/10 bg-[#0d171b] p-2 shadow-2xl">
                   {[
-                    { href: "/for-agencies", label: "For Agencies" },
-                    { href: "/for-saas", label: "For SaaS Companies" },
-                    { href: "/for-content", label: "For Content Teams" },
-                    { href: "/for-ecommerce", label: "For E-commerce" },
-                  ].map(({ href, label }) => (
+                    ["/for-agencies", "For Agencies"],
+                    ["/for-saas", "For SaaS Companies"],
+                    ["/for-content", "For Content Teams"],
+                    ["/for-ecommerce", "For E-commerce"],
+                  ].map(([href, label]) => (
                     <Link
                       key={href}
                       href={href}
-                      role="menuitem"
                       onClick={() => setSolutionsOpen(false)}
-                      className="flex items-center px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                      className="block rounded-lg px-3 py-2.5 text-sm text-white/60 transition-colors hover:bg-white/5 hover:text-white"
                     >
                       {label}
                     </Link>
@@ -328,1387 +562,764 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
                 </div>
               )}
             </div>
-            <a href="#features" className="hover:text-foreground transition-colors">Features</a>
-            <a href="#how-it-works" className="hover:text-foreground transition-colors">How it works</a>
-            <Link href="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
-            <Link
-              href="/free/seo-checker"
-              className="hover:text-foreground transition-colors flex items-center gap-1 text-brand font-semibold"
-            >
-              <Zap className="w-3.5 h-3.5" /> Free Checker
-            </Link>
-            <Link href="/about" className="hover:text-foreground transition-colors">About</Link>
-          </div>
 
-          <div className="hidden md:flex items-center gap-4">
+            <a href="#how-it-works" className="transition-colors hover:text-white">
+              How it works
+            </a>
+
+            <a href="#features" className="transition-colors hover:text-white">
+              Features
+            </a>
+
+            <a href="#pricing" className="transition-colors hover:text-white">
+              Pricing
+            </a>
+
+            <div ref={resourcesRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setResourcesOpen((open) => !open)}
+                className="inline-flex items-center gap-1.5 transition-colors hover:text-white"
+                aria-expanded={resourcesOpen}
+              >
+                Resources
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${resourcesOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {resourcesOpen && (
+                <div className="absolute left-0 top-full mt-3 w-56 rounded-xl border border-white/10 bg-[#0d171b] p-2 shadow-2xl">
+                  {[
+                    ["/blog", "SEO & AI Search Blog"],
+                    ["/case-studies", "Case Studies"],
+                    ["/methodology", "AEO Methodology"],
+                    ["/leaderboard", "AI SEO Leaderboard"],
+                    ["/vs", "Comparisons"],
+                  ].map(([href, label]) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={() => setResourcesOpen(false)}
+                      className="block rounded-lg px-3 py-2.5 text-sm text-white/60 transition-colors hover:bg-white/5 hover:text-white"
+                    >
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <Link
-              href="/login"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              href="/aria"
+              className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-400/5 px-3 py-1.5 font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
             >
+              <Mic className="h-3.5 w-3.5" />
+              Aria AI Copilot
+              <span className="rounded-full bg-emerald-300 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-black">
+                New
+              </span>
+            </Link>
+          </nav>
+
+          <div className="hidden items-center gap-5 lg:flex">
+            <Link href="/login" className="text-sm font-medium text-white/65 transition-colors hover:text-white">
               Log in
             </Link>
             <Link
               href="/signup"
-              className="text-sm font-semibold bg-foreground text-background px-5 py-2 rounded-full hover:opacity-90 transition-all active:scale-95"
+              className="rounded-full bg-emerald-300 px-5 py-2.5 text-sm font-bold text-black transition hover:bg-emerald-200"
             >
               Get started free
             </Link>
           </div>
 
           <button
-            className="md:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            type="button"
             onClick={() => setMobileNavOpen(true)}
-            aria-label="Open navigation menu"
+            className="rounded-lg p-2 text-white/70 transition hover:bg-white/5 hover:text-white lg:hidden"
+            aria-label="Open navigation"
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="h-5 w-5" />
           </button>
-          {/* Read-progress bar */}
-          {isScrolled && (
-            <div
-              className="absolute bottom-0 left-0 h-[1.5px] transition-all duration-75"
-              style={{ width: `${scrollProgress}%`, background: "var(--brand)" }}
-            />
-          )}
         </div>
-      </nav>
+      </header>
 
-      {/* ── Mobile drawer ──────────────────────────────────────────────────── */}
+      {/* Mobile navigation */}
       {mobileNavOpen && (
         <>
-          <div
-            className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden"
+          <button
+            type="button"
+            aria-label="Close navigation overlay"
+            className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm lg:hidden"
             onClick={() => setMobileNavOpen(false)}
-            aria-hidden="true"
           />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Navigation menu"
-            className="fixed inset-y-0 right-0 z-50 w-72 bg-background border-l border-border flex flex-col md:hidden shadow-2xl"
-          >
-            <div className="flex items-center justify-between px-5 h-16 border-b border-border shrink-0">
-              <span className="font-bold text-sm tracking-tight">Menu</span>
+          <div className="fixed inset-y-0 right-0 z-[60] flex w-[86%] max-w-sm flex-col border-l border-white/10 bg-[#081115] p-5 text-white shadow-2xl lg:hidden">
+            <div className="flex items-center justify-between border-b border-white/10 pb-5">
+              <BrandMark />
               <button
+                type="button"
                 onClick={() => setMobileNavOpen(false)}
-                className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                aria-label="Close navigation menu"
+                className="rounded-lg p-2 text-white/65 hover:bg-white/5 hover:text-white"
+                aria-label="Close navigation"
               >
-                <X className="w-4 h-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
-            <nav
-              className="flex-1 flex flex-col gap-1 px-4 py-6"
-              aria-label="Mobile navigation"
-            >
+
+            <nav className="flex flex-1 flex-col gap-1 overflow-y-auto py-6 text-sm">
               {[
-                { href: "/aria", label: "Aria Copilot" },
-                { href: "/for-agencies", label: "For Agencies" },
-                { href: "/for-saas", label: "For SaaS" },
-                { href: "/for-content", label: "For Content Teams" },
-                { href: "/for-ecommerce", label: "For E-commerce" },
-                { href: "#features", label: "Features" },
-                { href: "#how-it-works", label: "How it works" },
-                { href: "/pricing", label: "Pricing" },
-                { href: "#faq", label: "FAQ" },
-                { href: "/free/seo-checker", label: "Free SEO Checker" },
-                { href: "/about", label: "About" },
-                { href: "/contact", label: "Contact" },
-              ].map(({ href, label }) => (
+                ["/free/gso-checker", "Check AI visibility"],
+                ["#how-it-works", "How it works"],
+                ["#features", "Features"],
+                ["#pricing", "Pricing"],
+                ["/aria", "Aria AI Copilot"],
+                ["/for-agencies", "For Agencies"],
+                ["/for-saas", "For SaaS Companies"],
+                ["/blog", "Resources"],
+                ["/case-studies", "Case Studies"],
+              ].map(([href, label]) => (
                 <a
                   key={href}
                   href={href}
-                  onClick={() => {
-                    setMobileNavOpen(false);
-                    if (href.startsWith("#")) {
-                      const id = href.slice(1);
-                      setTimeout(() => {
-                        document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-                      }, 50);
-                    }
-                  }}
-                  className="flex items-center px-3 py-3 rounded-lg text-base font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="rounded-xl px-3 py-3 font-medium text-white/70 transition hover:bg-white/5 hover:text-white"
                 >
                   {label}
                 </a>
               ))}
             </nav>
-            <div className="p-4 border-t border-border flex flex-col gap-3">
+
+            <div className="space-y-3 border-t border-white/10 pt-5">
               <Link
                 href="/login"
                 onClick={() => setMobileNavOpen(false)}
-                className="w-full text-center py-2.5 rounded-xl border border-border text-sm font-medium text-foreground hover:bg-accent transition-colors"
+                className="block w-full rounded-xl border border-white/10 py-3 text-center text-sm font-semibold text-white"
               >
                 Log in
               </Link>
               <Link
                 href="/signup"
                 onClick={() => setMobileNavOpen(false)}
-                className="w-full text-center py-2.5 rounded-xl bg-foreground text-background text-sm font-bold hover:opacity-90 transition-all"
+                className="block w-full rounded-xl bg-emerald-300 py-3 text-center text-sm font-bold text-black"
               >
-                Get started — free
+                Get started free
               </Link>
             </div>
           </div>
         </>
       )}
 
-      {/* ── Hero ───────────────────────────────────────────────────────────── */}
-      {/* Decorative floating ISO miniatures — positioned outside main flow */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        <div className="absolute top-[22%] left-[4%] opacity-30 hidden lg:block">
-          <FloatContainer delay={0} yOffset={12} duration={5}>
-            <IsoServerMiniature />
-          </FloatContainer>
-        </div>
-        <div className="absolute top-[30%] right-[4%] opacity-25 hidden lg:block">
-          <FloatContainer delay={1.5} yOffset={10} duration={6}>
-            <IsoDatabaseMiniature />
-          </FloatContainer>
-        </div>
-        <div className="absolute top-[55%] left-[7%] opacity-15 hidden xl:block">
-          <FloatContainer delay={2.5} yOffset={8} duration={7}>
-            <IsoServerMiniature />
-          </FloatContainer>
-        </div>
-      </div>
-      <main
-        id="main-content"
-        className="relative z-10 max-w-7xl mx-auto px-6 pt-40 pb-20 flex flex-col items-center justify-center text-center min-h-screen"
-      >
-        <div className="relative flex items-center justify-center w-16 h-16 mb-8 mx-auto fade-in-up">
-          <div className="w-16 h-16 rounded-2xl bg-foreground flex items-center justify-center">
-            <Sparkles className="w-8 h-8 text-background" />
-          </div>
-        </div>
-
-        <div className="fade-in-up fade-in-up-1 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-card mb-8">
-          <span
-            className="flex h-2 w-2 rounded-full bg-brand animate-breathe"
-            aria-hidden="true"
-          />
-          <span className="text-xs font-medium text-muted-foreground">
-            Now tracking AI citations across ChatGPT, Claude, Perplexity &amp;
-            Google AI Mode
-          </span>
-        </div>
-
-        <h1 className="fade-in-up fade-in-up-2 max-w-3xl text-5xl md:text-7xl font-black tracking-tighter leading-[1.05] mb-6">
-          Your competitors are cited by ChatGPT.
-          <span className="block text-brand">You&apos;re not. Let&apos;s fix that.</span>
-        </h1>
-
-        <p
-          id="aiseo-definition"
-          className="fade-in-up fade-in-up-3 max-w-xl text-lg md:text-xl text-muted-foreground mb-10 leading-relaxed"
-        >
-          OptiAISEO audits your site, writes the fix, publishes it — then proves
-          it worked. Traditional SEO tools stop at the report.{" "}
-          <span className="text-foreground font-semibold">We close the loop.</span>
-        </p>
-
-        <div className="fade-in-up fade-in-up-4 flex flex-col sm:flex-row items-center gap-4 w-full justify-center">
-          <div className="flex flex-col items-center gap-1.5 w-full sm:w-auto">
-            <Link
-              href="/signup"
-              className="w-full sm:w-auto px-8 py-4 rounded-full bg-foreground text-background font-bold text-lg hover:opacity-90 transition-all active:scale-95 inline-flex items-center justify-center gap-2"
-            >
-              <Zap className="w-5 h-5" />
-              Start free — no card needed
-            </Link>
-            <span className="text-xs text-muted-foreground">
-              Connect your site · 7-day Pro trial included
-            </span>
-          </div>
-          <Link
-            href="/aria"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5 underline underline-offset-2"
-          >
-            <Mic className="w-4 h-4 text-brand" />
-            Watch Aria Demo
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-
-        {/* Micro-trust badges */}
-        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 mt-4 fade-in-up fade-in-up-4">
-          {["No card needed", "7-day Pro trial", "Cancel anytime", "SSL encrypted"].map((t) => (
-            <span key={t} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "var(--brand)" }} />
-              {t}
-            </span>
-          ))}
-        </div>
-
-        <div className="mt-20 w-full max-w-7xl mx-auto flex flex-col lg:flex-row gap-12 relative perspective-1000">
-          <div className="flex-1 relative transform-gpu transition-all duration-700 ease-out lg:hover:-translate-y-2 border border-border rounded-2xl shadow-xl p-2 bg-card group">
-            <DashboardMockup />
-          </div>
-          <div className="flex-1 relative transform-gpu transition-all duration-700 ease-out lg:hover:-translate-y-2 border border-border rounded-2xl shadow-xl p-8 bg-card flex flex-col justify-center items-center group overflow-hidden">
-            <div className="text-center mb-8 z-10 relative">
-              <h2 className="text-2xl font-bold mb-2 tracking-tight">
-                Compound your AI presence
-              </h2>
-              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                Every fix, every blog post, every schema update compounds — your
-                GSoV and organic traffic grow together over time.
-              </p>
-            </div>
-            <div className="w-full flex items-center justify-center relative z-0 pb-2">
-              <TrafficGrowth3D />
-            </div>
-          </div>
-        </div>
-      </main>
-
-      {/* ── Audit → Fix → Prove loop ──────────────────────────────────────── */}
-      <section
-        aria-labelledby="loop-heading"
-        className="relative py-20 border-t border-border bg-muted/20"
-      >
-        <div className="max-w-5xl mx-auto px-6 text-center">
-          <p className="text-xs font-bold uppercase tracking-widest text-brand mb-3">How OptiAISEO works</p>
-          <h2
-            id="loop-heading"
-            className="text-3xl md:text-4xl font-black tracking-tight mb-4"
-          >
-            The only SEO tool that closes the loop.
-          </h2>
-          <p className="text-muted-foreground max-w-xl mx-auto mb-14 text-base">
-            Every other tool gives you a report and stops. OptiAISEO audits,
-            fixes, publishes, and proves — automatically, every week.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
-            <div
-              className="hidden md:block absolute top-8 left-[16.5%] right-[16.5%] h-px bg-border"
-              aria-hidden="true"
-            />
-            {[
-              {
-                step: "01", label: "AUDIT",
-                title: "We find everything broken",
-                desc: "Full technical audit, AEO scoring across ChatGPT, Claude, Perplexity and Google AI, GSC decay detection, competitor gaps — every week, automatically.",
-                color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20",
-              },
-              {
-                step: "02", label: "FIX",
-                title: "We write and publish the fix",
-                desc: "AI-generated blog posts, schema markup, meta rewrites, internal links — pushed live to WordPress, Ghost, or GitHub as a PR. No agency. No ticket queue.",
-                color: "text-brand", bg: "bg-brand/10 border-brand/20",
-              },
-              {
-                step: "03", label: "PROVE",
-                title: "We show it worked",
-                desc: "Before/after rankings. AEO score deltas. Self-healing outcomes with traffic impact logged. Not a report. An actual result you can show your boss.",
-                color: "text-violet-400", bg: "bg-violet-500/10 border-violet-500/20",
-              },
-            ].map(({ step, label, title, desc, color, bg }) => (
-              <div
-                key={step}
-                className="relative card-surface rounded-2xl p-8 flex flex-col items-center text-center"
-              >
-                <div className={`w-14 h-14 rounded-full border-2 ${bg} flex items-center justify-center mb-5 relative z-10 bg-background`}>
-                  <span className={`text-lg font-black ${color}`}>{step}</span>
-                </div>
-                <span className={`text-[10px] font-black tracking-widest uppercase ${color} mb-2`}>{label}</span>
-                <h3 className="text-base font-bold mb-3">{title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-10 text-sm text-muted-foreground">
-            Ahrefs shows you what&apos;s broken. Semrush shows you what&apos;s broken.{" "}
-            <span className="text-foreground font-semibold">OptiAISEO fixes it and proves it worked.</span>
-          </p>
-        </div>
-      </section>
-
-      {/* ── Integration trust strip ────────────────────────────────────────── */}
-      <section
-        aria-label="Powered by"
-        className="py-12 border-t border-b border-border bg-card overflow-hidden"
-      >
-        <p className="text-center text-xs font-bold uppercase tracking-widest text-muted-foreground mb-8">
-          Powered by
-        </p>
-        <div className="flex items-center justify-center flex-wrap gap-x-10 gap-y-4 max-w-4xl mx-auto px-6">
-          {INTEGRATIONS.map(({ name, abbr }) => (
-            <span
-              key={name}
-              title={name}
-              className="text-sm font-semibold text-muted-foreground/60 hover:text-muted-foreground transition-colors tracking-wide"
-            >
-              {abbr}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Social proof ────────────────────────────────────────────────────── */}
-      <section
-        aria-labelledby="social-proof-heading"
-        className="relative py-20 border-t border-border"
-      >
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-20">
-            {[
-              {
-                value: stats.siteCount > 100 ? `${stats.siteCount.toLocaleString()}+` : "100+",
-                label: "sites connected",
-              },
-              {
-                value: stats.auditCount > 1000 ? `${(stats.auditCount / 1000).toFixed(0)}k+` : stats.auditCount > 0 ? `${stats.auditCount}+` : "1,000+",
-                label: "audits completed",
-              },
-              {
-                value: stats.blogCount > 100 ? `${stats.blogCount}+` : stats.blogCount > 0 ? `${stats.blogCount}+` : "500+",
-                label: "posts published",
-              },
-              { value: "< 2 min", label: "to first audit" },
-            ].map(({ value, label }) => (
-              <div key={label} className="text-center">
-                <p className="text-3xl md:text-4xl font-black tracking-tight text-foreground mb-1">{value}</p>
-                <p className="text-sm text-muted-foreground">{label}</p>
-              </div>
-            ))}
+      <main>
+        {/* Hero */}
+        <section className="relative overflow-hidden bg-[#071013] pt-[72px] text-white">
+          <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+            <div className="absolute left-[38%] top-20 h-[520px] w-[520px] rounded-full bg-emerald-500/[0.08] blur-[110px]" />
+            <div className="absolute -right-48 top-40 h-[640px] w-[640px] rounded-full border border-emerald-400/[0.08]" />
+            <div className="absolute -right-24 top-64 h-[420px] w-[420px] rounded-full border border-emerald-400/[0.07]" />
+            <div className="absolute bottom-[-180px] left-[36%] h-[420px] w-[420px] rounded-full bg-emerald-400/[0.05] blur-[100px]" />
           </div>
 
-          <div className="text-center mb-12">
-            <h2
-              id="social-proof-heading"
-              className="text-2xl md:text-4xl font-bold tracking-tight mb-3"
-            >
-              Trusted by SEO teams & indie founders
-            </h2>
-            <p className="text-muted-foreground max-w-xl mx-auto">What early users say after connecting their first site.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              {
-                quote: "The GitHub auto-fix PR blew my mind. I asked Aria to fix my missing schema and had a pull request open in under 60 seconds. No other tool does this.",
-                name: "Marcus T.",
-                role: "Founder, SaaS startup",
-                initials: "MT",
-                accent: "bg-emerald-500",
-              },
-              {
-                quote: "I switched from Semrush after realising it had zero AI engine tracking. OptiAISEO showed me I had a GSoV of 0% — and exactly how to fix it. Game changer.",
-                name: "Priya S.",
-                role: "Head of Growth, Fintech",
-                initials: "PS",
-                accent: "bg-sky-500",
-              },
-              {
-                quote: "I connected my site, ran my first audit in under two minutes, and had a full list of actionable fixes before I'd finished my coffee. The voice agent feels like having a senior SEO on call.",
-                name: "Jordan R.",
-                role: "Freelance SEO Consultant",
-                initials: "JR",
-                accent: "bg-violet-500",
-              },
-            ].map(({ quote, name, role, initials, accent }) => (
-              <figure
-                key={name}
-                className="card-surface rounded-2xl p-8 flex flex-col justify-between hover:-translate-y-1 transition-transform duration-300"
-              >
-                {/* Stars */}
-                <div className="flex gap-0.5 mb-4" aria-label="5 out of 5 stars">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <svg key={i} className="w-3.5 h-3.5 fill-current" style={{ color: "#fbbf24" }} viewBox="0 0 20 20">
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                    </svg>
-                  ))}
-                </div>
-                <blockquote className="text-sm text-muted-foreground leading-relaxed mb-6 flex-1">
-                  &ldquo;{quote}&rdquo;
-                </blockquote>
-                <figcaption className="flex items-center gap-3">
-                  <div
-                    className={`w-10 h-10 rounded-full ${accent} flex items-center justify-center shrink-0`}
-                    aria-hidden="true"
-                  >
-                    <span className="text-xs font-black text-white">{initials}</span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold flex items-center gap-1.5">
-                      {name}
-                      <span className="text-xs font-medium" style={{ color: "var(--brand)" }}>· verified</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">{role}</p>
-                  </div>
-                </figcaption>
-              </figure>
-            ))}
-          </div>
-
-          <div className="mt-12 flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground">
-            <span>See how we compare:</span>
-            {[
-              { href: "/vs/semrush", label: "OptiAISEO vs Semrush" },
-              { href: "/vs/ahrefs", label: "OptiAISEO vs Ahrefs" },
-              { href: "/vs/surfer-seo", label: "OptiAISEO vs Surfer SEO" },
-              { href: "/vs/moz", label: "OptiAISEO vs Moz" },
-              { href: "/vs/clearscope", label: "OptiAISEO vs Clearscope" },
-              { href: "/vs/mangools", label: "OptiAISEO vs Mangools" },
-            ].map(({ href, label }, i, arr) => (
-              <span key={href} className="flex items-center gap-3">
-                <Link href={href} className="text-brand hover:underline font-semibold">{label}</Link>
-                {i < arr.length - 1 && <span aria-hidden="true">·</span>}
-              </span>
-            ))}
-            <Link href="/vs" className="text-muted-foreground hover:text-foreground underline underline-offset-2 ml-1 text-xs">
-              See all →
-            </Link>
-          </div>
-
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-            <Link
-              href="/case-studies"
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
-            >
-              Read real customer results — AI SEO case studies →
-            </Link>
-            <span aria-hidden="true" className="text-border hidden sm:inline">·</span>
-            <Link
-              href="/leaderboard"
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
-            >
-              See the AI SEO Leaderboard →
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Built for your team — solution page links ─────────────────────── */}
-      <section aria-labelledby="solutions-heading" className="py-12 border-t border-border bg-card/40">
-        <div className="max-w-5xl mx-auto px-6 text-center">
-          <p id="solutions-heading" className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-5">Built for every team</p>
-          <div className="flex flex-wrap justify-center gap-3">
-            <Link href="/for-agencies" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
-              🏢 For Agencies
-            </Link>
-            <Link href="/for-saas" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
-              🚀 For SaaS Companies
-            </Link>
-            <Link href="/for-content" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
-              ✍️ For Content Teams
-            </Link>
-            <Link href="/for-ecommerce" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
-              🛒 For E-commerce
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Aria showcase ─────────────────────────────────────────────────── */}
-      <section
-        id="aria"
-        aria-labelledby="aria-heading"
-        className="relative py-24 border-t border-zinc-800/40 bg-zinc-950 text-white overflow-hidden"
-      >
-        <div
-          className="absolute inset-0 pointer-events-none"
-          aria-hidden="true"
-          style={{
-            background:
-              "radial-gradient(ellipse 60% 50% at 50% 0%, rgba(16,185,129,0.12) 0%, transparent 70%)",
-          }}
-        />
-
-        <div className="relative max-w-7xl mx-auto px-6">
-          <div className="flex flex-col lg:flex-row items-center gap-16">
-            <div className="flex-shrink-0 flex flex-col items-center gap-6">
-              <div className="w-40 h-40 rounded-full border border-brand/30 flex items-center justify-center relative">
-                <div className="w-28 h-28 rounded-full border border-brand/20 flex items-center justify-center">
-                  <div className="w-20 h-20 rounded-full bg-brand/10 border border-brand/30 flex items-center justify-center">
-                    <Mic className="w-8 h-8 text-brand" />
-                  </div>
-                </div>
-                <span
-                  className="absolute inset-0 rounded-full border border-brand/20 animate-ping opacity-30"
-                  aria-hidden="true"
-                />
-              </div>
-              <div className="text-center">
-                <p className="font-bold text-lg tracking-tight">Aria</p>
-                <p className="text-xs text-white/55 mt-0.5">
-                  Powered by Gemini 2.5 Flash · LiveKit WebRTC
-                </p>
-              </div>
-            </div>
-
-            <div className="flex-1 text-center lg:text-left">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-brand/20 bg-brand/10 mb-6">
-                <span className="text-xs font-semibold text-brand uppercase tracking-wider">
-                  No other SEO tool has this
+          <div className="relative mx-auto grid min-h-[690px] max-w-7xl items-center gap-12 px-5 py-16 sm:px-6 md:py-20 lg:grid-cols-[0.87fr_1.13fr] lg:gap-16 lg:py-24">
+            <div className="max-w-xl">
+              <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_18px_rgba(110,231,183,0.9)]" />
+                <span className="text-[11px] font-semibold text-emerald-200">
+                  LIVE · AI citation tracking across ChatGPT, Claude, Perplexity & Google AI
                 </span>
               </div>
-              <h2
-                id="aria-heading"
-                className="text-3xl md:text-5xl font-black tracking-tight mb-6 leading-tight"
-              >
-                Meet Aria — your AI SEO strategist.
-                <span className="block text-brand">Talk to her.</span>
-              </h2>
-              <p className="text-lg text-white/70 mb-8 max-w-xl leading-relaxed">
-                Aria is a real-time voice agent with sub-second response, full
-                barge-in support, and the ability to{" "}
-                <em>take action</em> — not just answer questions.
+
+              <h1 className="max-w-[650px] text-[52px] font-black leading-[0.96] tracking-[-0.055em] sm:text-6xl md:text-7xl">
+                Get your brand
+                <span className="block text-emerald-300">cited by AI.</span>
+              </h1>
+
+              <p className="mt-7 max-w-[590px] text-base leading-7 text-white/62 sm:text-lg">
+                OptiAISEO finds why ChatGPT, Claude, Perplexity and Google AI are not citing you — then helps fix
+                your site, publish the changes, and measure the results.
               </p>
 
-              <ul className="space-y-3 mb-10 text-left max-w-lg mx-auto lg:mx-0">
-                {[
-                  { icon: Activity, text: "\"Aria, audit my homepage and tell me the top 3 issues.\"" },
-                  { icon: Eye, text: "\"Aria, look at my design and critique the conversion rate.\"" },
-                  { icon: GitPullRequest, text: "\"Aria, open a GitHub PR to fix the missing schema.\"" },
-                  { icon: TrendingUp, text: "\"Aria, what keywords am I losing to my competitors?\"" },
-                ].map(({ icon: Icon, text }, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <div className="w-7 h-7 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center shrink-0 mt-0.5">
-                      <Icon className="w-3.5 h-3.5 text-brand" />
-                    </div>
-                    <span className="text-sm text-white/65 italic">{text}</span>
-                  </li>
-                ))}
-              </ul>
+              <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
+                <Link
+                  href="/free/gso-checker"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-emerald-300 px-7 text-sm font-black text-black transition hover:bg-emerald-200 active:scale-[0.98]"
+                >
+                  Check my AI visibility
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
 
-              <div className="flex flex-wrap items-center gap-4 lg:justify-start justify-center">
                 <Link
                   href="/aria"
-                  className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-full bg-brand text-white font-bold text-base hover:opacity-95 hover:shadow-lg hover:shadow-brand/30 transition-all active:scale-95"
+                  className="inline-flex min-h-12 items-center justify-center gap-3 rounded-full px-2 text-sm font-semibold text-white/70 transition hover:text-white sm:justify-start"
                 >
-                  <Mic className="w-4 h-4" />
-                  See Aria in action
-                  <ArrowRight className="w-4 h-4" />
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5">
+                    <Mic className="h-4 w-4" />
+                  </span>
+                  Watch Aria in action · 60 sec
                 </Link>
+              </div>
+
+              <div className="mt-4 text-xs text-white/35">Free · No credit card required</div>
+            </div>
+
+            <VisibilityDashboard />
+          </div>
+        </section>
+
+        {/* Live stats */}
+        <section className="border-b border-zinc-200 bg-white">
+          <div className="mx-auto grid max-w-7xl grid-cols-2 px-5 sm:px-6 md:grid-cols-4">
+            {metricItems.map(({ value, label, icon: Icon }, index) => (
+              <div
+                key={label}
+                className={`flex items-center gap-3 py-7 md:px-6 ${index !== metricItems.length - 1 ? "md:border-r md:border-zinc-200" : ""
+                  }`}
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-50">
+                  <Icon className="h-4 w-4 text-emerald-600" />
+                </div>
+                <div>
+                  <div className="text-xl font-black tracking-tight text-zinc-950 sm:text-2xl">{value}</div>
+                  <div className="mt-1 text-[11px] leading-4 text-zinc-500">{label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* How it works */}
+        <section id="how-it-works" className="bg-[#fbfcfb] py-20 sm:py-24">
+          <div className="mx-auto max-w-7xl px-5 sm:px-6">
+            <div className="grid gap-12 lg:grid-cols-[0.75fr_1.25fr] lg:items-start">
+              <div className="max-w-lg">
+                <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700">
+                  <Sparkles className="h-3 w-3" />
+                  How it works
+                </div>
+
+                <h2 className="text-4xl font-black leading-[1.02] tracking-[-0.045em] sm:text-5xl">
+                  From invisible to <span className="text-emerald-500">cited.</span>
+                </h2>
+
+                <p className="mt-5 max-w-md text-base leading-7 text-zinc-600">
+                  Find the gaps, fix the content, publish what matters, and measure whether AI engines start citing
+                  your brand.
+                </p>
+
+                <Link
+                  href="/methodology"
+                  className="mt-7 inline-flex items-center gap-2 rounded-full border border-zinc-300 px-5 py-2.5 text-sm font-bold text-zinc-900 transition hover:border-zinc-900"
+                >
+                  Learn how we measure
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+
+              <div className="relative">
+                <div className="absolute left-[12%] right-[12%] top-7 hidden h-px bg-zinc-200 md:block" />
+                <div className="grid gap-8 md:grid-cols-4">
+                  {WORKFLOW.map(({ step, title, desc, icon: Icon }) => (
+                    <div key={step} className="relative">
+                      <div className="relative z-10 flex h-14 w-14 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50">
+                        <Icon className="h-5 w-5 text-emerald-600" />
+                      </div>
+                      <div className="mt-4 text-xs font-black text-zinc-500">{step}</div>
+                      <h3 className="mt-2 text-base font-black tracking-tight text-zinc-950">{title}</h3>
+                      <p className="mt-2 text-xs leading-5 text-zinc-500">{desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Competitor comparison */}
+        <section className="relative overflow-hidden bg-[#081115] py-20 text-white sm:py-24">
+          <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+            <div className="absolute right-[-120px] top-[-120px] h-[450px] w-[450px] rounded-full bg-emerald-400/[0.06] blur-[80px]" />
+          </div>
+
+          <div className="relative mx-auto grid max-w-7xl gap-12 px-5 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
+            <div className="max-w-lg">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-300">
+                <Target className="h-3 w-3" />
+                See the difference
+              </div>
+
+              <h2 className="text-4xl font-black leading-[1.04] tracking-[-0.045em] sm:text-5xl">
+                Your competitors are already <span className="text-emerald-300">getting cited.</span>
+              </h2>
+
+              <p className="mt-5 text-base leading-7 text-white/60">
+                See where they are winning, which AI engines mention them, and what your site needs to close the gap.
+              </p>
+
+              <Link
+                href="/free/gso-checker"
+                className="mt-7 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:bg-emerald-100"
+              >
+                Compare your brand
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+
+            <ComparisonTable />
+          </div>
+        </section>
+
+        {/* Results */}
+        <section className="bg-white py-20 sm:py-24">
+          <div className="mx-auto grid max-w-7xl gap-12 px-5 sm:px-6 lg:grid-cols-2 lg:items-center">
+            <ResultPreview />
+
+            <div className="max-w-xl lg:pl-10">
+              <div className="mb-4 inline-flex rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700">
+                Real outcomes
+              </div>
+
+              <h2 className="text-4xl font-black leading-[1.02] tracking-[-0.045em] sm:text-5xl">
+                Get more visibility.
+                <br />
+                Drive more revenue.
+              </h2>
+
+              <p className="mt-5 text-base leading-7 text-zinc-600">
+                More citations create more chances to be discovered, evaluated, and trusted before a buyer ever
+                reaches your website.
+              </p>
+
+              <div className="mt-7 grid gap-3 sm:grid-cols-2">
+                {[
+                  "AI visibility reports",
+                  "Competitor insights",
+                  "Automatic fixes",
+                  "Before / after measurement",
+                ].map((item) => (
+                  <div key={item} className="flex items-center gap-2 text-sm font-semibold text-zinc-700">
+                    <CircleCheck className="h-4 w-4 text-emerald-500" />
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Capabilities */}
+        <section id="features" className="border-y border-zinc-200 bg-[#f6f8f7] py-20 sm:py-24">
+          <div className="mx-auto max-w-7xl px-5 sm:px-6">
+            <div className="mx-auto max-w-2xl text-center">
+              <div className="mb-4 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-600">
+                Built for AI search
+              </div>
+              <h2 className="text-4xl font-black tracking-[-0.045em] sm:text-5xl">
+                Everything you need to earn more AI citations.
+              </h2>
+              <p className="mt-5 text-base leading-7 text-zinc-600">
+                Move from reporting to execution with one workflow for discovery, optimization, publishing, and
+                measurement.
+              </p>
+            </div>
+
+            <div className="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+              {CAPABILITIES.map(({ icon: Icon, eyebrow, title, desc }) => (
+                <article
+                  key={title}
+                  className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.04)] transition hover:-translate-y-1 hover:border-emerald-300"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
+                    <Icon className="h-5 w-5 text-emerald-600" />
+                  </div>
+                  <div className="mt-5 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-600">
+                    {eyebrow}
+                  </div>
+                  <h3 className="mt-2 text-lg font-black tracking-tight text-zinc-950">{title}</h3>
+                  <p className="mt-3 text-sm leading-6 text-zinc-500">{desc}</p>
+                </article>
+              ))}
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                "Technical SEO audits",
+                "Competitor keyword gaps",
+                "Content planner",
+                "Auto indexing",
+                "Content decay alerts",
+                "Internal link optimizer",
+                "Knowledge graph feed",
+                "AEO rank tracking",
+              ].map((item) => (
+                <div key={item} className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-3">
+                  <Check className="h-4 w-4 text-emerald-500" />
+                  <span className="text-xs font-semibold text-zinc-600">{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Aria */}
+        <section className="relative overflow-hidden bg-[#071013] py-20 text-white sm:py-24">
+          <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+            <div className="absolute left-[-160px] top-[-160px] h-[460px] w-[460px] rounded-full bg-emerald-400/[0.08] blur-[90px]" />
+          </div>
+
+          <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-5 sm:px-6 lg:grid-cols-[0.72fr_1.28fr]">
+            <div className="flex justify-center">
+              <div className="relative flex h-64 w-64 items-center justify-center">
+                <div className="absolute inset-0 rounded-full border border-emerald-300/15" />
+                <div className="absolute inset-7 rounded-full border border-emerald-300/15" />
+                <div className="absolute inset-14 rounded-full border border-emerald-300/15" />
+                <div className="absolute inset-0 rounded-full bg-emerald-400/[0.04] blur-xl" />
+                <div className="relative flex h-24 w-24 items-center justify-center rounded-full border border-emerald-300/30 bg-emerald-300/10 shadow-[0_0_60px_rgba(52,211,153,0.15)]">
+                  <Mic className="h-9 w-9 text-emerald-300" />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-300">
+                <Bot className="h-3 w-3" />
+                Aria AI Copilot
+              </div>
+
+              <h2 className="text-4xl font-black leading-[1.03] tracking-[-0.045em] sm:text-5xl">
+                Tell Aria what you want fixed.
+                <span className="block text-emerald-300">She can take action.</span>
+              </h2>
+
+              <p className="mt-5 max-w-2xl text-base leading-7 text-white/60">
+                Ask questions by voice, review audit findings, create fixes, and open GitHub pull requests without
+                digging through dashboards.
+              </p>
+
+              <div className="mt-7 grid gap-3 sm:grid-cols-2">
+                {[
+                  [Activity, '"Audit my homepage and show the top issues."'],
+                  [ScanSearch, '"Why are competitors cited more often?"'],
+                  [GitPullRequest, '"Open a PR to fix the missing schema."'],
+                  [TrendingUp, '"Which pages are losing visibility?"'],
+                ].map(([Icon, text], index) => {
+                  const TypedIcon = Icon as typeof Activity;
+                  return (
+                    <div key={index} className="flex gap-3 rounded-xl border border-white/8 bg-white/[0.035] p-4">
+                      <TypedIcon className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+                      <span className="text-sm leading-5 text-white/55">{text as string}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link
+                  href="/aria"
+                  className="inline-flex items-center gap-2 rounded-full bg-emerald-300 px-6 py-3 text-sm font-black text-black transition hover:bg-emerald-200"
+                >
+                  <Mic className="h-4 w-4" />
+                  See Aria in action
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+
                 <Link
                   href="/signup"
-                  className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-full bg-white/10 border border-white/30 text-white font-bold text-base hover:bg-white/20 hover:border-white/50 transition-all active:scale-95"
+                  className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10"
                 >
                   Start free trial
                 </Link>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ── Features ──────────────────────────────────────────────────────── */}
-      <section
-        id="features"
-        aria-labelledby="features-heading"
-        className="relative py-24 border-t border-border"
-      >
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2
-              id="features-heading"
-              className="text-3xl md:text-5xl font-bold tracking-tight mb-4"
-            >
-              Everything AI search demands.{" "}
-              <span className="text-brand">Automated.</span>
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Traditional SEO tools tell you what&apos;s wrong. OptiAISEO fixes it,
-              publishes content, and tracks your visibility in AI answers —
-              without manual work.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {FEATURES.map((feature) => (
-              <div
-                key={feature.title}
-                className="relative p-6 rounded-2xl border border-border bg-card hover:border-brand/30 hover:bg-brand/5 transition-all duration-200 group flex flex-col"
-              >
-                <div className="w-10 h-10 rounded-xl bg-brand/10 group-hover:bg-brand/20 flex items-center justify-center mb-4 transition-colors shrink-0">
-                  <feature.icon className="w-5 h-5 text-brand" />
-                </div>
-                <span
-                  className={`self-start text-[10px] font-bold px-2 py-0.5 rounded-full border mb-3 ${feature.badgeColor}`}
-                >
-                  {feature.badge}
-                </span>
-                <h3 className="text-lg font-bold mb-2">{feature.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed flex-1">
-                  {feature.desc}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              "Technical SEO audits (after setup)",
-              "Competitor keyword gaps",
-              "Content planner",
-              "Auto indexing",
-              "Content decay alerts",
-              "Internal link optimizer",
-              "Knowledge graph feed",
-              "AEO rank tracker",
-            ].map((item) => (
-              <div
-                key={item}
-                className="flex items-center gap-2.5 px-4 py-3 rounded-xl border border-border bg-card/50"
-              >
-                <Check className="w-4 h-4 text-brand shrink-0" />
-                <span className="text-sm text-muted-foreground">{item}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── How it works ──────────────────────────────────────────────────── */}
-      <section
-        id="how-it-works"
-        aria-labelledby="how-it-works-heading"
-        className="relative py-24 border-t border-border bg-muted/30"
-      >
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2
-              id="how-it-works-heading"
-              className="text-3xl md:text-5xl font-bold tracking-tight mb-4"
-            >
-              From zero to ranked in four steps
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Works for SEO teams and developers alike. GitHub is optional — not required.
-            </p>
-          </div>
-
-          <div className="relative">
-            <div
-              className="hidden md:block absolute top-8 left-0 w-full h-px bg-border"
-              aria-hidden="true"
-            />
-            <ol className="grid grid-cols-1 md:grid-cols-4 gap-12 text-center relative z-10 list-none">
-              {STEPS.map((item) => (
-                <li key={item.step} className="flex flex-col items-center">
-                  <div
-                    className="w-16 h-16 rounded-full bg-card border-4 border-background ring-1 ring-border flex items-center justify-center text-xl font-bold mb-6"
-                    aria-label={`Step ${item.step}`}
-                  >
-                    {item.step}
-                  </div>
-                  <h3 className="text-xl font-bold mb-2">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground">{item.desc}</p>
-                </li>
+        {/* Integrations */}
+        <section className="border-b border-zinc-200 bg-white py-14">
+          <div className="mx-auto max-w-7xl px-5 text-center sm:px-6">
+            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
+              AI engines we monitor
+            </div>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm font-bold text-zinc-500 sm:text-base">
+              {["ChatGPT", "Claude", "Perplexity", "Google AI"].map((name) => (
+                <span key={name}>{name}</span>
               ))}
-            </ol>
-          </div>
-        </div>
-      </section>
+            </div>
 
-      {/* ── Pricing ───────────────────────────────────────────────────────── */}
-      <section
-        id="pricing"
-        aria-labelledby="pricing-heading"
-        className="relative py-24 border-t border-border"
-      >
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2
-              id="pricing-heading"
-              className="text-3xl md:text-5xl font-bold tracking-tight mb-4"
-            >
-              Simple, transparent pricing
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Start free. Upgrade only when you need more automation.
-            </p>
+            <div className="mx-auto my-8 h-px max-w-3xl bg-zinc-100" />
 
-            <div className="flex items-center justify-center gap-3 mt-6">
-              <span
-                className={`text-sm font-medium transition-colors ${!billingAnnual ? "text-foreground" : "text-muted-foreground"
-                  }`}
-              >
-                Monthly
-              </span>
-              <button
-                role="switch"
-                aria-checked={billingAnnual}
-                aria-label="Toggle annual billing"
-                onClick={() => setBillingAnnual((v) => !v)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-ring ${billingAnnual ? "bg-brand" : "bg-muted"
-                  }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${billingAnnual ? "translate-x-6" : "translate-x-1"
-                    }`}
-                />
-              </button>
-              <span
-                className={`text-sm font-medium flex items-center gap-2 transition-colors ${billingAnnual ? "text-foreground" : "text-muted-foreground"
-                  }`}
-              >
-                Annual
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-brand/10 text-brand border border-brand/20">
-                  Save 20%
-                </span>
-              </span>
+            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
+              Works with your publishing stack
+            </div>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm font-semibold text-zinc-400">
+              {["Google Search Console", "GitHub", "WordPress", "Ghost"].map((name) => (
+                <span key={name}>{name}</span>
+              ))}
             </div>
           </div>
+        </section>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-6xl mx-auto">
-            {PLANS.map((plan) => (
-              <div
-                key={plan.name}
-                className={`card-surface p-6 flex flex-col relative overflow-hidden hover:-translate-y-1 transition-transform duration-300 ${plan.highlight
-                  ? "ring-2 ring-foreground/20"
-                  : "ring-1 ring-border"
-                  }`}
-              >
-                {plan.badge && (
-                  <div
-                    className={`absolute top-0 right-0 px-3 py-1 text-xs font-bold rounded-bl-lg ${plan.highlight
-                      ? "bg-foreground text-background"
-                      : "bg-card text-muted-foreground border-l border-b border-border"
-                      }`}
-                  >
-                    {plan.badge.toUpperCase()}
-                  </div>
-                )}
-                <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
-                <p className="text-muted-foreground text-sm mb-6">{plan.desc}</p>
-                <div className="flex items-baseline gap-2 mb-1">
-                  <span className="text-5xl font-bold">{getPrice(plan)}</span>
-                  <span className="text-muted-foreground text-sm">/mo</span>
-                </div>
-                {billingAnnual && plan.name !== "Free" && (
-                  <p className="text-xs text-brand font-medium mb-6">
-                    Billed annually — 2 months free
-                  </p>
-                )}
-                {(!billingAnnual || plan.name === "Free") && (
-                  <div className="mb-6" />
-                )}
-                <ul
-                  className="flex-1 space-y-3 mb-8"
-                  aria-label={`${plan.name} plan features`}
-                >
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-center gap-3">
-                      <Check className="w-4 h-4 text-brand shrink-0" />
-                      <span className="text-sm">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href={billingAnnual
-                    ? (plan.ctaHref.includes('?') ? `${plan.ctaHref}&billing=annual` : `${plan.ctaHref}?billing=annual`)
-                    : plan.ctaHref
-                  }
-                  className={`w-full py-3 rounded-xl font-semibold transition-all block text-center text-sm ${plan.highlight
-                    ? "bg-foreground text-background hover:opacity-90"
-                    : "bg-muted border border-border text-foreground hover:bg-accent hover:border-border/80"
+        {/* Pricing */}
+        <section id="pricing" className="bg-[#f7f9f8] py-20 sm:py-24">
+          <div className="mx-auto max-w-7xl px-5 sm:px-6">
+            <div className="mx-auto max-w-2xl text-center">
+              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-600">Pricing</div>
+              <h2 className="mt-3 text-4xl font-black tracking-[-0.045em] sm:text-5xl">
+                Simple, transparent pricing.
+              </h2>
+              <p className="mt-4 text-base text-zinc-600">Start free. Upgrade when you need more automation.</p>
+
+              <div className="mt-7 inline-flex items-center rounded-full border border-zinc-200 bg-white p-1 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setBillingAnnual(false)}
+                  className={`rounded-full px-4 py-2 text-xs font-bold transition ${!billingAnnual ? "bg-zinc-950 text-white" : "text-zinc-500"
                     }`}
                 >
-                  {plan.cta}
+                  Monthly
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillingAnnual(true)}
+                  className={`rounded-full px-4 py-2 text-xs font-bold transition ${billingAnnual ? "bg-zinc-950 text-white" : "text-zinc-500"
+                    }`}
+                >
+                  Annual · Save 20%
+                </button>
+              </div>
+            </div>
+
+            <div className="mx-auto mt-12 grid max-w-6xl gap-5 md:grid-cols-2 xl:grid-cols-4">
+              {PLANS.map((plan) => (
+                <article
+                  key={plan.name}
+                  className={`relative flex flex-col overflow-hidden rounded-2xl bg-white p-6 ${plan.highlight
+                    ? "border-2 border-emerald-400 shadow-[0_22px_70px_rgba(16,185,129,0.12)]"
+                    : "border border-zinc-200"
+                    }`}
+                >
+                  {plan.badge && (
+                    <div
+                      className={`absolute right-4 top-4 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.1em] ${plan.highlight
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-zinc-100 text-zinc-500"
+                        }`}
+                    >
+                      {plan.badge}
+                    </div>
+                  )}
+
+                  <h3 className="text-xl font-black tracking-tight">{plan.name}</h3>
+                  <p className="mt-3 min-h-[56px] text-sm leading-5 text-zinc-500">{plan.desc}</p>
+
+                  <div className="mt-6 flex items-end gap-2">
+                    <span className="text-4xl font-black tracking-tight">{getPrice(plan)}</span>
+                    <span className="mb-1 text-sm text-zinc-400">/mo</span>
+                  </div>
+
+                  {billingAnnual && plan.name !== "Free" ? (
+                    <div className="mt-1 text-[10px] font-semibold text-emerald-600">Billed annually</div>
+                  ) : (
+                    <div className="mt-1 h-[15px]" />
+                  )}
+
+                  <ul className="mt-6 flex-1 space-y-3">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex items-start gap-2 text-sm text-zinc-600">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <Link
+                    href={
+                      billingAnnual
+                        ? plan.ctaHref.includes("?")
+                          ? `${plan.ctaHref}&billing=annual`
+                          : `${plan.ctaHref}?billing=annual`
+                        : plan.ctaHref
+                    }
+                    className={`mt-8 block rounded-xl py-3 text-center text-sm font-black transition ${plan.highlight
+                      ? "bg-emerald-300 text-black hover:bg-emerald-200"
+                      : "border border-zinc-200 bg-zinc-50 text-zinc-950 hover:bg-zinc-100"
+                      }`}
+                  >
+                    {plan.cta}
+                  </Link>
+                </article>
+              ))}
+            </div>
+
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-medium text-zinc-500">
+              {["No card required to start", "Cancel anytime", "Your data stays yours"].map((item) => (
+                <span key={item} className="inline-flex items-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* FAQ */}
+        <section id="faq" className="border-t border-zinc-200 bg-white py-20 sm:py-24">
+          <div className="mx-auto max-w-4xl px-5 sm:px-6">
+            <div className="text-center">
+              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-600">FAQ</div>
+              <h2 className="mt-3 text-4xl font-black tracking-[-0.045em] sm:text-5xl">
+                Frequently asked questions.
+              </h2>
+            </div>
+
+            <div className="mt-10 space-y-3">
+              {faqItems.map((item, index) => {
+                const open = openFaqIndex === index;
+
+                return (
+                  <div key={`${item.name}-${index}`} className="overflow-hidden rounded-2xl border border-zinc-200">
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-4 px-5 py-5 text-left text-sm font-bold text-zinc-950 sm:px-6"
+                      onClick={() => setOpenFaqIndex(open ? null : index)}
+                      aria-expanded={open}
+                      aria-controls={`faq-${index}`}
+                    >
+                      <span>{item.name}</span>
+                      <ChevronDown
+                        className={`h-5 w-5 shrink-0 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`}
+                      />
+                    </button>
+
+                    <div
+                      id={`faq-${index}`}
+                      className={`grid transition-all duration-300 ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                        }`}
+                    >
+                      <div className="overflow-hidden">
+                        <p className="px-5 pb-5 text-sm leading-6 text-zinc-500 sm:px-6">{item.acceptedAnswer.text}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* Final CTA */}
+        <section className="relative overflow-hidden bg-[#05231d] py-16 text-white sm:py-20">
+          <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+            <div className="absolute left-[-100px] top-[-240px] h-[550px] w-[550px] rounded-full border border-emerald-300/10" />
+            <div className="absolute right-[-160px] bottom-[-300px] h-[650px] w-[650px] rounded-full border border-emerald-300/10" />
+          </div>
+
+          <div className="relative mx-auto grid max-w-7xl gap-10 px-5 sm:px-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
+            <div>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-emerald-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-300">
+                <Zap className="h-3 w-3" />
+                Get started today
+              </div>
+
+              <h2 className="text-3xl font-black tracking-[-0.04em] sm:text-4xl">What&apos;s your AI visibility score?</h2>
+              <p className="mt-3 text-sm text-white/55">
+                Enter your website and get a free AI search visibility report.
+              </p>
+
+              <div className="mt-6 flex max-w-xl flex-col gap-3 rounded-2xl bg-white p-2 sm:flex-row">
+                <input
+                  type="url"
+                  value={website}
+                  onChange={(event) => setWebsite(event.target.value)}
+                  placeholder="https://yourwebsite.com"
+                  className="min-h-11 flex-1 rounded-xl px-4 text-sm text-zinc-900 outline-none placeholder:text-zinc-400"
+                  aria-label="Website URL"
+                />
+                <Link
+                  href={visibilityHref}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-300 px-5 text-sm font-black text-black transition hover:bg-emerald-200"
+                >
+                  Check my visibility
+                  <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
-            ))}
-          </div>
 
-          <p className="text-center text-sm text-muted-foreground mt-6">
-            No credit card required · Cancel anytime · Your data is always yours
-          </p>
+              <div className="mt-3 text-[11px] text-white/35">Free · No credit card required</div>
+            </div>
 
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
-            {[
-              "No credit card to start",
-              "Cancel anytime",
-              "7-day Pro trial on all paid plans",
-              "Data stays yours",
-            ].map((item) => (
-              <span key={item} className="flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-brand" />
-                {item}
-              </span>
-            ))}
-          </div>
-
-          {/* Trust / transparency contextual links */}
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground">
-            <Link href="/security" className="hover:text-foreground transition-colors flex items-center gap-1 underline underline-offset-2">
-              <ShieldCheck className="w-3.5 h-3.5" /> Security &amp; data trust
-            </Link>
-            <span aria-hidden="true">·</span>
-            <Link href="/methodology" className="hover:text-foreground transition-colors underline underline-offset-2">
-              How we measure AEO
-            </Link>
-            <span aria-hidden="true">·</span>
-            <Link href="/changelog" className="hover:text-foreground transition-colors underline underline-offset-2">
-              What&apos;s new in OptiAISEO
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* ── FAQ ───────────────────────────────────────────────────────────── */}
-      <section
-        id="faq"
-        aria-labelledby="faq-heading"
-        className="relative py-24 border-t border-border bg-muted/30"
-      >
-        <div className="max-w-4xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2
-              id="faq-heading"
-              className="text-3xl md:text-5xl font-bold tracking-tight mb-4"
-            >
-              Frequently asked questions
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Everything you need to know about OptiAISEO.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            {faqItems.map((item, idx) => (
-              <div key={idx} className="card-surface rounded-xl overflow-hidden">
-                <button
-                  className="w-full flex items-center justify-between p-6 text-left font-semibold text-base hover:bg-accent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => setOpenFaqIndex(openFaqIndex === idx ? null : idx)}
-                  aria-expanded={openFaqIndex === idx}
-                  aria-controls={`faq-panel-${idx}`}
-                >
-                  {item.name}
-                  <ChevronDown
-                    className={`w-5 h-5 text-muted-foreground transition-transform duration-300 shrink-0 ml-4 ${openFaqIndex === idx ? "rotate-180" : ""
-                      }`}
-                  />
-                </button>
-                <div
-                  id={`faq-panel-${idx}`}
-                  role="region"
-                  aria-label={item.name}
-                  className={`grid transition-all duration-300 ease-in-out ${openFaqIndex === idx
-                    ? "grid-rows-[1fr] opacity-100"
-                    : "grid-rows-[0fr] opacity-0"
-                    }`}
-                >
-                  <div className="overflow-hidden">
-                    <p className="p-6 pt-0 text-muted-foreground leading-relaxed pr-8 text-sm">
-                      {item.acceptedAnswer.text}
-                    </p>
+            <div className="rounded-2xl border border-emerald-300/15 bg-black/15 p-6 backdrop-blur-sm">
+              <div className="text-xs font-bold text-white">Takes less than 30 seconds</div>
+              <div className="mt-5 space-y-3">
+                {[
+                  "Your AI visibility score",
+                  "Where you're being cited",
+                  "Top citation opportunities",
+                  "Personalized recommendations",
+                ].map((item) => (
+                  <div key={item} className="flex items-center gap-2 text-sm text-white/60">
+                    <Check className="h-4 w-4 text-emerald-300" />
+                    {item}
                   </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Deepen your knowledge — guide & blog hub links ─────────────────── */}
-      <section aria-labelledby="learn-heading" className="py-12 border-t border-border">
-        <div className="max-w-5xl mx-auto px-6 text-center">
-          <p id="learn-heading" className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-5">Learn more</p>
-          <div className="flex flex-wrap justify-center gap-3">
-            <Link href="/guide" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
-              📚 SEO &amp; AEO Guide Hub
-            </Link>
-            <Link href="/aeo-guide" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
-              🤖 AEO Guide Hub
-            </Link>
-            <Link href="/blog" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
-              📝 SEO Blog
-            </Link>
-            <Link href="/free/gso-checker" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
-              🧠 Free AI Visibility Check
-            </Link>
-            <Link href="/leaderboard" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
-              🏆 AI SEO Leaderboard
-            </Link>
-            <Link href="/methodology" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-border hover:border-brand hover:text-brand bg-card text-sm font-semibold transition-all hover:-translate-y-0.5">
-              🔬 How We Measure AEO
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* ── SEO Guide Content — comprehensive H2 sections for content depth ── */}
-      <section
-        id="seo-guide"
-        aria-labelledby="seo-guide-heading"
-        className="relative py-24 border-t border-border bg-muted/20"
-      >
-        <div className="max-w-4xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <p className="text-xs font-bold uppercase tracking-widest text-brand mb-3">The Complete SEO Guide</p>
-            <h2
-              id="seo-guide-heading"
-              className="text-3xl md:text-5xl font-bold tracking-tight mb-4"
-            >
-              Everything you need to know about SEO
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              Search Engine Optimization is the practice of improving your website so it ranks higher in search results.
-              Whether you&apos;re new to SEO or looking to refine your strategy, this guide covers the fundamentals
-              that top-ranking pages share — from how Google discovers content to optimizing your images for search.
-            </p>
-          </div>
-
-          {/* Table of Contents */}
-          <nav aria-label="Guide table of contents" className="card-surface rounded-2xl p-6 mb-12">
-            <p className="text-sm font-bold mb-4 flex items-center gap-2">
-              <span className="w-6 h-6 rounded-lg bg-brand/10 flex items-center justify-center">
-                <Sparkles className="w-3.5 h-3.5 text-brand" />
-              </span>
-              In this guide
-            </p>
-            <ol className="grid grid-cols-1 sm:grid-cols-2 gap-2 list-none">
-              {[
-                { href: "#why-seo-important", label: "Why is SEO important?" },
-                { href: "#how-google-works", label: "How does Google Search work?" },
-                { href: "#seo-results-timeline", label: "How long until I see results?" },
-                { href: "#help-google-find-content", label: "Help Google find your content" },
-                { href: "#organize-your-site", label: "Organize your site" },
-                { href: "#make-content-useful", label: "Make your site interesting and useful" },
-                { href: "#influence-serp-appearance", label: "Influence how your site looks in search" },
-                { href: "#optimize-images", label: "Add and optimize images" },
-              ].map((item, i) => (
-                <li key={item.href}>
-                  <a
-                    href={item.href}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                  >
-                    <span className="w-5 h-5 rounded-full bg-brand/10 text-brand text-xs font-bold flex items-center justify-center shrink-0">
-                      {i + 1}
-                    </span>
-                    {item.label}
-                  </a>
-                </li>
-              ))}
-            </ol>
-          </nav>
-
-          {/* Video embed — lazy-loaded: shows thumbnail until user clicks play */}
-          <div className="mb-16 rounded-2xl overflow-hidden border border-border">
-            <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
-              <iframe
-                className="absolute top-0 left-0 w-full h-full"
-                src="https://www.youtube.com/embed/MYE6T_gd7H0?si=fo6u1X2_ncyOQl-S"
-                title="What is SEO? Search Engine Optimization explained"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                loading="lazy"
-                srcDoc={`<style>*{padding:0;margin:0;overflow:hidden}html,body{height:100%}img,span{position:absolute;width:100%;top:0;bottom:0;margin:auto}span{height:1.5em;text-align:center;font:48px/1.5 sans-serif;color:white;text-shadow:0 0 .5em black}</style><a href=https://www.youtube.com/embed/MYE6T_gd7H0?autoplay=1><img src=https://img.youtube.com/vi/MYE6T_gd7H0/hqdefault.jpg alt='What is SEO? Watch the explainer video'><span>&#x25BA;</span></a>`}
-              />
-            </div>
-            <div className="px-5 py-3 bg-card text-xs text-muted-foreground">
-              <span className="font-semibold text-foreground">Watch:</span> What is SEO and how does it work? A visual explainer.
             </div>
           </div>
+        </section>
+      </main>
 
-          <div className="flex flex-col gap-16">
-
-            {/* H2 1: Why is SEO important? */}
-            <article id="why-seo-important">
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
-                Why is SEO important?
-              </h2>
-              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
-                <p>
-                  SEO is the single most cost-effective channel for sustainable organic growth. Unlike paid advertising where traffic stops the moment you stop spending, rankings earned through SEO compound over time — a well-optimized page can generate traffic for years with minimal ongoing cost.
-                </p>
-                <p>
-                  Consider this: Google processes over{" "}
-                  <a href="https://www.internetlivestats.com/google-search-statistics/" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline font-medium">
-                    8.5 billion searches per day
-                  </a>. The first page of results captures over 90% of all clicks, and the top three positions alone account for roughly 55% of click-through rates. If your website isn&apos;t ranking, you&apos;re invisible to the vast majority of your potential customers.
-                </p>
-                <p>
-                  For businesses, SEO drives qualified intent-based traffic — people actively searching for what you offer. A user searching &ldquo;best project management tool for remote teams&rdquo; has far higher purchase intent than someone scrolling past a social media ad. That&apos;s why SEO consistently delivers the highest ROI of any digital marketing channel, according to{" "}
-                  <a href="https://www.brightedge.com/resources/research-reports/organic-search-still-largest-channel" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline font-medium">
-                    BrightEdge research
-                  </a>{" "}
-                  showing organic search drives 53% of all website traffic.
-                </p>
-                <p>
-                  In 2025, SEO has expanded beyond traditional blue links. With AI Overviews, featured snippets, and answer engines like ChatGPT and Perplexity citing sources directly, optimizing for search now means optimizing for AI visibility too — a discipline known as Answer Engine Optimization (AEO).
-                </p>
-              </div>
-            </article>
-
-            {/* H2 2: How does Google Search work? */}
-            <article id="how-google-works">
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
-                How does Google Search work?
-              </h2>
-              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
-                <p>
-                  Google Search operates in three stages: crawling, indexing, and ranking. Understanding each stage is essential for diagnosing why a page isn&apos;t performing.
-                </p>
-                <p>
-                  <strong className="text-foreground">Crawling</strong> is how Google discovers content. Googlebot — Google&apos;s web crawler — follows links from known pages to find new and updated content. If your pages aren&apos;t linked from anywhere, or if your <code className="px-1.5 py-0.5 rounded bg-card border border-border text-xs">robots.txt</code> blocks access, Google won&apos;t even know they exist.
-                </p>
-                <p>
-                  <strong className="text-foreground">Indexing</strong> is the analysis phase. Once Googlebot fetches a page, Google processes the content — reading text, cataloging images, parsing structured data, and understanding entity relationships. Pages that are thin, duplicate, or blocked by a <code className="px-1.5 py-0.5 rounded bg-card border border-border text-xs">noindex</code> tag will not be added to the index.
-                </p>
-                <p>
-                  <strong className="text-foreground">Ranking</strong> is where Google decides the order of results. Google evaluates hundreds of signals including content relevance, page experience (Core Web Vitals), backlink authority, and E-E-A-T (Experience, Expertise, Authoritativeness, Trustworthiness). According to{" "}
-                  <a href="https://developers.google.com/search/docs/fundamentals/seo-starter-guide" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline font-medium">
-                    Google&apos;s own SEO starter guide
-                  </a>, the most fundamental step is ensuring your content is useful, reliable, and people-first.
-                </p>
-                <p>
-                  OptiAISEO automates all three stages: we submit sitemaps to Google, detect indexing issues, analyze ranking signals against competitors, and auto-fix technical problems that prevent your content from performing.
-                </p>
-              </div>
-            </article>
-
-            {/* H2 3: How long until I see results? */}
-            <article id="seo-results-timeline">
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
-                How long until I see impact in search results?
-              </h2>
-              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
-                <p>
-                  SEO is not instant. Most websites see measurable ranking improvements within 4 to 6 months of consistent optimization work. Technical fixes like schema markup or Core Web Vitals improvements can show impact within weeks, but content-driven gains and backlink authority take longer to compound.
-                </p>
-                <p>
-                  The timeline depends on three factors: your current domain authority, the competitiveness of your target keywords, and the quality of your execution. A new domain targeting &ldquo;best CRM software&rdquo; will take significantly longer than an established site targeting a long-tail phrase like &ldquo;CRM for freelance consultants.&rdquo;
-                </p>
-                <p>
-                  Google has stated that it can take{" "}
-                  <a href="https://developers.google.com/search/docs/fundamentals/do-i-need-seo" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline font-medium">
-                    four months to a year
-                  </a>{" "}
-                  before you begin to see benefits from SEO changes. The key is consistency: sites that publish high-quality content regularly, fix technical issues promptly, and build authoritative backlinks outperform competitors who treat SEO as a one-time project.
-                </p>
-                <p>
-                  OptiAISEO accelerates this timeline by automating the repetitive work — weekly audits, auto-generated content, schema injection, and continuous monitoring — so you build momentum faster than doing everything manually.
-                </p>
-              </div>
-            </article>
-
-            {/* H2 4: Help Google find your content */}
-            <article id="help-google-find-content">
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
-                Help Google find your content
-              </h2>
-              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
-                <p>
-                  The first step in SEO is making sure Google can actually discover your pages. A page that isn&apos;t crawled can never be indexed, and a page that isn&apos;t indexed can never rank.
-                </p>
-                <p>
-                  <strong className="text-foreground">Submit a sitemap.</strong> An XML sitemap is a structured file that tells Google about every important page on your site. Submit it through Google Search Console to ensure complete coverage. OptiAISEO generates and monitors your sitemap automatically.
-                </p>
-                <p>
-                  <strong className="text-foreground">Use internal links strategically.</strong> Every page on your site should be reachable within 3 clicks from your homepage. Orphan pages — those with no internal links pointing to them — are the most common cause of crawl gaps. OptiAISEO&apos;s internal link optimizer identifies orphan pages and suggests contextual linking opportunities.
-                </p>
-                <p>
-                  <strong className="text-foreground">Check your robots.txt.</strong> A misconfigured <code className="px-1.5 py-0.5 rounded bg-card border border-border text-xs">robots.txt</code> file can accidentally block critical pages from being crawled. Common mistakes include blocking CSS/JS files (which prevents Google from rendering your page) or accidentally disallowing entire directories. OptiAISEO audits your robots.txt configuration in every technical audit.
-                </p>
-                <p>
-                  <strong className="text-foreground">Request indexing for new pages.</strong> When you publish new content, use the URL Inspection tool in Google Search Console to request indexing. This speeds up the discovery process from days to hours.
-                </p>
-              </div>
-            </article>
-
-            {/* H2 5: Organize your site */}
-            <article id="organize-your-site">
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
-                Organize your site for better rankings
-              </h2>
-              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
-                <p>
-                  Site architecture directly impacts how Google understands and ranks your content. A well-organized site makes it easier for crawlers to navigate, users to find information, and search engines to determine which pages are most important.
-                </p>
-                <p>
-                  <strong className="text-foreground">Use a logical URL structure.</strong> URLs should be descriptive, readable, and follow a consistent hierarchy. For example, <code className="px-1.5 py-0.5 rounded bg-card border border-border text-xs">/blog/seo-guide</code> is better than <code className="px-1.5 py-0.5 rounded bg-card border border-border text-xs">/p?id=4827</code>. Good URL structure helps both users and search engines understand your content before they even visit the page.
-                </p>
-                <p>
-                  <strong className="text-foreground">Implement breadcrumb navigation.</strong> Breadcrumbs show users and search engines the path from the homepage to the current page. Google displays breadcrumbs in search results, improving click-through rates. Add BreadcrumbList schema to your pages — OptiAISEO injects this automatically during technical audits.
-                </p>
-                <p>
-                  <strong className="text-foreground">Create content hubs.</strong> Group related content under pillar pages with supporting cluster content linked back to the pillar. This topical authority structure signals to Google that you have comprehensive coverage of a subject, which is a key ranking factor in 2025.
-                </p>
-                <p>
-                  <strong className="text-foreground">Use heading hierarchy correctly.</strong> Every page should have a single H1 tag, followed by H2s for main sections and H3s for subsections. This hierarchical structure helps Google understand topic relationships within your content. Our audit reports flag heading hierarchy issues automatically.
-                </p>
-              </div>
-            </article>
-
-            {/* H2 6: Make your site interesting and useful */}
-            <article id="make-content-useful">
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
-                Make your site interesting and useful
-              </h2>
-              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
-                <p>
-                  Content quality is the most important ranking factor in 2025. Google&apos;s Helpful Content System evaluates whether your pages are written primarily for people, not search engines. Pages that provide genuine value consistently outrank those optimized purely for keywords.
-                </p>
-                <p>
-                  <strong className="text-foreground">Answer real questions.</strong> Use tools like Google&apos;s &ldquo;People Also Ask&rdquo; and Answer The Public to identify questions your audience is actually asking. Structure your content to provide clear, direct answers — this is also how you get cited in AI Overviews and featured snippets.
-                </p>
-                <p>
-                  <strong className="text-foreground">Go deeper than competitors.</strong> If the average top-ranking page for your keyword has 3,000 words and covers 12 subtopics, writing a 500-word overview won&apos;t rank. OptiAISEO&apos;s SERP Gap Analysis shows you exactly how your content compares to competitors — word count, heading structure, topic coverage, and E-E-A-T signals.
-                </p>
-                <p>
-                  <strong className="text-foreground">Include original data and expert insights.</strong> Content that contains original statistics, case studies, or expert quotes earns more backlinks and is more likely to be cited by AI models. According to a{" "}
-                  <a href="https://backlinko.com/search-engine-ranking" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline font-medium">
-                    Backlinko study of 11.8 million search results
-                  </a>, the average first-page result contains comprehensive, in-depth content that thoroughly covers the topic.
-                </p>
-                <p>
-                  <strong className="text-foreground">Keep content fresh.</strong> Update your most important pages regularly with new data, examples, and insights. Google tracks content freshness — pages that haven&apos;t been updated in years gradually lose ranking authority. OptiAISEO&apos;s content decay alerts notify you when a high-performing page starts losing traffic.
-                </p>
-              </div>
-            </article>
-
-            {/* H2 7: Influence how your site looks in Google Search */}
-            <article id="influence-serp-appearance">
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
-                Influence how your site looks in Google Search
-              </h2>
-              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
-                <p>
-                  How your pages appear in search results directly impacts click-through rates. A compelling title, clear description, and rich snippets can double your CTR at the same ranking position.
-                </p>
-                <p>
-                  <strong className="text-foreground">Write compelling title tags.</strong> Your title tag is the most visible element in search results. Keep it under 60 characters, include your primary keyword near the beginning, and make it compelling enough to click. Avoid generic titles like &ldquo;Home&rdquo; or &ldquo;Untitled&rdquo; — every page should have a unique, descriptive title.
-                </p>
-                <p>
-                  <strong className="text-foreground">Craft meta descriptions that sell.</strong> While meta descriptions don&apos;t directly affect rankings, they significantly impact CTR. Write 150-160 character descriptions that summarize the page&apos;s value proposition and include a call-to-action. If you don&apos;t provide one, Google will generate its own — and it rarely matches your intent.
-                </p>
-                <p>
-                  <strong className="text-foreground">Implement structured data (schema markup).</strong> JSON-LD schema enables rich results in Google — star ratings, FAQ dropdowns, product prices, event dates, and more. Pages with rich results see CTR increases of 20-30% on average. OptiAISEO detects missing schema opportunities and can auto-inject the markup via GitHub PR.
-                </p>
-                <p>
-                  <strong className="text-foreground">Optimize for sitelinks.</strong> Sitelinks are the sub-links Google shows beneath your main result. To earn them, use clear navigation, descriptive anchor text for internal links, and ensure your most important pages are well-linked. A table of contents with anchor links also increases your chances of earning sitelinks.
-                </p>
-              </div>
-            </article>
-
-            {/* H2 8: Add images and optimize them */}
-            <article id="optimize-images">
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
-                Add images to your site, and optimize them
-              </h2>
-              <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed space-y-4">
-                <p>
-                  Visual content breaks up text, reduces bounce rates, and creates additional ranking opportunities through Google Images. Pages with relevant images consistently outperform text-only pages in both engagement metrics and search rankings.
-                </p>
-                <p>
-                  <strong className="text-foreground">Use descriptive alt text.</strong> Alt text is the primary way Google understands what an image contains. Write natural, descriptive alt text that accurately describes the image — &ldquo;Screenshot of Google Search Console performance report showing organic traffic growth&rdquo; is far better than &ldquo;image1.png&rdquo; or leaving it blank entirely.
-                </p>
-                <p>
-                  <strong className="text-foreground">Compress images for performance.</strong> Large image files are the number one cause of slow page loads, and page speed is a confirmed ranking factor. Use modern formats like WebP or AVIF, and implement lazy loading for images below the fold. Every second of load time delay reduces conversions by roughly 7%.
-                </p>
-                <p>
-                  <strong className="text-foreground">Use original visuals when possible.</strong> Custom screenshots, diagrams, infographics, and data visualizations perform significantly better than generic stock photos. They&apos;re also more likely to earn backlinks when other sites reference your visual content. Tools like Canva, Figma, or even simple annotated screenshots can dramatically improve content quality.
-                </p>
-                <p>
-                  <strong className="text-foreground">Add descriptive filenames.</strong> Before uploading, rename image files to be descriptive: <code className="px-1.5 py-0.5 rounded bg-card border border-border text-xs">seo-audit-dashboard.webp</code> tells Google what the image is about, while <code className="px-1.5 py-0.5 rounded bg-card border border-border text-xs">IMG_4382.jpg</code> provides zero context. OptiAISEO flags images with non-descriptive filenames during audits.
-                </p>
-              </div>
-            </article>
-
-          </div>
-
-          {/* CTA within guide */}
-          <div className="mt-16 text-center">
-            <div className="card-surface rounded-2xl p-8 inline-block max-w-lg mx-auto">
-              <h3 className="text-lg font-bold mb-2">Ready to fix your SEO?</h3>
-              <p className="text-sm text-muted-foreground mb-5">
-                OptiAISEO identifies every gap shown in this guide — content depth, schema, technical issues, and AI visibility — then auto-generates the fixes.
-              </p>
-              <Link
-                href="/signup"
-                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-foreground text-background font-bold text-sm hover:opacity-90 transition-all active:scale-95"
-              >
-                <Zap className="w-4 h-4" />
-                Start your free audit
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Pre-footer CTA ────────────────────────────────────────────────── */}
-      <section className="relative py-24 border-t border-zinc-800/40 bg-zinc-950 text-white overflow-hidden">
-        <div
-          className="absolute inset-0 pointer-events-none"
-          aria-hidden="true"
-          style={{
-            background:
-              "radial-gradient(ellipse 50% 60% at 50% 100%, rgba(16,185,129,0.10) 0%, transparent 70%)",
-          }}
-        />
-        <div className="max-w-4xl mx-auto px-6 text-center relative z-10">
-          <h2 className="text-4xl md:text-5xl font-black tracking-tight mb-5">
-            Still on the fence?
-          </h2>
-          <p className="text-lg text-white/70 mb-6 max-w-xl mx-auto">
-            No developer needed. Works on WordPress, Ghost, Webflow, or any CMS.
-            Your first audit runs in under 2 minutes.
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-white/60 mb-10">
-            {["No code required", "Works on any CMS", "Cancel anytime", "Data exported any time"].map((item) => (
-              <span key={item} className="flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-brand" />
-                {item}
-              </span>
-            ))}
-          </div>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link
-              href="/signup"
-              className="w-full sm:w-auto px-8 py-4 rounded-full bg-brand text-white font-bold text-lg hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2"
-            >
-              <Zap className="w-5 h-5" />
-              Get started free
-            </Link>
-            <span className="text-sm text-white/55 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4" />
-              No credit card · Cancel anytime
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Footer ────────────────────────────────────────────────────────── */}
-      <footer className="border-t border-border py-12 bg-background">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
-            <div className="flex flex-col items-start gap-2">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="w-6 h-6 rounded bg-foreground flex items-center justify-center"
-                  aria-hidden="true"
-                >
-                  <span className="font-black text-background text-[9px] tracking-tight">
-                    AI
-                  </span>
-                </div>
-                <span className="font-medium text-sm tracking-tight text-muted-foreground">
-                  OptiAISEO &copy; {new Date().getFullYear()}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground/50 hidden md:block">
-                AI Search Visibility &amp; Answer Engine Optimization Platform
+      {/* Footer */}
+      <footer className="bg-[#071013] py-12 text-white">
+        <div className="mx-auto max-w-7xl px-5 sm:px-6">
+          <div className="grid gap-10 border-b border-white/8 pb-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_repeat(4,1fr)]">
+            <div>
+              <BrandMark />
+              <p className="mt-4 max-w-xs text-xs leading-5 text-white/40">
+                AI search visibility, answer engine optimization, automated fixes, and measurable results.
               </p>
             </div>
 
-            <nav aria-label="Social media links" className="flex items-center gap-5">
-              <a href="https://twitter.com/aiseoseo" target="_blank" rel="noreferrer me noopener" className="text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-accent" aria-label="OptiAISEO on X (Twitter)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.742l7.735-8.857L1.254 2.25H8.08l4.261 5.635L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" /></svg>
-              </a>
-              <a href="https://linkedin.com/company/aiseoseo" target="_blank" rel="noreferrer me noopener" className="text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-accent" aria-label="OptiAISEO on LinkedIn">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" /></svg>
-              </a>
-              <a href="https://instagram.com/aiseoseo" target="_blank" rel="noreferrer me noopener" className="text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-accent" aria-label="OptiAISEO on Instagram">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" /></svg>
-              </a>
-              <a href="https://facebook.com/aiseoseo" target="_blank" rel="noreferrer me noopener" className="text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-accent" aria-label="OptiAISEO on Facebook">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" /></svg>
-              </a>
-              <a href="https://youtube.com/@aiseoseo" target="_blank" rel="noreferrer me noopener" className="text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-accent" aria-label="OptiAISEO on YouTube">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" /></svg>
-              </a>
-              <a href="https://github.com/kenneth256" target="_blank" rel="noreferrer me noopener" className="text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-accent" aria-label="OptiAISEO on GitHub">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" /></svg>
-              </a>
-            </nav>
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-white/35">Product</div>
+              <div className="mt-4 flex flex-col gap-2 text-xs text-white/50">
+                <Link href="/aria" className="hover:text-white">Aria Copilot</Link>
+                <Link href="/pricing" className="hover:text-white">Pricing</Link>
+                <Link href="/case-studies" className="hover:text-white">Case Studies</Link>
+                <Link href="/methodology" className="hover:text-white">Methodology</Link>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-white/35">Solutions</div>
+              <div className="mt-4 flex flex-col gap-2 text-xs text-white/50">
+                <Link href="/for-agencies" className="hover:text-white">For Agencies</Link>
+                <Link href="/for-saas" className="hover:text-white">For SaaS</Link>
+                <Link href="/for-content" className="hover:text-white">For Content Teams</Link>
+                <Link href="/for-ecommerce" className="hover:text-white">For E-commerce</Link>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-white/35">Resources</div>
+              <div className="mt-4 flex flex-col gap-2 text-xs text-white/50">
+                <Link href="/blog" className="hover:text-white">Blog</Link>
+                <Link href="/leaderboard" className="hover:text-white">AI SEO Leaderboard</Link>
+                <Link href="/vs" className="hover:text-white">Comparisons</Link>
+                <Link href="/free/gso-checker" className="hover:text-white">Free AI Checker</Link>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-white/35">Company</div>
+              <div className="mt-4 flex flex-col gap-2 text-xs text-white/50">
+                <Link href="/about" className="hover:text-white">About</Link>
+                <Link href="/contact" className="hover:text-white">Contact</Link>
+                <Link href="/security" className="hover:text-white">Security</Link>
+                <Link href="/privacy" className="hover:text-white">Privacy</Link>
+                <Link href="/terms" className="hover:text-white">Terms</Link>
+              </div>
+            </div>
           </div>
 
-          <div className="border-t border-border pt-8">
-            {/* Footer link columns */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 mb-8 text-xs">
-              {/* Product */}
-              <div>
-                <p className="font-semibold text-foreground mb-3 uppercase tracking-widest text-[10px]">Product</p>
-                <nav aria-label="Product pages" className="flex flex-col gap-2 text-muted-foreground">
-                  <Link href="/aria" className="hover:text-foreground transition-colors">Aria Voice Copilot</Link>
-                  <Link href="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
-                  <Link href="/changelog" className="hover:text-foreground transition-colors">Changelog</Link>
-                  <Link href="/methodology" className="hover:text-foreground transition-colors">AEO Methodology</Link>
-                  <Link href="/case-studies" className="hover:text-foreground transition-colors">Case Studies</Link>
-                </nav>
-              </div>
-              {/* Solutions */}
-              <div>
-                <p className="font-semibold text-foreground mb-3 uppercase tracking-widest text-[10px]">Solutions</p>
-                <nav aria-label="Solution pages" className="flex flex-col gap-2 text-muted-foreground">
-                  <Link href="/for-agencies" className="hover:text-foreground transition-colors">For Agencies</Link>
-                  <Link href="/for-saas" className="hover:text-foreground transition-colors">For SaaS</Link>
-                  <Link href="/for-content" className="hover:text-foreground transition-colors">For Content Teams</Link>
-                  <Link href="/for-ecommerce" className="hover:text-foreground transition-colors">For E-commerce</Link>
-                </nav>
-              </div>
-              {/* Free Tools */}
-              <div>
-                <p className="font-semibold text-foreground mb-3 uppercase tracking-widest text-[10px]">Free Tools</p>
-                <nav aria-label="Free tools" className="flex flex-col gap-2 text-muted-foreground">
-                  <Link href="/free/seo-checker" className="hover:text-foreground transition-colors">Free SEO Checker</Link>
-                  <Link href="/free/gso-checker" className="hover:text-foreground transition-colors">Free AI Checker</Link>
-                  <Link href="/free/reddit-seo" className="hover:text-foreground transition-colors">Reddit SEO Finder</Link>
-                  <Link href="/blog" className="hover:text-foreground transition-colors">SEO Blog</Link>
-                </nav>
-              </div>
-              {/* Compare */}
-              <div>
-                <p className="font-semibold text-foreground mb-3 uppercase tracking-widest text-[10px]">Compare</p>
-                <nav aria-label="Comparison pages" className="flex flex-col gap-2 text-muted-foreground">
-                  <Link href="/vs" className="hover:text-foreground transition-colors">All Comparisons</Link>
-                  <Link href="/vs/semrush" className="hover:text-foreground transition-colors">vs Semrush</Link>
-                  <Link href="/vs/ahrefs" className="hover:text-foreground transition-colors">vs Ahrefs</Link>
-                  <Link href="/vs/surfer-seo" className="hover:text-foreground transition-colors">vs Surfer SEO</Link>
-                  <Link href="/vs/moz" className="hover:text-foreground transition-colors">vs Moz</Link>
-                  <Link href="/vs/clearscope" className="hover:text-foreground transition-colors">vs Clearscope</Link>
-                  <Link href="/vs/mangools" className="hover:text-foreground transition-colors">vs Mangools</Link>
-                </nav>
-              </div>
-              {/* Leaderboard */}
-              <div>
-                <p className="font-semibold text-foreground mb-3 uppercase tracking-widest text-[10px]">Leaderboard</p>
-                <nav aria-label="AI SEO Leaderboard" className="flex flex-col gap-2 text-muted-foreground">
-                  <Link href="/leaderboard" className="hover:text-foreground transition-colors">All Niches</Link>
-                  <Link href="/leaderboard/saas" className="hover:text-foreground transition-colors">SaaS</Link>
-                  <Link href="/leaderboard/ecommerce" className="hover:text-foreground transition-colors">Ecommerce</Link>
-                  <Link href="/leaderboard/agency" className="hover:text-foreground transition-colors">Agency</Link>
-                  <Link href="/leaderboard/blog" className="hover:text-foreground transition-colors">Blog</Link>
-                  <Link href="/leaderboard/local" className="hover:text-foreground transition-colors">Local</Link>
-                  <Link href="/leaderboard/other" className="hover:text-foreground transition-colors">Other</Link>
-                </nav>
-              </div>
-              {/* Company */}
-              <div>
-                <p className="font-semibold text-foreground mb-3 uppercase tracking-widest text-[10px]">Company</p>
-                <nav aria-label="Company pages" className="flex flex-col gap-2 text-muted-foreground">
-                  <Link href="/about" className="hover:text-foreground transition-colors">About</Link>
-                  <Link href="/contact" className="hover:text-foreground transition-colors">Contact</Link>
-                  <Link href="/security" className="hover:text-foreground transition-colors">Security</Link>
-                  <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
-                  <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
-                </nav>
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-6">
-              <p className="text-xs text-muted-foreground/50 text-center sm:text-left">
-                AI Search Visibility &amp; Answer Engine Optimization Platform
-              </p>
-              {/* ScamAdviser trust widget — official embed */}
-              <a
-                href="https://scamadviser.com/check-website/optiaiseo.online"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Check OptiAISEO on ScamAdviser — Verified Trusted Site"
-                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                  <polyline points="9 12 11 14 15 10" />
-                </svg>
-                Verified on ScamAdviser
-              </a>
-              <p className="text-xs text-muted-foreground/40 text-center sm:text-right">
-                © {new Date().getFullYear()} OptiAISEO. All rights reserved.
-              </p>
-            </div>
+          <div className="flex flex-col gap-3 pt-6 text-[11px] text-white/30 sm:flex-row sm:items-center sm:justify-between">
+            <span>© {new Date().getFullYear()} OptiAISEO. All rights reserved.</span>
+            <span>AI Search Visibility & Answer Engine Optimization Platform</span>
           </div>
         </div>
       </footer>
