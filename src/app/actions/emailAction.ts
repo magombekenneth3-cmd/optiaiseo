@@ -23,8 +23,18 @@ export async function sendAgencyDigestEmailAction(
         pdfBufferLength: 12500,
     });
 
+    if (!result.success) {
+        return {
+            success: false,
+            error: "Failed to send the executive digest. Please check your email configuration.",
+        };
+    }
+
     return {
-        success: result.success,
-        data: result,
+        success: true,
+        data: {
+            messageId: result.messageId,
+            deliveredAt: result.deliveredAt,
+        },
     };
 }
