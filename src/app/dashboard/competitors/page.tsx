@@ -7,7 +7,8 @@ import { CompetitorsDashboard } from "./CompetitorsDashboard";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Competitors",
+  title: "Competitors | OptiAISEO",
+  description: "Track search competitors, discover keyword gaps, and monitor market movement.",
   robots: { index: false, follow: false },
 };
 
