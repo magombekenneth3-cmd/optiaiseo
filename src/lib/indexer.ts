@@ -98,8 +98,9 @@ export async function submitUrlForIndexing(
             logger.error("[indexer] Google Indexing API submission failed", { url, code: result.code, error: result.message });
         }
 
+        // IndexNow runs independently of Google — never gated on Google success
         const indexNowCfg = await getIndexNowConfig(siteId).catch(() => null);
-        if (indexNowCfg && result.success) {
+        if (indexNowCfg) {
             const indexNowResults = await submitToAllIndexNow(indexNowCfg.host, indexNowCfg.apiKey, [url]);
             await Promise.all(
                 indexNowResults.map((r) =>

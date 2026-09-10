@@ -89,7 +89,8 @@ export async function requestIndexing(url: string, siteId?: string): Promise<Act
                 return { success: true, message: "Already submitted in the last 24 hours — no action needed." };
             }
             if (!result.success) {
-                return { success: false, code: "UNKNOWN", error: result.reason ?? "Indexing request failed." };
+                logger.error("[Action] submitUrlForIndexing failed", { url: normalizedUrl, siteId, reason: result.reason });
+                return { success: false, code: "UNKNOWN", error: "Indexing request failed. Please try again later." };
             }
             return { success: true, message: "Google is on it! Your URL has been queued for fast indexing." };
         }
@@ -124,9 +125,11 @@ export async function requestIndexing(url: string, siteId?: string): Promise<Act
             return { success: false, code: "API_DISABLED", consoleUrl: result.message, error: "The Google Indexing API is not enabled in your Google Cloud project." };
         }
         if (result.code === "PERMISSION_DENIED") {
-            return { success: false, code: "PERMISSION_DENIED", error: result.message };
+            logger.warn("[Action] Indexing permission denied", { url: normalizedUrl, rawMessage: result.message });
+            return { success: false, code: "PERMISSION_DENIED", error: "Permission denied. Make sure you are a verified owner of this site in Google Search Console." };
         }
-        return { success: false, code: "UNKNOWN", error: result.message };
+        logger.error("[Action] Indexing failed", { url: normalizedUrl, code: result.code, rawMessage: result.message });
+        return { success: false, code: "UNKNOWN", error: "Indexing request failed. Please try again later." };
     } catch (error: unknown) {
         logger.error("[Action] requestIndexing error:", { error });
         return { success: false, code: "UNKNOWN", error: "An unexpected error occurred." };
@@ -191,7 +194,8 @@ export async function submitManualIndexing(siteId: string, url: string): Promise
             return { success: true, message: "Already submitted in the last 24 hours — no action needed." };
         }
         if (!result.success) {
-            return { success: false, code: "UNKNOWN", error: result.reason ?? "Indexing request failed." };
+            logger.error("[Action] submitManualIndexing failed", { url: normalizedUrl, siteId, reason: result.reason });
+            return { success: false, code: "UNKNOWN", error: "Indexing request failed. Please try again later." };
         }
 
         return { success: true, message: "Submitted to Google — typically crawled within 24 hours." };

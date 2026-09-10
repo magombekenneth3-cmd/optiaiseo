@@ -13,10 +13,19 @@ export async function submitInstantIndexingAction(
     const site = await assertSiteAccess(siteId, auth.user.id, "EDIT");
     if (!site) return { success: false, error: "Access denied", code: "unauthorized" };
 
-    const result = await triggerInstantIndexing(siteId, urls);
+    const result = await triggerInstantIndexing(siteId, urls, auth.user.id);
 
     return {
-        success: true,
-        data: result
+        success: result.success,
+        data: {
+            domain: result.domain,
+            urlsCount: result.urls.length,
+            google: { status: result.google.status },
+            indexNow: { status: result.indexNow.status },
+        },
+        ...(result.success
+            ? {}
+            : { error: "One or more indexing providers failed. Check the indexing dashboard for details." }
+        ),
     };
 }

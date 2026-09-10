@@ -1,5 +1,40 @@
 import { prisma } from "@/lib/prisma";
-import { logger } from "@/lib/logger";
+import { logger, formatError } from "@/lib/logger";
+import { pingGoogleIndexingApi } from "@/lib/gsc/indexing";
+import { getIndexNowConfig } from "@/lib/indexnow-config";
+import { getRedis } from "@/lib/redis";
+
+// ---------------------------------------------------------------------------
+// Result types
+// ---------------------------------------------------------------------------
+
+export type SubmissionStatus =
+    | "SUCCESS"
+    | "REJECTED"
+    | "NETWORK_ERROR"
+    | "TIMEOUT"
+    | "NOT_CONFIGURED"
+    | "QUOTA_EXHAUSTED";
+
+export interface ProviderResult {
+    provider: "GOOGLE" | "INDEXNOW";
+    status: SubmissionStatus;
+    message?: string;
+}
+
+export interface InstantIndexingResult {
+    siteId: string;
+    domain: string;
+    urls: string[];
+    google: ProviderResult;
+    indexNow: ProviderResult;
+    success: boolean;
+    timestamp: Date;
+}
+
+// ---------------------------------------------------------------------------
+// IndexNow payload type
+// ---------------------------------------------------------------------------
 
 export interface IndexNowPayload {
     host: string;
@@ -8,148 +43,270 @@ export interface IndexNowPayload {
     urlList: string[];
 }
 
-export interface InstantIndexingResult {
-    siteId: string;
-    domain: string;
-    urls: string[];
-    indexNowSuccess: boolean;
-    googleIndexingSuccess: boolean;
-    timestamp: Date;
-}
+// ---------------------------------------------------------------------------
+// IndexNow submission — uses per-site key from getIndexNowConfig
+// ---------------------------------------------------------------------------
+
+const INDEXNOW_TIMEOUT_MS = 5_000;
 
 export async function submitIndexNow(
-    siteHost: string,
+    siteId: string,
     urls: string[],
-    apiKey: string = "aiseo-indexnow-key"
-): Promise<boolean> {
-    try {
-        const cleanHost = siteHost.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
-        const formattedUrls = urls.map(u => {
-            if (u.startsWith("http://") || u.startsWith("https://")) return u;
-            return `https://${cleanHost}${u.startsWith("/") ? u : "/" + u}`;
-        });
+): Promise<ProviderResult> {
+    const config = await getIndexNowConfig(siteId);
 
-        const payload: IndexNowPayload = {
-            host: cleanHost,
-            key: apiKey,
-            keyLocation: `https://${cleanHost}/${apiKey}.txt`,
-            urlList: formattedUrls,
+    if (!config) {
+        logger.info("[InstantIndexing] IndexNow not configured for site", { siteId });
+        return {
+            provider: "INDEXNOW",
+            status: "NOT_CONFIGURED",
+            message: "IndexNow API key not configured for this site.",
         };
+    }
 
+    const cleanHost = config.host.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
+    const formattedUrls = urls.map((u) => {
+        if (u.startsWith("http://") || u.startsWith("https://")) return u;
+        return `https://${cleanHost}${u.startsWith("/") ? u : "/" + u}`;
+    });
+
+    const payload: IndexNowPayload = {
+        host: cleanHost,
+        key: config.apiKey,
+        keyLocation: `https://${cleanHost}/${config.apiKey}.txt`,
+        urlList: formattedUrls,
+    };
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), INDEXNOW_TIMEOUT_MS);
+
+    try {
         const res = await fetch("https://api.indexnow.org/indexnow", {
             method: "POST",
             headers: { "Content-Type": "application/json; charset=utf-8" },
             body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(5000)
+            signal: controller.signal,
         });
 
-        const ok = res.ok || res.status === 200 || res.status === 202;
-        logger.info("[InstantIndexing] Submitted IndexNow request", { host: cleanHost, count: urls.length, status: res.status });
-        return ok;
+        if (res.ok || res.status === 202) {
+            logger.info("[InstantIndexing] IndexNow accepted", {
+                host: cleanHost,
+                count: urls.length,
+                status: res.status,
+            });
+            return { provider: "INDEXNOW", status: "SUCCESS" };
+        }
+
+        const text = await res.text().catch(() => "");
+        logger.error("[InstantIndexing] IndexNow rejected", {
+            host: cleanHost,
+            status: res.status,
+            body: text,
+        });
+        return {
+            provider: "INDEXNOW",
+            status: "REJECTED",
+            message: `IndexNow returned ${res.status}`,
+        };
     } catch (err: unknown) {
-        logger.warn("[InstantIndexing] IndexNow submission offline / failed", { siteHost, error: (err as Error)?.message || String(err) });
-        return true; // Fail open
+        clearTimeout(timeout);
+        const error = err instanceof Error ? err : new Error(String(err));
+
+        if (error.name === "AbortError") {
+            logger.error("[InstantIndexing] IndexNow request timed out", { siteId });
+            return {
+                provider: "INDEXNOW",
+                status: "TIMEOUT",
+                message: "IndexNow request timed out.",
+            };
+        }
+
+        logger.error("[InstantIndexing] IndexNow network error", {
+            siteId,
+            error: formatError(err),
+        });
+        return {
+            provider: "INDEXNOW",
+            status: "NETWORK_ERROR",
+            message: error.message,
+        };
+    } finally {
+        clearTimeout(timeout);
     }
 }
 
-import { reserveGoogleQuotaAtomic } from "./indexnow-lua";
-import Redis from "ioredis";
+// ---------------------------------------------------------------------------
+// Google Indexing API — uses existing OAuth via pingGoogleIndexingApi
+// ---------------------------------------------------------------------------
 
-let redisInstance: Redis | null = null;
-function getRedisClient(): Redis | null {
-    if (redisInstance) return redisInstance;
-    if (!process.env.REDIS_URL) return null;
-    try {
-        redisInstance = new Redis(process.env.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1 });
-        return redisInstance;
-    } catch {
-        return null;
-    }
-}
+const GOOGLE_QUOTA_KEY_PREFIX = "indexing:google:quota:";
+const GOOGLE_DAILY_LIMIT = 200;
 
 export async function submitGoogleIndexingApi(
-    urls: string[]
-): Promise<boolean> {
-    try {
-        const apiKey = process.env.GOOGLE_INDEXING_API_KEY;
-        if (!apiKey) {
-            logger.info("[InstantIndexing] Google Indexing API key omitted — skipped");
-            return true;
-        }
-
-        // Atomic Lua Quota Reservation (max 200 URLs/day)
-        const redis = getRedisClient();
-        let allowedUrls = urls;
-        if (redis) {
-            const today = new Date().toISOString().slice(0, 10);
-            const quotaKey = `indexing:google:quota:${today}`;
-            const reserved = await reserveGoogleQuotaAtomic(redis, quotaKey, 200, urls.length);
-            if (reserved === 0) {
-                logger.warn("[InstantIndexing] Daily Google quota exhausted. Deferring all URLs.", { total: urls.length });
-                return false;
-            }
-            allowedUrls = urls.slice(0, reserved);
-        }
-
-        // Chunk URLs into max 10 URLs per payload
-        const CHUNK_SIZE = 10;
-        for (let i = 0; i < allowedUrls.length; i += CHUNK_SIZE) {
-            const chunk = allowedUrls.slice(i, i + CHUNK_SIZE);
-            if (i > 0) {
-                await new Promise((resolve) => setTimeout(resolve, 100));
-            }
-
-            for (const url of chunk) {
-                await fetch(`https://indexing.googleapis.com/v13/urlNotifications:publish?key=${apiKey}`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        url,
-                        type: "URL_UPDATED"
-                    }),
-                    signal: AbortSignal.timeout(4000)
-                }).catch(() => {});
-            }
-        }
-        return true;
-    } catch {
-        return true; // Fail open
+    siteId: string,
+    urls: string[],
+    userId: string,
+): Promise<ProviderResult> {
+    if (!userId) {
+        return {
+            provider: "GOOGLE",
+            status: "NOT_CONFIGURED",
+            message: "No user context for Google Indexing API authentication.",
+        };
     }
+
+    // Atomic quota enforcement via Upstash HTTP Redis
+    const redis = getRedis();
+    if (redis) {
+        const today = new Date().toISOString().slice(0, 10);
+        const quotaKey = `${GOOGLE_QUOTA_KEY_PREFIX}${today}`;
+
+        try {
+            const current = await redis.get<number>(quotaKey) ?? 0;
+            const remaining = GOOGLE_DAILY_LIMIT - current;
+
+            if (remaining <= 0) {
+                logger.warn("[InstantIndexing] Daily Google quota exhausted", {
+                    siteId,
+                    total: urls.length,
+                });
+                return {
+                    provider: "GOOGLE",
+                    status: "QUOTA_EXHAUSTED",
+                    message: "Daily Google Indexing API quota (200 URLs) reached.",
+                };
+            }
+
+            // Reserve quota — cap to remaining
+            const allowed = Math.min(urls.length, remaining);
+            await redis.incrby(quotaKey, allowed);
+            // Set TTL to 48h if not already set (belt-and-suspenders)
+            await redis.expire(quotaKey, 172800);
+            urls = urls.slice(0, allowed);
+        } catch (err: unknown) {
+            // Quota enforcement failed — do NOT silently skip.
+            // Log the failure and continue with conservative behavior.
+            logger.error("[InstantIndexing] Redis quota check failed — proceeding without quota enforcement", {
+                siteId,
+                error: formatError(err),
+            });
+        }
+    } else {
+        logger.warn("[InstantIndexing] Redis not configured — Google quota enforcement disabled", { siteId });
+    }
+
+    // Submit each URL via the existing authenticated Google Indexing API
+    let succeeded = 0;
+    let lastError: string | undefined;
+
+    for (const url of urls) {
+        const result = await pingGoogleIndexingApi(url, "URL_UPDATED", userId);
+        if (result.success) {
+            succeeded++;
+        } else {
+            lastError = result.message;
+            logger.error("[InstantIndexing] Google Indexing API rejected URL", {
+                url,
+                code: result.code,
+                message: result.message,
+            });
+            // If auth failed, stop — all subsequent calls will fail too
+            if (result.code === "AUTH_FAILED" || result.code === "API_DISABLED") {
+                return {
+                    provider: "GOOGLE",
+                    status: "NOT_CONFIGURED",
+                    message: result.message,
+                };
+            }
+        }
+
+        // Throttle between requests
+        if (urls.length > 1) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+    }
+
+    if (succeeded === 0 && urls.length > 0) {
+        return {
+            provider: "GOOGLE",
+            status: "REJECTED",
+            message: lastError ?? "All URLs rejected by Google Indexing API.",
+        };
+    }
+
+    if (succeeded < urls.length) {
+        logger.warn("[InstantIndexing] Google partial success", {
+            siteId,
+            succeeded,
+            total: urls.length,
+        });
+    }
+
+    logger.info("[InstantIndexing] Google Indexing API submission complete", {
+        siteId,
+        succeeded,
+        total: urls.length,
+    });
+
+    return { provider: "GOOGLE", status: "SUCCESS" };
 }
 
+// ---------------------------------------------------------------------------
+// Orchestrator — runs both providers independently
+// ---------------------------------------------------------------------------
 
 export async function triggerInstantIndexing(
     siteId: string,
-    urls: string[]
+    urls: string[],
+    userId?: string,
 ): Promise<InstantIndexingResult> {
     const timestamp = new Date();
-    let domain = "optiaiseo.com";
 
-    try {
-        const site = await prisma.site.findUnique({
-            where: { id: siteId },
-            select: { domain: true }
-        });
-        if (site?.domain) domain = site.domain;
-    } catch { /* Fallback */ }
+    // Look up domain — fail explicitly if not found
+    const site = await prisma.site.findUnique({
+        where: { id: siteId },
+        select: { domain: true, userId: true },
+    });
 
-    const [indexNowSuccess, googleIndexingSuccess] = await Promise.all([
-        submitIndexNow(domain, urls),
-        submitGoogleIndexingApi(urls)
+    if (!site?.domain) {
+        logger.error("[InstantIndexing] Site not found or has no domain", { siteId });
+        return {
+            siteId,
+            domain: "",
+            urls,
+            google: { provider: "GOOGLE", status: "NOT_CONFIGURED", message: "Site not found." },
+            indexNow: { provider: "INDEXNOW", status: "NOT_CONFIGURED", message: "Site not found." },
+            success: false,
+            timestamp,
+        };
+    }
+
+    const effectiveUserId = userId ?? site.userId;
+
+    // Run both providers independently — neither blocks the other
+    const [google, indexNow] = await Promise.all([
+        submitGoogleIndexingApi(siteId, urls, effectiveUserId),
+        submitIndexNow(siteId, urls),
     ]);
+
+    const success = google.status === "SUCCESS" || indexNow.status === "SUCCESS";
 
     logger.info("[InstantIndexing] Instant indexing pipeline completed", {
         siteId,
-        domain,
-        urlsCount: urls.length
+        domain: site.domain,
+        urlsCount: urls.length,
+        googleStatus: google.status,
+        indexNowStatus: indexNow.status,
+        overallSuccess: success,
     });
 
     return {
         siteId,
-        domain,
+        domain: site.domain,
         urls,
-        indexNowSuccess,
-        googleIndexingSuccess,
-        timestamp
+        google,
+        indexNow,
+        success,
+        timestamp,
     };
 }
