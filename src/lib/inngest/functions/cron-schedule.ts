@@ -828,3 +828,156 @@ export const cronDailyPortfolioAllocation = inngest.createFunction(
         return { sites: sites.length, allocations: totalSelected };
     },
 );
+
+
+/**
+ * Stuck-Audit Sweep — runs every 15 minutes.
+ *
+ * Detects audits stuck in non-terminal states and transitions them to FAILED.
+ *
+ * Two sweep categories:
+ *   1. PENDING audits older than 20 minutes — the Inngest job was never picked
+ *      up, or the worker crashed before reaching save-homepage-audit.
+ *   2. IN_PROGRESS audits older than 45 minutes — page fan-out coordinator
+ *      crashed, or child page jobs were lost/silently dropped.
+ *
+ * This is the last-resort safety net — not the primary failure handler.
+ * The primary handlers are onFailure in processManualAuditJob and runPageAuditJob.
+ *
+ * Threshold reasoning:
+ *   - PENDING 20min: matches stuck-blog sweep. Covers Inngest retries + cold starts.
+ *   - IN_PROGRESS 45min: AGENCY tier can audit 500 pages at concurrency 5.
+ *     At ~3s/page = ~5 min. 45 min = generous 9× buffer.
+ *
+ * Also releases held Redis audit leases for stuck audits.
+ */
+export const cronStuckAuditSweep = inngest.createFunction(
+    {
+        id: "cron-stuck-audit-sweep",
+        name: "Cron: Stuck Audit PENDING/IN_PROGRESS Sweep",
+        retries: 1,
+        triggers: [{ cron: "*/15 * * * *" }], // every 15 min
+    },
+    async ({ step }) => {
+        const PENDING_THRESHOLD_MS = 20 * 60 * 1000;   // 20 minutes
+        const IN_PROGRESS_THRESHOLD_MS = 45 * 60 * 1000; // 45 minutes
+
+        const pendingCutoff = new Date(Date.now() - PENDING_THRESHOLD_MS);
+        const inProgressCutoff = new Date(Date.now() - IN_PROGRESS_THRESHOLD_MS);
+
+        // 1. Find stuck PENDING audits
+        const stuckPending = await step.run("find-stuck-pending", () =>
+            prisma.audit.findMany({
+                where: {
+                    fixStatus: "PENDING",
+                    runTimestamp: { lt: pendingCutoff },
+                },
+                select: {
+                    id: true,
+                    siteId: true,
+                    runTimestamp: true,
+                    site: { select: { userId: true } },
+                },
+                take: 50,
+            })
+        );
+
+        // 2. Find stuck IN_PROGRESS audits
+        const stuckInProgress = await step.run("find-stuck-in-progress", () =>
+            prisma.audit.findMany({
+                where: {
+                    fixStatus: "IN_PROGRESS",
+                    runTimestamp: { lt: inProgressCutoff },
+                },
+                select: {
+                    id: true,
+                    siteId: true,
+                    totalPages: true,
+                    completedPages: true,
+                    failedPages: true,
+                    runTimestamp: true,
+                    site: { select: { userId: true } },
+                },
+                take: 50,
+            })
+        );
+
+        // 2b. Check if any IN_PROGRESS audits actually have all pages done
+        // (counter race condition: processed >= total but transition didn't fire)
+        const reconciled: string[] = [];
+        for (const audit of stuckInProgress) {
+            const processed = audit.completedPages + audit.failedPages;
+            if (audit.totalPages > 0 && processed >= audit.totalPages) {
+                const finalStatus = audit.completedPages === 0
+                    ? "FAILED"
+                    : audit.failedPages > 0
+                        ? "PARTIAL"
+                        : "COMPLETED";
+
+                const { count } = await prisma.audit.updateMany({
+                    where: { id: audit.id, fixStatus: "IN_PROGRESS" },
+                    data: { fixStatus: finalStatus },
+                });
+                if (count > 0) {
+                    reconciled.push(audit.id);
+                    logger.info("[StuckAuditSweep] Reconciled completed audit", {
+                        auditId: audit.id,
+                        finalStatus,
+                        completed: audit.completedPages,
+                        failed: audit.failedPages,
+                        total: audit.totalPages,
+                    });
+                }
+            }
+        }
+
+        // Filter out reconciled audits — they're no longer stuck
+        const trulyStuckInProgress = stuckInProgress.filter(
+            (a) => !reconciled.includes(a.id)
+        );
+
+        const allStuck = [...stuckPending, ...trulyStuckInProgress];
+
+        if (allStuck.length === 0 && reconciled.length === 0) {
+            return { swept: 0, reconciled: reconciled.length };
+        }
+
+        if (allStuck.length > 0) {
+            logger.warn(`[StuckAuditSweep] Found ${allStuck.length} stuck audits — marking FAILED`, {
+                pendingCount: stuckPending.length,
+                inProgressCount: trulyStuckInProgress.length,
+                ids: allStuck.map((a) => a.id),
+            });
+
+            // Mark all stuck audits as FAILED (idempotent — updateMany won't touch already-terminal)
+            await step.run("mark-stuck-audits-failed", async () => {
+                await prisma.audit.updateMany({
+                    where: {
+                        id: { in: allStuck.map((a) => a.id) },
+                        fixStatus: { notIn: ["COMPLETED", "FAILED", "PARTIAL"] },
+                    },
+                    data: { fixStatus: "FAILED" },
+                });
+            });
+
+            // Release any held audit leases
+            await step.run("release-stuck-audit-leases", async () => {
+                const { releaseAuditLease } = await import("@/lib/audit-lock");
+                for (const audit of allStuck) {
+                    const userId = audit.site?.userId;
+                    if (userId) {
+                        const lockKey = `audit-lock:${userId}:${audit.siteId}`;
+                        await releaseAuditLease(lockKey, audit.id).catch(() => null);
+                    }
+                }
+            });
+        }
+
+        return {
+            swept: allStuck.length,
+            reconciled: reconciled.length,
+            pending: stuckPending.length,
+            inProgress: trulyStuckInProgress.length,
+        };
+    },
+);

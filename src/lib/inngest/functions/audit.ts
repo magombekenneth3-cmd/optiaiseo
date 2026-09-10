@@ -15,17 +15,12 @@ import { writeMetricSnapshot } from "@/lib/metrics/metric-snapshot";
 import { redis } from "@/lib/redis";
 import { fireWhiteLabelWebhook } from "@/lib/webhooks/white-label";
 
-// Handles the non-blocking audit.run.manual event fired by the runAudit server
-// action. The server action creates a PENDING audit record immediately and
-// returns to the UI — this job runs the actual audit in the background.
 
 export const processManualAuditJob = inngest.createFunction(
     {
         id: "process-manual-audit",
         name: "Process Manual Audit",
         retries: 1,
-        // Deduplicates re-fires for the same auditId (e.g. double-click before
-        // the Redis lock activates, or an upstream 502 that causes a replay).
         idempotency: "event.data.auditId",
         concurrency: {
             limit: CONCURRENCY.auditFull,
@@ -50,19 +45,14 @@ export const processManualAuditJob = inngest.createFunction(
             userId: string;
             tier: string;
             auditMode?: "homepage" | "full";
-            lockKey?: string;   // forwarded from the server action
+            lockKey?: string;
         };
-
-        // Step 1: Run the homepage audit
         const auditResult = await step.run("run-homepage-audit", async () => {
             const engine = getFullAuditEngine();
             const url = domain.startsWith("http") ? domain : `https://${domain}`;
             return engine.runAudit(url, { userId, siteId });
         });
-
-        // Step 2: Save results to the PENDING audit record
         const isPaid = ["STARTER", "PRO", "AGENCY"].includes((tier ?? "").toUpperCase());
-        // For homepage-only mode, mark completed immediately — no fan-out needed
         const fanOut = auditMode !== "homepage";
 
         await step.run("save-homepage-audit", async () => {
@@ -91,17 +81,12 @@ export const processManualAuditJob = inngest.createFunction(
                 inp: null,
             }).catch(() => { /* non-fatal */ });
         });
-
-        // Release the dashboard lock — homepage audit is done, user can re-run now.
-        // Do this BEFORE fan-out so the UI unlocks immediately even if page audits
-        // take another few minutes.
         if (lockKey) {
             await step.run("release-audit-lock", async () => {
                 await redis.del(lockKey).catch(() => null);
             });
         }
 
-        // Fan out to per-page audits only for full-site mode
         if (fanOut) {
             await step.sendEvent("queue-page-audits", {
                 name: "audit.pages.run" as const,
@@ -129,15 +114,14 @@ export const processManualAuditJob = inngest.createFunction(
             const prefs = (dbUser.preferences as Record<string, unknown>) ?? {};
             if (prefs.emailDigest === false) return;
             await sendAuditCompleteEmail({
-                toEmail:  dbUser.email,
+                toEmail: dbUser.email,
                 userName: dbUser.name ?? dbUser.email.split("@")[0],
                 domain,
                 auditId,
-                score:    auditResult.overallScore,
+                score: auditResult.overallScore,
             });
         });
 
-        // In-app notification (fail-open)
         await step.run("notify-audit-complete", async () => {
             const allItems = auditResult.categories?.flatMap(
                 (c: { items?: { status?: string }[] }) => c.items ?? []
@@ -171,13 +155,9 @@ export const runWeeklyAuditJob = inngest.createFunction(
         id: "run-weekly-audit",
         name: "Run Weekly Site Audit",
         retries: 3,
-        // Prevents a second weekly audit running for the same siteId within the
-        // dedup window if the cron fires an extra event (e.g. during a deploy).
         idempotency: "event.data.siteId",
         concurrency: {
             limit: CONCURRENCY.auditFull,
-            // Per-site key: one concurrent audit per site, not a shared global bucket.
-            // Previously "global-audit" caused a single slow domain to block all others.
             key: "event.data.siteId",
         },
         throttle: {
@@ -218,23 +198,15 @@ export const runWeeklyAuditJob = inngest.createFunction(
         });
 
         const savedAudit = await step.run("save-audit", async () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const allItems = auditResult.categories.flatMap((c: { items: any[] }) => c.items);
 
-            // issueList may be stored as FullAuditReport (new shape: { categories[], recommendations[] })
-            // or as raw categories[] (old shape). Handle both so diffs work on existing records.
             const prevItems = (() => {
                 if (!previousAudit?.issueList) return [];
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const il = previousAudit.issueList as any;
-                // New shape: FullAuditReport object with categories[]
                 if (!Array.isArray(il) && Array.isArray(il.categories)) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     return il.categories.flatMap((c: any) => c.items ?? []);
                 }
-                // Old shape: raw categories[] array
                 if (Array.isArray(il)) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     return il.flatMap((c: any) => c.items ?? []);
                 }
                 return [];
@@ -259,18 +231,10 @@ export const runWeeklyAuditJob = inngest.createFunction(
                         (acc: Record<string, number>, c: { id: string; score: number }) => ({ ...acc, [c.id]: c.score }),
                         {}
                     ),
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    // Store the full FullAuditReport so the display page can read
-                    // recommendations[] and categories[] from one consistent shape.
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     issueList: auditResult as any,
                     fixStatus: resolveFixStatus(diff, prevItems.length === 0),
-                    // Gap 4.2: Populate Core Web Vitals columns from the performance module output.
-                    // PerformanceModule returns LCP/CLS/INP as numeric values on items with matching IDs.
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     ...(() => {
                         const perfCat = auditResult.categories.find(
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             (c: any) => c.id === "performance"
                         ) as { items?: { id: string; value?: number }[] } | undefined;
                         const getMetric = (id: string): number | null => {
@@ -285,14 +249,10 @@ export const runWeeklyAuditJob = inngest.createFunction(
                     })(),
                 },
             });
-
-            // 2.1: Write MetricSnapshot for time-series trend charts
             const perfCatForSnap = auditResult.categories.find(
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (c: any) => c.id === "performance"
             ) as { items?: { id: string; value?: number }[] } | undefined;
             const schemaCat = auditResult.categories.find(
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (c: any) => c.id === "schema"
             ) as { score?: number } | undefined;
             const getSnapMetric = (id: string): number | null => {

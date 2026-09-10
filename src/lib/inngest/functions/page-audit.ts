@@ -6,6 +6,9 @@ import { getAuditEngine } from "@/lib/seo-audit";
 import { discoverPages } from "@/lib/seo-audit/crawler";
 import { logger } from "@/lib/logger";
 
+/** Terminal states — once reached, the audit must not be overwritten. */
+const TERMINAL_STATES = ["COMPLETED", "FAILED", "PARTIAL"] as const;
+
 
 const PAGE_LIMIT: Record<string, number> = {
   FREE: 5,
@@ -37,6 +40,29 @@ export const runPageAuditJob = inngest.createFunction(
     id: "run-page-audit",
     name: "Run Multi-Page Audit (Fan-Out)",
     retries: 2,
+    onFailure: async ({ error, event }) => {
+        const data = event.data?.event?.data as Record<string, unknown> | undefined;
+        const auditId = data?.auditId as string | undefined;
+
+        // Atomically transition IN_PROGRESS/PENDING → FAILED (idempotent)
+        if (auditId) {
+            const { count } = await prisma.audit.updateMany({
+                where: {
+                    id: auditId,
+                    fixStatus: { notIn: [...TERMINAL_STATES] },
+                },
+                data: { fixStatus: "FAILED" },
+            });
+            if (count > 0) {
+                logger.info("[PageAudit] Parent audit finalized as FAILED after coordinator failure", { auditId });
+            }
+        }
+
+        logger.error("[PageAudit] Coordinator failed after all retries", {
+            error: error.message,
+            auditId,
+        });
+    },
 
     triggers: [{ event: "audit.pages.run" }],
   },

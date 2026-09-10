@@ -103,6 +103,10 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
     return { success: false, error: "Invalid site ID." };
   }
 
+  // Declare these outside try so the finally/catch blocks can access them.
+  let lockKey: string | undefined;
+  let auditId: string | undefined;
+
   try {
     const auth = await requireUser();
     if (!auth.ok) return { success: false as const, error: auth.error.error };
@@ -113,31 +117,9 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
       return { success: false, error: "Site not found or you do not have access to it." };
     }
 
-    // The lock key is forwarded to the Inngest job which releases it on
-    // completion (or FAILED). The 600s TTL is a backstop for crash scenarios —
-    // if Inngest never calls back the user is unlocked automatically after 10m.
-    const lockKey = `audit-lock:${user.id}:${site.id}`;
-    let acquired = true;
-    try {
-      const res = await redis.set(lockKey, "1", { ex: 600, nx: true });
-      acquired = !!res;
-    } catch (redisErr) {
-      logger.warn("[runAudit] Redis lock check failed, proceeding without lock", {
-        error: (redisErr as Error)?.message,
-      });
-    }
-    if (!acquired) {
-      return {
-        success: false,
-        error: "An audit is already running for this site. Please wait for it to finish.",
-      };
-    }
-
     const effectiveTier = await getEffectiveTier(user.id);
     const rateCheck = await checkAuditLimit(user.id, effectiveTier);
     if (!rateCheck.allowed) {
-      // Must release the lock or the user can never retry until TTL expires
-      await redis.del(lockKey).catch(() => null);
       return {
         success: false,
         error: `You have reached your audit limit for this month. Upgrade to Pro for unlimited audits. Resets on ${rateCheck.resetAt.toLocaleDateString()}.`,
@@ -146,6 +128,7 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
 
     clearSessionCaches();
 
+    // Create the PENDING audit record first so we have the auditId for the lock token.
     const newAudit = await prisma.audit.create({
       data: {
         siteId: site.id,
@@ -157,53 +140,94 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
         inp: null,
       },
     });
+    auditId = newAudit.id;
+
+    // Acquire lease with auditId as token (renewable, conditional release).
+    // The 120s initial TTL is extended by the Inngest job's heartbeat for long audits.
+    lockKey = `audit-lock:${user.id}:${site.id}`;
+    const { acquireAuditLease } = await import("@/lib/audit-lock");
+    const acquired = await acquireAuditLease(lockKey, auditId);
+    if (!acquired) {
+      // Another audit is actively running — mark this one as duplicate and bail
+      await prisma.audit.delete({ where: { id: auditId } }).catch(() => null);
+      return {
+        success: false,
+        error: "An audit is already running for this site. Please wait for it to finish.",
+      };
+    }
 
     try {
       await inngest.send({
         name: "audit.run.manual" as const,
         data: {
           siteId: site.id,
-          auditId: newAudit.id,
+          auditId,
           domain: site.domain,
           userId: user.id,
           tier: effectiveTier,
           auditMode,
           // Forward the key so the Inngest job can release it when done.
-          // This prevents the user seeing "audit already running" after it finishes.
           lockKey,
         },
       });
-      logger.info("[runAudit] Queued manual audit job", { domain: site.domain, auditId: newAudit.id, auditMode });
+      logger.info("[runAudit] Queued manual audit job", { domain: site.domain, auditId, auditMode });
     } catch (queueErr: unknown) {
-      // If Inngest is unavailable, fall back to synchronous execution
+      // If Inngest is unavailable, fall back to synchronous execution.
+      // Lock cleanup is handled by the outer finally.
       logger.warn("[runAudit] Inngest unavailable — falling back to synchronous homepage-only audit", {
         error: (queueErr as Error)?.message,
       });
-      // Fallback: homepage-only audit to avoid timing out the serverless function.
-      // Full-site crawls can exceed Vercel's 60s limit — we never attempt them here.
-      const { runSiteAudit } = await import("@/lib/audit");
-      const liveAuditResult = await runSiteAudit(site.domain, {
-        targetKeyword: site.targetKeyword ?? undefined,
-      });
-      await prisma.audit.update({
-        where: { id: newAudit.id },
-        data: {
-          categoryScores: liveAuditResult.categoryScores as object,
-          issueList: (liveAuditResult.rawReport ?? liveAuditResult.issues) as object,
-          fixStatus: "COMPLETED",   // homepage-only is always terminal — no page fan-out
-          lcp: liveAuditResult.lcp ?? null,
-          cls: liveAuditResult.cls ?? null,
-          inp: liveAuditResult.inp ?? null,
-        },
-      });
-      // Release lock on synchronous path too
-      await redis.del(lockKey).catch(() => null);
+      try {
+        const { runSiteAudit } = await import("@/lib/audit");
+        const liveAuditResult = await runSiteAudit(site.domain, {
+          targetKeyword: site.targetKeyword ?? undefined,
+        });
+        await prisma.audit.update({
+          where: { id: auditId },
+          data: {
+            categoryScores: liveAuditResult.categoryScores as object,
+            issueList: (liveAuditResult.rawReport ?? liveAuditResult.issues) as object,
+            fixStatus: "COMPLETED",   // homepage-only is always terminal — no page fan-out
+            lcp: liveAuditResult.lcp ?? null,
+            cls: liveAuditResult.cls ?? null,
+            inp: liveAuditResult.inp ?? null,
+          },
+        });
+      } catch (syncErr: unknown) {
+        // Synchronous fallback also failed — mark audit FAILED
+        logger.error("[runAudit] Synchronous fallback failed", {
+          error: (syncErr as Error)?.message,
+          auditId,
+        });
+        await prisma.audit.update({
+          where: { id: auditId },
+          data: { fixStatus: "FAILED" },
+        }).catch(() => null);
+      } finally {
+        // Release lock on synchronous path (success or failure)
+        const { releaseAuditLease } = await import("@/lib/audit-lock");
+        await releaseAuditLease(lockKey, auditId).catch(() => null);
+        lockKey = undefined; // Prevent double-release in outer finally
+      }
     }
 
     revalidatePath("/dashboard/audits");
     revalidateTag(`dashboard-metrics-${user.id}`);
     return { success: true, audit: newAudit };
   } catch (error: unknown) {
+    // If we created an audit but something unexpected threw, mark it FAILED
+    if (auditId) {
+      await prisma.audit.updateMany({
+        where: { id: auditId, fixStatus: { notIn: ["COMPLETED", "FAILED", "PARTIAL"] } },
+        data: { fixStatus: "FAILED" },
+      }).catch(() => null);
+    }
+    // Release lock if still held
+    if (lockKey && auditId) {
+      const { releaseAuditLease } = await import("@/lib/audit-lock");
+      await releaseAuditLease(lockKey, auditId).catch(() => null);
+    }
+
     logger.error("[Audits] runAudit failed", {
       error: (error as Error)?.message || String(error),
     });

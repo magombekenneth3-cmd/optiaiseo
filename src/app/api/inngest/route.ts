@@ -58,6 +58,7 @@ import {
     cronGracePeriodEnforcer,
     cronCreditWipeFinalizer,
     cronStuckBlogSweep,
+    cronStuckAuditSweep,
 } from "@/lib/inngest/functions/cron-schedule";
 
 import {
@@ -227,6 +228,7 @@ export const { GET, POST, PUT } = serve({
 
         // Missing registered jobs
         cronStuckBlogSweep,
+        cronStuckAuditSweep,         // every 15 min — fail-close stuck PENDING/IN_PROGRESS audits
         serpFeatureWeeklyCron,
         serpFeatureSiteJob,
         purgeExpiredSerpAnalysisJob,
