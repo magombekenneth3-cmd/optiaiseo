@@ -9,8 +9,8 @@ import { AlertTriangle, Copy, Check, ExternalLink, Link, X, Zap } from "lucide-r
 
 interface Blog {
     id:      string;
-    siteId:  string;
-    title:   string;
+    siteId?: string;
+    title?:  string;
 }
 
 export function InternalLinksModal({
@@ -40,6 +40,10 @@ export function InternalLinksModal({
         setSuggestions_loading(true);
         setError(null);
         try {
+            if (!blog.siteId) {
+                setError("Site ID is missing — cannot generate suggestions.");
+                return;
+            }
             const res = await generateInternalLinkingSuggestions(blog.siteId, blog.id);
             if (res.success) {
                 setSuggestions(res.suggestions);
@@ -89,7 +93,7 @@ export function InternalLinksModal({
                         </h2>
                         <p className="mt-1 max-w-xl truncate text-sm text-muted-foreground">
                             Generating internal links for:{" "}
-                            <span className="font-medium text-foreground">{blog.title}</span>
+                            <span className="font-medium text-foreground">{blog.title ?? "Untitled"}</span>
                         </p>
                     </div>
                     <button
