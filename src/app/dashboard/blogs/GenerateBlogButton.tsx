@@ -1,15 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { generateBlog } from "@/app/actions/blog";
 import { showActionError } from "@/lib/ui/action-errors";
-import { Loader2, Sparkles, ChevronDown, FileText, BarChart } from "lucide-react";
+import { Loader2, Sparkles, ChevronDown, FileText, BarChart3, Check } from "lucide-react";
 import { AuthorInput, GenerateBlogModal } from "./BlogStepper";
 import { UpgradeModal } from "@/components/UpgradeModal";
 import { CreditGate } from "@/components/ui/CreditGate";
+
+type PipelineType = "STANDARD" | "DATA_REPORT";
+
+const PIPELINE_OPTIONS: {
+    key: PipelineType;
+    label: string;
+    description: string;
+    icon: typeof FileText;
+    accent: string;
+    accentBg: string;
+    accentBorder: string;
+    value: string | undefined;
+}[] = [
+    {
+        key: "STANDARD",
+        label: "Standard Post",
+        description: "Evergreen or trending SEO content",
+        icon: FileText,
+        accent: "text-emerald-400",
+        accentBg: "bg-emerald-500/10",
+        accentBorder: "border-emerald-500/20",
+        value: undefined,
+    },
+    {
+        key: "DATA_REPORT",
+        label: "Data-Journalism Report",
+        description: "Research-driven content built to attract high-authority backlinks",
+        icon: BarChart3,
+        accent: "text-purple-400",
+        accentBg: "bg-purple-500/10",
+        accentBorder: "border-purple-500/20",
+        value: "DATA_REPORT",
+    },
+];
 
 interface GenerateBlogButtonProps {
     siteId: string;
@@ -17,142 +51,226 @@ interface GenerateBlogButtonProps {
     initialKeyword?: string;
 }
 
-export function GenerateBlogButton({ siteId, siteDomain, initialKeyword }: GenerateBlogButtonProps) {
+export function GenerateBlogButton({
+    siteId,
+    siteDomain,
+    initialKeyword,
+}: GenerateBlogButtonProps) {
     const router = useRouter();
     const [isPending, setIsPending] = useState(false);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
     const [showUpgrade, setShowUpgrade] = useState(false);
+    const [selectedPipeline, setSelectedPipeline] = useState<PipelineType>("STANDARD");
     const [pendingPipelineType, setPendingPipelineType] = useState<string | undefined>(undefined);
-    const openModal = (type?: string) => {
-        setPendingPipelineType(type);
-        setIsDropdownOpen(false);
-        setModalOpen(true);
-    };
 
-    const handleGenerate = async (author: AuthorInput) => {
-        setModalOpen(false);
-        setIsPending(true);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
 
-        const loadingId = toast.loading(
-            <div className="flex flex-col gap-0.5">
-                <span className="font-semibold">Queuing your post…</span>
-                <span className="text-xs opacity-70">Researching keywords &amp; picking pipeline — just a moment</span>
-            </div>
-        );
+    const closeDropdown = useCallback(() => setIsDropdownOpen(false), []);
 
-        try {
-            const res = await generateBlog(pendingPipelineType, siteId, author);
-            toast.dismiss(loadingId);
+    useEffect(() => {
+        if (!isDropdownOpen) return;
 
-            if (res.success) {
-                router.refresh();
-                toast.success(
-                    <div className="flex flex-col gap-0.5">
-                        <span className="font-semibold">✍️ Writing your post…</span>
-                        <span className="text-xs opacity-70">
-                            Generation is running in the background — it will appear below when ready (~1 min).
-                        </span>
-                    </div>,
-                    { duration: 8000 }
-                );
-            } else {
-                // Intercept limit errors and show the upgrade modal instead of a toast
-                const code = (res as { success: false; error?: string; code?: string }).code;
-                if (code === "insufficient_credits" || code === "rate_limit") {
-                    setShowUpgrade(true);
-                } else {
-                    showActionError(res as { success: false; error?: string; code?: string });
-                }
+        const handleClickOutside = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (
+                dropdownRef.current &&
+                !dropdownRef.current.contains(target) &&
+                triggerRef.current &&
+                !triggerRef.current.contains(target)
+            ) {
+                closeDropdown();
             }
-        } catch (error: unknown) {
-            toast.dismiss(loadingId);
-            toast.error(
+        };
+
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === "Escape") closeDropdown();
+        };
+
+        document.addEventListener("mousedown", handleClickOutside);
+        document.addEventListener("keydown", handleEscape);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+            document.removeEventListener("keydown", handleEscape);
+        };
+    }, [isDropdownOpen, closeDropdown]);
+
+    const openModal = useCallback(
+        (type?: string) => {
+            setPendingPipelineType(type);
+            setIsDropdownOpen(false);
+            setModalOpen(true);
+        },
+        []
+    );
+
+    const handleSelectPipeline = useCallback(
+        (option: (typeof PIPELINE_OPTIONS)[number]) => {
+            setSelectedPipeline(option.key);
+            setPendingPipelineType(option.value);
+            setIsDropdownOpen(false);
+        },
+        []
+    );
+
+    const handleGenerate = useCallback(
+        async (author: AuthorInput) => {
+            setModalOpen(false);
+            setIsPending(true);
+
+            const loadingId = toast.loading(
                 <div className="flex flex-col gap-0.5">
-                    <span className="font-semibold">Network error</span>
-                    <span className="text-xs opacity-80">{(error as Error)?.message || "Please check your connection and try again."}</span>
+                    <span className="font-semibold">Starting…</span>
+                    <span className="text-xs opacity-70">
+                        Researching keywords &amp; selecting pipeline
+                    </span>
                 </div>
             );
-        } finally {
-            setIsPending(false);
-        }
-    };
+
+            try {
+                const res = await generateBlog(pendingPipelineType, siteId, author);
+                toast.dismiss(loadingId);
+
+                if (res.success) {
+                    router.refresh();
+                    toast.success(
+                        <div className="flex flex-col gap-0.5">
+                            <span className="font-semibold">Your post is being written</span>
+                            <span className="text-xs opacity-70">
+                                Research and generation are running in the background.
+                            </span>
+                        </div>,
+                        { duration: 8000 }
+                    );
+                } else {
+                    const code = (res as { success: false; error?: string; code?: string }).code;
+                    if (code === "insufficient_credits" || code === "rate_limit") {
+                        setShowUpgrade(true);
+                    } else {
+                        showActionError(res as { success: false; error?: string; code?: string });
+                    }
+                }
+            } catch (error: unknown) {
+                toast.dismiss(loadingId);
+                toast.error(
+                    <div className="flex flex-col gap-0.5">
+                        <span className="font-semibold">Network error</span>
+                        <span className="text-xs opacity-80">
+                            {(error as Error)?.message ||
+                                "Please check your connection and try again."}
+                        </span>
+                    </div>
+                );
+            } finally {
+                setIsPending(false);
+            }
+        },
+        [pendingPipelineType, siteId, router]
+    );
+
+    const currentOption =
+        PIPELINE_OPTIONS.find((o) => o.key === selectedPipeline) ?? PIPELINE_OPTIONS[0];
 
     return (
         <>
-            <div className="relative inline-block text-left">
-                <div className="flex flex-col items-center gap-2">
-                    <CreditGate action="blog_generation">
-                        <div className="flex items-center">
-                            <button
-                                onClick={() => openModal()}
-                                disabled={isPending}
-                                className="inline-flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-black px-5 py-2.5 rounded-l-xl font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.35)] min-w-[155px]"
-                            >
-                                {isPending ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        Generating…
-                                    </>
-                                ) : (
-                                    <>
-                                        <Sparkles className="w-4 h-4" />
-                                        Generate Post
-                                    </>
-                                )}
-                            </button>
-                            <button
-                                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                                disabled={isPending}
-                                className="inline-flex items-center justify-center px-3 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-r-xl border-l border-emerald-600/30 transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.35)]"
-                            >
-                                <ChevronDown className="w-4 h-4" />
-                            </button>
-                        </div>
-                    </CreditGate>
-                    {!isPending && (
-                        <span className="text-xs font-bold text-emerald-400/80 uppercase tracking-widest flex items-center gap-1.5 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/60 animate-pulse" />
-                            Uses AnswerThePublic
-                        </span>
-                    )}
-                </div>
+            <div className="relative inline-flex flex-col items-center gap-2">
+                <CreditGate action="blog_generation">
+                    <div className="flex items-stretch">
+                        <button
+                            type="button"
+                            onClick={() => openModal(currentOption.value)}
+                            disabled={isPending}
+                            className="inline-flex items-center justify-center gap-2 rounded-l-xl border border-r-0 border-emerald-500/30 bg-emerald-500/15 px-5 py-2.5 text-sm font-bold text-emerald-300 transition-all duration-150 hover:bg-emerald-500/20 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {isPending ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Starting…
+                                </>
+                            ) : (
+                                <>
+                                    <Sparkles className="h-4 w-4" />
+                                    Generate Post
+                                </>
+                            )}
+                        </button>
+                        <button
+                            ref={triggerRef}
+                            type="button"
+                            onClick={() => setIsDropdownOpen((v) => !v)}
+                            disabled={isPending}
+                            aria-expanded={isDropdownOpen}
+                            aria-haspopup="true"
+                            aria-label="Select generation type"
+                            className="inline-flex items-center justify-center rounded-r-xl border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-2.5 text-emerald-300 transition-all duration-150 hover:bg-emerald-500/20 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            <ChevronDown
+                                className={`h-4 w-4 transition-transform duration-150 ${
+                                    isDropdownOpen ? "rotate-180" : ""
+                                }`}
+                            />
+                        </button>
+                    </div>
+                </CreditGate>
 
-                {isDropdownOpen && typeof window !== "undefined" && createPortal(
-                    <div style={{ position: "fixed", inset: 0, zIndex: 9999 }} aria-modal="true" role="dialog">
-                        <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.8)" }} onClick={() => setIsDropdownOpen(false)} />
-                        <div style={{ position: "relative", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem", pointerEvents: "none" }}>
-                            <div className="pointer-events-auto w-64 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] bg-card border border-border animate-in fade-in zoom-in-95 duration-150" role="menu">
-                                <button
-                                    onClick={() => openModal()}
-                                    className="text-left w-full px-4 py-3 text-sm text-zinc-300 hover:bg-muted hover:text-white flex items-start gap-3 transition-colors rounded-t-xl"
-                                    role="menuitem"
-                                >
-                                    <FileText className="w-4 h-4 mt-0.5 text-emerald-400 shrink-0" />
-                                    <div className="flex flex-col">
-                                        <span className="font-semibold text-white">Standard Post</span>
-                                        <span className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                                            Evergreen or trending guide targeting your next top keyword.
-                                        </span>
-                                    </div>
-                                </button>
-                                <button
-                                    onClick={() => openModal("DATA_REPORT")}
-                                    className="text-left w-full px-4 py-3 text-sm text-zinc-300 hover:bg-muted hover:text-white flex items-start gap-3 transition-colors border-t border-border rounded-b-xl"
-                                    role="menuitem"
-                                >
-                                    <BarChart className="w-4 h-4 mt-0.5 text-purple-400 shrink-0" />
-                                    <div className="flex flex-col">
-                                        <span className="font-semibold text-white">Data-Journalism Report</span>
-                                        <span className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                                            Synthesize research stats to earn high-authority backlinks.
-                                        </span>
-                                    </div>
-                                </button>
-                            </div>
+                {!isPending && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/15 bg-emerald-500/5 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-emerald-400/70">
+                        Research-backed generation
+                    </span>
+                )}
+
+                {isDropdownOpen && (
+                    <div
+                        ref={dropdownRef}
+                        role="menu"
+                        aria-label="Generation type"
+                        className="absolute right-0 top-full z-50 mt-2 w-72 origin-top-right animate-in fade-in zoom-in-95 rounded-xl border border-border bg-card p-1.5 shadow-lg duration-150 sm:w-80"
+                    >
+                        <div className="mb-1.5 px-3 pt-2">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                                Generation type
+                            </p>
                         </div>
-                    </div>,
-                    document.body
+
+                        {PIPELINE_OPTIONS.map((option) => {
+                            const Icon = option.icon;
+                            const isSelected = selectedPipeline === option.key;
+
+                            return (
+                                <button
+                                    key={option.key}
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => handleSelectPipeline(option)}
+                                    className={`group flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-150 ${
+                                        isSelected
+                                            ? "bg-muted/60 border border-border"
+                                            : "border border-transparent hover:border-border hover:bg-muted/40"
+                                    }`}
+                                >
+                                    <div
+                                        className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-150 ${option.accentBg} ${option.accentBorder} border`}
+                                    >
+                                        <Icon
+                                            className={`h-4 w-4 transition-transform duration-150 group-hover:scale-110 ${option.accent}`}
+                                        />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-semibold text-foreground">
+                                            {option.label}
+                                        </p>
+                                        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                                            {option.description}
+                                        </p>
+                                    </div>
+                                    {isSelected && (
+                                        <Check className="mt-1 h-4 w-4 shrink-0 text-emerald-400" />
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
                 )}
             </div>
 
@@ -167,14 +285,15 @@ export function GenerateBlogButton({ siteId, siteDomain, initialKeyword }: Gener
                 />
             )}
 
-            {/* Upgrade modal — shown when monthly blog limit is hit */}
-            {showUpgrade && typeof window !== "undefined" && createPortal(
-                <UpgradeModal
-                    currentTier="FREE"
-                    onClose={() => setShowUpgrade(false)}
-                />,
-                document.body
-            )}
+            {showUpgrade &&
+                typeof window !== "undefined" &&
+                createPortal(
+                    <UpgradeModal
+                        currentTier="FREE"
+                        onClose={() => setShowUpgrade(false)}
+                    />,
+                    document.body
+                )}
         </>
     );
 }

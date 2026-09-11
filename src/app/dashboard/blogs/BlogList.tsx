@@ -1,216 +1,417 @@
 "use client";
-import { logger } from "@/lib/logger";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { ReviewBlogModal } from "./ReviewBlogModal";
-import { InternalLinksModal } from "./InternalLinksModal";
+import { logger } from "@/lib/logger";
 import {
-    ArrowUpDown,
-    Bot,
+    AlertTriangle,
+    Check,
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
+    CircleDot,
+    Clock3,
     ExternalLink,
     Eye,
+    FileText,
+    Filter,
+    Hash,
     Link as LinkIcon,
     Loader2,
     MoreHorizontal,
     RefreshCw,
     Search,
+    Sparkles,
     X,
     Zap,
 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ReviewBlogModal } from "./ReviewBlogModal";
+import { InternalLinksModal } from "./InternalLinksModal";
 import { RepurposeTab } from "@/components/blog/RepurposeTab";
 import { toast } from "sonner";
-import { HashnodeIcon, MediumIcon, WordPressIcon, GhostIcon } from "@/components/icons/platforms";
+import {
+    HashnodeIcon,
+    MediumIcon,
+    WordPressIcon,
+    GhostIcon,
+} from "@/components/icons/platforms";
+
+type BlogStatus =
+    | "PUBLISHED"
+    | "DRAFT"
+    | "REVIEW"
+    | "NEEDS_REVIEW"
+    | "GENERATING"
+    | "QUEUED"
+    | "PENDING"
+    | "FAILED"
+    | string;
+
+type Blog = {
+    id: string;
+    siteId?: string;
+    title?: string;
+    slug?: string;
+    content?: string;
+    status: BlogStatus;
+    createdAt: string | Date;
+    updatedAt?: string | Date;
+    targetKeywords?: string[];
+    validationScore?: number | null;
+    validationErrors?: string[] | null;
+    citationScore?: number | null;
+    citationCriteria?: unknown;
+    hashnodeUrl?: string | null;
+    mediumUrl?: string | null;
+    wordPressUrl?: string | null;
+    ghostUrl?: string | null;
+    [key: string]: any;
+};
+
+type FilterStatus =
+    | "ALL"
+    | "DRAFT"
+    | "REVIEW"
+    | "PUBLISHED"
+    | "FAILED"
+    | "GENERATING";
+
+type SortOption =
+    | "UPDATED_DESC"
+    | "CREATED_DESC"
+    | "CREATED_ASC"
+    | "SCORE_DESC";
 
 const PAGE_SIZE = 10;
 const TEN_MINUTES_MS = 10 * 60 * 1000;
 
-type FilterTab = "all" | "draft" | "review" | "published" | "failed";
-type SortKey = "newest" | "oldest" | "score-desc" | "score-asc";
-
-function getAiReadiness(blog: any): { level: string; color: string } {
-    const score = blog.validationScore as number | null;
-    const hasSchema =
-        typeof blog.content === "string" &&
-        (blog.content.includes('"@type":"FAQPage"') ||
-            blog.content.includes('"@type": "FAQPage"') ||
-            blog.content.includes('"@type":"HowTo"') ||
-            blog.content.includes('"@type": "HowTo"'));
-
-    if (score != null && score >= 80 && hasSchema) return { level: "Good", color: "emerald" };
-    if (score != null && score >= 65) return { level: "Fair", color: "amber" };
-    if (score != null && score < 65) return { level: "Low", color: "red" };
-    return { level: "—", color: "zinc" };
+function formatDate(value?: string | Date) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    }).format(date);
 }
 
-function CircularScore({ score }: { score: number }) {
-    const clamped = Math.max(0, Math.min(100, score));
-    const color =
-        clamped >= 80
-            ? "text-emerald-400"
-            : clamped >= 60
-              ? "text-amber-400"
-              : "text-red-400";
+function formatRelativeDate(value?: string | Date) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    const diff = Date.now() - date.getTime();
+    const minute = 60 * 1000;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    if (diff < minute) return "Just now";
+    if (diff < hour) {
+        const minutes = Math.floor(diff / minute);
+        return `${minutes}m ago`;
+    }
+    if (diff < day) {
+        const hours = Math.floor(diff / hour);
+        return `${hours}h ago`;
+    }
+    if (diff < 7 * day) {
+        const days = Math.floor(diff / day);
+        return `${days}d ago`;
+    }
+    return formatDate(value);
+}
+
+function isReviewStatus(status: BlogStatus) {
+    return status === "REVIEW" || status === "NEEDS_REVIEW";
+}
+
+function isGeneratingStatus(status: BlogStatus) {
+    return status === "GENERATING" || status === "QUEUED" || status === "PENDING";
+}
+
+function isStuckBlog(blog: Blog) {
+    if (blog.status !== "GENERATING" && blog.status !== "QUEUED") return false;
+    const createdAt = new Date(blog.createdAt).getTime();
+    if (Number.isNaN(createdAt)) return false;
+    return Date.now() - createdAt > TEN_MINUTES_MS;
+}
+
+function getBlogUrl(blog: Blog) {
+    if (blog.status !== "PUBLISHED") return null;
+    return blog.hashnodeUrl || blog.mediumUrl || null;
+}
+
+function getQualityState(blog: Blog) {
+    const score = blog.validationScore == null ? null : Number(blog.validationScore);
+    const hasErrors = Array.isArray(blog.validationErrors) && blog.validationErrors.length > 0;
+    if (hasErrors || (score != null && score < 60)) return "attention";
+    if (score != null && score < 80) return "improve";
+    if (score != null) return "strong";
+    return "unknown";
+}
+
+function getStatusConfig(blog: Blog) {
+    if (blog.status === "PUBLISHED") {
+        return {
+            label: "Published",
+            className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
+            dot: "bg-emerald-400",
+        };
+    }
+    if (blog.status === "DRAFT") {
+        return {
+            label: "Draft",
+            className: "border-amber-500/20 bg-amber-500/10 text-amber-400",
+            dot: "bg-amber-400",
+        };
+    }
+    if (isReviewStatus(blog.status)) {
+        return {
+            label: "Needs review",
+            className: "border-orange-500/20 bg-orange-500/10 text-orange-400",
+            dot: "bg-orange-400",
+        };
+    }
+    if (blog.status === "FAILED") {
+        return {
+            label: "Failed",
+            className: "border-red-500/20 bg-red-500/10 text-red-400",
+            dot: "bg-red-400",
+        };
+    }
+    if (isGeneratingStatus(blog.status)) {
+        if (isStuckBlog(blog)) {
+            return {
+                label: "Stuck",
+                className: "border-red-500/20 bg-red-500/10 text-red-400",
+                dot: "bg-red-400",
+            };
+        }
+        return {
+            label: "Writing",
+            className: "border-blue-500/20 bg-blue-500/10 text-blue-400",
+            dot: "bg-blue-400",
+        };
+    }
+    return {
+        label: blog.status
+            ? blog.status.charAt(0) + blog.status.slice(1).toLowerCase()
+            : "Unknown",
+        className: "border-border bg-muted text-muted-foreground",
+        dot: "bg-muted-foreground",
+    };
+}
+
+function StatusBadge({ blog }: { blog: Blog }) {
+    const config = getStatusConfig(blog);
+    const generating = isGeneratingStatus(blog.status) && !isStuckBlog(blog);
+    return (
+        <span
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${config.className}`}
+        >
+            {generating ? (
+                <RefreshCw className="h-3 w-3 animate-spin" />
+            ) : (
+                <span className={`h-1.5 w-1.5 rounded-full ${config.dot}`} />
+            )}
+            {config.label}
+        </span>
+    );
+}
+
+function QualityScore({ blog }: { blog: Blog }) {
+    const score =
+        blog.validationScore == null
+            ? null
+            : Math.max(0, Math.min(100, Number(blog.validationScore)));
+    const state = getQualityState(blog);
+
+    if (score == null) {
+        return (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-muted/40">
+                    <span className="text-[10px]">—</span>
+                </div>
+                <div className="hidden lg:block">
+                    <div className="font-medium text-muted-foreground">Not scored</div>
+                    <div className="text-[11px]">Awaiting validation</div>
+                </div>
+            </div>
+        );
+    }
+
+    const ring =
+        state === "attention"
+            ? "border-red-500/40 text-red-400"
+            : state === "improve"
+              ? "border-amber-500/40 text-amber-400"
+              : "border-emerald-500/40 text-emerald-400";
+
     const label =
-        clamped >= 80 ? "Good" : clamped >= 60 ? "Fair" : "Needs work";
+        state === "attention" ? "Attention" : state === "improve" ? "Improve" : "Strong";
 
     return (
-        <div className="flex items-center gap-2.5">
-            <div className="relative h-9 w-9 shrink-0">
-                <svg className="-rotate-90" viewBox="0 0 36 36" fill="none">
-                    <circle
-                        cx="18"
-                        cy="18"
-                        r="15.9155"
-                        stroke="currentColor"
-                        strokeWidth="3"
-                        className="text-white/[0.06]"
-                    />
-                    <circle
-                        cx="18"
-                        cy="18"
-                        r="15.9155"
-                        stroke="currentColor"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                        strokeDasharray={`${clamped} ${100 - clamped}`}
-                        className={color}
-                    />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-foreground">
-                    {clamped}
-                </span>
+        <div
+            className="flex items-center gap-2"
+            title={
+                Array.isArray(blog.validationErrors) && blog.validationErrors.length > 0
+                    ? blog.validationErrors.slice(0, 3).join(" · ")
+                    : `${score}/100`
+            }
+        >
+            <div
+                className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 bg-background text-[10px] font-bold ${ring}`}
+            >
+                <span>{score}</span>
             </div>
-            <div className="hidden min-[900px]:block">
-                <p className="text-xs font-semibold text-foreground">{clamped}/100</p>
-                <p className="text-[10px] text-muted-foreground">{label}</p>
+            <div className="hidden lg:block">
+                <div className="text-xs font-semibold text-foreground">{label}</div>
+                <div className="text-[11px] text-muted-foreground">SEO score</div>
             </div>
         </div>
     );
 }
 
-function AiReadinessBadge({ blog }: { blog: any }) {
-    const { level, color } = getAiReadiness(blog);
-    const classes: Record<string, string> = {
-        emerald: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-        amber: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-        red: "bg-red-500/10 text-red-400 border-red-500/20",
-        zinc: "bg-muted text-muted-foreground border-border",
-    };
-
-    return (
-        <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${classes[color]}`}
-        >
-            <Bot className="h-3 w-3" />
-            {level}
-        </span>
-    );
-}
-
-function StatusBadge({ status, createdAt }: { status: string; createdAt: string }) {
-    const isStuck =
-        (status === "GENERATING" || status === "QUEUED") &&
-        Date.now() - new Date(createdAt).getTime() > TEN_MINUTES_MS;
-
-    if (status === "PUBLISHED")
-        return (
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                Published
-            </span>
-        );
-
-    if (status === "DRAFT")
-        return (
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                Draft
-            </span>
-        );
-
-    if (status === "REVIEW" || status === "NEEDS_REVIEW")
-        return (
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-orange-500/20 bg-orange-500/10 px-2.5 py-1 text-xs font-medium text-orange-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-                Needs Review
-            </span>
-        );
-
-    if (status === "FAILED")
-        return (
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
-                Failed
-            </span>
-        );
-
-    if (isStuck)
-        return (
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
-                Stuck
-            </span>
-        );
-
-    return (
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-400">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Writing…
-        </span>
-    );
-}
-
-function SyndicationIcons({
+function DistributionLinks({
     blog,
     onHashnodeSync,
-    syncingIds,
+    syncing,
 }: {
-    blog: any;
+    blog: Blog;
     onHashnodeSync: (id: string) => void;
-    syncingIds: Set<string>;
+    syncing: boolean;
 }) {
+    const hasDistribution =
+        blog.hashnodeUrl || blog.mediumUrl || blog.wordPressUrl || blog.ghostUrl;
+
+    if (!hasDistribution && blog.status !== "PUBLISHED") {
+        return <span className="text-xs text-muted-foreground">—</span>;
+    }
+
     return (
         <div className="flex items-center gap-1.5">
             {blog.hashnodeUrl ? (
-                <a href={blog.hashnodeUrl} target="_blank" rel="noreferrer" title="View on Hashnode" className="text-blue-400 hover:text-blue-300 transition-colors">
+                <a
+                    href={blog.hashnodeUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="View on Hashnode"
+                    aria-label="View on Hashnode"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-blue-400 transition-colors hover:bg-blue-500/10 hover:text-blue-300"
+                >
                     <HashnodeIcon className="h-4 w-4" />
                 </a>
-            ) : (
-                blog.status === "PUBLISHED" && (
-                    <button onClick={() => onHashnodeSync(blog.id)} disabled={syncingIds.has(blog.id)} title="Sync to Hashnode" className="text-zinc-600 hover:text-blue-400 transition-colors disabled:opacity-50 disabled:cursor-wait">
-                        {syncingIds.has(blog.id) ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <HashnodeIcon className="h-4 w-4" />}
-                    </button>
-                )
-            )}
+            ) : blog.status === "PUBLISHED" ? (
+                <button
+                    type="button"
+                    onClick={() => onHashnodeSync(blog.id)}
+                    disabled={syncing}
+                    title="Sync to Hashnode"
+                    aria-label="Sync to Hashnode"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-blue-500/10 hover:text-blue-400 disabled:cursor-wait disabled:opacity-50"
+                >
+                    {syncing ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <HashnodeIcon className="h-4 w-4" />
+                    )}
+                </button>
+            ) : null}
+
             {blog.mediumUrl ? (
-                <a href={blog.mediumUrl} target="_blank" rel="noreferrer" title="View on Medium" className="text-emerald-400 hover:text-emerald-300 transition-colors">
+                <a
+                    href={blog.mediumUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="View on Medium"
+                    aria-label="View on Medium"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-emerald-400 transition-colors hover:bg-emerald-500/10 hover:text-emerald-300"
+                >
                     <MediumIcon className="h-4 w-4" />
                 </a>
-            ) : (
-                blog.status === "PUBLISHED" && <MediumIcon className="h-4 w-4 text-zinc-700" />
-            )}
+            ) : blog.status === "PUBLISHED" ? (
+                <span
+                    title="Not synced to Medium"
+                    className="flex h-7 w-7 items-center justify-center text-muted-foreground/30"
+                >
+                    <MediumIcon className="h-4 w-4" />
+                </span>
+            ) : null}
+
             {blog.wordPressUrl && (
-                <a href={blog.wordPressUrl} target="_blank" rel="noreferrer" title="View on WordPress" className="text-blue-500 hover:text-blue-400 transition-colors">
+                <a
+                    href={blog.wordPressUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="View on WordPress"
+                    aria-label="View on WordPress"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-blue-400 transition-colors hover:bg-blue-500/10 hover:text-blue-300"
+                >
                     <WordPressIcon className="h-4 w-4" />
                 </a>
             )}
+
             {blog.ghostUrl && (
-                <a href={blog.ghostUrl} target="_blank" rel="noreferrer" title="View on Ghost" className="text-yellow-500 hover:text-yellow-400 transition-colors">
+                <a
+                    href={blog.ghostUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="View on Ghost"
+                    aria-label="View on Ghost"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-yellow-400 transition-colors hover:bg-yellow-500/10 hover:text-yellow-300"
+                >
                     <GhostIcon className="h-4 w-4" />
                 </a>
-            )}
-            {(blog.status === "DRAFT" || blog.status === "REVIEW" || blog.status === "NEEDS_REVIEW") && (
-                <span className="text-xs text-zinc-700">—</span>
             )}
         </div>
     );
 }
 
-function SnippetOptimizeButton({ blogId, keyword }: { blogId: string; keyword?: string }) {
+function EmptyState({
+    searchActive,
+    onClearSearch,
+}: {
+    searchActive: boolean;
+    onClearSearch: () => void;
+}) {
+    return (
+        <div className="rounded-2xl border border-border bg-card/30 px-6 py-16 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted/50">
+                {searchActive ? (
+                    <Search className="h-6 w-6 text-muted-foreground" />
+                ) : (
+                    <FileText className="h-6 w-6 text-muted-foreground" />
+                )}
+            </div>
+            <h3 className="text-sm font-semibold text-foreground">
+                {searchActive ? "No content matches your search" : "No SEO content yet"}
+            </h3>
+            <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-muted-foreground">
+                {searchActive
+                    ? "Try a different title, keyword, or status filter."
+                    : "Generate your first optimized post and manage your entire content workflow from here."}
+            </p>
+            {searchActive && (
+                <button
+                    type="button"
+                    onClick={onClearSearch}
+                    className="mt-5 inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3.5 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+                >
+                    <X className="h-3.5 w-3.5" />
+                    Clear filters
+                </button>
+            )}
+        </div>
+    );
+}
+
+function SnippetOptimizeButton({
+    blogId,
+    keyword,
+}: {
+    blogId: string;
+    keyword?: string;
+}) {
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<{
@@ -225,9 +426,14 @@ function SnippetOptimizeButton({ blogId, keyword }: { blogId: string; keyword?: 
         setLoading(true);
         setResult(null);
         try {
-            const res = await fetch(`/api/blogs/${blogId}/snippet-optimize`, { method: "POST" });
-            if (res.ok) setResult(await res.json());
-            else toast.error("Snippet optimizer failed — try again.");
+            const res = await fetch(`/api/blogs/${blogId}/snippet-optimize`, {
+                method: "POST",
+            });
+            if (res.ok) {
+                setResult(await res.json());
+            } else {
+                toast.error("Snippet optimizer failed — try again.");
+            }
         } catch {
             toast.error("Network error — could not reach snippet optimizer.");
         } finally {
@@ -235,68 +441,152 @@ function SnippetOptimizeButton({ blogId, keyword }: { blogId: string; keyword?: 
         }
     };
 
+    const close = () => {
+        if (!loading) {
+            setIsOpen(false);
+            setResult(null);
+        }
+    };
+
     return (
         <>
             <button
+                type="button"
                 onClick={open}
                 title="Optimize for Featured Snippet"
-                className="flex items-center gap-1.5 rounded-md border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-500/20"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5 text-xs font-semibold text-amber-300 transition-colors hover:border-amber-500/30 hover:bg-amber-500/15"
             >
-                ⚡ Snippet
+                <Zap className="h-3.5 w-3.5" />
+                Snippet
             </button>
+
             {isOpen && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80">
-                    <div className="w-full max-w-lg rounded-2xl border border-border bg-background shadow-2xl overflow-hidden">
+                <div
+                    className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+                    onMouseDown={(event) => {
+                        if (event.target === event.currentTarget) close();
+                    }}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Snippet optimizer"
+                >
+                    <div className="max-h-[90vh] w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
                         <div className="flex items-center justify-between border-b border-border px-5 py-4">
-                            <div>
-                                <h3 className="font-bold text-foreground">Snippet Optimizer</h3>
-                                {keyword && (
-                                    <p className="mt-0.5 text-xs text-muted-foreground">
-                                        Keyword: <span className="text-emerald-400">{keyword}</span>
-                                    </p>
-                                )}
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400">
+                                        <Sparkles className="h-4 w-4" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-bold text-foreground">
+                                            Snippet Optimizer
+                                        </h3>
+                                        {keyword && (
+                                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                                Target:{" "}
+                                                <span className="text-amber-400">{keyword}</span>
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                            <button onClick={() => setIsOpen(false)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+                            <button
+                                type="button"
+                                onClick={close}
+                                disabled={loading}
+                                aria-label="Close snippet optimizer"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+                            >
                                 <X className="h-4 w-4" />
                             </button>
                         </div>
-                        <div className="space-y-4 p-5">
+
+                        <div className="max-h-[calc(90vh-73px)] overflow-y-auto p-5">
                             {loading && (
-                                <div className="flex items-center justify-center gap-3 py-8 text-sm text-muted-foreground">
-                                    <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
-                                    Fetching current snippet and generating optimized block…
+                                <div className="flex flex-col items-center justify-center py-14 text-center">
+                                    <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full border border-amber-500/20 bg-amber-500/10">
+                                        <Loader2 className="h-5 w-5 animate-spin text-amber-400" />
+                                    </div>
+                                    <p className="text-sm font-medium text-foreground">
+                                        Analyzing your snippet
+                                    </p>
+                                    <p className="mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
+                                        Fetching the current result and generating an optimized
+                                        content block.
+                                    </p>
                                 </div>
                             )}
+
                             {result && !loading && (
-                                <>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Format detected</span>
-                                        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-bold uppercase text-amber-300">{result.format}</span>
+                                <div className="space-y-5">
+                                    <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 p-3">
+                                        <div>
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                                                Detected format
+                                            </p>
+                                            <p className="mt-1 text-sm font-semibold text-foreground">
+                                                {result.format}
+                                            </p>
+                                        </div>
+                                        <div className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+                                            Featured snippet
+                                        </div>
                                     </div>
+
                                     {result.currentSnippet && (
                                         <div>
-                                            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Current Google Snippet</p>
-                                            <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs italic leading-relaxed text-zinc-400">{result.currentSnippet}</div>
+                                            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                                                Current result
+                                            </p>
+                                            <div className="rounded-xl border border-border bg-muted/30 p-4 text-xs leading-6 text-muted-foreground">
+                                                {result.currentSnippet}
+                                            </div>
                                         </div>
                                     )}
+
                                     <div>
-                                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-400">Your Optimized Block</p>
-                                        <div className="whitespace-pre-wrap rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 font-mono text-xs leading-relaxed text-zinc-200">{result.optimizedBlock}</div>
+                                        <div className="mb-2 flex items-center justify-between">
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+                                                AI recommendation
+                                            </p>
+                                            <Check className="h-3.5 w-3.5 text-emerald-400" />
+                                        </div>
+                                        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 font-mono text-xs leading-6 text-foreground">
+                                            <pre className="whitespace-pre-wrap break-words font-inherit">
+                                                {result.optimizedBlock}
+                                            </pre>
+                                        </div>
                                     </div>
-                                    <div className="flex items-start gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
-                                        <span className="mt-0.5 shrink-0 text-xs font-bold uppercase tracking-wider text-blue-400">Where to put it</span>
-                                        <p className="text-xs leading-relaxed text-zinc-300">{result.insertionGuidance}</p>
+
+                                    <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-blue-400">
+                                            Placement
+                                        </p>
+                                        <p className="text-xs leading-5 text-muted-foreground">
+                                            {result.insertionGuidance}
+                                        </p>
                                     </div>
+
                                     <button
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(result.optimizedBlock);
-                                            toast.success("Optimized block copied!");
+                                        type="button"
+                                        onClick={async () => {
+                                            try {
+                                                await navigator.clipboard.writeText(
+                                                    result.optimizedBlock
+                                                );
+                                                toast.success("Optimized block copied!");
+                                            } catch {
+                                                toast.error(
+                                                    "Could not copy the optimized block."
+                                                );
+                                            }
                                         }}
-                                        className="w-full rounded-xl border border-amber-500/30 bg-amber-500/15 py-2 text-sm font-bold text-amber-300 transition-colors hover:bg-amber-500/25"
+                                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/15 py-2.5 text-sm font-bold text-amber-300 transition-colors hover:bg-amber-500/20"
                                     >
-                                        Copy Block
+                                        <Check className="h-4 w-4" />
+                                        Copy optimized block
                                     </button>
-                                </>
+                                </div>
                             )}
                         </div>
                     </div>
@@ -306,96 +596,123 @@ function SnippetOptimizeButton({ blogId, keyword }: { blogId: string; keyword?: 
     );
 }
 
-function RowActions({
+function ActionMenu({
     blog,
-    blogUrl,
-    isStuck,
-    onPreview,
+    onReview,
     onRepurpose,
-    onLinkModal,
-    onDeleteStuck,
+    onLinks,
+    onDelete,
+    onSnippet,
 }: {
-    blog: any;
-    blogUrl: string | null;
-    isStuck: boolean;
-    onPreview: () => void;
+    blog: Blog;
+    onReview: () => void;
     onRepurpose: () => void;
-    onLinkModal: () => void;
-    onDeleteStuck: () => void;
+    onLinks: () => void;
+    onDelete: () => void;
+    onSnippet: () => void;
 }) {
     const [open, setOpen] = useState(false);
-    const ref = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (!open) return;
-        const handler = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        const handlePointerDown = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (!target.closest("[data-blog-action-menu]")) setOpen(false);
         };
-        document.addEventListener("mousedown", handler);
-        return () => document.removeEventListener("mousedown", handler);
+        document.addEventListener("mousedown", handlePointerDown);
+        return () => document.removeEventListener("mousedown", handlePointerDown);
     }, [open]);
 
-    if (blog.status === "GENERATING" || blog.status === "QUEUED" || blog.status === "FAILED") {
-        const isFailed = blog.status === "FAILED";
-        const isTimedOut = !isFailed && Date.now() - new Date(blog.createdAt).getTime() > TEN_MINUTES_MS;
-        if (isFailed || isTimedOut) {
-            return (
-                <button onClick={onDeleteStuck} className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10">
-                    Delete
-                </button>
-            );
-        }
-        return (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs italic text-blue-400">
-                <Loader2 className="h-3 w-3 animate-spin" /> Writing…
-            </span>
-        );
-    }
-
-    if (blog.status === "DRAFT" || blog.status === "REVIEW" || blog.status === "NEEDS_REVIEW") {
-        const hasErrors = Array.isArray(blog.validationErrors) && blog.validationErrors.length > 0;
-        const lowScore = blog.validationScore != null && (blog.validationScore as number) < 60;
-        const warn = hasErrors || lowScore;
-
-        return (
-            <button
-                onClick={onPreview}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    warn
-                        ? "border border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
-                        : "text-foreground hover:bg-accent"
-                }`}
-            >
-                <Eye className="h-3.5 w-3.5" />
-                {warn ? "Review" : blog.status === "REVIEW" || blog.status === "NEEDS_REVIEW" ? "Review" : "Review"}
-            </button>
-        );
-    }
+    const canReview = blog.status === "DRAFT" || isReviewStatus(blog.status);
+    const canPublishActions = blog.status === "PUBLISHED";
+    const stuck = isStuckBlog(blog);
+    const failed = blog.status === "FAILED";
 
     return (
-        <div ref={ref} className="relative">
-            <button onClick={() => setOpen(!open)} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+        <div className="relative" data-blog-action-menu>
+            <button
+                type="button"
+                onClick={() => setOpen((value) => !value)}
+                aria-label={`Actions for ${blog.title || "blog"}`}
+                aria-expanded={open}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+                    open
+                        ? "border-border bg-muted text-foreground"
+                        : "border-transparent text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground"
+                }`}
+            >
                 <MoreHorizontal className="h-4 w-4" />
             </button>
+
             {open && (
-                <div className="absolute right-0 top-full z-50 mt-1 w-48 overflow-hidden rounded-xl border border-border bg-popover shadow-xl">
-                    <button onClick={() => { onRepurpose(); setOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-xs font-medium text-amber-400 transition-colors hover:bg-accent">
-                        <Zap className="h-3.5 w-3.5" /> Repurpose
-                    </button>
-                    <button onClick={() => { onLinkModal(); setOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-accent">
-                        <LinkIcon className="h-3.5 w-3.5" /> Cluster Links
-                    </button>
-                    <div className="px-3 py-2">
-                        <SnippetOptimizeButton blogId={blog.id} keyword={blog.targetKeywords?.[0]} />
-                    </div>
-                    {blogUrl ? (
-                        <a href={blogUrl} target="_blank" rel="noreferrer" className="flex w-full items-center gap-2 border-t border-border px-3 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-                            <ExternalLink className="h-3.5 w-3.5" /> View Live
-                        </a>
-                    ) : (
-                        <Link href={`/dashboard/sites/${blog.siteId}`} className="flex w-full items-center gap-2 border-t border-border px-3 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-                            <ExternalLink className="h-3.5 w-3.5" /> View Site
-                        </Link>
+                <div className="absolute right-0 top-10 z-40 w-52 overflow-hidden rounded-xl border border-border bg-background p-1.5 shadow-xl">
+                    {canReview && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setOpen(false);
+                                onReview();
+                            }}
+                            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                        >
+                            <Eye className="h-3.5 w-3.5 text-primary" />
+                            {isReviewStatus(blog.status) ? "Review & Fix" : "Review & Publish"}
+                        </button>
+                    )}
+
+                    {canPublishActions && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setOpen(false);
+                                    onRepurpose();
+                                }}
+                                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                            >
+                                <Zap className="h-3.5 w-3.5 text-amber-400" />
+                                Repurpose
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setOpen(false);
+                                    onLinks();
+                                }}
+                                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                            >
+                                <LinkIcon className="h-3.5 w-3.5 text-emerald-400" />
+                                Internal links
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setOpen(false);
+                                    onSnippet();
+                                }}
+                                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                            >
+                                <Zap className="h-3.5 w-3.5 text-amber-300" />
+                                Optimize snippet
+                            </button>
+                        </>
+                    )}
+
+                    {(failed || stuck) && (
+                        <>
+                            <div className="my-1 border-t border-border" />
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setOpen(false);
+                                    onDelete();
+                                }}
+                                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                                Delete
+                            </button>
+                        </>
                     )}
                 </div>
             )}
@@ -403,480 +720,804 @@ function RowActions({
     );
 }
 
-const TABS: { key: FilterTab; label: string; match: (b: any) => boolean }[] = [
-    { key: "all", label: "All", match: () => true },
-    { key: "draft", label: "Draft", match: (b) => b.status === "DRAFT" },
-    { key: "review", label: "In review", match: (b) => b.status === "REVIEW" || b.status === "NEEDS_REVIEW" },
-    { key: "published", label: "Published", match: (b) => b.status === "PUBLISHED" },
-    { key: "failed", label: "Issues", match: (b) => b.status === "FAILED" || (b.validationScore != null && Number(b.validationScore) < 60) || (Array.isArray(b.validationErrors) && b.validationErrors.length > 0) },
-];
-
-const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-    { key: "newest", label: "Newest first" },
-    { key: "oldest", label: "Oldest first" },
-    { key: "score-desc", label: "Highest score" },
-    { key: "score-asc", label: "Lowest score" },
-];
-
-export function BlogList({ blogs, success, initialReviewId }: { blogs: any[]; success: boolean; initialReviewId?: string }) {
+export function BlogList({
+    blogs,
+    success,
+    initialReviewId,
+}: {
+    blogs: Blog[];
+    success: boolean;
+    initialReviewId?: string;
+}) {
     const router = useRouter();
     const searchParams = useSearchParams();
 
-    const [previewBlog, setPreviewBlog] = useState<any | null>(null);
-    const [linkModalBlog, setLinkModalBlog] = useState<any | null>(null);
-    const [repurposeBlog, setRepurposeBlog] = useState<any | null>(null);
+    const [previewBlog, setPreviewBlog] = useState<Blog | null>(null);
+    const [linkModalBlog, setLinkModalBlog] = useState<Blog | null>(null);
+    const [repurposeBlog, setRepurposeBlog] = useState<Blog | null>(null);
     const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
-    const [dismissedRepurposeId, setDismissedRepurposeId] = useState<string | null>(() => {
-        if (typeof window === "undefined") return null;
-        return localStorage.getItem("repurpose_banner_dismissed") ?? null;
-    });
-    const pendingRefreshRef = useRef(false);
-
-    const [activeTab, setActiveTab] = useState<FilterTab>("all");
-    const [searchQuery, setSearchQuery] = useState("");
-    const [sortKey, setSortKey] = useState<SortKey>("newest");
-    const [page, setPage] = useState(0);
-    const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState<FilterStatus>("ALL");
+    const [sort, setSort] = useState<SortOption>("UPDATED_DESC");
+    const [page, setPage] = useState(1);
     const [showSort, setShowSort] = useState(false);
+    const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [dismissedRepurposeId, setDismissedRepurposeId] = useState<string | null>(
+        () => {
+            if (typeof window === "undefined") return null;
+            return localStorage.getItem("repurpose_banner_dismissed") ?? null;
+        }
+    );
+
+    const pendingRefreshRef = useRef(false);
+    const pollCountRef = useRef(0);
+    const hasOpenedReviewRef = useRef(false);
     const sortRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (hasOpenedReviewRef.current) return;
+        const reviewId = initialReviewId ?? searchParams.get("review");
+        if (!reviewId || !blogs?.length) return;
+        const target = blogs.find((blog) => blog.id === reviewId);
+        if (target) {
+            hasOpenedReviewRef.current = true;
+            setPreviewBlog(target);
+        }
+    }, [initialReviewId, searchParams, blogs]);
+
+    useEffect(() => {
+        setPage(1);
+    }, [search, statusFilter, sort]);
 
     useEffect(() => {
         if (!showSort) return;
         const handler = (e: MouseEvent) => {
-            if (sortRef.current && !sortRef.current.contains(e.target as Node)) setShowSort(false);
+            if (sortRef.current && !sortRef.current.contains(e.target as Node)) {
+                setShowSort(false);
+            }
         };
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, [showSort]);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => {
-        const reviewId = initialReviewId ?? searchParams.get("review");
-        if (!reviewId || !blogs?.length) return;
-        const target = blogs.find((b: any) => b.id === reviewId);
-        if (target) setPreviewBlog(target);
-    }, []);
-
-    const handlePublish = async (id: string) => {
-        try {
-            const res = await fetch(`/api/blogs/${id}/publish`, { method: "POST" });
-            const data = await res.json();
-            if (res.ok && data.success) {
-                toast.success(
-                    <div className="flex flex-col gap-1">
-                        <span className="font-semibold">Blog Published Successfully!</span>
-                        {data.mediumUrl && (<a href={data.mediumUrl} target="_blank" rel="noreferrer" className="text-xs text-emerald-400 hover:underline">View on Medium →</a>)}
-                        {data.hashnodeUrl && (<a href={data.hashnodeUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:underline">View on Hashnode →</a>)}
-                        {data.wordPressUrl && (<a href={data.wordPressUrl} target="_blank" rel="noreferrer" className="text-xs text-sky-400 hover:underline">View on WordPress →</a>)}
-                        {data.ghostUrl && (<a href={data.ghostUrl} target="_blank" rel="noreferrer" className="text-xs text-yellow-400 hover:underline">View on Ghost →</a>)}
-                    </div>,
-                    { duration: 5000 }
-                );
-                pendingRefreshRef.current = true;
-                return { success: true, mediumUrl: data.mediumUrl, hashnodeUrl: data.hashnodeUrl };
-            } else {
+    const handlePublish = useCallback(
+        async (id: string) => {
+            try {
+                const res = await fetch(`/api/blogs/${id}/publish`, { method: "POST" });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    toast.success(
+                        <div className="flex flex-col gap-1">
+                            <span className="font-semibold">Blog published successfully</span>
+                            {data.mediumUrl && (
+                                <a
+                                    href={data.mediumUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-xs text-emerald-400 hover:underline"
+                                >
+                                    View on Medium →
+                                </a>
+                            )}
+                            {data.hashnodeUrl && (
+                                <a
+                                    href={data.hashnodeUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-xs text-blue-400 hover:underline"
+                                >
+                                    View on Hashnode →
+                                </a>
+                            )}
+                            {data.wordPressUrl && (
+                                <a
+                                    href={data.wordPressUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-xs text-sky-400 hover:underline"
+                                >
+                                    View on WordPress →
+                                </a>
+                            )}
+                            {data.ghostUrl && (
+                                <a
+                                    href={data.ghostUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-xs text-yellow-400 hover:underline"
+                                >
+                                    View on Ghost →
+                                </a>
+                            )}
+                        </div>,
+                        { duration: 5000 }
+                    );
+                    pendingRefreshRef.current = true;
+                    return { success: true, mediumUrl: data.mediumUrl, hashnodeUrl: data.hashnodeUrl };
+                }
                 toast.error(data.error || "Failed to publish blog.");
                 return { success: false };
+            } catch (error) {
+                logger.error("[BlogList] Unexpected error:", {
+                    error: (error as any)?.message || error,
+                });
+                toast.error("A network error occurred.");
+                return { success: false };
             }
-        } catch (error) {
-            logger.error("[BlogList] Unexpected error:", { error: (error as any)?.message || error });
-            toast.error("A network error occurred.");
-            return { success: false };
-        }
-    };
+        },
+        []
+    );
 
-    const handleDeleteStuck = async (id: string) => {
-        try {
-            await fetch(`/api/blogs/${id}`, { method: "DELETE" });
-            router.refresh();
-        } catch {
-            toast.error("Failed to remove stuck blog.");
-        }
-    };
-
-    const handleHashnodeSync = async (id: string) => {
-        setSyncingIds(prev => new Set([...prev, id]));
-        try {
-            const res = await fetch(`/api/blogs/${id}/hashnode-sync`, { method: "POST" });
-            const data = await res.json();
-            if (res.ok && data.success) {
-                toast.success(
-                    <div className="flex flex-col gap-1">
-                        <span className="font-semibold">Synced to Hashnode!</span>
-                        <a href={data.hashnodeUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:underline">View on Hashnode →</a>
-                    </div>,
-                    { duration: 6000 }
-                );
+    const handleDeleteStuck = useCallback(
+        async (id: string) => {
+            try {
+                const res = await fetch(`/api/blogs/${id}`, { method: "DELETE" });
+                if (!res.ok) throw new Error("Delete request failed");
+                toast.success("Blog removed.");
                 router.refresh();
-            } else {
-                toast.error(data.error || "Hashnode sync failed.");
+            } catch {
+                toast.error("Failed to remove blog.");
             }
-        } catch {
-            toast.error("Network error — could not sync to Hashnode.");
-        } finally {
-            setSyncingIds(prev => { const next = new Set(prev); next.delete(id); return next; });
-        }
-    };
+        },
+        [router]
+    );
 
-    const hasActiveBlog = blogs?.some(b => {
-        if (b.status !== "GENERATING" && b.status !== "QUEUED") return false;
-        return Date.now() - new Date(b.createdAt).getTime() < TEN_MINUTES_MS;
-    });
-    const pollCountRef = useRef(0);
+    const handleHashnodeSync = useCallback(
+        async (id: string) => {
+            setSyncingIds((previous) => new Set([...previous, id]));
+            try {
+                const res = await fetch(`/api/blogs/${id}/hashnode-sync`, { method: "POST" });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    toast.success(
+                        <div className="flex flex-col gap-1">
+                            <span className="font-semibold">Synced to Hashnode</span>
+                            {data.hashnodeUrl && (
+                                <a
+                                    href={data.hashnodeUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-xs text-blue-400 hover:underline"
+                                >
+                                    View on Hashnode →
+                                </a>
+                            )}
+                        </div>,
+                        { duration: 6000 }
+                    );
+                    router.refresh();
+                } else {
+                    toast.error(data.error || "Hashnode sync failed.");
+                }
+            } catch {
+                toast.error("Network error — could not sync to Hashnode.");
+            } finally {
+                setSyncingIds((previous) => {
+                    const next = new Set(previous);
+                    next.delete(id);
+                    return next;
+                });
+            }
+        },
+        [router]
+    );
+
+    const hasActiveBlog = useMemo(
+        () =>
+            blogs?.some((blog) => {
+                if (blog.status !== "GENERATING" && blog.status !== "QUEUED") return false;
+                const createdAt = new Date(blog.createdAt).getTime();
+                if (Number.isNaN(createdAt)) return false;
+                return Date.now() - createdAt < TEN_MINUTES_MS;
+            }) ?? false,
+        [blogs]
+    );
 
     useEffect(() => {
-        if (!hasActiveBlog) { pollCountRef.current = 0; return; }
+        if (!hasActiveBlog) {
+            pollCountRef.current = 0;
+            return;
+        }
         const interval = setInterval(() => {
-            if (pollCountRef.current >= 30) { clearInterval(interval); pollCountRef.current = 0; return; }
+            if (pollCountRef.current >= 30) {
+                clearInterval(interval);
+                pollCountRef.current = 0;
+                return;
+            }
             if (document.visibilityState !== "visible") return;
             if (previewBlog || linkModalBlog || repurposeBlog) return;
             pollCountRef.current += 1;
             router.refresh();
         }, 8000);
         return () => clearInterval(interval);
-    }, [hasActiveBlog, previewBlog, linkModalBlog, repurposeBlog]);
+    }, [hasActiveBlog, previewBlog, linkModalBlog, repurposeBlog, router]);
 
-    const repurposeBannerBlog = blogs?.find(
-        (b: any) => b.status === "PUBLISHED" && b.id !== dismissedRepurposeId
-    ) ?? null;
-
-    const filtered = useMemo(() => {
-        const tabFilter = TABS.find(t => t.key === activeTab)!.match;
-        let result = (blogs ?? []).filter(tabFilter);
-
-        if (searchQuery.trim()) {
-            const q = searchQuery.toLowerCase();
-            result = result.filter(
-                (b: any) =>
-                    b.title?.toLowerCase().includes(q) ||
-                    b.targetKeywords?.some((k: string) => k.toLowerCase().includes(q))
+    const filteredBlogs = useMemo(() => {
+        const normalizedSearch = search.trim().toLowerCase();
+        const result = [...(blogs ?? [])].filter((blog) => {
+            if (statusFilter === "DRAFT" && blog.status !== "DRAFT") return false;
+            if (statusFilter === "REVIEW" && !isReviewStatus(blog.status)) return false;
+            if (statusFilter === "PUBLISHED" && blog.status !== "PUBLISHED") return false;
+            if (statusFilter === "FAILED" && blog.status !== "FAILED") return false;
+            if (statusFilter === "GENERATING" && !isGeneratingStatus(blog.status)) return false;
+            if (!normalizedSearch) return true;
+            const title = blog.title?.toLowerCase() ?? "";
+            const keyword = blog.targetKeywords?.join(" ").toLowerCase() ?? "";
+            const slug = blog.slug?.toLowerCase() ?? "";
+            return (
+                title.includes(normalizedSearch) ||
+                keyword.includes(normalizedSearch) ||
+                slug.includes(normalizedSearch)
             );
-        }
+        });
 
-        result.sort((a: any, b: any) => {
-            switch (sortKey) {
-                case "oldest":
-                    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-                case "score-desc":
-                    return (b.validationScore ?? 0) - (a.validationScore ?? 0);
-                case "score-asc":
-                    return (a.validationScore ?? 0) - (b.validationScore ?? 0);
-                default:
-                    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        result.sort((a, b) => {
+            if (sort === "SCORE_DESC") {
+                const scoreA = a.validationScore == null ? -1 : Number(a.validationScore);
+                const scoreB = b.validationScore == null ? -1 : Number(b.validationScore);
+                return scoreB - scoreA;
             }
+            if (sort === "CREATED_ASC") {
+                return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+            }
+            if (sort === "CREATED_DESC") {
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            }
+            const updatedA = new Date(a.updatedAt ?? a.createdAt).getTime();
+            const updatedB = new Date(b.updatedAt ?? b.createdAt).getTime();
+            return updatedB - updatedA;
         });
 
         return result;
-    }, [blogs, activeTab, searchQuery, sortKey]);
+    }, [blogs, search, statusFilter, sort]);
 
-    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-    const safePage = Math.min(page, totalPages - 1);
-    const paged = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+    const totalPages = Math.max(1, Math.ceil(filteredBlogs.length / PAGE_SIZE));
+    const currentPage = Math.min(page, totalPages);
 
-    useEffect(() => { setPage(0); }, [activeTab, searchQuery, sortKey]);
+    const paginatedBlogs = useMemo(() => {
+        const start = (currentPage - 1) * PAGE_SIZE;
+        return filteredBlogs.slice(start, start + PAGE_SIZE);
+    }, [filteredBlogs, currentPage]);
+
+    const stats = useMemo(() => {
+        const all = blogs ?? [];
+        return {
+            total: all.length,
+            draft: all.filter((blog) => blog.status === "DRAFT").length,
+            review: all.filter((blog) => isReviewStatus(blog.status)).length,
+            published: all.filter((blog) => blog.status === "PUBLISHED").length,
+            generating: all.filter((blog) => isGeneratingStatus(blog.status)).length,
+            issues: all.filter((blog) => {
+                const hasErrors =
+                    Array.isArray(blog.validationErrors) && blog.validationErrors.length > 0;
+                const lowScore =
+                    blog.validationScore != null && Number(blog.validationScore) < 60;
+                return hasErrors || lowScore || blog.status === "FAILED";
+            }).length,
+        };
+    }, [blogs]);
+
+    const repurposeBannerBlog =
+        blogs?.find(
+            (blog) => blog.status === "PUBLISHED" && blog.id !== dismissedRepurposeId
+        ) ?? null;
+
+    const activeFilterCount = (statusFilter !== "ALL" ? 1 : 0) + (search.trim() ? 1 : 0);
+
+    const clearFilters = useCallback(() => {
+        setSearch("");
+        setStatusFilter("ALL");
+        setPage(1);
+    }, []);
 
     const toggleSelect = useCallback((id: string) => {
-        setSelected(prev => {
+        setSelected((prev) => {
             const next = new Set(prev);
-            if (next.has(id)) next.delete(id); else next.add(id);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
             return next;
         });
     }, []);
 
     const toggleAll = useCallback(() => {
-        const pageIds = paged.map((b: any) => b.id as string);
-        const allSelected = pageIds.every(id => selected.has(id));
-        setSelected(prev => {
+        const pageIds = paginatedBlogs.map((b) => b.id);
+        const allSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+        setSelected((prev) => {
             const next = new Set(prev);
-            pageIds.forEach(id => allSelected ? next.delete(id) : next.add(id));
+            pageIds.forEach((id) => (allSelected ? next.delete(id) : next.add(id)));
             return next;
         });
-    }, [paged, selected]);
+    }, [paginatedBlogs, selected]);
 
-    const tabCounts = useMemo(() => {
-        const source = blogs ?? [];
-        return TABS.reduce<Record<string, number>>((acc, tab) => {
-            acc[tab.key] = source.filter(tab.match).length;
-            return acc;
-        }, {});
-    }, [blogs]);
-
-    const formatDate = (d: string) => {
-        const date = new Date(d);
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const getPageNumbers = () => {
+        if (totalPages <= 5) {
+            return Array.from({ length: totalPages }, (_, index) => index + 1);
+        }
+        if (currentPage <= 3) return [1, 2, 3, 4, totalPages];
+        if (currentPage >= totalPages - 2) {
+            return [1, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+        }
+        return [1, currentPage - 1, currentPage, currentPage + 1, totalPages];
     };
+
+    const sortOptions: { key: SortOption; label: string }[] = [
+        { key: "UPDATED_DESC", label: "Recently updated" },
+        { key: "CREATED_DESC", label: "Newest first" },
+        { key: "CREATED_ASC", label: "Oldest first" },
+        { key: "SCORE_DESC", label: "Highest score" },
+    ];
 
     return (
         <>
-            {repurposeBannerBlog && (
-                <div className="mb-3 flex items-center gap-3 rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3">
-                    <Zap className="h-4 w-4 shrink-0 text-amber-400" />
-                    <p className="min-w-0 flex-1 text-xs leading-snug text-amber-300">
-                        <span className="font-semibold">🎉 &quot;{repurposeBannerBlog.title}&quot;</span> is live — repurpose it into LinkedIn, Twitter, email &amp; more in 30 seconds.
-                    </p>
-                    <button onClick={() => setRepurposeBlog(repurposeBannerBlog)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-500/30 bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 transition-colors hover:bg-amber-500/25">
-                        Repurpose it →
-                    </button>
-                    <button
-                        onClick={() => {
-                            setDismissedRepurposeId(repurposeBannerBlog.id);
-                            localStorage.setItem("repurpose_banner_dismissed", repurposeBannerBlog.id);
-                        }}
-                        className="shrink-0 rounded-lg p-1 text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                        <X className="h-3.5 w-3.5" />
-                    </button>
-                </div>
-            )}
-
-            <div className="overflow-hidden rounded-2xl border border-border bg-card/40 shadow-sm">
-                <div className="flex flex-col gap-3 border-b border-border px-4 pb-3 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-wrap items-center gap-1">
-                        {TABS.map(tab => (
-                            <button
-                                key={tab.key}
-                                onClick={() => setActiveTab(tab.key)}
-                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                    activeTab === tab.key
-                                        ? "bg-foreground/10 text-foreground"
-                                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                                }`}
-                            >
-                                {tab.label}
-                                <span className={`ml-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
-                                    activeTab === tab.key ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"
-                                }`}>
-                                    {tabCounts[tab.key] ?? 0}
-                                </span>
-                            </button>
-                        ))}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <div className="relative">
-                            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                            <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search title or keyword…"
-                                className="h-8 w-48 rounded-lg border border-border bg-background pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
-                            />
-                            {searchQuery && (
-                                <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                                    <X className="h-3 w-3" />
-                                </button>
-                            )}
-                        </div>
-
-                        <div ref={sortRef} className="relative">
-                            <button onClick={() => setShowSort(!showSort)} className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:text-foreground">
-                                <ArrowUpDown className="h-3.5 w-3.5" />
-                                <span className="hidden sm:inline">{SORT_OPTIONS.find(s => s.key === sortKey)?.label}</span>
-                            </button>
-                            {showSort && (
-                                <div className="absolute right-0 top-full z-50 mt-1 w-40 overflow-hidden rounded-xl border border-border bg-popover shadow-xl">
-                                    {SORT_OPTIONS.map(opt => (
-                                        <button
-                                            key={opt.key}
-                                            onClick={() => { setSortKey(opt.key); setShowSort(false); }}
-                                            className={`flex w-full px-3 py-2 text-xs font-medium transition-colors hover:bg-accent ${sortKey === opt.key ? "text-foreground" : "text-muted-foreground"}`}
-                                        >
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Mobile card list */}
-                <div className="md:hidden divide-y divide-border">
-                    {paged.length > 0 ? (
-                        paged.map((blog: any) => {
-                            const blogUrl = blog.status === "PUBLISHED" ? (blog.hashnodeUrl || blog.mediumUrl || null) : null;
-                            const isStuck = (blog.status === "GENERATING" || blog.status === "QUEUED") && Date.now() - new Date(blog.createdAt).getTime() > TEN_MINUTES_MS;
-
-                            return (
-                                <div key={blog.id} className="space-y-3 p-4">
-                                    <div className="flex items-start justify-between gap-2">
-                                        <p className="flex-1 text-sm font-medium leading-snug line-clamp-2">
-                                            {blogUrl ? (
-                                                <a href={blogUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-primary">
-                                                    {blog.title}
-                                                    <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-40" />
-                                                </a>
-                                            ) : blog.title}
-                                        </p>
-                                        <StatusBadge status={blog.status} createdAt={blog.createdAt} />
-                                    </div>
-
-                                    <div className="flex items-center justify-between">
-                                        <span className="max-w-[55%] truncate text-xs text-muted-foreground">{blog.targetKeywords?.[0] || "Auto-assigned"}</span>
-                                        <div className="flex items-center gap-3">
-                                            {blog.validationScore != null && <CircularScore score={blog.validationScore as number} />}
-                                            <AiReadinessBadge blog={blog} />
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center justify-between">
-                                        <SyndicationIcons blog={blog} onHashnodeSync={handleHashnodeSync} syncingIds={syncingIds} />
-                                        <span className="text-xs text-muted-foreground">{formatDate(blog.createdAt)}</span>
-                                    </div>
-
-                                    <div className="border-t border-border pt-2">
-                                        <RowActions
-                                            blog={blog}
-                                            blogUrl={blogUrl}
-                                            isStuck={isStuck}
-                                            onPreview={() => setPreviewBlog(blog)}
-                                            onRepurpose={() => setRepurposeBlog(blog)}
-                                            onLinkModal={() => setLinkModalBlog(blog)}
-                                            onDeleteStuck={() => handleDeleteStuck(blog.id)}
-                                        />
-                                    </div>
-                                </div>
-                            );
-                        })
-                    ) : (
-                        <div className="px-6 py-16 text-center">
-                            <p className="font-medium text-muted-foreground">No articles match this filter</p>
-                            <p className="mt-1 text-xs text-muted-foreground">Try a different tab or clear your search.</p>
-                        </div>
-                    )}
-                </div>
-
-                {/* Desktop table */}
-                <div className="hidden md:block overflow-x-auto">
-                    <table className="w-full text-left text-sm whitespace-nowrap">
-                        <thead className="border-b border-border bg-card/60 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                            <tr>
-                                <th className="w-10 px-4 py-3">
-                                    <input
-                                        type="checkbox"
-                                        checked={paged.length > 0 && paged.every((b: any) => selected.has(b.id))}
-                                        onChange={toggleAll}
-                                        className="h-3.5 w-3.5 rounded border-border accent-emerald-500"
-                                    />
-                                </th>
-                                <th className="px-4 py-3 font-medium">Title</th>
-                                <th className="px-4 py-3 font-medium">Keyword</th>
-                                <th className="px-4 py-3 font-medium">SEO Score</th>
-                                <th className="px-4 py-3 font-medium">AI Ready</th>
-                                <th className="px-4 py-3 font-medium">Status</th>
-                                <th className="px-4 py-3 font-medium">Published On</th>
-                                <th className="px-4 py-3 font-medium">Date</th>
-                                <th className="px-4 py-3 text-right font-medium">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                            {paged.length > 0 ? (
-                                paged.map((blog: any) => {
-                                    const blogUrl = blog.status === "PUBLISHED" ? (blog.hashnodeUrl || blog.mediumUrl || null) : null;
-                                    const isStuck = (blog.status === "GENERATING" || blog.status === "QUEUED") && Date.now() - new Date(blog.createdAt).getTime() > TEN_MINUTES_MS;
-
-                                    return (
-                                        <tr key={blog.id} className="group transition-colors hover:bg-card/80">
-                                            <td className="px-4 py-3.5">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selected.has(blog.id)}
-                                                    onChange={() => toggleSelect(blog.id)}
-                                                    className="h-3.5 w-3.5 rounded border-border accent-emerald-500"
-                                                />
-                                            </td>
-                                            <td className="max-w-[240px] truncate px-4 py-3.5 font-medium" title={blog.title}>
-                                                {blogUrl ? (
-                                                    <a href={blogUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 transition-colors hover:text-primary">
-                                                        {blog.title}
-                                                        <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-40" />
-                                                    </a>
-                                                ) : blog.title}
-                                            </td>
-                                            <td className="px-4 py-3.5 text-muted-foreground">{blog.targetKeywords?.[0] || "Auto-assigned"}</td>
-                                            <td className="px-4 py-3.5">
-                                                {blog.validationScore != null ? (
-                                                    <CircularScore score={blog.validationScore as number} />
-                                                ) : (
-                                                    <span className="text-xs text-zinc-700">—</span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3.5">
-                                                <AiReadinessBadge blog={blog} />
-                                            </td>
-                                            <td className="px-4 py-3.5">
-                                                <StatusBadge status={blog.status} createdAt={blog.createdAt} />
-                                            </td>
-                                            <td className="px-4 py-3.5">
-                                                <SyndicationIcons blog={blog} onHashnodeSync={handleHashnodeSync} syncingIds={syncingIds} />
-                                            </td>
-                                            <td className="px-4 py-3.5 text-muted-foreground">{formatDate(blog.createdAt)}</td>
-                                            <td className="px-4 py-3.5 text-right">
-                                                <RowActions
-                                                    blog={blog}
-                                                    blogUrl={blogUrl}
-                                                    isStuck={isStuck}
-                                                    onPreview={() => setPreviewBlog(blog)}
-                                                    onRepurpose={() => setRepurposeBlog(blog)}
-                                                    onLinkModal={() => setLinkModalBlog(blog)}
-                                                    onDeleteStuck={() => handleDeleteStuck(blog.id)}
-                                                />
-                                            </td>
-                                        </tr>
-                                    );
-                                })
-                            ) : (
-                                <tr>
-                                    <td colSpan={9} className="px-6 py-20 text-center">
-                                        <p className="font-medium text-muted-foreground">No articles match this filter</p>
-                                        <p className="mt-1 text-xs text-muted-foreground">Try a different tab or clear your search.</p>
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-
-                {filtered.length > PAGE_SIZE && (
-                    <div className="flex items-center justify-between border-t border-border px-4 py-3">
-                        <p className="text-xs text-muted-foreground">
-                            Showing {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
-                        </p>
-                        <div className="flex items-center gap-1">
-                            <button
-                                onClick={() => setPage(p => Math.max(0, p - 1))}
-                                disabled={safePage === 0}
-                                className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
-                            >
-                                <ChevronLeft className="h-4 w-4" />
-                            </button>
-                            {Array.from({ length: totalPages }, (_, i) => (
+            <div className="space-y-4">
+                {repurposeBannerBlog && (
+                    <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-r from-amber-500/10 via-background to-background">
+                        <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-400">
+                                <Zap className="h-5 w-5" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-foreground">
+                                    Your latest post is live
+                                </p>
+                                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                    {repurposeBannerBlog.title}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
                                 <button
-                                    key={i}
-                                    onClick={() => setPage(i)}
-                                    className={`h-7 w-7 rounded-lg text-xs font-semibold transition-colors ${
-                                        i === safePage ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:bg-accent"
-                                    }`}
+                                    type="button"
+                                    onClick={() => setRepurposeBlog(repurposeBannerBlog)}
+                                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/15 px-3.5 py-2 text-xs font-bold text-amber-300 transition-colors hover:bg-amber-500/20"
                                 >
-                                    {i + 1}
+                                    Repurpose content
+                                    <span aria-hidden>→</span>
                                 </button>
-                            ))}
-                            <button
-                                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                                disabled={safePage >= totalPages - 1}
-                                className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
-                            >
-                                <ChevronRight className="h-4 w-4" />
-                            </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setDismissedRepurposeId(repurposeBannerBlog.id);
+                                        localStorage.setItem(
+                                            "repurpose_banner_dismissed",
+                                            repurposeBannerBlog.id
+                                        );
+                                    }}
+                                    aria-label="Dismiss repurpose suggestion"
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
+
+                <div className="rounded-2xl border border-border bg-card/30 p-4">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                        <button
+                            type="button"
+                            onClick={() => setStatusFilter("ALL")}
+                            className={`rounded-xl border p-3 text-left transition-colors ${
+                                statusFilter === "ALL"
+                                    ? "border-primary/30 bg-primary/5"
+                                    : "border-border bg-background/40 hover:bg-muted/40"
+                            }`}
+                        >
+                            <div className="flex items-center justify-between">
+                                <FileText className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-lg font-bold text-foreground">
+                                    {stats.total}
+                                </span>
+                            </div>
+                            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+                                All content
+                            </p>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setStatusFilter("DRAFT")}
+                            className={`rounded-xl border p-3 text-left transition-colors ${
+                                statusFilter === "DRAFT"
+                                    ? "border-amber-500/30 bg-amber-500/5"
+                                    : "border-border bg-background/40 hover:bg-muted/40"
+                            }`}
+                        >
+                            <div className="flex items-center justify-between">
+                                <CircleDot className="h-4 w-4 text-amber-400" />
+                                <span className="text-lg font-bold text-foreground">
+                                    {stats.draft}
+                                </span>
+                            </div>
+                            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+                                Drafts
+                            </p>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setStatusFilter("REVIEW")}
+                            className={`rounded-xl border p-3 text-left transition-colors ${
+                                statusFilter === "REVIEW"
+                                    ? "border-orange-500/30 bg-orange-500/5"
+                                    : "border-border bg-background/40 hover:bg-muted/40"
+                            }`}
+                        >
+                            <div className="flex items-center justify-between">
+                                <Eye className="h-4 w-4 text-orange-400" />
+                                <span className="text-lg font-bold text-foreground">
+                                    {stats.review}
+                                </span>
+                            </div>
+                            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+                                In review
+                            </p>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setStatusFilter("PUBLISHED")}
+                            className={`rounded-xl border p-3 text-left transition-colors ${
+                                statusFilter === "PUBLISHED"
+                                    ? "border-emerald-500/30 bg-emerald-500/5"
+                                    : "border-border bg-background/40 hover:bg-muted/40"
+                            }`}
+                        >
+                            <div className="flex items-center justify-between">
+                                <Check className="h-4 w-4 text-emerald-400" />
+                                <span className="text-lg font-bold text-foreground">
+                                    {stats.published}
+                                </span>
+                            </div>
+                            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+                                Published
+                            </p>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setStatusFilter("GENERATING")}
+                            className={`rounded-xl border p-3 text-left transition-colors ${
+                                statusFilter === "GENERATING"
+                                    ? "border-blue-500/30 bg-blue-500/5"
+                                    : "border-border bg-background/40 hover:bg-muted/40"
+                            }`}
+                        >
+                            <div className="flex items-center justify-between">
+                                <RefreshCw className="h-4 w-4 text-blue-400" />
+                                <span className="text-lg font-bold text-foreground">
+                                    {stats.generating}
+                                </span>
+                            </div>
+                            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+                                Writing
+                            </p>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setStatusFilter("FAILED")}
+                            className={`rounded-xl border p-3 text-left transition-colors ${
+                                statusFilter === "FAILED"
+                                    ? "border-red-500/30 bg-red-500/5"
+                                    : "border-border bg-background/40 hover:bg-muted/40"
+                            }`}
+                        >
+                            <div className="flex items-center justify-between">
+                                <AlertTriangle className="h-4 w-4 text-red-400" />
+                                <span className="text-lg font-bold text-foreground">
+                                    {stats.issues}
+                                </span>
+                            </div>
+                            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+                                Issues
+                            </p>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="overflow-hidden rounded-2xl border border-border bg-card/40">
+                    <div className="flex flex-col gap-3 border-b border-border px-4 pb-3 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-2">
+                            <div className="relative">
+                                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                                <input
+                                    type="text"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder="Search title, keyword, or slug…"
+                                    className="h-8 w-56 rounded-lg border border-border bg-background pl-8 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
+                                />
+                                {search && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSearch("")}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                )}
+                            </div>
+                            {activeFilterCount > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={clearFilters}
+                                    className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                                >
+                                    <X className="h-3 w-3" />
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">
+                                {filteredBlogs.length}{" "}
+                                {filteredBlogs.length === 1 ? "result" : "results"}
+                            </span>
+                            <div ref={sortRef} className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowSort(!showSort)}
+                                    className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                                >
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                    <span className="hidden sm:inline">
+                                        {sortOptions.find((s) => s.key === sort)?.label}
+                                    </span>
+                                </button>
+                                {showSort && (
+                                    <div className="absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-popover shadow-xl">
+                                        {sortOptions.map((opt) => (
+                                            <button
+                                                type="button"
+                                                key={opt.key}
+                                                onClick={() => {
+                                                    setSort(opt.key);
+                                                    setShowSort(false);
+                                                }}
+                                                className={`flex w-full px-3 py-2 text-xs font-medium transition-colors hover:bg-accent ${
+                                                    sort === opt.key
+                                                        ? "text-foreground"
+                                                        : "text-muted-foreground"
+                                                }`}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="md:hidden divide-y divide-border">
+                        {paginatedBlogs.length > 0 ? (
+                            paginatedBlogs.map((blog) => {
+                                const blogUrl = getBlogUrl(blog);
+                                return (
+                                    <div key={blog.id} className="space-y-3 p-4">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <p className="flex-1 text-sm font-medium leading-snug line-clamp-2">
+                                                {blogUrl ? (
+                                                    <a
+                                                        href={blogUrl}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="inline-flex items-center gap-1 hover:text-primary"
+                                                    >
+                                                        {blog.title}
+                                                        <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-40" />
+                                                    </a>
+                                                ) : (
+                                                    blog.title
+                                                )}
+                                            </p>
+                                            <StatusBadge blog={blog} />
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="max-w-[55%] truncate text-xs text-muted-foreground">
+                                                {blog.targetKeywords?.[0] || "Auto-assigned"}
+                                            </span>
+                                            <QualityScore blog={blog} />
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <DistributionLinks
+                                                blog={blog}
+                                                onHashnodeSync={handleHashnodeSync}
+                                                syncing={syncingIds.has(blog.id)}
+                                            />
+                                            <span className="text-xs text-muted-foreground">
+                                                {formatRelativeDate(blog.updatedAt ?? blog.createdAt)}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-end border-t border-border pt-2">
+                                            <ActionMenu
+                                                blog={blog}
+                                                onReview={() => setPreviewBlog(blog)}
+                                                onRepurpose={() => setRepurposeBlog(blog)}
+                                                onLinks={() => setLinkModalBlog(blog)}
+                                                onDelete={() => handleDeleteStuck(blog.id)}
+                                                onSnippet={() => {}}
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        ) : (
+                            <EmptyState
+                                searchActive={activeFilterCount > 0}
+                                onClearSearch={clearFilters}
+                            />
+                        )}
+                    </div>
+
+                    <div className="hidden md:block overflow-x-auto">
+                        <table className="w-full text-left text-sm whitespace-nowrap">
+                            <thead className="border-b border-border bg-card/60 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                <tr>
+                                    <th className="w-10 px-4 py-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={
+                                                paginatedBlogs.length > 0 &&
+                                                paginatedBlogs.every((b) => selected.has(b.id))
+                                            }
+                                            onChange={toggleAll}
+                                            className="h-3.5 w-3.5 rounded border-border accent-emerald-500"
+                                        />
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">Title</th>
+                                    <th className="px-4 py-3 font-medium">Keyword</th>
+                                    <th className="px-4 py-3 font-medium">SEO Score</th>
+                                    <th className="px-4 py-3 font-medium">Status</th>
+                                    <th className="px-4 py-3 font-medium">Published On</th>
+                                    <th className="px-4 py-3 font-medium">Updated</th>
+                                    <th className="px-4 py-3 text-right font-medium">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                                {paginatedBlogs.length > 0 ? (
+                                    paginatedBlogs.map((blog) => {
+                                        const blogUrl = getBlogUrl(blog);
+                                        return (
+                                            <tr
+                                                key={blog.id}
+                                                className="group transition-colors hover:bg-card/80"
+                                            >
+                                                <td className="px-4 py-3.5">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selected.has(blog.id)}
+                                                        onChange={() => toggleSelect(blog.id)}
+                                                        className="h-3.5 w-3.5 rounded border-border accent-emerald-500"
+                                                    />
+                                                </td>
+                                                <td
+                                                    className="max-w-[240px] truncate px-4 py-3.5 font-medium"
+                                                    title={blog.title}
+                                                >
+                                                    {blogUrl ? (
+                                                        <a
+                                                            href={blogUrl}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="inline-flex items-center gap-1.5 transition-colors hover:text-primary"
+                                                        >
+                                                            {blog.title}
+                                                            <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-40" />
+                                                        </a>
+                                                    ) : (
+                                                        blog.title
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3.5 text-muted-foreground">
+                                                    {blog.targetKeywords?.[0] || "Auto-assigned"}
+                                                </td>
+                                                <td className="px-4 py-3.5">
+                                                    <QualityScore blog={blog} />
+                                                </td>
+                                                <td className="px-4 py-3.5">
+                                                    <StatusBadge blog={blog} />
+                                                </td>
+                                                <td className="px-4 py-3.5">
+                                                    <DistributionLinks
+                                                        blog={blog}
+                                                        onHashnodeSync={handleHashnodeSync}
+                                                        syncing={syncingIds.has(blog.id)}
+                                                    />
+                                                </td>
+                                                <td className="px-4 py-3.5 text-muted-foreground">
+                                                    <span title={formatDate(blog.updatedAt ?? blog.createdAt)}>
+                                                        {formatRelativeDate(blog.updatedAt ?? blog.createdAt)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3.5 text-right">
+                                                    <ActionMenu
+                                                        blog={blog}
+                                                        onReview={() => setPreviewBlog(blog)}
+                                                        onRepurpose={() => setRepurposeBlog(blog)}
+                                                        onLinks={() => setLinkModalBlog(blog)}
+                                                        onDelete={() => handleDeleteStuck(blog.id)}
+                                                        onSnippet={() => {}}
+                                                    />
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                ) : (
+                                    <tr>
+                                        <td colSpan={8} className="p-0">
+                                            <EmptyState
+                                                searchActive={activeFilterCount > 0}
+                                                onClearSearch={clearFilters}
+                                            />
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {filteredBlogs.length > PAGE_SIZE && (
+                        <div className="flex items-center justify-between border-t border-border px-4 py-3">
+                            <p className="text-xs text-muted-foreground">
+                                Showing {(currentPage - 1) * PAGE_SIZE + 1}–
+                                {Math.min(currentPage * PAGE_SIZE, filteredBlogs.length)} of{" "}
+                                {filteredBlogs.length}
+                            </p>
+                            <div className="flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                    disabled={currentPage === 1}
+                                    aria-label="Previous page"
+                                    className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                </button>
+                                {getPageNumbers().map((pageNum, idx, arr) => {
+                                    const showEllipsis =
+                                        idx > 0 && pageNum - arr[idx - 1] > 1;
+                                    return (
+                                        <span key={pageNum} className="flex items-center">
+                                            {showEllipsis && (
+                                                <span className="px-1 text-xs text-muted-foreground">
+                                                    …
+                                                </span>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => setPage(pageNum)}
+                                                className={`h-7 w-7 rounded-lg text-xs font-semibold transition-colors ${
+                                                    pageNum === currentPage
+                                                        ? "bg-foreground/10 text-foreground"
+                                                        : "text-muted-foreground hover:bg-accent"
+                                                }`}
+                                            >
+                                                {pageNum}
+                                            </button>
+                                        </span>
+                                    );
+                                })}
+                                <button
+                                    type="button"
+                                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage >= totalPages}
+                                    aria-label="Next page"
+                                    className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
+                                >
+                                    <ChevronRight className="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {previewBlog && (
                 <ReviewBlogModal
-                    blog={previewBlog}
+                    blog={previewBlog as any}
                     onClose={() => {
                         setPreviewBlog(null);
                         if (pendingRefreshRef.current) {
@@ -897,9 +1538,13 @@ export function BlogList({ blogs, success, initialReviewId }: { blogs: any[]; su
 
             {repurposeBlog && (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-                    onClick={(e) => { if (e.target === e.currentTarget) setRepurposeBlog(null); }}
-                    onKeyDown={(e) => { if (e.key === "Escape") setRepurposeBlog(null); }}
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+                    onMouseDown={(e) => {
+                        if (e.target === e.currentTarget) setRepurposeBlog(null);
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === "Escape") setRepurposeBlog(null);
+                    }}
                     role="dialog"
                     aria-modal="true"
                     aria-label="Repurpose content"
@@ -907,8 +1552,8 @@ export function BlogList({ blogs, success, initialReviewId }: { blogs: any[]; su
                     <div className="w-full max-w-2xl">
                         <RepurposeTab
                             blogId={repurposeBlog.id}
-                            blogTitle={repurposeBlog.title}
-                            blogSlug={repurposeBlog.slug}
+                            blogTitle={repurposeBlog.title ?? ""}
+                            blogSlug={repurposeBlog.slug ?? ""}
                             onClose={() => setRepurposeBlog(null)}
                         />
                     </div>
