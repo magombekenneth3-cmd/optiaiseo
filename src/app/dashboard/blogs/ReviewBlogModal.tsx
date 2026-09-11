@@ -1,442 +1,708 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
-import { logger } from "@/lib/logger";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  X, CheckCircle, Loader2, FileText, Code2, Save, Sparkles,
-  ChevronDown, ChevronUp, Shield, AlertTriangle, Info,
+    AlertTriangle,
+    Check,
+    CheckCircle2,
+    ChevronRight,
+    Clock3,
+    FileText,
+    Info,
+    Loader2,
+    Save,
+    ShieldCheck,
+    Sparkles,
+    X,
+    Zap,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeExternalLinks from "rehype-external-links";
-import { ContentEditor } from "./ContentEditor";
 import { toast } from "sonner";
+import { ContentEditor } from "./ContentEditor";
 import type { ContentScoreResult } from "@/lib/content-scoring";
 import type { CitationCriterion } from "@/lib/blog/ai-citation-template";
+import { logger } from "@/lib/logger";
 
 interface Blog {
-  id: string;
-  title: string;
-  content: string;
-  status: string;
-  targetKeywords: string[];
-  citationScore?: number | null;
-  citationCriteria?: unknown;
+    id: string;
+    title: string;
+    content: string;
+    status: string;
+    targetKeywords: string[];
+    citationScore?: number | null;
+    citationCriteria?: unknown;
 }
 
+type ReviewMode = "write" | "review";
 
-function CitationScorePanel({
-  score,
-  criteria,
-}: {
-  score: number;
-  criteria: CitationCriterion[];
-}) {
-  const [expanded, setExpanded] = useState(false);
+interface ReviewBlogModalProps {
+    blog: Blog;
+    onClose: () => void;
+    onPublish: (id: string) => Promise<{ success: boolean; mediumUrl?: string; hashnodeUrl?: string }>;
+}
 
-  const color =
-    score >= 80 ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/8" :
-    score >= 60 ? "text-amber-400 border-amber-500/30 bg-amber-500/8" :
-                  "text-rose-400 border-rose-500/30 bg-rose-500/8";
+function getScoreState(score: number) {
+    if (score >= 80) return { label: "Ready to publish", shortLabel: "Ready", tone: "success" as const };
+    if (score >= 60) return { label: "Needs minor work", shortLabel: "Needs work", tone: "warning" as const };
+    return { label: "Needs attention", shortLabel: "Needs attention", tone: "danger" as const };
+}
 
-  const barColor =
-    score >= 80 ? "bg-emerald-500" :
-    score >= 60 ? "bg-amber-500" :
-                  "bg-rose-500";
+function toneClasses(tone: "success" | "warning" | "danger") {
+    switch (tone) {
+        case "success": return { text: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", bar: "bg-emerald-500" };
+        case "warning": return { text: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", bar: "bg-amber-500" };
+        default: return { text: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/20", bar: "bg-rose-500" };
+    }
+}
 
-  const label =
-    score >= 80 ? "Citation Ready" :
-    score >= 60 ? "Needs Minor Work" :
-                  "Not Citation Ready";
+function ReadinessCard({ score, criteria }: { score: number; criteria: CitationCriterion[] }) {
+    const state = getScoreState(score);
+    const tone = toneClasses(state.tone);
 
-  const topFix = criteria.find((c) => !c.passed && c.weight === Math.max(...criteria.filter(x => !x.passed).map(x => x.weight)));
+    const failed = useMemo(
+        () => criteria.filter((c) => !c.passed).sort((a, b) => b.weight - a.weight),
+        [criteria]
+    );
+    const passed = useMemo(() => criteria.filter((c) => c.passed), [criteria]);
 
-  return (
-    <div className={`rounded-xl border ${color} px-4 py-3 transition-all`}>
-      {/* Header row */}
-      <div
-        className="flex items-center justify-between gap-3 cursor-pointer"
-        onClick={() => setExpanded((v) => !v)}
-        role="button"
-        aria-expanded={expanded}
-      >
-        <div className="flex items-center gap-2.5">
-          <Shield className="w-4 h-4 shrink-0" />
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wider">
-              AI Citation Score
-            </span>
-            <span className="ml-2 text-xs font-medium opacity-70">{label}</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Mini bar */}
-          <div className="hidden sm:flex items-center gap-2 w-28">
-            <div className="flex-1 h-1.5 rounded-full bg-current opacity-20">
-              <div
-                className={`h-1.5 rounded-full ${barColor}`}
-                style={{ width: `${score}%` }}
-              />
-            </div>
-            <span className="text-sm font-black tabular-nums">{score}</span>
-            <span className="text-xs opacity-60">/100</span>
-          </div>
-          {expanded ? <ChevronUp className="w-3.5 h-3.5 opacity-60" /> : <ChevronDown className="w-3.5 h-3.5 opacity-60" />}
-        </div>
-      </div>
-
-      {/* Top fix line — always visible when failing */}
-      {!expanded && score < 60 && topFix && (
-        <p className="mt-2 text-xs opacity-80 leading-relaxed pl-6.5">
-          <span className="font-semibold">Top fix: </span>{topFix.fix}
-        </p>
-      )}
-
-      {/* Expanded criteria breakdown */}
-      {expanded && (
-        <div className="mt-3 flex flex-col gap-1.5 pl-1">
-          {criteria.map((c) => (
-            <div key={c.id} className="flex items-start gap-2.5 text-xs">
-              {c.passed ? (
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-              ) : (
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className={`font-semibold ${c.passed ? "text-foreground" : "text-foreground"}`}>
-                    {c.label}
-                  </span>
-                  <span className={`shrink-0 tabular-nums font-bold text-xs ${c.passed ? "text-emerald-400" : "text-rose-400"}`}>
-                    {c.score}/{c.weight}
-                  </span>
+    return (
+        <section className="rounded-xl border border-border bg-card">
+            <div className="border-b border-border px-4 py-4">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <ShieldCheck className={`h-4 w-4 ${tone.text}`} />
+                            <h3 className="text-sm font-semibold">Citation readiness</h3>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            How prepared this article is for AI citation.
+                        </p>
+                    </div>
+                    <div className="text-right">
+                        <div className={`text-2xl font-bold tabular-nums ${tone.text}`}>
+                            {score}
+                            <span className="text-sm font-medium text-muted-foreground">/100</span>
+                        </div>
+                        <div className={`text-[11px] font-medium ${tone.text}`}>{state.label}</div>
+                    </div>
                 </div>
-                {!c.passed && (
-                  <p className="text-muted-foreground leading-relaxed mt-0.5">
-                    {c.fix}
-                  </p>
-                )}
-              </div>
+                <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                        className={`h-full rounded-full transition-all duration-500 ${tone.bar}`}
+                        style={{ width: `${score}%` }}
+                    />
+                </div>
             </div>
-          ))}
 
-          {/* Score bar */}
-          <div className="mt-2 pt-2 border-t border-current border-opacity-20">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="opacity-60">Citation readiness</span>
-              <span className="font-bold">{score}/100 — threshold: 60</span>
+            <div className="px-4 py-3">
+                {failed.length > 0 ? (
+                    <>
+                        <div className="mb-2 flex items-center justify-between">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                Needs attention
+                            </span>
+                            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                {failed.length}
+                            </span>
+                        </div>
+                        <div className="space-y-2">
+                            {failed.map((criterion) => (
+                                <div key={criterion.id} className="rounded-lg border border-border bg-background/50 p-3">
+                                    <div className="flex items-start gap-2.5">
+                                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="text-xs font-medium">{criterion.label}</span>
+                                                <span className="shrink-0 tabular-nums text-[10px] font-semibold text-muted-foreground">
+                                                    {criterion.score}/{criterion.weight}
+                                                </span>
+                                            </div>
+                                            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                                                {criterion.fix}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                ) : (
+                    <div className="flex items-center gap-2 py-2 text-xs text-emerald-400">
+                        <CheckCircle2 className="h-4 w-4" />
+                        All citation criteria passed.
+                    </div>
+                )}
+
+                {passed.length > 0 && failed.length > 0 && (
+                    <div className="mt-3 border-t border-border pt-3">
+                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                            <Check className="h-3.5 w-3.5 text-emerald-400" />
+                            {passed.length} criteria already passing
+                        </div>
+                    </div>
+                )}
             </div>
-            <div className="h-2 rounded-full bg-current opacity-15">
-              <div
-                className={`h-2 rounded-full transition-all duration-500 ${barColor}`}
-                style={{ width: `${score}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+        </section>
+    );
 }
 
-
-export function ReviewBlogModal({
-  blog,
-  onClose,
-  onPublish,
-}: {
-  blog: Blog;
-  onClose: () => void;
-  onPublish: (id: string) => Promise<{ success: boolean; mediumUrl?: string; hashnodeUrl?: string }>;
-}) {
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [isSaving, setIsSaving]         = useState(false);
-  const [isImproving, setIsImproving]   = useState(false);
-  const [activeTab, setActiveTab]       = useState<"preview" | "editor">("preview");
-  const [editedContent, setEditedContent] = useState(blog.content);
-  const [scoreResult, setScoreResult]   = useState<ContentScoreResult | null>(null);
-
-  // Parse persisted citation criteria from the blog record
-  const citationScore = blog.citationScore ?? null;
-  const citationCriteria: CitationCriterion[] = Array.isArray(blog.citationCriteria)
-    ? (blog.citationCriteria as CitationCriterion[])
-    : [];
-
-  const handlePublish = async () => {
-    setIsPublishing(true);
-    const { success } = await onPublish(blog.id);
-    setIsPublishing(false);
-    if (success) onClose();
-  };
-
-  const handleSaveEdits = async () => {
-    setIsSaving(true);
-    try {
-      const res = await fetch(`/api/blogs/${blog.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: editedContent }),
-      });
-      if (!res.ok) throw new Error("Failed to save edits");
-      toast.success("Edits saved successfully");
-    } catch (error) {
-      logger.error("Error:", { error: (error as any)?.message || error });
-      toast.error("Failed to save edits");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleAIImprove = async () => {
-    setIsImproving(true);
-    try {
-      const issues: string[] = [];
-      if (scoreResult) {
-        if (scoreResult.topOpportunities?.length) issues.push(...scoreResult.topOpportunities);
-        const missingTerms = scoreResult.subScores?.nlpTerms?.missing;
-        if (missingTerms?.length) issues.push(`Add missing semantic terms: ${missingTerms.join(", ")}`);
-        const missingHeadings = scoreResult.subScores?.headings?.missing;
-        if (missingHeadings?.length) issues.push(`Add missing headings: ${missingHeadings.join(", ")}`);
-      }
-
-      // Append citation gaps as additional issues so the improve endpoint fixes them too
-      const failingCitation = citationCriteria
-        .filter((c) => !c.passed)
-        .sort((a, b) => b.weight - a.weight)
-        .slice(0, 3)
-        .map((c) => `[CITATION] ${c.fix}`);
-
-      const res = await fetch(`/api/blogs/${blog.id}/improve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          issues: [...issues, ...failingCitation],
-          citationScore,
-          scoreData: scoreResult
-            ? {
-                wordCount:       scoreResult.subScores?.wordCount,
-                keywords:        scoreResult.subScores?.exactKeywords,
-                readabilityGrade:scoreResult.subScores?.readability?.gradeLevel,
-                missingTerms:    scoreResult.subScores?.nlpTerms?.missing,
-                missingHeadings: scoreResult.subScores?.headings?.missing,
-              }
-            : null,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "AI improve failed");
-      }
-
-      const { content } = await res.json();
-      if (content) {
-        setEditedContent(content);
-        toast.success("AI has improved the content for citation readiness!", {
-          duration: 5000,
-          description: "Switch to Content Editor to review the changes.",
-        });
-        setActiveTab("editor");
-      }
-    } catch (err: unknown) {
-      logger.error("Error:", { error: (err as any)?.message || err });
-      toast.error((err as Error).message || "AI improvement failed. Please try again.");
-    } finally {
-      setIsImproving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-      <div
-        className={`relative w-full ${
-          activeTab === "editor" ? "max-w-7xl" : "max-w-4xl"
-        } bg-background border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-all duration-300`}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card/50">
-          <div className="flex-1">
-            <h2 className="text-xl font-bold text-foreground pr-8">{blog.title}</h2>
-            <div className="flex items-center gap-3 mt-1.5 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-muted border border-border">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                Draft
-              </span>
-              {blog.targetKeywords?.[0] && (
-                <span className="flex items-center gap-1">
-                  <span className="font-medium text-muted-foreground">Target:</span>{" "}
-                  {blog.targetKeywords[0]}
-                </span>
-              )}
-              {/* Citation score badge */}
-              {citationScore !== null && (
-                <span
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold ${
-                    citationScore >= 80
-                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                      : citationScore >= 60
-                        ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
-                        : "bg-rose-500/10 border-rose-500/30 text-rose-400"
-                  }`}
-                >
-                  <Shield className="w-3 h-3" />
-                  AI Citation: {citationScore}/100
-                </span>
-              )}
+function MetricRow({ label, value, description }: { label: string; value: string; description?: string }) {
+    return (
+        <div className="flex items-center justify-between border-b border-border py-3 last:border-0">
+            <div>
+                <div className="text-xs font-medium">{label}</div>
+                {description && <div className="mt-0.5 text-[10px] text-muted-foreground">{description}</div>}
             </div>
-          </div>
-
-          {/* Tab Switcher */}
-          <div className="flex items-center bg-card border border-border rounded-lg p-1 mr-12">
-            <button
-              onClick={() => setActiveTab("preview")}
-              className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                activeTab === "preview"
-                  ? "bg-muted text-foreground shadow"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              Preview
-            </button>
-            <button
-              onClick={() => setActiveTab("editor")}
-              className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                activeTab === "editor"
-                  ? "bg-muted text-foreground shadow"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Code2 className="w-4 h-4" />
-              Content Editor
-            </button>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full transition-colors absolute top-4 right-4"
-          >
-            <X className="w-5 h-5" />
-          </button>
+            <div className="text-sm font-semibold tabular-nums">{value}</div>
         </div>
+    );
+}
 
-        {/* Citation Score Panel — shown in preview tab when data is available */}
-        {activeTab === "preview" && citationScore !== null && citationCriteria.length > 0 && (
-          <div className="px-6 pt-4 pb-0">
-            <CitationScorePanel score={citationScore} criteria={citationCriteria} />
-          </div>
-        )}
-
-        {/* Notice when citation score is missing (old blog, pre-migration) */}
-        {activeTab === "preview" && citationScore === null && (
-          <div className="px-6 pt-4 pb-0">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 border border-border rounded-lg px-3 py-2">
-              <Info className="w-3.5 h-3.5 shrink-0" />
-              AI Citation Score not available for this draft — regenerate to get a score.
-            </div>
-          </div>
-        )}
-
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto bg-background">
-          {activeTab === "preview" ? (
-            <div className="p-8 prose prose-invert prose-emerald max-w-none prose-img:rounded-xl prose-img:w-full prose-img:object-cover prose-headings:scroll-m-20">
-              <ReactMarkdown
-                rehypePlugins={[
-                  rehypeRaw,
-                  [rehypeExternalLinks, { target: "_blank", rel: ["noopener", "noreferrer"] }],
-                ]}
-              >
-                {editedContent}
-              </ReactMarkdown>
-            </div>
-          ) : (
-            <div className="h-full">
-              <ContentEditor
-                initialContent={editedContent}
-                initialKeyword={blog.targetKeywords?.[0] || ""}
-                blogId={blog.id}
-                onContentChange={(content) => setEditedContent(content)}
-                onScoreChange={(score) => setScoreResult(score)}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="p-4 border-t border-border bg-card/50 flex justify-between items-center gap-3">
-          <div className="flex items-center gap-2">
-            {activeTab === "editor" && (
-              <button
-                onClick={handleSaveEdits}
-                disabled={isSaving}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground bg-muted hover:bg-accent border border-border rounded-lg transition-colors disabled:opacity-50"
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                ) : (
-                  <Save className="w-4 h-4 text-emerald-400" />
-                )}
-                Save Edits
-              </button>
+function ChecklistItem({ label, complete }: { label: string; complete: boolean }) {
+    return (
+        <div className="flex items-center gap-2.5 text-xs">
+            {complete ? (
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+            ) : (
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
             )}
-
-            {/* AI Improve — targets citation gaps when score < 60 */}
-            <button
-              onClick={handleAIImprove}
-              disabled={isImproving || isPublishing}
-              title={
-                citationScore !== null && citationScore < 60
-                  ? `Fix ${citationCriteria.filter((c) => !c.passed).length} citation gaps to reach 60/100`
-                  : "Let Gemini AI rewrite this content to improve quality and citation readiness"
-              }
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isImproving ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  AI Improving...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  {citationScore !== null && citationScore < 60
-                    ? `Fix Citation Gaps (${citationScore}/100)`
-                    : "AI Improve"}
-                </>
-              )}
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-accent rounded-lg transition-colors border border-transparent"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handlePublish}
-              disabled={isPublishing}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-primary-foreground bg-primary hover:bg-emerald-400 rounded-lg transition-colors shadow-[0_0_15px_rgba(16,185,129,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isPublishing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Publishing...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="w-4 h-4" />
-                  Approve &amp; Publish
-                </>
-              )}
-            </button>
-          </div>
+            <span className={complete ? "text-muted-foreground" : "font-medium text-foreground"}>
+                {label}
+            </span>
         </div>
-      </div>
-    </div>
-  );
+    );
+}
+
+export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalProps) {
+    const [mode, setMode] = useState<ReviewMode>("write");
+    const [editedContent, setEditedContent] = useState(blog.content);
+    const [scoreResult, setScoreResult] = useState<ContentScoreResult | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isPublishing, setIsPublishing] = useState(false);
+    const [isImproving, setIsImproving] = useState(false);
+    const [aiContent, setAiContent] = useState<string | null>(null);
+    const [showAiReview, setShowAiReview] = useState(false);
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+    const citationScore = blog.citationScore ?? null;
+    const citationCriteria: CitationCriterion[] = Array.isArray(blog.citationCriteria)
+        ? (blog.citationCriteria as CitationCriterion[])
+        : [];
+
+    // scoreResult.score is the correct field — ContentScoreResult has no overallScore
+    const activeScore = scoreResult?.score ?? citationScore;
+
+    const failedCitationCriteria = useMemo(
+        () => citationCriteria.filter((c) => !c.passed).sort((a, b) => b.weight - a.weight),
+        [citationCriteria]
+    );
+
+    const issueCount = failedCitationCriteria.length + (scoreResult?.topOpportunities?.length ?? 0);
+
+    const scoreState = activeScore !== null
+        ? getScoreState(activeScore)
+        : { label: "Not analyzed", shortLabel: "Not analyzed", tone: "warning" as const };
+
+    const headerTone = toneClasses(scoreState.tone);
+
+    useEffect(() => {
+        setHasUnsavedChanges(editedContent !== blog.content);
+    }, [editedContent, blog.content]);
+
+    useEffect(() => {
+        if (!showAiReview) return;
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setShowAiReview(false);
+        };
+        document.addEventListener("keydown", handler);
+        return () => document.removeEventListener("keydown", handler);
+    }, [showAiReview]);
+
+    const handleContentChange = useCallback((c: string) => setEditedContent(c), []);
+    const handleScoreChange = useCallback((s: ContentScoreResult | null) => setScoreResult(s), []);
+
+    const handleSaveEdits = useCallback(async () => {
+        if (!hasUnsavedChanges) return;
+        setIsSaving(true);
+        try {
+            const res = await fetch(`/api/blogs/${blog.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ content: editedContent }),
+            });
+            if (!res.ok) throw new Error("Failed to save edits");
+            setHasUnsavedChanges(false);
+            toast.success("Draft saved");
+        } catch (error) {
+            logger.error("Failed to save blog edits", { error: (error as Error)?.message || error });
+            toast.error("Couldn't save the draft");
+        } finally {
+            setIsSaving(false);
+        }
+    }, [blog.id, editedContent, hasUnsavedChanges]);
+
+    const handleAIImprove = useCallback(async () => {
+        setIsImproving(true);
+        try {
+            const issues: string[] = [];
+            if (scoreResult) {
+                if (scoreResult.topOpportunities?.length) issues.push(...scoreResult.topOpportunities);
+                const missingTerms = scoreResult.subScores?.nlpTerms?.missing;
+                if (missingTerms?.length) issues.push(`Add missing semantic terms: ${missingTerms.join(", ")}`);
+                const missingHeadings = scoreResult.subScores?.headings?.missing;
+                if (missingHeadings?.length) issues.push(`Add missing headings: ${missingHeadings.join(", ")}`);
+            }
+
+            const citationIssues = failedCitationCriteria
+                .slice(0, 3)
+                .map((c) => `[CITATION] ${c.fix}`);
+
+            const res = await fetch(`/api/blogs/${blog.id}/improve`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    issues: [...issues, ...citationIssues],
+                    citationScore,
+                    scoreData: scoreResult
+                        ? {
+                            wordCount: scoreResult.subScores?.wordCount,
+                            keywords: scoreResult.subScores?.exactKeywords,
+                            readabilityGrade: scoreResult.subScores?.readability?.gradeLevel,
+                            missingTerms: scoreResult.subScores?.nlpTerms?.missing,
+                            missingHeadings: scoreResult.subScores?.headings?.missing,
+                        }
+                        : null,
+                }),
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || "AI improvement failed");
+            }
+
+            const { content } = await res.json();
+            if (!content) throw new Error("AI returned no content");
+
+            setAiContent(content);
+            setShowAiReview(true);
+            toast.success("AI improvement is ready to review");
+        } catch (error) {
+            logger.error("AI improvement failed", { error: (error as Error)?.message || error });
+            toast.error((error as Error)?.message || "AI improvement failed. Please try again.");
+        } finally {
+            setIsImproving(false);
+        }
+    }, [blog.id, citationScore, failedCitationCriteria, scoreResult]);
+
+    const acceptAiChanges = useCallback(() => {
+        if (!aiContent) return;
+        setEditedContent(aiContent);
+        setHasUnsavedChanges(true);
+        setAiContent(null);
+        setShowAiReview(false);
+        setMode("write");
+        toast.success("AI changes applied to draft");
+    }, [aiContent]);
+
+    const rejectAiChanges = useCallback(() => {
+        setAiContent(null);
+        setShowAiReview(false);
+        toast("AI suggestions discarded");
+    }, []);
+
+    const handlePublish = useCallback(async () => {
+        if (hasUnsavedChanges) {
+            toast.error("Save your latest changes before publishing");
+            return;
+        }
+        setIsPublishing(true);
+        try {
+            const result = await onPublish(blog.id);
+            if (result.success) {
+                toast.success("Article published");
+                onClose();
+            }
+        } catch (error) {
+            logger.error("Publishing failed", { error: (error as Error)?.message || error });
+            toast.error("Couldn't publish this article");
+        } finally {
+            setIsPublishing(false);
+        }
+    }, [blog.id, hasUnsavedChanges, onClose, onPublish]);
+
+    return (
+        <div className="fixed inset-0 z-50 bg-background">
+            <div className="flex h-full flex-col">
+                {/* ── Top bar ── */}
+                <header className="flex h-16 shrink-0 items-center border-b border-border bg-card">
+                    <div className="flex min-w-0 flex-1 items-center gap-4 px-5">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            aria-label="Close"
+                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+
+                        <div className="h-6 w-px bg-border" />
+
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                                <h1 className="truncate text-sm font-semibold">{blog.title}</h1>
+                                <span className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                    Draft
+                                </span>
+                            </div>
+                            <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+                                <span>
+                                    Target:{" "}
+                                    <span className="font-medium text-foreground/80">
+                                        {blog.targetKeywords?.[0] || "No target keyword"}
+                                    </span>
+                                </span>
+                                <span>·</span>
+                                <span className="flex items-center gap-1">
+                                    <Clock3 className="h-3 w-3" />
+                                    {hasUnsavedChanges ? "Unsaved changes" : "Saved"}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Readiness pill */}
+                    <div className="mr-4 flex items-center gap-3">
+                        {activeScore !== null && (
+                            <div className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 ${headerTone.bg} ${headerTone.border}`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${headerTone.bar}`} />
+                                <span className={`text-xs font-semibold ${headerTone.text}`}>{activeScore}/100</span>
+                                <span className="text-[11px] text-muted-foreground">{scoreState.shortLabel}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Mode switch */}
+                    <div className="mr-4 flex rounded-lg border border-border bg-background p-1">
+                        <button
+                            type="button"
+                            onClick={() => setMode("write")}
+                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                                mode === "write" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                            }`}
+                        >
+                            <FileText className="h-3.5 w-3.5" />
+                            Write
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setMode("review")}
+                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                                mode === "review" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                            }`}
+                        >
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                            Review
+                        </button>
+                    </div>
+                </header>
+
+                {/* ── Main workspace ── */}
+                <main className="flex min-h-0 flex-1">
+                    {/* Article area */}
+                    <section className="min-w-0 flex-1 overflow-y-auto bg-background">
+                        {mode === "write" ? (
+                            <div className="mx-auto h-full w-full max-w-5xl px-6 py-8 lg:px-10">
+                                <ContentEditor
+                                    initialContent={editedContent}
+                                    initialKeyword={blog.targetKeywords?.[0] || ""}
+                                    blogId={blog.id}
+                                    onContentChange={handleContentChange}
+                                    onScoreChange={handleScoreChange}
+                                />
+                            </div>
+                        ) : (
+                            <div className="mx-auto w-full max-w-4xl px-8 py-12">
+                                <article className="prose prose-invert prose-emerald max-w-none prose-headings:scroll-m-20 prose-img:w-full prose-img:rounded-xl prose-img:object-cover">
+                                    <h1>{blog.title}</h1>
+                                    <div className="not-prose mb-8 flex items-center gap-3 border-b border-border pb-5 text-xs text-muted-foreground">
+                                        <span>Draft</span>
+                                        <span>·</span>
+                                        <span>{blog.targetKeywords?.[0] || "No target keyword"}</span>
+                                    </div>
+                                    <ReactMarkdown
+                                        rehypePlugins={[
+                                            rehypeRaw,
+                                            [rehypeExternalLinks, { target: "_blank", rel: ["noopener", "noreferrer"] }],
+                                        ]}
+                                    >
+                                        {editedContent}
+                                    </ReactMarkdown>
+                                </article>
+                            </div>
+                        )}
+                    </section>
+
+                    {/* ── Sidebar ── */}
+                    <aside className="hidden w-[360px] shrink-0 overflow-y-auto border-l border-border bg-card/40 xl:block">
+                        <div className="space-y-4 p-4">
+                            <div>
+                                <h2 className="text-sm font-semibold">Optimization</h2>
+                                <p className="mt-1 text-xs text-muted-foreground">Review the article before publishing.</p>
+                            </div>
+
+                            {activeScore !== null && citationCriteria.length > 0 ? (
+                                <ReadinessCard score={activeScore} criteria={citationCriteria} />
+                            ) : (
+                                <section className="rounded-xl border border-border bg-card p-4">
+                                    <div className="flex items-start gap-3">
+                                        <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                                        <div>
+                                            <h3 className="text-xs font-semibold">Citation score unavailable</h3>
+                                            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                                                Analyze the content to see citation readiness and optimization recommendations.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </section>
+                            )}
+
+                            {/* Content health */}
+                            {scoreResult && (
+                                <section className="rounded-xl border border-border bg-card">
+                                    <div className="border-b border-border px-4 py-3">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h3 className="text-xs font-semibold">Content health</h3>
+                                                <p className="mt-1 text-[10px] text-muted-foreground">Based on the latest analysis.</p>
+                                            </div>
+                                            <span className="text-sm font-bold tabular-nums">{scoreResult.score}/100</span>
+                                        </div>
+                                    </div>
+                                    <div className="px-4">
+                                        <MetricRow
+                                            label="Word count"
+                                            value={String(scoreResult.subScores.wordCount.current)}
+                                            description={`Target: ${scoreResult.subScores.wordCount.targetMin}–${scoreResult.subScores.wordCount.targetMax}`}
+                                        />
+                                        <MetricRow
+                                            label="Readability"
+                                            value={`Grade ${scoreResult.subScores.readability.gradeLevel.toFixed(1)}`}
+                                        />
+                                        <MetricRow
+                                            label="Keyword uses"
+                                            value={String(scoreResult.subScores.exactKeywords.current)}
+                                            description={`Median: ${scoreResult.subScores.exactKeywords.targetMin}`}
+                                        />
+                                    </div>
+                                </section>
+                            )}
+
+                            {/* AI improve action */}
+                            {issueCount > 0 && (
+                                <section className="rounded-xl border border-border bg-card p-4">
+                                    <div className="flex items-start gap-3">
+                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                                            <Sparkles className="h-4 w-4 text-primary" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h3 className="text-xs font-semibold">Recommended improvement</h3>
+                                            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                                                AI can address the highest-impact issues without changing your draft until you approve.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleAIImprove}
+                                        disabled={isImproving || isPublishing}
+                                        className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        {isImproving ? (
+                                            <><Loader2 className="h-3.5 w-3.5 animate-spin" />Improving content...</>
+                                        ) : (
+                                            <><Zap className="h-3.5 w-3.5" />Fix {issueCount} issues with AI</>
+                                        )}
+                                    </button>
+                                </section>
+                            )}
+
+                            {/* Publishing checklist */}
+                            <section className="rounded-xl border border-border bg-card p-4">
+                                <div className="mb-3 flex items-center gap-2">
+                                    <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                                    <h3 className="text-xs font-semibold">Publishing checklist</h3>
+                                </div>
+                                <div className="space-y-2.5">
+                                    <ChecklistItem label="Content reviewed" complete={editedContent.trim().length > 0} />
+                                    <ChecklistItem
+                                        label="Optimization analyzed"
+                                        complete={scoreResult !== null || citationScore !== null}
+                                    />
+                                    <ChecklistItem label="Changes saved" complete={!hasUnsavedChanges} />
+                                    <ChecklistItem
+                                        label="Citation ready"
+                                        complete={activeScore !== null && activeScore >= 60}
+                                    />
+                                </div>
+                            </section>
+                        </div>
+                    </aside>
+                </main>
+
+                {/* ── Footer ── */}
+                <footer className="flex h-16 shrink-0 items-center justify-between border-t border-border bg-card px-5">
+                    <div className="flex items-center gap-3">
+                        {hasUnsavedChanges ? (
+                            <span className="flex items-center gap-2 text-xs text-amber-400">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                                Unsaved changes
+                            </span>
+                        ) : (
+                            <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Check className="h-3.5 w-3.5 text-emerald-400" />
+                                All changes saved
+                            </span>
+                        )}
+
+                        {mode === "write" && (
+                            <button
+                                type="button"
+                                onClick={handleSaveEdits}
+                                disabled={!hasUnsavedChanges || isSaving}
+                                className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-2 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                {isSaving ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                    <Save className="h-3.5 w-3.5" />
+                                )}
+                                {isSaving ? "Saving..." : "Save draft"}
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        >
+                            Close
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handlePublish}
+                            disabled={
+                                isPublishing ||
+                                isSaving ||
+                                hasUnsavedChanges ||
+                                (activeScore !== null && activeScore < 60)
+                            }
+                            title={
+                                hasUnsavedChanges
+                                    ? "Save your changes before publishing"
+                                    : activeScore !== null && activeScore < 60
+                                        ? "Improve citation readiness before publishing"
+                                        : "Publish article"
+                            }
+                            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            {isPublishing ? (
+                                <><Loader2 className="h-3.5 w-3.5 animate-spin" />Publishing...</>
+                            ) : (
+                                <><CheckCircle2 className="h-3.5 w-3.5" />Publish</>
+                            )}
+                        </button>
+                    </div>
+                </footer>
+            </div>
+
+            {/* ── AI diff panel ── */}
+            {showAiReview && aiContent && (
+                <div
+                    className="fixed inset-0 z-[60] flex items-center justify-center p-6"
+                    onMouseDown={() => setShowAiReview(false)}
+                >
+                    <div className="absolute inset-0 bg-black/70" aria-hidden="true" />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="ai-review-title"
+                        className="relative flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <Sparkles className="h-4 w-4 text-primary" />
+                                    <h2 id="ai-review-title" className="text-sm font-semibold">
+                                        Review AI improvements
+                                    </h2>
+                                </div>
+                                <p className="mt-1 text-xs text-muted-foreground">Nothing has been applied to your draft yet.</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={rejectAiChanges}
+                                aria-label="Close AI review"
+                                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        <div className="grid min-h-0 flex-1 grid-cols-2 overflow-hidden">
+                            <div className="overflow-y-auto border-r border-border">
+                                <div className="border-b border-border bg-muted/30 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Current draft
+                                </div>
+                                <div className="p-6">
+                                    <pre className="whitespace-pre-wrap font-sans text-sm leading-7 text-muted-foreground">
+                                        {editedContent}
+                                    </pre>
+                                </div>
+                            </div>
+                            <div className="overflow-y-auto">
+                                <div className="border-b border-border bg-primary/5 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
+                                    AI proposal
+                                </div>
+                                <div className="p-6">
+                                    <pre className="whitespace-pre-wrap font-sans text-sm leading-7">
+                                        {aiContent}
+                                    </pre>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border-t border-border bg-card px-5 py-4">
+                            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                                <Info className="h-3.5 w-3.5" />
+                                Review the proposed content before applying it.
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={rejectAiChanges}
+                                    className="rounded-lg border border-border px-3 py-2 text-xs font-medium transition-colors hover:bg-muted"
+                                >
+                                    Discard
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={acceptAiChanges}
+                                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                                >
+                                    <Check className="h-3.5 w-3.5" />
+                                    Apply changes
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 }
