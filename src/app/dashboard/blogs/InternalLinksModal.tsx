@@ -1,20 +1,44 @@
 "use client";
 
-import { useState } from "react";
-import { generateInternalLinkingSuggestions, type InternalLinkSuggestion } from "@/app/actions/internalLinking";
-import { Link, Zap, Copy, ExternalLink, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+    generateInternalLinkingSuggestions,
+    type InternalLinkSuggestion,
+} from "@/app/actions/internalLinking";
+import { AlertTriangle, Copy, Check, ExternalLink, Link, X, Zap } from "lucide-react";
 
+interface Blog {
+    id:      string;
+    siteId:  string;
+    title:   string;
+}
 
-export function InternalLinksModal({ blog, onClose }: { blog: any; onClose: () => void }) {
-    const [loading, setLoading] = useState(false);
-    const [suggestions, setSuggestions] = useState<InternalLinkSuggestion[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+export function InternalLinksModal({
+    blog,
+    onClose,
+}: {
+    blog:    Blog;
+    onClose: () => void;
+}) {
+    const [loading, setSuggestions_loading]   = useState(false);
+    const [suggestions, setSuggestions]       = useState<InternalLinkSuggestion[] | null>(null);
+    const [error, setError]                   = useState<string | null>(null);
+    const [copiedIndex, setCopiedIndex]       = useState<number | null>(null);
+    const copyTimerRef                        = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const handleGenerate = async () => {
-        setLoading(true);
+    // Escape key and cleanup
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+        document.addEventListener("keydown", handler);
+        return () => {
+            document.removeEventListener("keydown", handler);
+            if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+        };
+    }, [onClose]);
+
+    const handleGenerate = useCallback(async () => {
+        setSuggestions_loading(true);
         setError(null);
-
         try {
             const res = await generateInternalLinkingSuggestions(blog.siteId, blog.id);
             if (res.success) {
@@ -25,114 +49,165 @@ export function InternalLinksModal({ blog, onClose }: { blog: any; onClose: () =
         } catch {
             setError("A network error occurred.");
         } finally {
-            setLoading(false);
+            setSuggestions_loading(false);
         }
-    };
+    }, [blog.siteId, blog.id]);
 
-    const handleCopy = (text: string, index: number) => {
-        navigator.clipboard.writeText(text);
-        setCopiedIndex(index);
-        setTimeout(() => setCopiedIndex(null), 2000);
-    };
+    const handleCopy = useCallback(async (text: string, index: number) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+            setCopiedIndex(index);
+            copyTimerRef.current = setTimeout(() => setCopiedIndex(null), 2000);
+        } catch {
+            // Clipboard API unavailable — silently ignore
+        }
+    }, []);
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in duration-200">
-            <div className="bg-[#121214] border border-border shadow-2xl rounded-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+            onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
+        >
+            <div className="absolute inset-0 bg-black/80" aria-hidden="true" />
 
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="internal-links-title"
+                className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
+            >
                 {/* Header */}
-                <div className="px-6 py-4 border-b border-border flex items-center justify-between sticky top-0 bg-[#121214]/90 backdrop-blur-md z-10">
-                    <div>
-                        <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/90 px-6 py-4 backdrop-blur-md">
+                    <div className="min-w-0">
+                        <h2
+                            id="internal-links-title"
+                            className="flex items-center gap-2 text-xl font-bold tracking-tight text-foreground"
+                        >
                             <Link className="h-5 w-5 text-emerald-400" />
                             Semantic Topic Cluster Engine
                         </h2>
-                        <p className="text-sm text-muted-foreground mt-1 max-w-xl truncate">
-                            Generating internal links for: <span className="text-foreground font-medium">{blog.title}</span>
+                        <p className="mt-1 max-w-xl truncate text-sm text-muted-foreground">
+                            Generating internal links for:{" "}
+                            <span className="font-medium text-foreground">{blog.title}</span>
                         </p>
                     </div>
                     <button
+                        type="button"
                         onClick={onClose}
-                        className="p-2 -mr-2 text-muted-foreground hover:text-white hover:bg-muted rounded-lg transition-colors"
+                        aria-label="Close"
+                        className="-mr-2 rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
-                        <X className="w-5 h-5" />
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+                <div className="flex-1 overflow-y-auto p-6">
+                    {/* Idle state */}
                     {!suggestions && !loading && !error && (
-                        <div className="py-12 text-center flex flex-col items-center">
-                            <div className="w-16 h-16 bg-gradient-to-tr from-emerald-500/20 to-blue-500/20 rounded-full flex items-center justify-center mb-6 ring-1 ring-white/10 shadow-xl">
-                                <Zap className="w-8 h-8 text-emerald-400" />
+                        <div className="flex flex-col items-center py-12 text-center">
+                            <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-500/20 to-blue-500/20 ring-1 ring-white/10 shadow-xl">
+                                <Zap className="h-8 w-8 text-emerald-400" />
                             </div>
-                            <h3 className="text-lg font-semibold text-white mb-2">Build Semantic Context</h3>
-                            <p className="text-muted-foreground max-w-md text-sm leading-relaxed mb-8">
-                                AI algorithms rank pages higher when they belong to strong internal topic clusters. We will scan your site&apos;s existing pages and generate exact paragraphs you can insert to link back to this new blog post.
+                            <h3 className="mb-2 text-lg font-semibold text-foreground">Build Semantic Context</h3>
+                            <p className="mb-8 max-w-md text-sm leading-relaxed text-muted-foreground">
+                                AI algorithms rank pages higher when they belong to strong internal topic clusters.
+                                We will scan your site&apos;s existing pages and generate exact paragraphs you can insert
+                                to link back to this new blog post.
                             </p>
                             <button
+                                type="button"
                                 onClick={handleGenerate}
-                                className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-emerald-400 hover:opacity-90 transition-opacity text-black font-bold rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+                                className="rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-400 px-6 py-3 font-bold text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-opacity hover:opacity-90"
                             >
                                 Generate Link Suggestions
                             </button>
                         </div>
                     )}
 
+                    {/* Loading */}
                     {loading && (
-                        <div className="py-16 flex flex-col items-center justify-center gap-4">
-                            <div className="w-10 h-10 border-4 border-border border-t-emerald-400 rounded-full animate-spin"></div>
-                            <p className="text-muted-foreground font-medium animate-pulse">Scanning existing pages and mapping context...</p>
+                        <div className="flex flex-col items-center justify-center gap-4 py-16">
+                            <div className="h-10 w-10 animate-spin rounded-full border-4 border-border border-t-emerald-400" />
+                            <p className="animate-pulse font-medium text-muted-foreground">
+                                Scanning existing pages and mapping context...
+                            </p>
                         </div>
                     )}
 
+                    {/* Error */}
                     {error && (
-                        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-sm flex items-start gap-3">
-                            <span>❌</span>
+                        <div className="flex items-start gap-3 rounded-xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-400">
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                             <p>{error}</p>
                         </div>
                     )}
 
+                    {/* Results */}
                     {suggestions && (
                         <div className="space-y-6">
                             <div className="flex items-center justify-between border-b border-border pb-4">
                                 <p className="text-xs font-bold uppercase tracking-widest text-emerald-400">
-                                    {suggestions.length} Link Opportunities Found
+                                    {suggestions.length} Link Opportunit{suggestions.length === 1 ? "y" : "ies"} Found
                                 </p>
                             </div>
 
                             <div className="grid gap-4">
                                 {suggestions.map((s, i) => (
-                                    <div key={i} className="bg-card border border-border rounded-xl p-5 hover:border-white/20 transition-all group">
-                                        <div className="flex items-start justify-between gap-4 mb-4">
-                                            <div>
-                                                <p className="text-xs font-medium text-muted-foreground mb-1">Source Page to Edit:</p>
-                                                <a href={s.sourceUrl} target="_blank" rel="noreferrer" className="text-sm font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1">
-                                                    {s.sourceUrl} <ExternalLink className="w-3 h-3 opacity-50" />
+                                    <div
+                                        key={s.sourceUrl}
+                                        className="group rounded-xl border border-border bg-card p-5 transition-all hover:border-white/20"
+                                    >
+                                        <div className="mb-4 flex items-start justify-between gap-4">
+                                            <div className="min-w-0">
+                                                <p className="mb-1 text-xs font-medium text-muted-foreground">
+                                                    Source Page to Edit:
+                                                </p>
+                                                <a
+                                                    href={s.sourceUrl}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="flex items-center gap-1 text-sm font-semibold text-blue-400 hover:text-blue-300"
+                                                >
+                                                    <span className="truncate">{s.sourceUrl}</span>
+                                                    <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
                                                 </a>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-xs font-medium text-muted-foreground mb-1">Target Anchor Text:</p>
-                                                <span className="inline-block px-2 py-1 bg-muted rounded text-xs font-mono text-zinc-300">
+                                            <div className="shrink-0 text-right">
+                                                <p className="mb-1 text-xs font-medium text-muted-foreground">
+                                                    Target Anchor Text:
+                                                </p>
+                                                <span className="inline-block rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
                                                     {s.suggestedAnchorText}
                                                 </span>
                                             </div>
                                         </div>
 
                                         <div className="relative">
-                                            <p className="text-xs font-medium text-muted-foreground mb-2">Paragraph to Insert:</p>
-                                            <div className="bg-card rounded-lg p-4 font-mono text-xs text-zinc-300 leading-relaxed border border-black/50 shadow-inner break-words whitespace-pre-wrap">
+                                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                                                Paragraph to Insert:
+                                            </p>
+                                            <div className="break-words whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-4 font-mono text-xs leading-relaxed text-foreground shadow-inner">
                                                 {s.suggestedParagraphContext}
                                             </div>
-
                                             <button
+                                                type="button"
                                                 onClick={() => handleCopy(s.suggestedParagraphContext, i)}
-                                                className="absolute top-8 right-2 p-2 rounded-md bg-white/10 hover:bg-white/20 text-white shadow-lg backdrop-blur-md transition-all border border-border group-hover:opacity-100 sm:opacity-0 focus:opacity-100 flex items-center gap-1.5"
+                                                aria-label="Copy paragraph"
                                                 title="Copy Paragraph"
+                                                className="absolute right-2 top-8 flex items-center gap-1.5 rounded-md border border-border bg-background/80 p-2 text-foreground shadow-lg backdrop-blur-md transition-all focus:opacity-100 group-hover:opacity-100 sm:opacity-0"
                                             >
                                                 {copiedIndex === i ? (
-                                                    <span className="text-emerald-400 font-bold text-xs px-1">Copied!</span>
+                                                    <>
+                                                        <Check className="h-3.5 w-3.5 text-emerald-400" />
+                                                        <span className="text-xs font-bold text-emerald-400">Copied!</span>
+                                                    </>
                                                 ) : (
-                                                    <><Copy className="w-3.5 h-3.5" /> <span className="sr-only sm:not-sr-only text-xs font-medium pr-1">Copy</span></>
+                                                    <>
+                                                        <Copy className="h-3.5 w-3.5" />
+                                                        <span className="sr-only text-xs font-medium sm:not-sr-only">Copy</span>
+                                                    </>
                                                 )}
                                             </button>
                                         </div>
