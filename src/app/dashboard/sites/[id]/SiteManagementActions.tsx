@@ -1,12 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { deleteSite, saveHashnodeToken, saveCoreServices, saveGithubRepo, saveBlogTone, saveTechStack, saveBrandName } from "@/app/actions/site";
 import { toast } from "sonner";
 
+const GitHubIcon = () => (
+    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+    </svg>
+);
 
 export function SiteManagementActions({
     siteId,
@@ -62,101 +67,130 @@ export function SiteManagementActions({
         if (showModal) {
             document.body.style.overflow = 'hidden';
         } else {
-            document.body.style.overflow = 'unset';
+            document.body.style.overflow = '';
         }
-        return () => { document.body.style.overflow = 'unset'; };
+        return () => { document.body.style.overflow = ''; };
     }, [showModal]);
 
-    const handleDelete = async () => {
+    const handleDelete = useCallback(async () => {
         setIsDeleting(true);
         setError(null);
-
-        const deleteResult = await deleteSite(siteId);
-
-        if (deleteResult.success) {
-            router.push("/dashboard/sites");
-            router.refresh();
-        } else {
-            setError(deleteResult.error || "Failed to delete site.");
-            setIsDeleting(false);
+        try {
+            const deleteResult = await deleteSite(siteId);
+            if (deleteResult.success) {
+                router.push("/dashboard/sites");
+                router.refresh();
+            } else {
+                setError(deleteResult.error || "Failed to delete site.");
+                setShowModal(false);
+            }
+        } catch {
+            setError("An unexpected error occurred. Please try again.");
             setShowModal(false);
+        } finally {
+            setIsDeleting(false);
         }
-    };
+    }, [siteId, router]);
 
-    /**
-     * Save (or clear) the GitHub repo URL.
-     * Accepts an explicit `urlOverride` so the disconnect path can pass ""
-     * directly without depending on React state flushing first.
-     */
-    const handleSaveGithub = async (urlOverride?: string) => {
+    const handleSaveGithub = useCallback(async (urlOverride?: string) => {
         setIsSavingGithub(true);
         const urlToSave = urlOverride !== undefined ? urlOverride : githubRepoUrl;
-        const githubResult = await saveGithubRepo(siteId, urlToSave);
-        setIsSavingGithub(false);
-        if (githubResult.success) {
-            toast.success(urlToSave.trim() ? "GitHub repository connected!" : "GitHub repository disconnected.");
-            router.refresh();
-        } else {
-            toast.error(githubResult.error || "Failed to save GitHub repository.");
+        try {
+            const githubResult = await saveGithubRepo(siteId, urlToSave);
+            if (githubResult.success) {
+                toast.success(urlToSave.trim() ? "GitHub repository connected!" : "GitHub repository disconnected.");
+                router.refresh();
+            } else {
+                toast.error(githubResult.error || "Failed to save GitHub repository.");
+            }
+        } catch {
+            toast.error("An unexpected error occurred saving the repository.");
+        } finally {
+            setIsSavingGithub(false);
         }
-    };
+    }, [siteId, githubRepoUrl, router]);
 
-    const handleSaveHashnodeToken = async () => {
+    const handleSaveHashnodeToken = useCallback(async () => {
         setIsSavingToken(true);
-        const hashnodeResult = await saveHashnodeToken(siteId, hashnodeToken, hashnodePublicationId);
-        setIsSavingToken(false);
-        if (hashnodeResult.success) {
-            toast.success("Hashnode settings saved successfully.");
-        } else {
-            toast.error(hashnodeResult.error || "Failed to save Hashnode settings.");
+        try {
+            const hashnodeResult = await saveHashnodeToken(siteId, hashnodeToken, hashnodePublicationId);
+            if (hashnodeResult.success) {
+                toast.success("Hashnode settings saved successfully.");
+            } else {
+                toast.error(hashnodeResult.error || "Failed to save Hashnode settings.");
+            }
+        } catch {
+            toast.error("An unexpected error occurred saving Hashnode settings.");
+        } finally {
+            setIsSavingToken(false);
         }
-    };
+    }, [siteId, hashnodeToken, hashnodePublicationId]);
 
-    const handleSaveCoreServices = async () => {
+    const handleSaveCoreServices = useCallback(async () => {
         setIsSavingServices(true);
-        const coreResult = await saveCoreServices(siteId, coreServices);
-        setIsSavingServices(false);
-        if (coreResult.success) {
-            toast.success("Core services saved successfully.");
-        } else {
-            toast.error(coreResult.error || "Failed to save core services.");
+        try {
+            const coreResult = await saveCoreServices(siteId, coreServices);
+            if (coreResult.success) {
+                toast.success("Core services saved successfully.");
+            } else {
+                toast.error(coreResult.error || "Failed to save core services.");
+            }
+        } catch {
+            toast.error("An unexpected error occurred saving core services.");
+        } finally {
+            setIsSavingServices(false);
         }
-    };
+    }, [siteId, coreServices]);
 
-    const handleSaveBlogTone = async () => {
+    const handleSaveBlogTone = useCallback(async () => {
         setIsSavingTone(true);
-        const toneResult = await saveBlogTone(siteId, blogTone);
-        setIsSavingTone(false);
-        if (toneResult.success) {
-            toast.success("Blog tone saved successfully.");
-        } else {
-            toast.error(toneResult.error || "Failed to save blog tone.");
+        try {
+            const toneResult = await saveBlogTone(siteId, blogTone);
+            if (toneResult.success) {
+                toast.success("Blog tone saved successfully.");
+            } else {
+                toast.error(toneResult.error || "Failed to save blog tone.");
+            }
+        } catch {
+            toast.error("An unexpected error occurred saving blog tone.");
+        } finally {
+            setIsSavingTone(false);
         }
-    };
+    }, [siteId, blogTone]);
 
-    const handleSaveTechStack = async () => {
+    const handleSaveTechStack = useCallback(async () => {
         setIsSavingStack(true);
-        const stackResult = await saveTechStack(siteId, techStack);
-        setIsSavingStack(false);
-        if (stackResult.success) {
-            toast.success("Tech stack saved!");
-            router.refresh();
-        } else {
-            toast.error(stackResult.error || "Failed to save tech stack.");
+        try {
+            const stackResult = await saveTechStack(siteId, techStack);
+            if (stackResult.success) {
+                toast.success("Tech stack saved!");
+                router.refresh();
+            } else {
+                toast.error(stackResult.error || "Failed to save tech stack.");
+            }
+        } catch {
+            toast.error("An unexpected error occurred saving the tech stack.");
+        } finally {
+            setIsSavingStack(false);
         }
-    };
+    }, [siteId, techStack, router]);
 
-    const handleSaveBrandName = async () => {
+    const handleSaveBrandName = useCallback(async () => {
         setIsSavingBrand(true);
-        const result = await saveBrandName(siteId, brandName);
-        setIsSavingBrand(false);
-        if (result.success) {
-            toast.success("Brand name saved — re-run AEO Scan to see updated scores.");
-            router.refresh();
-        } else {
-            toast.error(result.error || "Failed to save brand name.");
+        try {
+            const result = await saveBrandName(siteId, brandName);
+            if (result.success) {
+                toast.success("Brand name saved — re-run AEO Scan to see updated scores.");
+                router.refresh();
+            } else {
+                toast.error(result.error || "Failed to save brand name.");
+            }
+        } catch {
+            toast.error("An unexpected error occurred saving the brand name.");
+        } finally {
+            setIsSavingBrand(false);
         }
-    };
+    }, [siteId, brandName, router]);
 
     const isGithubConnected = !!initialGithubRepoUrl;
 
@@ -165,7 +199,7 @@ export function SiteManagementActions({
             {/* GitHub Integration */}
             <div className="card-surface p-6 border-border hover:border-white/20 transition-all duration-300 relative overflow-hidden group bg-gradient-to-br from-white/[0.02] to-transparent">
                 <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
                     </svg>
                     GitHub Integration
@@ -195,6 +229,7 @@ export function SiteManagementActions({
                                 <span className="text-xs text-amber-300">GitHub account not connected — auto-PRs won&apos;t work without this.</span>
                             </div>
                             <button
+                                type="button"
                                 onClick={async () => {
                                     setIsConnectingGithub(true);
                                     await signIn("github", { callbackUrl: window.location.href });
@@ -202,9 +237,7 @@ export function SiteManagementActions({
                                 disabled={isConnectingGithub}
                                 className="flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-white text-sm font-semibold transition-all disabled:opacity-50"
                             >
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-                                </svg>
+                                <GitHubIcon />
                                 {isConnectingGithub ? "Redirecting to GitHub…" : "Connect GitHub Account"}
                             </button>
                         </div>
@@ -216,18 +249,16 @@ export function SiteManagementActions({
 
                 {isGithubConnected && (
                     <div className="mb-4 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20 flex items-center gap-3">
-                        <svg className="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-                        </svg>
+                        <GitHubIcon />
                         <div className="min-w-0">
                             <p className="text-xs text-muted-foreground mb-0.5">Connected repository</p>
                             <a
-                                href={initialGithubRepoUrl!}
+                                href={initialGithubRepoUrl ?? ""}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="text-sm text-white hover:text-emerald-400 transition-colors font-medium truncate block"
                             >
-                                {initialGithubRepoUrl!.replace("https://github.com/", "")}
+                                {(initialGithubRepoUrl ?? "").replace("https://github.com/", "")}
                             </a>
                         </div>
                         <div className="ml-auto shrink-0 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20">
@@ -248,20 +279,18 @@ export function SiteManagementActions({
                         />
                         <div className="flex gap-2">
                             <button
+                                type="button"
                                 onClick={() => handleSaveGithub()}
                                 disabled={isSavingGithub}
                                 className="flex-1 bg-muted hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-border flex items-center justify-center gap-2"
                             >
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-                                </svg>
+                                <GitHubIcon />
                                 {isSavingGithub ? "Saving..." : (isGithubConnected ? "Update Repository" : "Connect Repository")}
                             </button>
                             {isGithubConnected && (
                                 <button
+                                    type="button"
                                     onClick={async () => {
-                                        // Pass "" explicitly — do NOT rely on state flushing
-                                        // before the async save call reads it.
                                         setGithubRepoUrl("");
                                         await handleSaveGithub("");
                                     }}
@@ -312,6 +341,7 @@ export function SiteManagementActions({
                                 : <>Leave blank to auto-derive from domain.</>}
                         </p>
                         <button
+                            type="button"
                             onClick={handleSaveBrandName}
                             disabled={isSavingBrand}
                             className="shrink-0 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-500/30"
@@ -343,6 +373,7 @@ export function SiteManagementActions({
                         <div className="flex items-center justify-between">
                             <span className="text-xs text-muted-foreground">{coreServices.length}/2000</span>
                             <button
+                                type="button"
                                 onClick={handleSaveCoreServices}
                                 disabled={isSavingServices}
                                 className="shrink-0 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-500/30"
@@ -385,6 +416,7 @@ export function SiteManagementActions({
                         </select>
                         <div className="flex items-center justify-end">
                             <button
+                                type="button"
                                 onClick={handleSaveTechStack}
                                 disabled={isSavingStack}
                                 className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-500/30"
@@ -426,6 +458,7 @@ export function SiteManagementActions({
                         </select>
                         <div className="flex items-center justify-end">
                             <button
+                                type="button"
                                 onClick={handleSaveBlogTone}
                                 disabled={isSavingTone}
                                 className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-500/30"
@@ -487,6 +520,7 @@ export function SiteManagementActions({
                             <p className="text-xs text-muted-foreground mt-1">Find your Publication ID at <a href="https://hashnode.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground hover:underline">Hashnode</a> → Your Blog → Settings → Domain & SEO → Publication ID.</p>
                         </div>
                         <button
+                            type="button"
                             onClick={handleSaveHashnodeToken}
                             disabled={isSavingToken}
                             className="w-full bg-muted hover:bg-white/10 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-border"
@@ -519,6 +553,7 @@ export function SiteManagementActions({
                     )}
 
                     <button
+                        type="button"
                         onClick={() => setShowModal(true)}
                         disabled={isDeleting}
                         className="w-full bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-rose-500/30 hover:border-transparent flex justify-center items-center gap-2"
@@ -556,6 +591,7 @@ export function SiteManagementActions({
                         )}
                         <div className="flex items-center gap-3 w-full">
                             <button
+                                type="button"
                                 onClick={() => setShowModal(false)}
                                 disabled={isDeleting}
                                 className="flex-1 px-4 py-2.5 rounded-xl border border-zinc-700 hover:bg-zinc-800 transition-colors font-medium text-sm text-zinc-300 disabled:opacity-50"
@@ -563,6 +599,7 @@ export function SiteManagementActions({
                                 Cancel
                             </button>
                             <button
+                                type="button"
                                 onClick={handleDelete}
                                 disabled={isDeleting}
                                 className="flex-1 flex justify-center items-center gap-2 bg-rose-600 hover:bg-rose-500 text-white px-4 py-2.5 rounded-xl font-medium text-sm transition-colors disabled:opacity-50"
