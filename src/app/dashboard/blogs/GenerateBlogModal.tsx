@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useId } from "react";
+import { useState, useEffect, useRef, useCallback, useId, useMemo } from "react";
 import {
     Loader2,
     Sparkles,
@@ -120,7 +120,8 @@ export function GenerateBlogModal({
         keyword: initialKeyword ?? "",
     });
 
-    const keywordRef = useRef<HTMLInputElement>(null);
+    const keywordRef   = useRef<HTMLInputElement>(null);
+    const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const isDataReport = pipelineType === "DATA_REPORT";
     const keywordMissing = attemptedSubmit && !form.keyword.trim();
@@ -154,11 +155,14 @@ export function GenerateBlogModal({
             }
 
             setIsLoading(false);
-            setTimeout(() => keywordRef.current?.focus(), 80);
+            focusTimerRef.current = setTimeout(() => keywordRef.current?.focus(), 80);
         }
 
         load();
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+            if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
+        };
     }, [siteId]);
 
     useEffect(() => {
@@ -169,10 +173,9 @@ export function GenerateBlogModal({
         return () => document.removeEventListener("keydown", handler);
     }, [onClose]);
 
-    const setField = useCallback(
-        (field: keyof AuthorInput) =>
-            (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-                setForm((prev) => ({ ...prev, [field]: e.target.value })),
+    const handleFieldChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+            setForm((prev) => ({ ...prev, [e.target.name]: e.target.value })),
         []
     );
 
@@ -184,14 +187,20 @@ export function GenerateBlogModal({
         setForm((prev) => ({ ...prev, keyword: "" }));
     }, []);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    // Derived — keeps keyword field in sync when cleared via button
+    const keywordValue = useMemo(() => form.keyword, [form.keyword]);
+
+    const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         setAttemptedSubmit(true);
         if (!form.authorName.trim() || !form.keyword.trim()) return;
         setIsGenerating(true);
-        await onGenerate(form);
-        setIsGenerating(false);
-    };
+        try {
+            await onGenerate(form);
+        } finally {
+            setIsGenerating(false);
+        }
+    }, [form, onGenerate]);
 
     const headerAccent = isDataReport
         ? "bg-purple-500/10 border-purple-500/20"
@@ -274,9 +283,10 @@ export function GenerateBlogModal({
                                     <input
                                         ref={keywordRef}
                                         id={id("keyword")}
+                                        name="keyword"
                                         type="text"
-                                        value={form.keyword}
-                                        onChange={setField("keyword")}
+                                        value={keywordValue}
+                                        onChange={handleFieldChange}
                                         placeholder="e.g. piggery farming Uganda, best feed for pigs…"
                                         aria-invalid={keywordMissing}
                                         className={`${inputCls} pr-8 ${keywordMissing ? "border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20" : ""}`}
@@ -377,9 +387,10 @@ export function GenerateBlogModal({
                             >
                                 <input
                                     id={id("authorName")}
+                                    name="authorName"
                                     type="text"
                                     value={form.authorName}
-                                    onChange={setField("authorName")}
+                                    onChange={handleFieldChange}
                                     placeholder="e.g. Magombe Kenneth David"
                                     aria-invalid={nameMissing}
                                     className={`${inputCls} ${nameMissing ? "border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20" : ""}`}
@@ -398,9 +409,10 @@ export function GenerateBlogModal({
                             >
                                 <input
                                     id={id("authorRole")}
+                                    name="authorRole"
                                     type="text"
                                     value={form.authorRole}
-                                    onChange={setField("authorRole")}
+                                    onChange={handleFieldChange}
                                     placeholder="e.g. Founder & Farm Consultant"
                                     className={inputCls}
                                 />
@@ -414,8 +426,9 @@ export function GenerateBlogModal({
                             >
                                 <textarea
                                     id={id("authorBio")}
+                                    name="authorBio"
                                     value={form.authorBio}
-                                    onChange={setField("authorBio")}
+                                    onChange={handleFieldChange}
                                     placeholder="e.g. 5 years running a piggery in Wakiso District. I help Ugandan farmers increase yields while cutting feed costs."
                                     rows={2}
                                     className={`${inputCls} resize-none`}
@@ -456,8 +469,9 @@ export function GenerateBlogModal({
                             >
                                 <textarea
                                     id={id("realExperience")}
+                                    name="realExperience"
                                     value={form.realExperience}
-                                    onChange={setField("realExperience")}
+                                    onChange={handleFieldChange}
                                     placeholder="e.g. Reduced pig mortality from 12% to 4% in 60 days by switching feed supplier and adding vitamin supplements at week 3"
                                     rows={2}
                                     className={`${inputCls} resize-none`}
@@ -472,9 +486,10 @@ export function GenerateBlogModal({
                             >
                                 <input
                                     id={id("realNumbers")}
+                                    name="realNumbers"
                                     type="text"
                                     value={form.realNumbers}
-                                    onChange={setField("realNumbers")}
+                                    onChange={handleFieldChange}
                                     placeholder="e.g. Feed UGX 45,000/bag, avg yield 80kg/month, FCR 2.1"
                                     className={inputCls}
                                 />
@@ -488,9 +503,10 @@ export function GenerateBlogModal({
                             >
                                 <input
                                     id={id("localContext")}
+                                    name="localContext"
                                     type="text"
                                     value={form.localContext}
-                                    onChange={setField("localContext")}
+                                    onChange={handleFieldChange}
                                     placeholder="e.g. Kampala, Uganda — two rainy seasons, April–June and Oct–Nov"
                                     className={inputCls}
                                 />

@@ -178,13 +178,14 @@ function ChecklistItem({ label, complete }: { label: string; complete: boolean }
 export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalProps) {
     const [mode, setMode] = useState<ReviewMode>("write");
     const [editedContent, setEditedContent] = useState(blog.content);
+    // lastSavedContent tracks what is persisted server-side; hasUnsavedChanges derives from this
+    const [lastSavedContent, setLastSavedContent] = useState(blog.content);
     const [scoreResult, setScoreResult] = useState<ContentScoreResult | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isPublishing, setIsPublishing] = useState(false);
     const [isImproving, setIsImproving] = useState(false);
     const [aiContent, setAiContent] = useState<string | null>(null);
     const [showAiReview, setShowAiReview] = useState(false);
-    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
     const citationScore = blog.citationScore ?? null;
     const citationCriteria: CitationCriterion[] = Array.isArray(blog.citationCriteria)
@@ -193,6 +194,11 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
 
     // scoreResult.score is the correct field — ContentScoreResult has no overallScore
     const activeScore = scoreResult?.score ?? citationScore;
+
+    const hasUnsavedChanges = useMemo(
+        () => editedContent !== lastSavedContent,
+        [editedContent, lastSavedContent]
+    );
 
     const failedCitationCriteria = useMemo(
         () => citationCriteria.filter((c) => !c.passed).sort((a, b) => b.weight - a.weight),
@@ -206,10 +212,6 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
         : { label: "Not analyzed", shortLabel: "Not analyzed", tone: "warning" as const };
 
     const headerTone = toneClasses(scoreState.tone);
-
-    useEffect(() => {
-        setHasUnsavedChanges(editedContent !== blog.content);
-    }, [editedContent, blog.content]);
 
     useEffect(() => {
         if (!showAiReview) return;
@@ -233,7 +235,7 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                 body: JSON.stringify({ content: editedContent }),
             });
             if (!res.ok) throw new Error("Failed to save edits");
-            setHasUnsavedChanges(false);
+            setLastSavedContent(editedContent);
             toast.success("Draft saved");
         } catch (error) {
             logger.error("Failed to save blog edits", { error: (error as Error)?.message || error });
@@ -241,7 +243,7 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
         } finally {
             setIsSaving(false);
         }
-    }, [blog.id, editedContent, hasUnsavedChanges]);
+    }, [blog.id, editedContent, hasUnsavedChanges, lastSavedContent]);
 
     const handleAIImprove = useCallback(async () => {
         setIsImproving(true);
@@ -289,8 +291,9 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
             setShowAiReview(true);
             toast.success("AI improvement is ready to review");
         } catch (error) {
-            logger.error("AI improvement failed", { error: (error as Error)?.message || error });
-            toast.error((error as Error)?.message || "AI improvement failed. Please try again.");
+            const msg = error instanceof Error ? error.message : "AI improvement failed. Please try again.";
+            logger.error("AI improvement failed", { error: msg });
+            toast.error(msg);
         } finally {
             setIsImproving(false);
         }
@@ -298,8 +301,7 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
 
     const acceptAiChanges = useCallback(() => {
         if (!aiContent) return;
-        setEditedContent(aiContent);
-        setHasUnsavedChanges(true);
+        setEditedContent(aiContent); // hasUnsavedChanges recomputes automatically via useMemo
         setAiContent(null);
         setShowAiReview(false);
         setMode("write");
@@ -325,8 +327,9 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                 onClose();
             }
         } catch (error) {
-            logger.error("Publishing failed", { error: (error as Error)?.message || error });
-            toast.error("Couldn't publish this article");
+            const msg = error instanceof Error ? error.message : "Couldn't publish this article";
+            logger.error("Publishing failed", { error: msg });
+            toast.error(msg);
         } finally {
             setIsPublishing(false);
         }
