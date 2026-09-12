@@ -108,13 +108,32 @@ Return ONLY a JSON array wrapped in a markdown code block:
 \`\`\``;
 
         const { callGemini } = await import("@/lib/gemini");
-        const responseText = await callGemini(prompt, { maxOutputTokens: 1200, temperature: 0.4 });
+        const responseText = await callGemini(prompt, { maxOutputTokens: 2000, temperature: 0.4 });
 
         let suggestions: InternalLinkSuggestion[] = [];
 
         try {
-            const fenced = responseText.match(/```json([\s\S]*?)```/);
-            const jsonStr = fenced ? fenced[1].trim() : responseText.match(/\[[\s\S]*\]/)?.[0] ?? "";
+            // Strategy 1: complete fenced code block  ```json ... ```
+            let jsonStr = responseText.match(/```json([\s\S]*?)```/)?.[1]?.trim() ?? "";
+
+            // Strategy 2: bare JSON array anywhere in the response
+            if (!jsonStr) {
+                jsonStr = responseText.match(/\[[\s\S]*\]/)?.[0] ?? "";
+            }
+
+            // Strategy 3: the fence opened but never closed (truncated) — grab everything after ```json
+            if (!jsonStr) {
+                const afterFence = responseText.match(/```json([\s\S]*)/)?.[1]?.trim() ?? "";
+                if (afterFence) {
+                    // Close the array if truncated mid-way — attempt best-effort parse
+                    jsonStr = afterFence.endsWith("]") ? afterFence : afterFence + "]";
+                    // Remove any trailing incomplete object (ends without closing brace)
+                    jsonStr = jsonStr.replace(/,?\s*\{[^}]*$/, "]");
+                }
+            }
+
+            if (!jsonStr) throw new Error("No JSON found in AI response");
+
             const parsed = JSON.parse(jsonStr);
 
             if (!Array.isArray(parsed)) throw new Error("Response is not an array");
