@@ -262,21 +262,7 @@ export const cronWeeklySerpAnalysis = inngest.createFunction(
 );
 
 
-/**
- * Stuck-Blog Sweep — runs every 30 minutes.
- *
- * Any blog that has been in GENERATING status for more than 20 minutes is
- * considered stuck (Inngest's onFailure didn't fire, or the job was lost).
- * The sweep marks them FAILED and refunds 10 credits per blog.
- *
- * This is the last-resort safety net — not the primary failure handler.
- * The primary handler is onFailure inside generateBlogJob.
- *
- * 20-min threshold reasoning:
- *   - Inngest max step duration on Pro plan = 15 min per step.
- *   - We cap generation at 4.5 min.
- *   - 20 min = comfortable buffer that covers all retry attempts.
- */
+
 export const cronStuckBlogSweep = inngest.createFunction(
     {
         id: "cron-stuck-blog-sweep",
@@ -285,7 +271,7 @@ export const cronStuckBlogSweep = inngest.createFunction(
         triggers: [{ cron: "*/30 * * * *" }],
     },
     async ({ step }) => {
-        const STUCK_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutes
+        const STUCK_THRESHOLD_MS = 20 * 60 * 1000;
         const cutoff = new Date(Date.now() - STUCK_THRESHOLD_MS);
 
         const stuckBlogs = await step.run("find-stuck-blogs", () =>
@@ -485,11 +471,6 @@ export const cronWeeklyGrowthPipeline = inngest.createFunction(
 );
 
 
-// ────────────────────────────────────────────────────────────────────────────
-// D.5: Experiment Measurement — daily GSC metric collection for running experiments
-// Runs daily at 04:30 UTC — before evaluation cron at 05:00 UTC
-// ────────────────────────────────────────────────────────────────────────────
-
 export const cronDailyExperimentMeasurement = inngest.createFunction(
     {
         id: "cron-daily-experiment-measurement",
@@ -630,7 +611,6 @@ export const cronWeeklyLearningLoop = inngest.createFunction(
         const { validateSignal } = await import("@/lib/learning/signal-validator");
         const { persistAndActivateSignal, persistActionPerformance } = await import("@/lib/learning/signal-registry");
 
-        // 1. Get all sites with D.5 experiments
         const sites = await step.run("fetch-sites-with-experiments", async () => {
             try {
                 const rows = await (prisma as any).experiment.findMany({
@@ -710,7 +690,6 @@ export const cronDailyPortfolioAllocation = inngest.createFunction(
     async ({ step }) => {
         const { allocatePortfolioForSite } = await import("@/lib/portfolio/allocator");
 
-        // 1. Get all active sites with OPEN opportunities
         const sites = await step.run("fetch-sites-with-open-opportunities", async () => {
             try {
                 const rows = await (prisma as any).growthDecision.findMany({

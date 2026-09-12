@@ -41,7 +41,6 @@ export default function BlogGeneratingPage({
                 }
                 setStatus(data.generationStep ?? "researching");
             } catch {
-                // keep polling silently
             }
         };
 

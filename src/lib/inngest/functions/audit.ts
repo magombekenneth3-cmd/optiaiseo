@@ -88,7 +88,7 @@ export const processManualAuditJob = inngest.createFunction(
                 },
             });
 
-            // Write time-series metric snapshot
+
             await writeMetricSnapshot({
                 siteId,
                 overallScore: auditResult.overallScore,
@@ -96,7 +96,7 @@ export const processManualAuditJob = inngest.createFunction(
                 lcp: null,
                 cls: null,
                 inp: null,
-            }).catch(() => { /* non-fatal */ });
+            }).catch(() => {});
         });
         if (lockKey) {
             await step.run("release-audit-lock", async () => {
@@ -262,7 +262,7 @@ export const runWeeklyAuditJob = inngest.createFunction(
                 lcp: getPerfMetric(perfCatForSnap, "lcp"),
                 cls: getPerfMetric(perfCatForSnap, "cls"),
                 inp: getPerfMetric(perfCatForSnap, "inp"),
-            }).catch(() => {/* non-fatal */ });
+            }).catch(() => {});
 
             return { score: auditResult.overallScore, diff: diff?.summary, auditId: created.id };
 
@@ -319,7 +319,6 @@ export const runWeeklyAuditJob = inngest.createFunction(
             });
         });
 
-        // In-app notification (fail-open)
         await step.run("notify-weekly-audit-complete", async () => {
             const allItems = auditResult.categories?.flatMap(
                 (c: { items?: { status?: string }[] }) => c.items ?? []
@@ -510,7 +509,6 @@ export const processGsovSiteJob = inngest.createFunction(
     async ({ event, step }) => {
         const { siteId } = event.data;
 
-        // Fix #5: wrap all DB + external calls in step.run for replay isolation
         const detection = await step.run("detect-gsov-drop", async () => {
             const result = await detectGsovDrop(siteId);
             return {
@@ -581,7 +579,6 @@ export const processGscSiteJob = inngest.createFunction(
     async ({ event, step }) => {
         const { siteId } = event.data;
 
-        // Fix #5: wrap all DB + external calls in step.run for replay isolation
         const detection = await step.run("detect-gsc-anomalies", async () => {
             const result = await detectGscAnomalies(siteId);
             return { dropped: result.dropped, anomalies: result.anomalies };
