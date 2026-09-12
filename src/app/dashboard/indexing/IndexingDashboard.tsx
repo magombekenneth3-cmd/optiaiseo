@@ -208,6 +208,27 @@ export function IndexingDashboard({ sites, logs, todayCount, dailyQuota }: Props
 
             <QuotaBar used={todayCount} total={dailyQuota} />
 
+            <section aria-label="Indexing summary" className="fade-in-up">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8 py-2">
+                    <div>
+                        <p className="stat-value-sm">{localLogs.length}</p>
+                        <p className="stat-label">Discovered</p>
+                    </div>
+                    <div>
+                        <p className="stat-value-sm">{localLogs.filter(l => l.status === "SUCCESS").length}</p>
+                        <p className="stat-label">Indexed</p>
+                    </div>
+                    <div>
+                        <p className="stat-value-sm">{localLogs.filter(l => l.status === "PENDING").length}</p>
+                        <p className="stat-label">Pending</p>
+                    </div>
+                    <div>
+                        <p className="stat-value-sm text-amber-400">{localLogs.filter(l => l.status === "FAILED" || l.status === "SKIPPED").length}</p>
+                        <p className="stat-label">Need Attention</p>
+                    </div>
+                </div>
+            </section>
+
             <div className="card-surface p-5 space-y-4">
                 <div className="flex items-center justify-between">
                     <h2 className="text-sm font-semibold">Submit URLs</h2>
