@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Zap, Globe, Clock } from "lucide-react";
+import { Zap, Clock } from "lucide-react";
 
 interface Props {
     domain: string;
@@ -15,13 +15,6 @@ interface Props {
     statusHeadline: string;
 }
 
-/**
- * DashboardHeroHeader
- * ─────────────────────────────────────────────────────────────────────────────
- * Minimal single-row header: page title + domain/last-audit context + Run Audit CTA.
- * No nested card containers, no decorative backgrounds.
- * Score data surfaces in the KPI row below; this header is purely contextual.
- */
 export function DashboardHeroHeader({
     domain,
     lastAuditDate,
@@ -30,31 +23,26 @@ export function DashboardHeroHeader({
 }: Props) {
     return (
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-            {/* Left: title + context */}
             <div className="min-w-0">
-                <h1 className="text-xl font-bold tracking-tight text-foreground leading-tight">
-                    Dashboard
+                <h1
+                    className="text-2xl font-bold tracking-tight text-foreground leading-tight"
+                    style={{ fontFamily: "var(--font-display)" }}
+                >
+                    {domain || "Command Center"}
                 </h1>
                 <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                    {domain && (
-                        <span className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                            <Globe className="w-3 h-3 shrink-0" aria-hidden="true" />
-                            <span className="truncate max-w-[200px]">{domain}</span>
-                        </span>
-                    )}
+                    <span className="text-sm text-muted-foreground font-medium">
+                        {statusHeadline}
+                    </span>
                     {lastAuditDate && (
-                        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground/60">
                             <Clock className="w-3 h-3 shrink-0" aria-hidden="true" />
-                            Last audit {lastAuditDate}
+                            {lastAuditDate}
                         </span>
-                    )}
-                    {!lastAuditDate && !domain && (
-                        <span className="text-xs text-muted-foreground">{statusHeadline}</span>
                     )}
                 </div>
             </div>
 
-            {/* Right: Run Audit CTA */}
             {siteId && (
                 <Link
                     href={`/dashboard/audits?siteId=${siteId}`}

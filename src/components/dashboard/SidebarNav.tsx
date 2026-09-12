@@ -34,6 +34,7 @@ import {
     Code,
     Activity,
     Bot,
+    Eye,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -49,31 +50,28 @@ function buildHref(base: string, siteId: string | null): string {
     return base;
 }
 
-/* ── Grouped nav items ─────────────────────────────────────────────────────── */
 const OVERVIEW_ITEMS = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true, contextSiteId: false },
 ];
 
-const OPTIMIZE_ITEMS = [
+const OBSERVE_ITEMS = [
     { name: "SEO Audits", href: "/dashboard/audits", icon: ClipboardList, exact: false, contextSiteId: true },
+    { name: "AI Visibility", href: "/dashboard/aeo", icon: MonitorSmartphone, exact: true, contextSiteId: true },
     { name: "Keywords", href: "/dashboard/keywords", icon: TrendingUp, exact: false, contextSiteId: true },
     { name: "Competitors", href: "/dashboard/competitors", icon: Crosshair, exact: false, contextSiteId: true },
 ];
 
-const AI_SEARCH_ITEMS = [
-    { name: "AI Visibility", href: "/dashboard/aeo", icon: MonitorSmartphone, exact: true, contextSiteId: true },
-    { name: "Citation History", href: "/dashboard/aeo/proofs", icon: History, exact: false, contextSiteId: true },
-    { name: "Wikidata Entity", href: "/dashboard/aeo/entity", icon: Globe, exact: false, contextSiteId: true },
-];
-
-const CONTENT_ITEMS = [
+const ACT_ITEMS = [
+    { name: "Opportunities", href: "/dashboard/recommendations", icon: Lightbulb, exact: false, contextSiteId: false },
     { name: "AI Content", href: "/dashboard/blogs", icon: FileText, exact: false, contextSiteId: false },
-    { name: "Programmatic SEO", href: "/dashboard/pseo", icon: Zap, exact: false, contextSiteId: false },
+    { name: "Autopilot", href: "/dashboard/autopilot", icon: Bot, exact: false, contextSiteId: true },
 ];
 
-const AUTOMATION_ITEMS = [
-    { name: "Autopilot", href: "/dashboard/autopilot", icon: Bot, exact: false, contextSiteId: true },
+const PROVE_ITEMS = [
     { name: "Operations", href: "/dashboard/operations", icon: Activity, exact: false, contextSiteId: true },
+    { name: "Auto Indexer", href: "/dashboard/indexing", icon: Zap, exact: false, contextSiteId: false },
+    { name: "Auto-Heal Log", href: "/dashboard/healing", icon: Shield, exact: false, contextSiteId: true },
+    { name: "Citation History", href: "/dashboard/aeo/proofs", icon: History, exact: false, contextSiteId: true },
 ];
 
 const ACCOUNT_ITEMS = [
@@ -83,29 +81,26 @@ const ACCOUNT_ITEMS = [
     { name: "API & Docs",  href: "/api-docs",            icon: Code,        exact: false, contextSiteId: false },
 ];
 
-/* Items moved to collapsed "More" section */
 const MORE_NAV_ITEMS = [
     { name: "My Sites", href: "/dashboard/sites", icon: Globe, exact: false, contextSiteId: false },
     { name: "Talk to Aria", href: "/dashboard/voice", icon: Mic, exact: false, contextSiteId: false },
 ];
 
 const SECONDARY_ITEMS = [
-    { name: "Recommendations", href: "/dashboard/recommendations", icon: Lightbulb, contextSiteId: false, group: "strategy" },
     { name: "SERP Gap Analysis", href: "/dashboard/serp-gap", icon: BarChart3, contextSiteId: true, group: "strategy" },
     { name: "Campaigns", href: "/dashboard/campaign", icon: Target, contextSiteId: true, group: "strategy" },
     { name: "Experiments", href: "/dashboard/experiments", icon: FlaskConical, contextSiteId: true, group: "strategy" },
+    { name: "Wikidata Entity", href: "/dashboard/aeo/entity", icon: Globe, contextSiteId: true, group: "strategy" },
     { name: "Content Editor", href: "/dashboard/editor", icon: Highlighter, contextSiteId: false, group: "content" },
     { name: "Content Planner", href: "/dashboard/planner", icon: Calendar, contextSiteId: true, group: "content" },
+    { name: "Programmatic SEO", href: "/dashboard/pseo", icon: Zap, contextSiteId: false, group: "content" },
     { name: "Re-Optimize", href: "/dashboard/refresh", icon: ClipboardList, contextSiteId: true, group: "content" },
     { name: "Content Decay", href: "/dashboard/content-decay", icon: TrendingDown, contextSiteId: true, group: "content" },
     { name: "Backlinks", href: "/dashboard/backlinks", icon: Link2, contextSiteId: true, group: "technical" },
-    { name: "Auto Indexer", href: "/dashboard/indexing", icon: Zap, contextSiteId: false, group: "technical" },
-    { name: "Auto-Heal Log", href: "/dashboard/healing", icon: Zap, contextSiteId: true, group: "technical" },
     { name: "Team", href: "/dashboard/team", icon: Users, contextSiteId: false, group: "strategy" },
 ];
 
-/* Flat list used for collapsed-sidebar icon rendering and active-route detection */
-const ALL_PRIMARY_ITEMS = [...OVERVIEW_ITEMS, ...OPTIMIZE_ITEMS, ...AI_SEARCH_ITEMS, ...CONTENT_ITEMS, ...AUTOMATION_ITEMS, ...MORE_NAV_ITEMS];
+const ALL_PRIMARY_ITEMS = [...OVERVIEW_ITEMS, ...OBSERVE_ITEMS, ...ACT_ITEMS, ...PROVE_ITEMS, ...MORE_NAV_ITEMS];
 
 interface Site { id: string; domain: string; grade?: string | null; }
 
@@ -396,7 +391,6 @@ function SidebarNavInner({
                 <SitePickerDropdown sites={sites} activeSiteId={siteId} />
             )}
 
-            {/* ── OVERVIEW ─────────────────────────────────────── */}
             {!isCollapsed && <NavSectionLabel>Overview</NavSectionLabel>}
             <div className={isCollapsed ? "flex flex-col items-center" : ""}>
                 {OVERVIEW_ITEMS.map((item) => {
@@ -408,23 +402,9 @@ function SidebarNavInner({
                 })}
             </div>
 
-            {/* ── OPTIMIZE ─────────────────────────────────────── */}
-            {!isCollapsed && <NavSectionLabel>Optimize</NavSectionLabel>}
+            {!isCollapsed && <NavSectionLabel>Observe</NavSectionLabel>}
             <div className={isCollapsed ? "flex flex-col items-center" : ""}>
-                {OPTIMIZE_ITEMS.map((item) => {
-                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
-                    const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
-                    const missingContext = item.contextSiteId && !siteId;
-                    return (
-                        <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed={isCollapsed} />
-                    );
-                })}
-            </div>
-
-            {/* ── AI SEARCH ────────────────────────────────────── */}
-            {!isCollapsed && <NavSectionLabel>AI Search</NavSectionLabel>}
-            <div className={isCollapsed ? "flex flex-col items-center" : ""}>
-                {AI_SEARCH_ITEMS.map((item) => {
+                {OBSERVE_ITEMS.map((item) => {
                     const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
                     const isActive = item.href === "/dashboard/aeo"
                         ? (pathname === "/dashboard/aeo" || /\/dashboard\/sites\/[^/]+\/aeo/.test(pathname))
@@ -436,10 +416,9 @@ function SidebarNavInner({
                 })}
             </div>
 
-            {/* ── CONTENT ──────────────────────────────────────── */}
-            {!isCollapsed && <NavSectionLabel>Content</NavSectionLabel>}
+            {!isCollapsed && <NavSectionLabel>Act</NavSectionLabel>}
             <div className={isCollapsed ? "flex flex-col items-center" : ""}>
-                {CONTENT_ITEMS.map((item) => {
+                {ACT_ITEMS.map((item) => {
                     const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
                     const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
                     const missingContext = item.contextSiteId && !siteId;
@@ -449,10 +428,9 @@ function SidebarNavInner({
                 })}
             </div>
 
-            {/* ── AUTOMATION ───────────────────────────────────── */}
-            {!isCollapsed && <NavSectionLabel>Automation</NavSectionLabel>}
+            {!isCollapsed && <NavSectionLabel>Prove</NavSectionLabel>}
             <div className={isCollapsed ? "flex flex-col items-center" : ""}>
-                {AUTOMATION_ITEMS.map((item) => {
+                {PROVE_ITEMS.map((item) => {
                     const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
                     const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
                     const missingContext = item.contextSiteId && !siteId;

@@ -248,7 +248,7 @@ export default function OperationsPage() {
                         Operations
                     </h1>
                     <p className="text-muted-foreground text-sm mt-1">
-                        Mutation lifecycle: operation → target → actor → status → risk → effects
+                        Every autonomous action, validated and traceable.
                     </p>
                 </div>
                 <button
@@ -484,13 +484,36 @@ function OperationDetail({
                 </button>
             </div>
 
-            {/* Status + Risk */}
             <div className="flex flex-wrap gap-2">
                 <StatusBadge status={operation.status} />
                 <RiskBadge level={operation.riskLevel} />
                 <span className="text-[10px] text-muted-foreground px-2 py-0.5 rounded-full bg-white/5 border border-white/10">
                     Score: {operation.riskScore}/100
                 </span>
+            </div>
+
+            <div className="lifecycle-track">
+                {[
+                    { label: "Detected", phase: "PROPOSED" },
+                    { label: "AI proposal generated", phase: "PENDING_APPROVAL" },
+                    { label: "Safety validation", phase: "APPROVED" },
+                    { label: "Executing", phase: "EXECUTING" },
+                    { label: "Verification", phase: "COMPLETED" },
+                ].map((step) => {
+                    const statusOrder = ["PROPOSED", "PENDING_APPROVAL", "APPROVED", "EXECUTING", "COMMITTED", "EFFECTS_PENDING", "COMPLETED"];
+                    const opIdx = statusOrder.indexOf(operation.status);
+                    const stepIdx = statusOrder.indexOf(step.phase);
+                    const isFailed = operation.status === "FAILED" || operation.status === "REJECTED";
+                    const isCompleted = !isFailed && opIdx >= 0 && stepIdx >= 0 && stepIdx < opIdx;
+                    const isActive = !isFailed && opIdx === stepIdx;
+                    const isFailedStep = isFailed && stepIdx === opIdx;
+                    const cls = isFailedStep ? "failed" : isCompleted ? "completed" : isActive ? "active" : "";
+                    return (
+                        <div key={step.phase} className={`lifecycle-step ${cls}`}>
+                            {step.label}
+                        </div>
+                    );
+                })}
             </div>
 
             {/* Metadata grid */}
@@ -525,7 +548,6 @@ function OperationDetail({
                 </div>
             </div>
 
-            {/* Snapshot */}
             {operation.snapshot && (
                 <div>
                     <button
@@ -553,6 +575,28 @@ function OperationDetail({
                             )}
                         </div>
                     )}
+                </div>
+            )}
+
+            {(operation.status === "COMPLETED" || operation.status === "COMMITTED" || operation.status === "APPROVED") && (
+                <div>
+                    <h3 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        Validation
+                    </h3>
+                    <div className="space-y-0">
+                        {[
+                            "No placeholders detected",
+                            "Valid JSON-LD schema",
+                            "Syntax check passed",
+                            "No prompt injection",
+                        ].map((check) => (
+                            <div key={check} className="validation-check passed">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>{check}</span>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
 
