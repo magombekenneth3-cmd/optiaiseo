@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import React, { useState, useTransition } from "react";
 import { submitManualIndexing } from "@/app/actions/indexing";
 import { toast } from "sonner";
-import { Zap, Clock, CheckCircle2, XCircle, AlertCircle, RotateCcw, ExternalLink, FileText } from "lucide-react";
+import { Zap, Clock, CheckCircle2, XCircle, AlertCircle, RotateCcw, ExternalLink, FileText, ChevronDown } from "lucide-react";
 
 interface Site {
     id: string;
@@ -93,6 +93,7 @@ export function IndexingDashboard({ sites, logs, todayCount, dailyQuota }: Props
 
     const parsedUrls = parseUrlLines(urlText);
     const isMulti = parsedUrls.length > 1;
+    const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
     async function handleSitemapImport() {
         if (!sitemapUrl.trim()) return;
@@ -361,18 +362,23 @@ export function IndexingDashboard({ sites, logs, todayCount, dailyQuota }: Props
                                     const status = STATUS_CONFIG[entry.status] ?? STATUS_CONFIG["SKIPPED"];
                                     const date = new Date(entry.createdAt);
                                     return (
-                                        <tr key={entry.id} className="hover:bg-muted/20 transition-colors">
+                                        <React.Fragment key={entry.id}>
+                                        <tr className="hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => setExpandedRowId(expandedRowId === entry.id ? null : entry.id)}>
                                             <td className="px-4 py-3 max-w-[260px]">
-                                                <a
-                                                    href={entry.url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-foreground hover:text-emerald-400 transition-colors flex items-center gap-1.5 truncate"
-                                                    title={entry.url}
-                                                >
-                                                    <span className="truncate">{entry.url}</span>
-                                                    <ExternalLink className="w-3 h-3 shrink-0 opacity-50" />
-                                                </a>
+                                                <div className="flex items-center gap-1.5">
+                                                    <ChevronDown className={`w-3 h-3 shrink-0 text-muted-foreground transition-transform ${expandedRowId === entry.id ? "rotate-180" : ""}`} />
+                                                    <a
+                                                        href={entry.url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-foreground hover:text-emerald-400 transition-colors flex items-center gap-1.5 truncate"
+                                                        title={entry.url}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <span className="truncate">{entry.url}</span>
+                                                        <ExternalLink className="w-3 h-3 shrink-0 opacity-50" />
+                                                    </a>
+                                                </div>
                                             </td>
                                             <td className="px-4 py-3 text-muted-foreground text-xs truncate max-w-[120px]">
                                                 {entry.site.domain}
@@ -405,7 +411,7 @@ export function IndexingDashboard({ sites, logs, todayCount, dailyQuota }: Props
                                             <td className="px-4 py-3">
                                                 {entry.status === "FAILED" && (
                                                     <button
-                                                        onClick={() => handleRetry(entry)}
+                                                        onClick={(e) => { e.stopPropagation(); handleRetry(entry); }}
                                                         className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-muted hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
                                                     >
                                                         <RotateCcw className="w-3 h-3" />
@@ -414,6 +420,55 @@ export function IndexingDashboard({ sites, logs, todayCount, dailyQuota }: Props
                                                 )}
                                             </td>
                                         </tr>
+                                        {expandedRowId === entry.id && (
+                                            <tr>
+                                                <td colSpan={7} className="px-4 py-4 bg-muted/10">
+                                                    <div className="max-w-lg">
+                                                        <p className="text-xs font-semibold text-foreground mb-3">URL Lifecycle</p>
+                                                        <div className="lifecycle-track">
+                                                            {[
+                                                                { label: "Submitted", phase: "SUBMITTED" },
+                                                                { label: "Queued for processing", phase: "PENDING" },
+                                                                { label: "Sent to API", phase: "PROCESSING" },
+                                                                { label: entry.status === "FAILED" ? "Failed" : "Indexed", phase: entry.status === "FAILED" ? "FAILED" : "SUCCESS" },
+                                                            ].map((step, i) => {
+                                                                const stateOrder = ["SUBMITTED", "PENDING", "PROCESSING", entry.status === "FAILED" ? "FAILED" : "SUCCESS"];
+                                                                const currentIdx = entry.status === "SUCCESS" ? 3 : entry.status === "FAILED" ? 3 : entry.status === "PENDING" ? 1 : 0;
+                                                                const isCompleted = i < currentIdx;
+                                                                const isActive = i === currentIdx;
+                                                                const isFailed = step.phase === "FAILED" && entry.status === "FAILED";
+                                                                const cls = isFailed ? "failed" : isCompleted ? "completed" : isActive ? (entry.status === "SUCCESS" ? "completed" : "active") : "";
+                                                                return (
+                                                                    <div key={step.phase} className={`lifecycle-step ${cls}`}>
+                                                                        {step.label}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                        {entry.errorMsg && entry.status === "FAILED" && (
+                                                            <div className="mt-3 px-3 py-2 rounded-lg bg-rose-500/5 border border-rose-500/15 text-xs text-rose-400">
+                                                                <span className="font-semibold">Error: </span>{entry.errorMsg}
+                                                            </div>
+                                                        )}
+                                                        <div className="mt-3 grid grid-cols-3 gap-4 text-xs">
+                                                            <div>
+                                                                <p className="text-muted-foreground mb-0.5">Engine</p>
+                                                                <p className="font-medium text-foreground">{entry.engine}</p>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-muted-foreground mb-0.5">Trigger</p>
+                                                                <p className="font-medium text-foreground">{TRIGGER_LABELS[entry.trigger] ?? entry.trigger}</p>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-muted-foreground mb-0.5">Submitted</p>
+                                                                <p className="font-medium text-foreground">{date.toLocaleString()}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                        </React.Fragment>
                                     );
                                 })}
                             </tbody>

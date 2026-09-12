@@ -30,6 +30,7 @@ import { PdfDownloadButton } from "@/components/PdfDownloadButton";
 import { CreditGate } from "@/components/ui/CreditGate";
 import { AasCard } from "@/components/aeo/AasCard";
 import { ProofTimeline } from "@/components/aeo/ProofTimeline";
+import { AeoVisibilityBreakdown } from "@/components/dashboard/AeoVisibilityBreakdown";
 
 // ─── Score utilities ──────────────────────────────────────────────────────────
 
@@ -601,6 +602,30 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
 
                         {/* ── TAB 1: Trend & Forecast ── */}
                         {innerTab === "trend" && (<>
+
+                        {/* Per-LLM Visibility Breakdown */}
+                        {rate !== null && (
+                            <div className="border border-border rounded-[10px] bg-card p-5">
+                                <AeoVisibilityBreakdown
+                                    overallScore={rate}
+                                    llmScores={
+                                        result?.multiModelResults?.models
+                                            ? result.multiModelResults.models.map((m: any) => ({
+                                                name: (m.modelName as string).replace(/^./, (c: string) => c.toUpperCase()),
+                                                score: m.citationRate ?? 0,
+                                            }))
+                                            : []
+                                    }
+                                    opportunities={
+                                        recommendations.slice(0, 4).map((rec: string, i: number) => ({
+                                            label: rec.length > 80 ? rec.slice(0, 77) + "…" : rec,
+                                            impact: (i === 0 ? "critical" : i === 1 ? "high" : "medium") as "critical" | "high" | "medium",
+                                        }))
+                                    }
+                                />
+                            </div>
+                        )}
+
                         <AeoScoreTrendChart siteId={siteId} domain={domain} />
                         <div className="border-t border-[#21262d] pt-6">
                             <VisibilityForecastPanel siteId={siteId} />
