@@ -2,7 +2,11 @@
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { getAllSitesWithMentions, checkLlmMentions, type AeoCategoryScore } from "@/app/actions/llmMentions";
+import {
+    getAllSitesWithMentions,
+    checkLlmMentions,
+    type AeoCategoryScore,
+} from "@/app/actions/llmMentions";
 import { GsiMetrics } from "@/components/dashboard/GsiMetrics";
 import { PromptSimulator } from "@/components/aeo/PromptSimulator";
 import type { AeoResult } from "@/lib/aeo";
@@ -13,9 +17,8 @@ import {
     Bot, Zap, ChevronDown, ChevronUp, Lightbulb, Globe,
     TrendingUp, HelpCircle, BarChart2, BookOpen, Target,
     Users, Search, Wrench, Loader2, Copy, Check, AlertCircle,
-    ArrowUpRight, Sparkles, Activity,
+    ArrowUpRight, Sparkles, Activity, Shield, Clock,
 } from "lucide-react";
-import { PageHeader } from "@/components/dashboard/PageHeader";
 import { BrandEntityPanel } from "@/components/aeo/BrandEntityPanel";
 import { CitationGapPanel } from "@/components/aeo/CitationGapPanel";
 import { CitationBreakdownPanel } from "@/components/aeo/CitationBreakdownPanel";
@@ -30,22 +33,23 @@ import { PdfDownloadButton } from "@/components/PdfDownloadButton";
 import { CreditGate } from "@/components/ui/CreditGate";
 import { AasCard } from "@/components/aeo/AasCard";
 import { ProofTimeline } from "@/components/aeo/ProofTimeline";
-import { AeoVisibilityBreakdown } from "@/components/dashboard/AeoVisibilityBreakdown";
 
-// ─── Score utilities ──────────────────────────────────────────────────────────
+// New component files
+import { AeoHeroCard } from "@/components/dashboard/aeo/AeoHeroCard";
+import { ScanProgress } from "@/components/dashboard/aeo/ScanProgress";
+import { AiSearchPresence } from "@/components/dashboard/aeo/AiSearchPresence";
+import { TopOpportunities } from "@/components/dashboard/aeo/TopOpportunities";
+import { BrandEntityCard } from "@/components/dashboard/aeo/BrandEntityCard";
+import { CitationPerformance } from "@/components/dashboard/aeo/CitationPerformance";
+import { SiteHealthPanel } from "@/components/dashboard/aeo/SiteHealthPanel";
+
+// ─── Score utilities (shared across inline components) ─────────────────────
 
 function scoreColor(score: number) {
     return score >= 65 ? "text-emerald-400" : score >= 40 ? "text-amber-400" : "text-rose-400";
 }
 function scoreBg(score: number) {
     return score >= 65 ? "bg-emerald-500" : score >= 40 ? "bg-amber-500" : "bg-rose-500";
-}
-function scoreGlow(score: number) {
-    return score >= 65
-        ? "shadow-[0_0_20px_rgba(16,185,129,0.25)]"
-        : score >= 40
-            ? "shadow-[0_0_20px_rgba(245,158,11,0.25)]"
-            : "shadow-[0_0_20px_rgba(239,68,68,0.25)]";
 }
 function gradeColor(grade: string) {
     const map: Record<string, string> = {
@@ -58,7 +62,6 @@ function gradeColor(grade: string) {
     return map[grade] ?? "text-zinc-400 border-zinc-500/30 bg-zinc-500/10";
 }
 
-// PATCH: grade labels — "B" alone means nothing; add a one-liner so users know where they stand
 const GRADE_LABELS: Record<string, string> = {
     A: "Excellent — AI frequently cites you",
     B: "Good foundations — needs content depth",
@@ -75,68 +78,31 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
     how_to_guidance: BookOpen,
 };
 
-// ─── Score Ring ───────────────────────────────────────────────────────────────
+// ─── Shared ScoreRing (small, for inline use) ──────────────────────────────
 
-function ScoreRing({
-    rate, size = 64, strokeWidth = 6, showLabel = true,
-}: {
-    rate: number; size?: number; strokeWidth?: number; showLabel?: boolean;
-}) {
+function ScoreRing({ rate, size = 48, strokeWidth = 5 }: { rate: number; size?: number; strokeWidth?: number }) {
     const r = size / 2 - strokeWidth;
     const circ = 2 * Math.PI * r;
     const dash = Math.min(rate / 100, 1) * circ;
     const color = rate >= 65 ? "#10b981" : rate >= 40 ? "#f59e0b" : "#ef4444";
-
     return (
         <div className="relative shrink-0" style={{ width: size, height: size }}>
             <svg width={size} height={size} className="-rotate-90" viewBox={`0 0 ${size} ${size}`}>
-                <circle
-                    cx={size / 2} cy={size / 2} r={r}
-                    fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={strokeWidth}
-                />
-                <circle
-                    cx={size / 2} cy={size / 2} r={r}
-                    fill="none" stroke={color} strokeWidth={strokeWidth}
-                    strokeLinecap="round"
-                    strokeDasharray={`${dash} ${circ}`}
+                <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={strokeWidth} />
+                <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={strokeWidth}
+                    strokeLinecap="round" strokeDasharray={`${dash} ${circ}`}
                     style={{ transition: "stroke-dasharray 1.4s cubic-bezier(0.4,0,0.2,1)" }}
                 />
             </svg>
-            {showLabel && (
-                <span
-                    className={`absolute inset-0 flex items-center justify-center font-black rotate-90 tabular-nums ${scoreColor(rate)}`}
-                    style={{ fontSize: size > 80 ? 28 : 13 }}
-                >
-                    {rate}
-                </span>
-            )}
+            <span className={`absolute inset-0 flex items-center justify-center font-black rotate-90 tabular-nums ${scoreColor(rate)}`}
+                style={{ fontSize: size > 60 ? 16 : 11 }}>
+                {rate}
+            </span>
         </div>
     );
 }
 
-// ─── Layer Score Pill ─────────────────────────────────────────────────────────
-
-function LayerPill({
-    label, score, icon: Icon,
-}: {
-    label: string; score: number | undefined; icon: React.ElementType;
-}) {
-    if (score === undefined || score < 0) return null;
-    const cls =
-        score >= 65
-            ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/25"
-            : score >= 40
-                ? "text-amber-400 bg-amber-500/10 border-amber-500/25"
-                : "text-rose-400 bg-rose-500/10 border-rose-500/25";
-    return (
-        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${cls}`}>
-            <Icon className="w-2.5 h-2.5" />
-            {label}&nbsp;{score}%
-        </span>
-    );
-}
-
-// ─── Category Bar ─────────────────────────────────────────────────────────────
+// ─── Category bar ──────────────────────────────────────────────────────────
 
 function CategoryBar({ cat }: { cat: AeoCategoryScore }) {
     const Icon = CATEGORY_ICONS[cat.category] ?? Globe;
@@ -152,34 +118,37 @@ function CategoryBar({ cat }: { cat: AeoCategoryScore }) {
                 <span className={`text-sm font-black tabular-nums ${scoreColor(cat.score)}`}>{cat.score}%</span>
             </div>
             <div className="h-1 rounded-full bg-muted overflow-hidden">
-                <div
-                    className={`h-full rounded-full transition-all duration-1000 ${scoreBg(cat.score)}`}
-                    style={{ width: `${cat.score}%` }}
-                />
+                <div className={`h-full rounded-full transition-all duration-1000 ${scoreBg(cat.score)}`} style={{ width: `${cat.score}%` }} />
             </div>
-            <p className="text-[10px] text-muted-foreground">
-                {cat.cited}/{cat.queriesRun} queries cited
-            </p>
+            <p className="text-[10px] text-muted-foreground">{cat.cited}/{cat.queriesRun} queries cited</p>
         </div>
     );
 }
 
-// ─── Recommendation Fix Panel ─────────────────────────────────────────────────
+// ─── Section label ─────────────────────────────────────────────────────────
 
-function RecommendationFixPanel({
-    siteId, recommendation, competitors, category,
-}: {
-    siteId: string;
-    recommendation: string;
-    competitors: string[];
-    category?: string;
+function SectionLabel({ icon: Icon, label, accent }: {
+    icon: React.ElementType; label: string; accent?: "amber" | "blue" | "emerald";
+}) {
+    const color = accent === "amber" ? "text-amber-400" : accent === "blue" ? "text-blue-400" : accent === "emerald" ? "text-emerald-400" : "text-muted-foreground";
+    return (
+        <div className="flex items-center gap-2">
+            <Icon className={`w-3.5 h-3.5 ${color}`} />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
+        </div>
+    );
+}
+
+// ─── Recommendation fix panel ──────────────────────────────────────────────
+
+function RecommendationFixPanel({ siteId, recommendation, competitors, category }: {
+    siteId: string; recommendation: string; competitors: string[]; category?: string;
 }) {
     type State =
         | { status: "idle" }
         | { status: "loading" }
         | { status: "done"; result: AeoRecommendationFix }
         | { status: "error"; message: string };
-
     const [state, setState] = useState<State>({ status: "idle" });
     const [copied, setCopied] = useState(false);
 
@@ -196,39 +165,26 @@ function RecommendationFixPanel({
         setTimeout(() => setCopied(false), 2000);
     };
 
-    if (state.status === "idle") {
+    if (state.status === "idle")
         return (
-            <button
-                onClick={handleFix}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-bold rounded-lg
-          bg-emerald-500/10 border border-emerald-500/25 text-emerald-400
-          hover:bg-emerald-500/20 hover:border-emerald-500/50
-          active:scale-95 transition-all shrink-0 whitespace-nowrap"
-                title="Generate a targeted fix using competitor intelligence"
-            >
-                <Wrench className="w-3 h-3" />
-                Fix this
+            <button onClick={handleFix} className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-bold rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50 active:scale-95 transition-all shrink-0 whitespace-nowrap">
+                <Wrench className="w-3 h-3" /> Fix this
             </button>
         );
-    }
-    if (state.status === "loading") {
+    if (state.status === "loading")
         return (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border bg-emerald-500/10 border-emerald-500/20 text-emerald-400 shrink-0">
                 <Loader2 className="w-3 h-3 animate-spin" /> Generating…
             </span>
         );
-    }
-    if (state.status === "error") {
+    if (state.status === "error")
         return (
             <div className="mt-3 w-full flex items-start gap-2 text-xs text-rose-400 bg-rose-500/5 border border-rose-500/20 rounded-xl p-3">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 <span className="flex-1">{state.message}</span>
-                <button onClick={() => setState({ status: "idle" })} className="underline text-muted-foreground hover:text-foreground">
-                    Retry
-                </button>
+                <button onClick={() => setState({ status: "idle" })} className="underline text-muted-foreground hover:text-foreground">Retry</button>
             </div>
         );
-    }
 
     const r = state.result;
     return (
@@ -246,86 +202,593 @@ function RecommendationFixPanel({
             <ol className="space-y-2">
                 {r.steps.map((step, si) => (
                     <li key={si} className="flex gap-2.5 items-start text-xs text-foreground/80">
-                        <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-black flex items-center justify-center shrink-0 mt-0.5">
-                            {si + 1}
-                        </span>
+                        <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-black flex items-center justify-center shrink-0 mt-0.5">{si + 1}</span>
                         {step}
                     </li>
                 ))}
             </ol>
             {r.copySnippet && (
                 <div className="relative">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
-                        Ready-to-paste snippet
-                    </p>
-                    <pre className="text-xs text-zinc-300 bg-zinc-950/80 border border-zinc-700/60 rounded-xl p-3 pr-10 overflow-x-auto font-mono whitespace-pre-wrap">
-                        {r.copySnippet}
-                    </pre>
-                    <button
-                        onClick={() => handleCopy(r.copySnippet!)}
-                        className="absolute top-7 right-2 p-1.5 rounded-lg bg-zinc-700/80 hover:bg-zinc-600 text-zinc-300 hover:text-white transition-colors"
-                    >
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Ready-to-paste snippet</p>
+                    <pre className="text-xs text-zinc-300 bg-zinc-950/80 border border-zinc-700/60 rounded-xl p-3 pr-10 overflow-x-auto font-mono whitespace-pre-wrap">{r.copySnippet}</pre>
+                    <button onClick={() => handleCopy(r.copySnippet!)} className="absolute top-7 right-2 p-1.5 rounded-lg bg-zinc-700/80 hover:bg-zinc-600 text-zinc-300 hover:text-white transition-colors">
                         {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                     </button>
                 </div>
             )}
-            <button onClick={() => setState({ status: "idle" })} className="self-end text-[10px] text-muted-foreground hover:text-foreground underline">
-                Reset
-            </button>
+            <button onClick={() => setState({ status: "idle" })} className="self-end text-[10px] text-muted-foreground hover:text-foreground underline">Reset</button>
         </div>
     );
 }
 
-// ─── Scanning Spinner SVG ─────────────────────────────────────────────────────
+// ─── Benchmark Banner (sidebar) ────────────────────────────────────────────
 
-function SpinnerSvg({ className }: { className?: string }) {
+function BenchmarkSidebar({ yourScore, siteId }: { yourScore: number; siteId: string }) {
+    const [dismissed, setDismissed] = useState(true);
+    const [stats, setStats] = useState<{ average: number; topTenPercent: number } | null>(null);
+
+    useEffect(() => {
+        const isDismissed = localStorage.getItem(`benchmark-dismissed-${siteId}`) === "true";
+        setDismissed(isDismissed);
+        fetch("/api/aeo/benchmark").then(r => r.json()).then(data => {
+            if (data.success) setStats({ average: data.average, topTenPercent: data.topTenPercent });
+        }).catch(() => {});
+    }, [siteId]);
+
+    const average = stats?.average ?? 38;
+    const topTen = stats?.topTenPercent ?? 71;
+
+    if (dismissed) {
+        return (
+            <button
+                onClick={() => { localStorage.removeItem(`benchmark-dismissed-${siteId}`); setDismissed(false); }}
+                className="w-full text-[10px] text-muted-foreground/60 border border-dashed border-border rounded-xl py-2 px-3 text-center hover:text-muted-foreground transition-colors"
+            >
+                Show industry comparison
+            </button>
+        );
+    }
+
     return (
-        <svg className={`${className} animate-spin`} fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
+        <div className="rounded-2xl border border-border bg-card p-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <BarChart2 className="w-4 h-4 text-blue-400" />
+                    <p className="text-sm font-bold text-foreground">Industry Comparison</p>
+                </div>
+                <button onClick={() => { localStorage.setItem(`benchmark-dismissed-${siteId}`, "true"); setDismissed(true); }} className="text-muted-foreground/60 hover:text-foreground text-sm transition-colors">✕</button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+                {[
+                    { label: "Your score", value: yourScore, color: "text-foreground" },
+                    { label: "Category avg", value: average, color: "text-muted-foreground" },
+                    { label: "Top 10%", value: topTen, color: "text-amber-400" },
+                ].map(item => (
+                    <div key={item.label} className="text-center">
+                        <div className={`text-xl font-black tabular-nums ${item.color}`}>{item.value}</div>
+                        <div className="text-[9px] text-muted-foreground/70 mt-0.5">{item.label}</div>
+                    </div>
+                ))}
+            </div>
+            <div className="h-1.5 rounded-full bg-muted/40 relative overflow-visible">
+                <div className="absolute top-[-3px] w-0.5 h-3 bg-muted-foreground/50 rounded-full" style={{ left: `${Math.min(average, 100)}%` }} />
+                <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full" style={{ width: `${Math.min(yourScore, 100)}%` }} />
+                <div className="absolute top-[-3px] w-0.5 h-3 bg-amber-400 rounded-full" style={{ left: `${Math.min(topTen, 100)}%` }} />
+            </div>
+            <div className="flex justify-between text-[9px] text-muted-foreground/50 font-mono">
+                <span>0</span>
+                <span>avg {average}</span>
+                <span className="text-amber-400">top {topTen}</span>
+                <span>100</span>
+            </div>
+        </div>
     );
 }
 
-// ─── Site Row ─────────────────────────────────────────────────────────────────
+// ─── Recent Activity (sidebar) ────────────────────────────────────────────
 
-function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
+function RecentActivity({ sites }: { sites: any[] }) {
+    const events = sites
+        .flatMap((s) => {
+            const events = [];
+            if (s.latest?.createdAt) events.push({ label: "AI visibility scan completed", date: s.latest.createdAt, domain: s.site?.domain });
+            return events;
+        })
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 4);
+
+    if (events.length === 0) return null;
+
+    return (
+        <div className="rounded-2xl border border-border bg-card p-5 flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                <p className="text-sm font-bold text-foreground">Recent Activity</p>
+            </div>
+            <div className="flex flex-col gap-3">
+                {events.map((e, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
+                        <div className="min-w-0">
+                            <p className="text-xs text-foreground leading-snug">{e.label}</p>
+                            <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                                {new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                                {" · "}
+                                {new Date(e.date).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                            </p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ─── Tab definitions ───────────────────────────────────────────────────────
+
+const MAIN_TABS = [
+    { id: "overview",         label: "Overview" },
+    { id: "citations",        label: "Citations" },
+    { id: "recommendations",  label: "Recommendations" },
+    { id: "competitors",      label: "Competitors" },
+    { id: "queries",          label: "Queries" },
+    { id: "brand",            label: "Brand Entity" },
+    { id: "evidence",         label: "Evidence" },
+] as const;
+
+type MainTabId = typeof MAIN_TABS[number]["id"];
+
+// ─── Tab nav ───────────────────────────────────────────────────────────────
+
+function MainTabNav({ active, onChange }: { active: MainTabId; onChange: (t: MainTabId) => void }) {
+    return (
+        <div className="flex items-center gap-0 border-b border-border overflow-x-auto scrollbar-none">
+            {MAIN_TABS.map((tab) => (
+                <button
+                    key={tab.id}
+                    onClick={() => onChange(tab.id)}
+                    className={[
+                        "shrink-0 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap border-b-2 -mb-px",
+                        active === tab.id
+                            ? "border-emerald-500 text-foreground"
+                            : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
+                    ].join(" ")}
+                >
+                    {tab.label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+// ─── Tab content ───────────────────────────────────────────────────────────
+
+function TabContent({
+    tab, siteId, domain, rate, result, recommendations, responses,
+    categoryScores, models, brandFacts, competitorDomains, hasCompetitors,
+    onTabChange,
+}: {
+    tab: MainTabId;
     siteId: string;
     domain: string;
-    latest: any;
-    onScan: (siteId: string) => Promise<{ reportId: string } | { error: string } | null>;
-    onDeepScan: (siteId: string) => Promise<{ reportId: string } | { error: string } | null>;
+    rate: number | null;
+    result: any;
+    recommendations: string[];
+    responses: any[];
+    categoryScores: AeoCategoryScore[];
+    models: any[];
+    brandFacts: { factType: string; value: string; verified: boolean }[];
+    competitorDomains: string[];
+    hasCompetitors: boolean;
+    onTabChange: (t: MainTabId) => void;
 }) {
-    const router = useRouter();
+    // ── OVERVIEW ──────────────────────────────────────────────────────────
+    if (tab === "overview") {
+        return (
+            <div className="flex flex-col gap-6">
+                {/* Top row: opportunities + brand entity side by side */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div className="lg:col-span-2">
+                        <TopOpportunities
+                            recommendations={recommendations}
+                            responses={responses}
+                            domain={domain}
+                            siteId={siteId}
+                            onViewAll={() => onTabChange("recommendations")}
+                        />
+                    </div>
+                    <BrandEntityCard
+                        brandFacts={brandFacts}
+                        siteId={siteId}
+                        onViewDetails={() => onTabChange("brand")}
+                    />
+                </div>
+
+                {/* Category score breakdown */}
+                {categoryScores.length > 0 && (
+                    <div className="rounded-2xl border border-border bg-card p-5">
+                        <SectionLabel icon={TrendingUp} label="AEO Category Scores" />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                            {categoryScores.map(cat => <CategoryBar key={cat.category} cat={cat} />)}
+                        </div>
+                    </div>
+                )}
+
+                {/* Citation performance */}
+                <CitationPerformance
+                    models={models}
+                    lastScanAt={result?.createdAt}
+                    onViewEvidence={() => onTabChange("evidence")}
+                />
+            </div>
+        );
+    }
+
+    // ── CITATIONS ─────────────────────────────────────────────────────────
+    if (tab === "citations") {
+        return (
+            <div className="flex flex-col gap-6">
+                <PanelErrorBoundary fallbackTitle="Citation Gap panel failed to load">
+                    <CitationGapPanel siteId={siteId} hasCompetitors={hasCompetitors} />
+                </PanelErrorBoundary>
+                {responses.length > 0 && (
+                    <PanelErrorBoundary fallbackTitle="Citation Breakdown failed to load">
+                        <CitationBreakdownPanel responses={responses} domain={domain} multiModel={models} />
+                    </PanelErrorBoundary>
+                )}
+            </div>
+        );
+    }
+
+    // ── RECOMMENDATIONS ───────────────────────────────────────────────────
+    if (tab === "recommendations") {
+        const competitors = responses
+            .filter((r: any) => !r.cited && r.excerpt)
+            .flatMap((r: any) => ((r.excerpt as string).match(/\b([a-z0-9-]+\.(?:com|org|net|io|co|ai|app|dev))\b/gi) ?? []))
+            .filter((d: string) => !d.includes(domain));
+        const uniqueCompetitors = [...new Set(competitors)].slice(0, 3);
+        const catKeys = ["brand_authority", "industry", "services", "geography", "legitimacy"];
+
+        return (
+            <div className="flex flex-col gap-4">
+                <div className="rounded-2xl border border-border bg-card p-5">
+                    <SectionLabel icon={Lightbulb} label="Actionable Recommendations" accent="amber" />
+                    {recommendations.length === 0 ? (
+                        <p className="text-sm text-muted-foreground mt-4">
+                            Run an AEO Scan to generate personalised recommendations.
+                        </p>
+                    ) : (
+                        <div className="flex flex-col gap-4 mt-4">
+                            {recommendations.map((rec, i) => (
+                                <div key={i} className="rounded-xl border border-border/60 bg-muted/10 p-4">
+                                    <div className="flex items-start gap-3">
+                                        <span className="w-6 h-6 rounded-full bg-amber-500/15 border border-amber-500/25 text-amber-400 text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                                        <p className="text-sm text-foreground/85 leading-relaxed flex-1">{rec}</p>
+                                        <RecommendationFixPanel siteId={siteId} recommendation={rec} competitors={uniqueCompetitors} category={catKeys[i]} />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Schema gaps */}
+                {result?.schemaGaps?.length > 0 && (
+                    <div className="rounded-2xl border border-border bg-card p-5">
+                        <SectionLabel icon={AlertCircle} label="Missing Schema" accent="amber" />
+                        <div className="flex flex-col gap-2 mt-4">
+                            {result.schemaGaps.map((gap: string, i: number) => (
+                                <div key={i} className="flex items-start gap-2.5 text-sm p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl">
+                                    <span className="text-amber-400 text-base mt-0.5">⚠</span>
+                                    <span className="text-foreground/85">{gap}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* What AI knows about brand */}
+                {result?.checks?.aiExcerpt && (
+                    <div className="rounded-2xl border border-border bg-card p-5">
+                        <SectionLabel icon={Users} label="What AI Knows About Your Brand" accent="amber" />
+                        <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 flex flex-col gap-4">
+                            <p className="text-sm text-foreground/85 leading-relaxed italic">&ldquo;{result.checks.aiExcerpt}&rdquo;</p>
+                            {Array.isArray(result.checks.benchmarkChecks) && result.checks.benchmarkChecks.length > 0 && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {result.checks.benchmarkChecks.map((bc: any) => (
+                                        <div key={bc.id} className={`flex items-start gap-2.5 px-3 py-2.5 rounded-xl border text-xs ${bc.passed ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-300" : "bg-rose-500/5 border-rose-500/20 text-rose-300"}`}>
+                                            <span className="mt-0.5">{bc.passed ? "✅" : "❌"}</span>
+                                            <div>
+                                                <p className="font-semibold">{bc.label}</p>
+                                                <p className="text-[10px] text-muted-foreground mt-0.5">{bc.detail}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // ── COMPETITORS ───────────────────────────────────────────────────────
+    if (tab === "competitors") {
+        return (
+            <PanelErrorBoundary fallbackTitle="Competitor panel failed to load">
+                <BacklinkPanel siteId={siteId} competitorDomains={competitorDomains} />
+            </PanelErrorBoundary>
+        );
+    }
+
+    // ── QUERIES ───────────────────────────────────────────────────────────
+    if (tab === "queries") {
+        const categoryLabels: Record<string, string> = {
+            aio_brand: "AIO — Brand", brand_authority: "Brand Authority",
+            topic_coverage: "Topic Coverage", faq_readiness: "FAQ Readiness",
+            competitor_comparison: "Competitors", how_to_guidance: "How-To",
+            geo_recommendation: "GEO — Recommendation",
+        };
+        return (
+            <div className="flex flex-col gap-6">
+                <PanelErrorBoundary fallbackTitle="Prompt Simulator failed to load">
+                    <PromptSimulator siteId={siteId} domain={domain} />
+                </PanelErrorBoundary>
+                <PanelErrorBoundary fallbackTitle="Query Library failed to load">
+                    <QueryLibraryPanel siteId={siteId} />
+                </PanelErrorBoundary>
+
+                {/* Raw query responses */}
+                {responses.length > 0 && (
+                    <div className="rounded-2xl border border-border bg-card p-5">
+                        <SectionLabel icon={Search} label={`AI Query Results (${responses.length})`} />
+                        <div className="flex flex-col gap-2 mt-4">
+                            {responses.map((r: any, i: number) => {
+                                const categoryLabel = r.category
+                                    ? (categoryLabels[r.category] ?? r.category.replace(/_/g, " "))
+                                    : null;
+                                const queryLabel = r.query && r.query !== `AEO batch analysis for ${r.category}` ? r.query : null;
+                                return (
+                                    <div key={i} className={`p-3.5 rounded-xl text-xs border ${r.cited ? "bg-emerald-500/5 border-emerald-500/15" : "bg-muted/20 border-border/60"}`}>
+                                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                            <span className={`font-bold px-2 py-0.5 rounded-lg border text-[11px] ${r.cited ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border-rose-500/20"}`}>
+                                                {r.cited ? "✅ Cited" : "❌ Not cited"}
+                                            </span>
+                                            {categoryLabel && (
+                                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-muted border border-border text-muted-foreground">{categoryLabel}</span>
+                                            )}
+                                        </div>
+                                        {queryLabel && <p className="font-semibold text-foreground mb-1.5">&ldquo;{queryLabel}&rdquo;</p>}
+                                        {r.excerpt
+                                            ? <p className="text-muted-foreground leading-relaxed">{r.excerpt}</p>
+                                            : <p className="text-muted-foreground/60 italic">No excerpt available.</p>
+                                        }
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // ── BRAND ENTITY ──────────────────────────────────────────────────────
+    if (tab === "brand") {
+        return (
+            <PanelErrorBoundary fallbackTitle="Brand Entity panel failed to load">
+                <BrandEntityPanel
+                    siteId={siteId}
+                    domain={domain}
+                    brandFacts={brandFacts}
+                    competitorDomains={competitorDomains}
+                />
+            </PanelErrorBoundary>
+        );
+    }
+
+    // ── EVIDENCE ──────────────────────────────────────────────────────────
+    if (tab === "evidence") {
+        const isDeepAudit = Array.isArray(result?.checks);
+        const deepChecks: any[] = isDeepAudit ? result.checks : [];
+        return (
+            <div className="flex flex-col gap-6">
+                <PanelErrorBoundary fallbackTitle="Proof Timeline failed to load">
+                    <ProofTimeline siteId={siteId} domain={domain} />
+                </PanelErrorBoundary>
+                <AeoScoreTrendChart siteId={siteId} domain={domain} />
+                <PanelErrorBoundary fallbackTitle="Visibility Forecast failed to load">
+                    <VisibilityForecastPanel siteId={siteId} />
+                </PanelErrorBoundary>
+
+                {/* Multi-model comparison */}
+                {models.length > 0 && (
+                    <div className="rounded-2xl border border-border bg-card p-5">
+                        <SectionLabel icon={BarChart2} label="Model Citation Comparison" />
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                            {models.map((m: any) => (
+                                <div key={m.modelName} className="p-4 rounded-xl bg-muted/20 border border-border/60">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <p className="font-semibold capitalize text-sm text-foreground">{m.modelName}</p>
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${m.citationRate >= 50 ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"}`}>
+                                            {m.citationRate}%
+                                        </span>
+                                    </div>
+                                    <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-2">
+                                        <div className={`h-full rounded-full transition-all duration-700 ${m.citationRate >= 50 ? "bg-emerald-500" : "bg-rose-500"}`} style={{ width: `${m.citationRate}%` }} />
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground">{m.citationCount}/{m.queriesRun} queries</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* GSI metrics */}
+                {result?.multiEngineScore && <GsiMetrics result={result as AeoResult} />}
+
+                {/* Deep audit layers */}
+                {deepChecks.length > 0 && (() => {
+                    const layerGroups = [
+                        { key: "aeo", label: "AEO — Answer Engine", color: "text-blue-400", icon: Search, cats: ["schema", "eeat", "content", "technical", "citation"] },
+                        { key: "geo", label: "GEO — Generative Recommendation", color: "text-purple-400", icon: Target, cats: ["geo"] },
+                        { key: "aio", label: "AIO — Brand Understanding", color: "text-amber-400", icon: Users, cats: ["aio"] },
+                    ];
+                    return (
+                        <div className="flex flex-col gap-8">
+                            {layerGroups.map(({ key, label, color, icon: LIcon, cats }) => {
+                                const groupChecks = deepChecks.filter((c: any) => cats.includes(c.category));
+                                if (!groupChecks.length) return null;
+                                const passed = groupChecks.filter((c: any) => c.passed).length;
+                                return (
+                                    <div key={key} className="rounded-2xl border border-border bg-card p-5">
+                                        <div className={`flex items-center gap-2 mb-4 ${color}`}>
+                                            <LIcon className="w-4 h-4" />
+                                            <span className="text-xs font-bold uppercase tracking-wider">{label}</span>
+                                            <span className="text-muted-foreground font-normal normal-case tracking-normal text-xs">— {passed}/{groupChecks.length} passed</span>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            {groupChecks.map((c: any) => (
+                                                <div key={c.id} className={`p-4 rounded-xl border flex flex-col gap-2 ${c.passed ? "bg-emerald-500/5 border-emerald-500/20" : "bg-rose-500/5 border-rose-500/20"}`}>
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <p className="font-semibold text-sm text-foreground">{c.passed ? "✅" : "❌"} {c.label}</p>
+                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase shrink-0 ${c.impact === "high" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" : c.impact === "medium" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" : "bg-blue-500/10 text-blue-400 border-blue-500/20"}`}>{c.impact}</span>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground leading-relaxed">{c.detail}</p>
+                                                    {!c.passed && c.recommendation && (
+                                                        <div className="mt-1 p-3 bg-muted/40 rounded-xl border border-border/60">
+                                                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                                                <Lightbulb className="w-3 h-3 text-amber-400" /> How to fix
+                                                            </p>
+                                                            <p className="text-xs text-muted-foreground leading-relaxed">{c.recommendation}</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    );
+                })()}
+
+                {/* Semantic gaps */}
+                {result?.semanticGaps?.length > 0 && (
+                    <PanelErrorBoundary fallbackTitle="Semantic Gap panel failed to load">
+                        <SemanticGapPanel gaps={result.semanticGaps} />
+                    </PanelErrorBoundary>
+                )}
+            </div>
+        );
+    }
+
+    return null;
+}
+
+// ─── Skeleton ──────────────────────────────────────────────────────────────
+
+function PageSkeleton() {
+    return (
+        <div className="flex gap-6">
+            <div className="flex-1 min-w-0 flex flex-col gap-4">
+                <div className="h-10 w-48 rounded-lg shimmer" />
+                <div className="h-44 rounded-2xl shimmer" />
+                <div className="h-10 rounded-xl shimmer" />
+                <div className="h-72 rounded-2xl shimmer" />
+            </div>
+            <div className="w-72 shrink-0 flex flex-col gap-4">
+                <div className="h-52 rounded-2xl shimmer" />
+                <div className="h-36 rounded-2xl shimmer" />
+                <div className="h-28 rounded-2xl shimmer" />
+            </div>
+        </div>
+    );
+}
+
+// ─── Main inner page ───────────────────────────────────────────────────────
+
+function AeoRankPageInner() {
+    const [sites, setSites] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [primaryBrandFacts, setPrimaryBrandFacts] = useState<{ factType: string; value: string; verified: boolean }[]>([]);
+    const [mainTab, setMainTab] = useState<MainTabId>("overview");
+
+    // Scan state — lifted from individual SiteRow to page level
+    const [activeResult, setActiveResult] = useState<any>(null);
     const [scanning, setScanning] = useState(false);
     const [deepScanning, setDeepScanning] = useState(false);
     const [pollingStatus, setPollingStatus] = useState<"idle" | "polling" | "done" | "timeout">("idle");
-    const [scanError, setScanError] = useState<string | null>(null);
+    const [currentStep, setCurrentStep] = useState(0);
     const [pendingReportId, setPendingReportId] = useState<string | null>(null);
-    const [result, setResult] = useState<any>(latest);
-    const [expanded, setExpanded] = useState(false);
-    const [innerTab, setInnerTab] = useState<"trend" | "insights" | "raw">("trend");
-    const [currentStep, setCurrentStep] = useState<number>(0);
+    const [scanError, setScanError] = useState<string | null>(null);
 
-    useEffect(() => { setResult(latest); }, [latest]);
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const urlSiteId = searchParams.get("siteId");
 
-    const handleScan = async () => {
+    // Load all sites
+    useEffect(() => {
+        getAllSitesWithMentions().then((res) => {
+            setLoading(false);
+            if (res.success) {
+                setSites(res.sites);
+                const entry = res.sites.find((s: any) => s.site?.id === urlSiteId) ?? res.sites[0];
+                setActiveResult(entry?.latest ?? null);
+            }
+        });
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const activeSiteEntry = sites.find((s) => s.site?.id === urlSiteId) ?? sites[0];
+    const activeSite = activeSiteEntry?.site;
+
+    // Load brand facts when active site changes
+    useEffect(() => {
+        if (!activeSite?.id) return;
+        fetch(`/api/entity-panel?siteId=${activeSite.id}`)
+            .then((r) => r.json())
+            .then((data) => setPrimaryBrandFacts(data.brandFacts ?? []))
+            .catch(() => {});
+    }, [activeSite?.id]);
+
+    // Sync activeResult when URL siteId changes
+    useEffect(() => {
+        if (!sites.length) return;
+        const entry = sites.find((s: any) => s.site?.id === urlSiteId) ?? sites[0];
+        setActiveResult(entry?.latest ?? null);
+    }, [urlSiteId, sites]);
+
+    // Scan handlers
+    const handleScan = useCallback(async () => {
+        if (!activeSite?.id) return;
         setScanning(true); setScanError(null);
-        const res = await onScan(siteId);
-        setScanning(false);
-        if (res && "reportId" in res) { setPendingReportId(res.reportId); setPollingStatus("polling"); }
-        else setScanError((res as any)?.error ?? "Scan failed to start. Check your API key or rate limit.");
-    };
+        try {
+            const res = await checkLlmMentions(activeSite.id);
+            if (res.success && res.reportId) { setPendingReportId(res.reportId); setPollingStatus("polling"); }
+            else setScanError((res as any).error ?? "Scan failed to start.");
+        } catch (e: unknown) {
+            setScanError((e as Error)?.message ?? "Network error — please try again.");
+        } finally {
+            setScanning(false);
+        }
+    }, [activeSite?.id]);
 
-    const handleDeepScan = async () => {
+    const handleDeepScan = useCallback(async () => {
+        if (!activeSite?.id) return;
         setDeepScanning(true); setScanError(null);
-        const res = await onDeepScan(siteId);
-        setDeepScanning(false);
-        if (res && "reportId" in res) { setPendingReportId(res.reportId); setPollingStatus("polling"); }
-        else setScanError((res as any)?.error ?? "Deep audit failed to start. Check your API key or rate limit.");
-    };
+        try {
+            const res = await runAeoReport(activeSite.id);
+            if (res.success && res.reportId) { setPendingReportId(res.reportId); setPollingStatus("polling"); }
+            else setScanError((res as any).error ?? "Deep audit failed to start.");
+        } catch (e: unknown) {
+            setScanError((e as Error)?.message ?? "Network error — please try again.");
+        } finally {
+            setDeepScanning(false);
+        }
+    }, [activeSite?.id]);
 
-    // Polling
+    // Polling effect
     useEffect(() => {
         if (!pendingReportId || pollingStatus !== "polling") return;
         let attempts = 0;
@@ -336,20 +799,18 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
                 const status = await getAeoReportStatus(pendingReportId);
                 if (status.done && status.report) {
                     setPollingStatus("done"); setScanError(null); setPendingReportId(null);
-                    setResult(status.report); router.refresh();
+                    setActiveResult(status.report); router.refresh();
                     setTimeout(() => setPollingStatus("idle"), 3000);
                     return;
                 } else if (!status.done) {
-                    if (typeof status.currentStep === "number") {
-                        setCurrentStep(status.currentStep);
-                    }
+                    if (typeof status.currentStep === "number") setCurrentStep(status.currentStep);
                 } else if (status.done && !status.report) {
                     setPollingStatus("timeout");
                     setScanError("Audit failed — please try again.");
                     setPendingReportId(null); router.refresh(); return;
                 } else if (attempts >= 60) {
                     setPollingStatus("timeout");
-                    setScanError("Still running in the background — refresh the page in a few minutes.");
+                    setScanError("Still running in the background — refresh in a few minutes.");
                     setPendingReportId(null); return;
                 }
             } catch { /* retry silently */ }
@@ -360,916 +821,54 @@ function SiteRow({ siteId, domain, latest, onScan, onDeepScan }: {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pendingReportId, pollingStatus]);
 
-    const rate = result?.citationScore ?? result?.score ?? null;
-    const checks = result?.checks as any;
-    const isDeepAudit = Array.isArray(checks);
-    const mentions: number | null = !isDeepAudit && typeof checks?.mentionCount === "number" ? checks.mentionCount : null;
-    const total: number | null = !isDeepAudit && typeof checks?.totalQueries === "number" ? checks.totalQueries : null;
-    const categoryScores: AeoCategoryScore[] = !isDeepAudit ? (checks?.categoryScores ?? []) : [];
-    const responses: any[] = !isDeepAudit ? (checks?.responses ?? []) : [];
-    const deepChecks: any[] = isDeepAudit ? checks : [];
-    const recommendations: string[] = result?.topRecommendations ?? (!isDeepAudit ? checks?.recommendations : []) ?? [];
-    const grade: string | null = result?.grade ?? null;
-    const hasGsiData = !!(result?.multiEngineScore);
-    const scoreDelta: number = latest?.scoreDelta ?? 0;
     const isPolling = pollingStatus === "polling";
 
-    // PATCH: "Details" expand button label changes based on score — creates urgency for low scores
-    const expandLabel = expanded
-        ? "Collapse"
-        : rate !== null && rate < 40
-            ? "View Issues"
-            : "Details";
+    // Derived data from activeResult
+    const rate = activeResult?.citationScore ?? activeResult?.score ?? null;
+    const grade = activeResult?.grade ?? null;
+    const scoreDelta = activeResult?.scoreDelta ?? activeSiteEntry?.latest?.scoreDelta ?? 0;
+    const layerScores = activeResult?.layerScores ?? null;
+    const checks = activeResult?.checks;
+    const isDeepAudit = Array.isArray(checks);
+    const recommendations: string[] = activeResult?.topRecommendations ?? (!isDeepAudit ? checks?.recommendations : []) ?? [];
+    const responses: any[] = !isDeepAudit ? (checks?.responses ?? []) : [];
+    const categoryScores: AeoCategoryScore[] = !isDeepAudit ? (checks?.categoryScores ?? []) : [];
+    const models: any[] = activeResult?.multiModelResults?.models ?? [];
 
-    return (
-        <div className="rounded-2xl border border-border bg-card overflow-hidden transition-all duration-200 hover:border-border/80">
-
-            {/* ── Header row ── */}
-            <div className="p-5 flex items-center justify-between gap-4 flex-wrap">
-
-                {/* Left: ring + meta */}
-                <div className="flex items-center gap-4 min-w-0">
-                    {rate !== null ? (
-                        <ScoreRing rate={rate} size={64} />
-                    ) : (
-                        <div className="w-16 h-16 rounded-full bg-muted border border-border flex items-center justify-center shrink-0">
-                            <Activity className="w-5 h-5 text-muted-foreground/40" />
-                        </div>
-                    )}
-
-                    <div className="min-w-0">
-                        {/* Domain + badges */}
-                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                            <p className="font-bold text-base tracking-tight truncate">{domain}</p>
-                            {grade && (
-                                <span className={`text-xs font-black px-2 py-0.5 rounded-lg border ${gradeColor(grade)}`}>
-                                    Grade {grade}
-                                </span>
-                            )}
-                            {scoreDelta !== 0 && (
-                                <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${scoreDelta > 0 ? "text-emerald-400 bg-emerald-500/10" : "text-rose-400 bg-rose-500/10"
-                                    }`}>
-                                    {scoreDelta > 0 ? "↑" : "↓"} {Math.abs(scoreDelta)}%
-                                </span>
-                            )}
-                        </div>
-
-                        {/* Layer pills */}
-                        {result?.layerScores && (
-                            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                                <LayerPill label="AEO" score={result.layerScores.aeo} icon={Search} />
-                                <LayerPill label="GEO" score={result.layerScores.geo} icon={Target} />
-                                <LayerPill label="AIO" score={result.layerScores.aio} icon={Users} />
-                            </div>
-                        )}
-
-                        {/* Status line */}
-                        {isDeepAudit ? (
-                            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                                <Sparkles className="w-3 h-3 text-blue-400" />
-                                AI Deep Audit completed
-                            </p>
-                        ) : rate !== null && mentions !== null && total !== null ? (
-                            <p className="text-xs text-muted-foreground">
-                                Cited in <span className="text-foreground font-semibold">{mentions}/{total}</span> AI queries
-                                {categoryScores.length > 0 && " across 5 categories"}
-                            </p>
-                        ) : (
-                            <p className="text-xs text-muted-foreground">Not yet scanned — 15-query AEO audit</p>
-                        )}
-                        {result?.createdAt && (
-                            <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                                Updated {new Date(result.createdAt).toLocaleDateString()}
-                            </p>
-                        )}
-                    </div>
-                </div>
-
-                {/* Right: actions */}
-                {/*
-                    PATCH: button hierarchy — was two equal-weight buttons side by side.
-                    "AEO Scan" is the entry-level action (15 queries, fast, free tier).
-                    "Deep Audit" is the advanced action (full GSI audit, costs credits).
-                    Now: AEO Scan = solid primary CTA, Deep Audit = secondary ghost button.
-                    When no scan exists, a "Start here" label guides new users.
-                */}
-                <div className="flex flex-col items-end gap-2">
-                    {rate === null && !isPolling && (
-                        <p className="text-[10px] text-muted-foreground">
-                            ↓ Run your first scan to see AI visibility
-                        </p>
-                    )}
-                    <div className="flex items-center gap-2 flex-wrap">
-                        {rate !== null && (
-                            <button
-                                onClick={() => setExpanded(e => !e)}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border/70 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted hover:border-border transition-all"
-                            >
-                                {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                                {expandLabel}
-                            </button>
-                        )}
-
-                        {/* Primary: AEO Scan */}
-                        <button
-                            onClick={handleScan}
-                            disabled={scanning || isPolling}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed
-              bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50"
-                        >
-                            {scanning ? "Queuing…"
-                                : isPolling ? <><SpinnerSvg className="w-3.5 h-3.5" /> Scanning…</>
-                                    : pollingStatus === "done" ? "✅ Done"
-                                        : <><Zap className="w-3.5 h-3.5" /> AEO Scan</>}
-                        </button>
-
-                        {/* Secondary: Deep Audit — visually quieter */}
-                        <CreditGate action="aeo_check">
-                            <button
-                                onClick={handleDeepScan}
-                                disabled={deepScanning || isPolling}
-                                className="flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed
-                  border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted hover:border-border"
-                                title="Full Generative Search Intelligence audit — uses more credits"
-                            >
-                                {deepScanning ? "Queuing…"
-                                    : isPolling ? <><SpinnerSvg className="w-3.5 h-3.5" /> Running…</>
-                                        : pollingStatus === "done" ? "✅ Done"
-                                            : <><Sparkles className="w-3 h-3" /> Deep Audit</>}
-                            </button>
-                        </CreditGate>
-
-                        {/* PDF Export — only when a report exists */}
-                        {rate !== null && result?.id && (
-                            <PdfDownloadButton
-                                endpoint="/api/pdf/aeo"
-                                params={{ reportId: result.id }}
-                                label="PDF"
-                                filename={`aeo-report-${domain}.pdf`}
-                            />
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* ── Error banner ── */}
-            {scanError && (
-                <div className="mx-5 mb-4 px-4 py-3 rounded-xl bg-rose-500/8 border border-rose-500/20 text-rose-400 text-sm flex items-center gap-2.5">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    {scanError}
-                </div>
-            )}
-
-            {/* ── Polling progress banner ── */}
-            {isPolling && !scanError && (
-                <div className="mx-5 mb-4 px-5 py-4 rounded-2xl bg-[#0d1117] border border-[#30363d] flex flex-col gap-4">
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400 font-semibold animate-pulse">⟳</div>
-                        <div>
-                            <div className="text-sm font-semibold text-foreground">AEO Audit Running</div>
-                            <div className="text-xs text-muted-foreground">Step {Math.max(1, currentStep)} of 7 · ~45 seconds remaining</div>
-                        </div>
-                        <div className="ml-auto text-sm font-bold text-[#818cf8]">
-                            {Math.round((Math.max(1, currentStep) / 7) * 100)}%
-                        </div>
-                    </div>
-
-                    <div className="h-1 rounded-full bg-muted overflow-hidden">
-                        <div
-                            className="h-full bg-gradient-to-r from-blue-500 to-[#818cf8] rounded-full transition-all duration-500"
-                            style={{ width: `${(Math.max(1, currentStep) / 7) * 100}%` }}
-                        />
-                    </div>
-
-                    <div className="flex flex-col gap-2.5 mt-1">
-                        {[
-                            { label: "Fetching site pages", sub: "Discovered pages via sitemap" },
-                            { label: "Schema gap detection", sub: "Checking JSON-LD on all pages" },
-                            { label: "Checking Gemini citations", sub: "Verifying brand presence" },
-                            { label: "Checking Perplexity citations", sub: "Verifying citation links" },
-                            { label: "Checking ChatGPT mentions", sub: "Verifying response text" },
-                            { label: "Semantic vector analysis", sub: "Calculating concept relevance" },
-                            { label: "Building report", sub: "Building final insights" },
-                        ].map((s, i) => {
-                            const done = currentStep > i + 1;
-                            const active = currentStep === i + 1 || (currentStep === 0 && i === 0);
-                            const pending = currentStep < i + 1 && !(currentStep === 0 && i === 0);
-                            return (
-                                <div key={i} className={`flex items-center gap-3 transition-opacity duration-300 ${pending ? "opacity-40" : "opacity-100"}`}>
-                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] border font-bold shrink-0 ${
-                                        done ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" :
-                                        active ? "bg-blue-500/10 text-blue-400 border-blue-500/25" :
-                                        "bg-muted/30 text-muted-foreground border-border"
-                                    }`}>
-                                        {done ? "✓" : i + 1}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className={`text-xs ${active ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{s.label}</p>
-                                        {(done || active) && <p className="text-[10px] text-muted-foreground/60">{s.sub}</p>}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
-            {/* ── Expanded detail panel (3-tab inner view) ── */}
-            {expanded && (
-                <div className="border-t border-[#21262d]">
-
-                    {/* Inner tab bar */}
-                    <div className="flex items-center gap-1 px-5 py-2.5 border-b border-[#21262d] bg-[#0a0d11] overflow-x-auto scrollbar-none">
-                        {(["trend", "insights", "raw"] as const).map((t) => {
-                            const labels = { trend: "Trend & Forecast", insights: "Insights", raw: "Raw Data" };
-                            return (
-                                <button
-                                    key={t}
-                                    onClick={() => setInnerTab(t)}
-                                    className={`shrink-0 px-3.5 py-1.5 rounded-lg text-[12px] font-semibold transition-colors ${
-                                        innerTab === t
-                                            ? "bg-[#21262d] text-[#e6edf3]"
-                                            : "text-[#6e7681] hover:text-[#c9d1d9]"
-                                    }`}
-                                >
-                                    {labels[t]}
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    <div className="p-6 flex flex-col gap-8">
-
-                        {/* ── TAB 1: Trend & Forecast ── */}
-                        {innerTab === "trend" && (<>
-
-                        {/* Per-LLM Visibility Breakdown */}
-                        {rate !== null && (
-                            <div className="border border-border rounded-[10px] bg-card p-5">
-                                <AeoVisibilityBreakdown
-                                    overallScore={rate}
-                                    llmScores={
-                                        result?.multiModelResults?.models
-                                            ? result.multiModelResults.models.map((m: any) => ({
-                                                name: (m.modelName as string).replace(/^./, (c: string) => c.toUpperCase()),
-                                                score: m.citationRate ?? 0,
-                                            }))
-                                            : []
-                                    }
-                                    opportunities={
-                                        recommendations.slice(0, 4).map((rec: string, i: number) => ({
-                                            label: rec.length > 80 ? rec.slice(0, 77) + "…" : rec,
-                                            impact: (i === 0 ? "critical" : i === 1 ? "high" : "medium") as "critical" | "high" | "medium",
-                                        }))
-                                    }
-                                />
-                            </div>
-                        )}
-
-                        <AeoScoreTrendChart siteId={siteId} domain={domain} />
-                        <div className="border-t border-[#21262d] pt-6">
-                            <VisibilityForecastPanel siteId={siteId} />
-                        </div>
-
-                        {/* Category scores — end of Tab 1 */}
-                        {categoryScores.length > 0 && (
-                            <section>
-                                <SectionLabel icon={TrendingUp} label="AEO Category Scores" />
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-                                    {categoryScores.map(cat => <CategoryBar key={cat.category} cat={cat} />)}
-                                </div>
-                            </section>
-                        )}
-                        </>)}
-
-                        {/* ── TAB 2: Insights ── */}
-        {innerTab === "insights" && (<>
-
-                        {/* Semantic Gap */}
-                        {result?.semanticGaps && result.semanticGaps.length > 0 && (
-                            <SemanticGapPanel gaps={result.semanticGaps} />
-                        )}
-
-                        {/* Prompt Simulator */}
-                        <PromptSimulator siteId={siteId} domain={domain} />
-
-                        {/* Benchmark strip — industry comparison */}
-                        {rate !== null && (
-                            <section>
-                                <SectionLabel icon={BarChart2} label="Industry Benchmark" accent="blue" />
-                                <div className="mt-4 grid grid-cols-3 gap-3">
-                                    {[
-                                        { label: "Your Score", value: rate, color: rate >= 65 ? "text-emerald-400" : rate >= 40 ? "text-amber-400" : "text-rose-400", bg: rate >= 65 ? "bg-emerald-500/10" : rate >= 40 ? "bg-amber-500/10" : "bg-rose-500/10" },
-                                        { label: "Industry Avg", value: 42, color: "text-blue-400", bg: "bg-blue-500/10" },
-                                        { label: "Top 10%", value: 78, color: "text-purple-400", bg: "bg-purple-500/10" },
-                                    ].map(item => (
-                                        <div key={item.label} className={`p-3 rounded-xl border border-border/60 ${item.bg} flex flex-col gap-1 text-center`}>
-                                            <span className={`text-2xl font-black tabular-nums ${item.color}`}>{item.value}%</span>
-                                            <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{item.label}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                                <p className="text-[10px] text-muted-foreground/50 mt-2">Industry averages based on aggregate scan data across all OptiAISEO sites.</p>
-                            </section>
-                        )}
-
-                        {/* Recommendations */}
-                        {recommendations.length > 0 && (
-                            <section>
-                                <SectionLabel icon={Lightbulb} label="Actionable Recommendations" accent="amber" />
-                                <div className="flex flex-col gap-4 mt-4">
-                                    {recommendations.map((rec, i) => {
-                                        const competitorDomains: string[] = responses
-                                            .filter((r: any) => !r.cited && r.excerpt)
-                                            .flatMap((r: any) => ((r.excerpt as string).match(/\b([a-z0-9-]+\.(?:com|org|net|io|co|ai|app|dev))\b/gi) ?? []))
-                                            .filter((d: string) => !d.includes(domain));
-                                        const uniqueCompetitors = [...new Set(competitorDomains)].slice(0, 3);
-                                        const catKeys = ["brand_authority", "industry", "services", "geography", "legitimacy"];
-                                        return (
-                                            <div key={i} className="rounded-xl border border-[#30363d] bg-[#161b22] p-4">
-                                                <div className="flex items-start gap-3">
-                                                    <span className="w-6 h-6 rounded-full bg-amber-500/15 border border-amber-500/25 text-amber-400 text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">
-                                                        {i + 1}
-                                                    </span>
-                                                    <p className="text-sm text-[#c9d1d9] leading-relaxed flex-1">{rec}</p>
-                                                    <RecommendationFixPanel
-                                                        siteId={siteId}
-                                                        recommendation={rec}
-                                                        competitors={uniqueCompetitors}
-                                                        category={catKeys[i]}
-                                                    />
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </section>
-                        )}
-
-                        {/* AIO Brand Intelligence */}
-                        {checks?.aiExcerpt && (
-                            <section>
-                                <SectionLabel icon={Users} label="What AI Knows About Your Brand" accent="amber" />
-                                <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 flex flex-col gap-4">
-                                    <p className="text-sm text-[#c9d1d9] leading-relaxed italic">&ldquo;{checks.aiExcerpt}&rdquo;</p>
-                                    {Array.isArray(checks.benchmarkChecks) && checks.benchmarkChecks.length > 0 && (
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                            {checks.benchmarkChecks.map((bc: any) => (
-                                                <div key={bc.id} className={`flex items-start gap-2.5 px-3 py-2.5 rounded-xl border text-xs ${bc.passed ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-300" : "bg-rose-500/5 border-rose-500/20 text-rose-300"}`}>
-                                                    <span className="mt-0.5">{bc.passed ? "✅" : "❌"}</span>
-                                                    <div>
-                                                        <p className="font-semibold">{bc.label}</p>
-                                                        <p className="text-[10px] text-[#6e7681] mt-0.5">{bc.detail}</p>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </section>
-                        )}
-
-                        {/* Schema Gaps */}
-                        {result?.schemaGaps?.length > 0 && (
-                            <section>
-                                <SectionLabel icon={AlertCircle} label="Missing Schema" accent="amber" />
-                                <div className="flex flex-col gap-2 mt-4">
-                                    {result.schemaGaps.map((gap: string, i: number) => (
-                                        <div key={i} className="flex items-start gap-2.5 text-sm p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl">
-                                            <span className="text-amber-400 text-base mt-0.5">⚠</span>
-                                            <span className="text-[#c9d1d9]">{gap}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </section>
-                        )}
-                        </>)}
-
-                        {/* ── TAB 3: Raw Data ── */}
-                        {innerTab === "raw" && (<>
-
-                        {/* Multi-model citation comparison */}
-                        {result?.multiModelResults?.models && (
-                            <section>
-                                <SectionLabel icon={BarChart2} label="Model Citation Comparison" />
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-                                    {result.multiModelResults.models.map((m: any) => (
-                                        <div key={m.modelName} className="p-4 rounded-xl bg-[#161b22] border border-[#30363d]">
-                                            <div className="flex items-center justify-between mb-3">
-                                                <p className="font-semibold capitalize text-sm text-[#e6edf3]">{m.modelName}</p>
-                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${m.citationRate >= 50 ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"}`}>
-                                                    {m.citationRate}%
-                                                </span>
-                                            </div>
-                                            <div className="h-1.5 bg-[#21262d] rounded-full overflow-hidden mb-2">
-                                                <div className={`h-full rounded-full transition-all duration-700 ${m.citationRate >= 50 ? "bg-emerald-500" : "bg-rose-500"}`} style={{ width: `${m.citationRate}%` }} />
-                                            </div>
-                                            <p className="text-[10px] text-[#6e7681]">{m.citationCount}/{m.queriesRun} queries</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </section>
-                        )}
-
-                        {/* GSI Metrics */}
-                        {hasGsiData && <GsiMetrics result={result as AeoResult} />}
-
-                        {/* Query responses */}
-                        {responses.length > 0 && (
-                            <section>
-                                <SectionLabel icon={Search} label={`AI Query Results (${responses.length})`} />
-                                <div className="flex flex-col gap-2 mt-4">
-                                    {responses.map((r: any, i: number) => {
-                                        const categoryLabels: Record<string, string> = {
-                                            aio_brand: "AIO — Brand", brand_authority: "Brand Authority",
-                                            topic_coverage: "Topic Coverage", faq_readiness: "FAQ Readiness",
-                                            competitor_comparison: "Competitors", how_to_guidance: "How-To",
-                                            geo_recommendation: "GEO — Recommendation",
-                                        };
-                                        const categoryLabel = r.category ? (categoryLabels[r.category] ?? r.category.replace(/_/g, " ")) : null;
-                                        const queryLabel = r.query && r.query !== `AEO batch analysis for ${r.category}` ? r.query : null;
-                                        return (
-                                            <div key={i} className={`p-3.5 rounded-xl text-xs border ${r.cited ? "bg-emerald-500/5 border-emerald-500/15" : "bg-[#161b22] border-[#30363d]"}`}>
-                                                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                                    <span className={`font-bold px-2 py-0.5 rounded-lg border text-[11px] ${r.cited ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border-rose-500/20"}`}>
-                                                        {r.cited ? "✅ Cited" : "❌ Not cited"}
-                                                    </span>
-                                                    {categoryLabel && (
-                                                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#21262d] border border-[#30363d] text-[#6e7681]">
-                                                            {categoryLabel}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                {queryLabel && <p className="font-semibold text-[#e6edf3] mb-1.5">&ldquo;{queryLabel}&rdquo;</p>}
-                                                {r.excerpt
-                                                    ? <p className="text-[#8b949e] leading-relaxed">{r.excerpt}</p>
-                                                    : <p className="text-[#6e7681] italic">No excerpt available.</p>
-                                                }
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </section>
-                        )}
-
-                        {/* Citation Breakdown */}
-                        {responses.length > 0 && (
-                            <section>
-                                <CitationBreakdownPanel responses={responses} domain={domain} multiModel={result?.multiModelResults?.models} />
-                            </section>
-                        )}
-
-                        {/* Deep Audit checks grouped by layer */}
-                        {deepChecks.length > 0 && (() => {
-                            const layerGroups = [
-                                { key: "aeo", label: "AEO — Answer Engine", color: "text-blue-400", icon: Search, cats: ["schema", "eeat", "content", "technical", "citation"] },
-                                { key: "geo", label: "GEO — Generative Recommendation", color: "text-purple-400", icon: Target, cats: ["geo"] },
-                                { key: "aio", label: "AIO — Brand Understanding", color: "text-amber-400", icon: Users, cats: ["aio"] },
-                            ];
-                            return (
-                                <div className="flex flex-col gap-8">
-                                    {layerGroups.map(({ key, label, color, icon: LIcon, cats }) => {
-                                        const groupChecks = deepChecks.filter((c: any) => cats.includes(c.category));
-                                        if (!groupChecks.length) return null;
-                                        const passed = groupChecks.filter((c: any) => c.passed).length;
-                                        return (
-                                            <section key={key}>
-                                                <div className={`flex items-center gap-2 mb-4 ${color}`}>
-                                                    <LIcon className="w-4 h-4" />
-                                                    <span className="text-xs font-bold uppercase tracking-wider">{label}</span>
-                                                    <span className="text-[#6e7681] font-normal normal-case tracking-normal text-xs">— {passed}/{groupChecks.length} passed</span>
-                                                </div>
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                    {groupChecks.map((c: any) => (
-                                                        <div key={c.id} className={`p-4 rounded-xl border flex flex-col gap-2 ${c.passed ? "bg-emerald-500/5 border-emerald-500/20" : "bg-rose-500/5 border-rose-500/20"}`}>
-                                                            <div className="flex items-start justify-between gap-2">
-                                                                <p className="font-semibold text-sm text-[#e6edf3]">{c.passed ? "✅" : "❌"} {c.label}</p>
-                                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase shrink-0 ${c.impact === "high" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" : c.impact === "medium" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" : "bg-blue-500/10 text-blue-400 border-blue-500/20"}`}>{c.impact}</span>
-                                                            </div>
-                                                            <p className="text-xs text-[#8b949e] leading-relaxed flex-grow">{c.detail}</p>
-                                                            {!c.passed && c.recommendation && (
-                                                                <div className="mt-1 p-3 bg-[#161b22] rounded-xl border border-[#30363d]">
-                                                                    <p className="text-[10px] font-bold text-[#6e7681] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                                                                        <Lightbulb className="w-3 h-3 text-amber-400" /> How to fix
-                                                                    </p>
-                                                                    <p className="text-xs text-[#8b949e] leading-relaxed">{c.recommendation}</p>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </section>
-                                        );
-                                    })}
-                                </div>
-                            );
-                        })()}
-                        </>)}
-
-                    </div>
-                </div>
-            )}
-
-        </div>
-    );
-}
-// ─── Section Label ────────────────────────────────────────────────────────────
-
-function SectionLabel({
-    icon: Icon, label, accent,
-}: {
-    icon: React.ElementType; label: string; accent?: "amber" | "blue" | "emerald";
-}) {
-    const color =
-        accent === "amber" ? "text-amber-400"
-            : accent === "blue" ? "text-blue-400"
-                : accent === "emerald" ? "text-emerald-400"
-                    : "text-muted-foreground";
-    return (
-        <div className="flex items-center gap-2">
-            <Icon className={`w-3.5 h-3.5 ${color}`} />
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
-        </div>
-    );
-}
-
-// ─── Intelligence Tab Panel ───────────────────────────────────────────────────
-/*
-    PATCH: Intelligence panels (BrandEntity, CitationGap, GenerativeSOV,
-    QueryLibrary) were stacked sequentially below the SummaryHero.
-    Now wrapped in a tab bar — only one panel visible at a time.
-    Tab order: Brand → Citations → Share of Voice → Query Library
-*/
-
-const INTEL_TABS = [
-    { id: "brand", label: "Brand Entity" },
-    { id: "citations", label: "Citation Gaps" },
-    { id: "proof", label: "Proof Timeline" },
-    { id: "sov", label: "Share of Voice" },
-    { id: "queries", label: "Query Library" },
-    { id: "backlinks", label: "Backlinks" },
-] as const;
-
-type IntelTabId = typeof INTEL_TABS[number]["id"];
-
-function IntelligenceTabs({
-    siteId,
-    domain,
-    brandFacts,
-    competitorDomains,
-    hasCompetitors,
-}: {
-    siteId: string;
-    domain: string;
-    brandFacts: { factType: string; value: string; verified: boolean }[];
-    competitorDomains: string[];
-    hasCompetitors: boolean;
-}) {
-    const pathname = usePathname();
-    const searchParams = useSearchParams();
-    const tabParam = searchParams.get("tab");
-    const defaultTab = pathname.endsWith("/proofs") ? "proof" : pathname.endsWith("/entity") ? "brand" : (tabParam && INTEL_TABS.some(t => t.id === tabParam) ? tabParam as IntelTabId : "brand");
-    const [activeTab, setActiveTab] = useState<IntelTabId>(defaultTab);
-
-    useEffect(() => {
-        const currentTab = pathname.endsWith("/proofs") ? "proof" : pathname.endsWith("/entity") ? "brand" : (tabParam && INTEL_TABS.some(t => t.id === tabParam) ? tabParam as IntelTabId : "brand");
-        setActiveTab(currentTab);
-    }, [pathname, tabParam]);
-
-    return (
-        <div className="card-surface overflow-hidden">
-            {/* Tab bar */}
-            <div className="flex overflow-x-auto border-b border-border scrollbar-none">
-                {INTEL_TABS.map((tab) => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={[
-                            "shrink-0 px-5 py-3.5 text-sm font-medium transition-colors whitespace-nowrap",
-                            "border-b-2 -mb-px",
-                            activeTab === tab.id
-                                ? "border-[var(--brand)] text-foreground"
-                                : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
-                        ].join(" ")}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
-            </div>
-
-            {/* Panel content */}
-            <div className="p-5">
-                {activeTab === "brand" && (
-                    <PanelErrorBoundary fallbackTitle="Brand Entity panel failed to load">
-                        <BrandEntityPanel
-                            siteId={siteId}
-                            domain={domain}
-                            brandFacts={brandFacts}
-                            competitorDomains={competitorDomains}
-                        />
-                    </PanelErrorBoundary>
-                )}
-                {activeTab === "citations" && (
-                    <PanelErrorBoundary fallbackTitle="Citation Gap panel failed to load">
-                        <CitationGapPanel siteId={siteId} hasCompetitors={hasCompetitors} />
-                    </PanelErrorBoundary>
-                )}
-                {activeTab === "proof" && (
-                    <PanelErrorBoundary fallbackTitle="Proof Timeline failed to load">
-                        <ProofTimeline siteId={siteId} domain={domain} />
-                    </PanelErrorBoundary>
-                )}
-                {activeTab === "sov" && (
-                    <PanelErrorBoundary fallbackTitle="Share of Voice panel failed to load">
-                        <GenerativeSOVPanel siteId={siteId} />
-                    </PanelErrorBoundary>
-                )}
-                {activeTab === "queries" && (
-                    <PanelErrorBoundary fallbackTitle="Query Library panel failed to load">
-                        <QueryLibraryPanel siteId={siteId} />
-                    </PanelErrorBoundary>
-                )}
-                {activeTab === "backlinks" && (
-                    <PanelErrorBoundary fallbackTitle="Backlinks panel failed to load">
-                        <BacklinkPanel siteId={siteId} competitorDomains={competitorDomains} />
-                    </PanelErrorBoundary>
-                )}
-            </div>
-        </div>
-    );
-}
-
-// ─── Summary hero card ────────────────────────────────────────────────────────
-
-function SummaryHero({ sites, scannedSites, avgRate, topGrade }: {
-    sites: any[];
-    scannedSites: any[];
-    avgRate: number | null;
-    topGrade: string | null;
-}) {
-    const recs = scannedSites[0]?.latest?.topRecommendations ?? [];
-    const fallbackRecs = [
-        "Create a comprehensive 'About Us' page to establish brand entity.",
-        "Add Organization and LocalBusiness schema to your homepage.",
-        "Publish comparison pages to capture GEO recommendation traffic.",
-    ];
-    const displayRecs = recs.length > 0 ? recs.slice(0, 3) : fallbackRecs;
-    const isReal = recs.length > 0;
-
-    // PATCH: first site's siteId for RecommendationFixPanel inside hero
-    const heroSiteId = scannedSites[0]?.site?.id ?? "";
-    const heroCompetitors: string[] = (scannedSites[0]?.site?.competitors ?? [])
-        .map((c: { domain: string }) => c.domain).slice(0, 3);
-    const catKeys = ["brand_authority", "industry", "services"];
-
-    return (
-        <div className="card-surface overflow-hidden">
-            <div className="flex flex-col sm:flex-row">
-
-                {/* Score column */}
-                <div className="sm:w-64 p-8 border-b sm:border-b-0 sm:border-r border-border bg-muted/20 flex flex-col items-center justify-center text-center gap-4">
-                    <div className={`relative rounded-full ${avgRate !== null ? scoreGlow(avgRate ?? 0) : ""}`}>
-                        {avgRate !== null ? (
-                            <ScoreRing rate={avgRate} size={120} strokeWidth={8} />
-                        ) : (
-                            <div className="w-[120px] h-[120px] rounded-full border-[8px] border-border flex items-center justify-center">
-                                <span className="text-muted-foreground text-2xl font-black">–</span>
-                            </div>
-                        )}
-                    </div>
-                    <div>
-                        <p className="text-xl font-black text-foreground tabular-nums">
-                            {avgRate !== null ? `${avgRate}%` : "–"}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">Avg. AI Visibility</p>
-                        {/* PATCH: zero score gets an explanatory line, not just "1 site scanned" */}
-                        {avgRate === 0 ? (
-                            <p className="text-[10px] text-rose-400/80 mt-1 max-w-[140px] mx-auto leading-relaxed">
-                                AI models aren&apos;t citing you yet — run a scan for a full diagnosis
-                            </p>
-                        ) : (
-                            <p className="text-[10px] text-muted-foreground/60 mt-1">
-                                {scannedSites.length} site{scannedSites.length !== 1 ? "s" : ""} scanned
-                            </p>
-                        )}
-                    </div>
-                </div>
-
-                {/* Right panel */}
-                <div className="flex-1 p-6 sm:p-8 flex flex-col gap-6">
-                    {topGrade && (
-                        <div className="flex items-center gap-3">
-                            <span className={`text-xl font-black px-4 py-2 rounded-xl border ${gradeColor(topGrade)}`}>
-                                {topGrade}
-                            </span>
-                            <div>
-                                {/* PATCH: grade label now explains what it means, not just "Highest network grade" */}
-                                <p className="font-bold text-sm text-foreground">
-                                    Grade {topGrade}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    {GRADE_LABELS[topGrade] ?? "Highest network grade"}
-                                </p>
-                            </div>
-                        </div>
-                    )}
-
-                    <div>
-                        <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                            <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
-                            Priority Actions
-                        </p>
-                        {/*
-                            PATCH: priority actions now include "Fix this" button when real data exists.
-                            Mirrors the RecommendationFixPanel used in SiteRow's expanded view.
-                            Fallback (no scan yet) stays muted and actionless — no point offering
-                            fixes for generic placeholder recommendations.
-                        */}
-                        <ul className="space-y-3">
-                            {displayRecs.map((rec: string, i: number) => (
-                                <li key={i} className="flex gap-3 items-start">
-                                    <span className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 ${isReal
-                                        ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                                        : "bg-muted text-muted-foreground/60"
-                                        }`}>{i + 1}</span>
-                                    <span className={`text-sm leading-relaxed flex-1 ${isReal ? "text-foreground/85" : "text-muted-foreground/50"}`}>
-                                        {rec}
-                                    </span>
-                                    {isReal && heroSiteId && (
-                                        <RecommendationFixPanel
-                                            siteId={heroSiteId}
-                                            recommendation={rec}
-                                            competitors={heroCompetitors}
-                                            category={catKeys[i]}
-                                        />
-                                    )}
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            {/* Score by layer strip */}
-            <div className="border-t border-[#21262d] bg-[#0a0d11]">
-                <div className="flex items-center gap-2 px-4 pt-3 pb-1 col-span-full sm:col-span-3">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6e7681]">Score by layer</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[#21262d]">
-                    {[
-                    { step: "AEO", color: "text-blue-400", bg: "bg-blue-500/10", icon: Search, desc: "Get cited in AI answers", scoreKey: "aeo" },
-                    { step: "GEO", color: "text-purple-400", bg: "bg-purple-500/10", icon: Target, desc: "Get recommended as the best", scoreKey: "geo" },
-                    { step: "AIO", color: "text-amber-400", bg: "bg-amber-500/10", icon: Users, desc: "Get understood by AI", scoreKey: "aio" },
-                ].map(item => {
-                    const layerScore = scannedSites[0]?.latest?.layerScores?.[item.scoreKey];
-                    return (
-                        <div key={item.step} className="p-4 flex items-center gap-3">
-                            <span className={`w-7 h-7 rounded-lg ${item.bg} ${item.color} flex items-center justify-center shrink-0`}>
-                                <item.icon className="w-3.5 h-3.5" />
-                            </span>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                    <p className={`text-xs font-bold ${item.color}`}>{item.step}</p>
-                                    {/* PATCH: show actual score in strip when available */}
-                                    {typeof layerScore === "number" && layerScore >= 0 && (
-                                        <span className={`text-[10px] font-black tabular-nums ${scoreColor(layerScore)}`}>
-                                            {layerScore}%
-                                        </span>
-                                    )}
-                                </div>
-                                <p className="text-xs text-muted-foreground">{item.desc}</p>
-                            </div>
-                        </div>
-                    );
-                })}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
-
-function SiteRowSkeleton() {
-    return (
-        <div className="card-surface p-5">
-            <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full shimmer shrink-0" />
-                <div className="flex-1 flex flex-col gap-2">
-                    <div className="h-4 w-32 rounded shimmer" />
-                    <div className="h-3 w-48 rounded shimmer" />
-                    <div className="h-2.5 w-24 rounded shimmer" />
-                </div>
-                <div className="flex gap-2">
-                    <div className="h-9 w-24 rounded-xl shimmer" />
-                    <div className="h-9 w-28 rounded-xl shimmer" />
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ─── Main inner page ──────────────────────────────────────────────────────────
-
-function AeoRankPageInner() {
-    const [sites, setSites] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [primaryBrandFacts, setPrimaryBrandFacts] = useState<{ factType: string; value: string; verified: boolean }[]>([]);
-    const searchParams = useSearchParams();
-    const urlSiteId = searchParams.get("siteId");
-
-    useEffect(() => {
-        getAllSitesWithMentions().then(res => {
-            setLoading(false);
-            if (res.success) setSites(res.sites);
-        });
-    }, []);
-
-    const activeSiteEntry = sites.find(s => s.site?.id === urlSiteId) ?? sites[0];
-    const activeSite = activeSiteEntry?.site;
-
-    useEffect(() => {
-        if (!activeSite?.id) return;
-        fetch(`/api/entity-panel?siteId=${activeSite.id}`)
-            .then(r => r.json())
-            .then(data => setPrimaryBrandFacts(data.brandFacts ?? []))
-            .catch(() => { });
-    }, [activeSite?.id]);
-
-    const handleScan = async (siteId: string) => {
-        try {
-            const res = await checkLlmMentions(siteId);
-            if (res.success && res.reportId) return { reportId: res.reportId };
-            if (!res.success) return { error: (res as any).error ?? "Scan failed" };
-        } catch (e: unknown) {
-            return { error: (e as Error)?.message ?? "Network error — please try again." };
-        }
-        return null;
-    };
-
-    const handleDeepScan = async (siteId: string) => {
-        try {
-            const res = await runAeoReport(siteId);
-            if (res.success && res.reportId) return { reportId: res.reportId };
-            if (!res.success) return { error: (res as any).error ?? "Deep audit failed" };
-        } catch (e: unknown) {
-            return { error: (e as Error)?.message ?? "Network error — please try again." };
-        }
-        return null;
-    };
-
-    const scannedSites = sites.filter(s => s.latest);
-    const avgRate = scannedSites.length > 0
-        ? Math.round(scannedSites.reduce((sum, s) => sum + (s.latest?.citationScore ?? 0), 0) / scannedSites.length)
-        : null;
-    const topGrade = scannedSites.length > 0
-        ? ["A", "B", "C", "D", "F"].find(g => scannedSites.some(s => s.latest?.grade === g)) ?? null
+    // Insight banner text
+    const insight = rate !== null
+        ? rate >= 65
+            ? `Your brand is well optimized for AI discovery. Focus on improving crawler access and creating more citation-worthy content to increase your actual AI visibility across ChatGPT, Gemini, Perplexity and Claude.`
+            : rate >= 40
+            ? `Your brand has moderate AI visibility. Improving schema markup and brand entity signals can significantly increase your citation rates across major AI platforms.`
+            : `Your brand has low AI visibility. AI models are not citing you in their responses. Run a full audit to identify the specific blockers preventing citations.`
         : null;
 
     return (
-        <div className="flex flex-col gap-6 max-w-6xl mx-auto pb-12 fade-in-up">
-            <PageHeader
-                title="AEO · GEO · AIO Optimizer"
-                description="Three-layer AI visibility: AEO (get cited in answers) · GEO (get chosen as the recommendation) · AIO (get your brand understood by AI)."
-            />
-
-            {/* Summary grids */}
-            {!loading && sites.length > 0 && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-                    <div className="lg:col-span-2">
-                        <SummaryHero sites={sites} scannedSites={scannedSites} avgRate={avgRate} topGrade={topGrade} />
-                    </div>
-                    <div>
-                        {activeSite && activeSiteEntry?.latest?.score !== undefined && (
-                            <BenchmarkBanner yourScore={activeSiteEntry.latest.score} siteId={activeSite.id} />
-                        )}
-                        {activeSite && <AasCard siteId={activeSite.id} />}
-                    </div>
+        <div className="flex flex-col gap-6 max-w-[1400px] mx-auto pb-12 fade-in-up">
+            {/* Page header */}
+            <div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                    <span>←</span>
+                    <span>AI Visibility</span>
                 </div>
-            )}
-
-            {/* PATCH: Intelligence panels now in a tabbed card instead of stacked */}
-            {!loading && activeSite && (
-                <IntelligenceTabs
-                    siteId={activeSite.id ?? ""}
-                    domain={activeSite.domain ?? ""}
-                    brandFacts={primaryBrandFacts}
-                    competitorDomains={activeSite.competitors?.map((c: { domain: string }) => c.domain) ?? []}
-                    hasCompetitors={(activeSite.competitors?.length ?? 0) > 0}
-                />
-            )}
-
-            {/* Loading skeletons */}
-            {loading && (
-                <div className="flex flex-col gap-4">
-                    <SiteRowSkeleton />
-                    <SiteRowSkeleton />
+                <div className="flex items-center gap-2.5 flex-wrap">
+                    <h1 className="text-2xl font-black text-foreground">AI Visibility</h1>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20">AEO</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20">GEO</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">AIO</span>
                 </div>
-            )}
+                <p className="text-sm text-muted-foreground mt-1">
+                    Understand how AI search engines discover, cite and recommend your brand.
+                </p>
+            </div>
+
+            {/* Loading */}
+            {loading && <PageSkeleton />}
 
             {/* Empty state */}
             {!loading && sites.length === 0 && (
-                <div className="card-surface p-16 text-center flex flex-col items-center gap-4">
+                <div className="rounded-2xl border border-border bg-card p-16 text-center flex flex-col items-center gap-4">
                     <div className="w-16 h-16 rounded-2xl bg-muted border border-border flex items-center justify-center">
                         <Bot className="w-8 h-8 text-muted-foreground/50" />
                     </div>
@@ -1288,137 +887,107 @@ function AeoRankPageInner() {
                 </div>
             )}
 
-            {/* Site rows */}
+            {/* Main 2-column layout */}
             {!loading && sites.length > 0 && (
-                <section>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                        Registered Sites
-                    </p>
-                    <div className="flex flex-col gap-4">
-                        {sites.map(({ site, latest }) => (
-                            <PanelErrorBoundary key={site.id} fallbackTitle={`AEO data for ${site.domain} failed to load`}>
-                                <SiteRow
-                                    siteId={site.id}
-                                    domain={site.domain}
-                                    latest={latest}
-                                    onScan={handleScan}
-                                    onDeepScan={handleDeepScan}
+                <div className="flex gap-6 items-start">
+                    {/* ── Left: main content ── */}
+                    <div className="flex-1 min-w-0 flex flex-col gap-4">
+
+                        {/* Hero card */}
+                        <AeoHeroCard
+                            domain={activeSite?.domain ?? ""}
+                            rate={rate}
+                            scoreDelta={scoreDelta}
+                            grade={grade}
+                            layerScores={layerScores}
+                            lastScanAt={activeResult?.createdAt ?? null}
+                            insight={insight}
+                            scanning={scanning}
+                            deepScanning={deepScanning}
+                            isPolling={isPolling}
+                            pollingStatus={pollingStatus}
+                            onScan={handleScan}
+                            onDeepScan={handleDeepScan}
+                        />
+
+                        {/* PDF export (shown when report exists) */}
+                        {rate !== null && activeResult?.id && (
+                            <div className="flex justify-end">
+                                <PdfDownloadButton
+                                    endpoint="/api/pdf/aeo"
+                                    params={{ reportId: activeResult.id }}
+                                    label="Download PDF Report"
+                                    filename={`aeo-report-${activeSite?.domain ?? "site"}.pdf`}
                                 />
-                            </PanelErrorBoundary>
-                        ))}
+                            </div>
+                        )}
+
+                        {/* Scan progress */}
+                        {isPolling && <ScanProgress currentStep={currentStep} />}
+
+                        {/* Scan error */}
+                        {scanError && (
+                            <div className="px-4 py-3 rounded-xl bg-rose-500/8 border border-rose-500/20 text-rose-400 text-sm flex items-center gap-2.5">
+                                <AlertCircle className="w-4 h-4 shrink-0" />
+                                {scanError}
+                                <button onClick={() => setScanError(null)} className="ml-auto text-[11px] underline text-muted-foreground hover:text-foreground">Dismiss</button>
+                            </div>
+                        )}
+
+                        {/* AAS Card */}
+                        {activeSite && <AasCard siteId={activeSite.id} />}
+
+                        {/* Tab nav */}
+                        <MainTabNav active={mainTab} onChange={setMainTab} />
+
+                        {/* Tab content */}
+                        <TabContent
+                            tab={mainTab}
+                            siteId={activeSite?.id ?? ""}
+                            domain={activeSite?.domain ?? ""}
+                            rate={rate}
+                            result={activeResult}
+                            recommendations={recommendations}
+                            responses={responses}
+                            categoryScores={categoryScores}
+                            models={models}
+                            brandFacts={primaryBrandFacts}
+                            competitorDomains={activeSite?.competitors?.map((c: { domain: string }) => c.domain) ?? []}
+                            hasCompetitors={(activeSite?.competitors?.length ?? 0) > 0}
+                            onTabChange={setMainTab}
+                        />
                     </div>
-                </section>
+
+                    {/* ── Right: sticky sidebar ── */}
+                    <aside className="w-[280px] shrink-0 flex flex-col gap-4 sticky top-4">
+                        {/* Per-LLM citation rates */}
+                        <AiSearchPresence
+                            models={models.map((m: any) => ({
+                                name: m.modelName.replace(/^./, (c: string) => c.toUpperCase()),
+                                score: m.citationRate ?? 0,
+                            }))}
+                            onScan={handleScan}
+                            scanning={scanning || isPolling || deepScanning}
+                        />
+
+                        {/* Industry benchmark */}
+                        {rate !== null && (
+                            <BenchmarkSidebar yourScore={rate} siteId={activeSite?.id ?? ""} />
+                        )}
+
+                        {/* Recent activity */}
+                        <RecentActivity sites={sites} />
+
+                        {/* All registered sites */}
+                        <SiteHealthPanel sites={sites} activeSiteId={activeSite?.id} />
+                    </aside>
+                </div>
             )}
         </div>
     );
 }
 
-interface BenchmarkBannerProps {
-    yourScore: number;
-    siteId: string;
-}
-
-function BenchmarkBanner({ yourScore, siteId }: BenchmarkBannerProps) {
-    const [dismissed, setDismissed] = useState(true);
-    const [stats, setStats] = useState<{ average: number; topTenPercent: number } | null>(null);
-
-    useEffect(() => {
-        const isDismissed = localStorage.getItem(`benchmark-dismissed-${siteId}`) === "true";
-        setDismissed(isDismissed);
-
-        fetch("/api/aeo/benchmark")
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    setStats({ average: data.average, topTenPercent: data.topTenPercent });
-                }
-            })
-            .catch(() => {});
-    }, [siteId]);
-
-    const handleDismiss = () => {
-        localStorage.setItem(`benchmark-dismissed-${siteId}`, "true");
-        setDismissed(true);
-    };
-
-    const handleShow = () => {
-        localStorage.removeItem(`benchmark-dismissed-${siteId}`);
-        setDismissed(false);
-    };
-
-    if (dismissed) {
-        return (
-            <div
-                className="text-[10px] text-muted-foreground/60 border border-dashed border-[#30363d] rounded-xl py-2 px-3 text-center cursor-pointer hover:text-muted-foreground transition-colors mb-4"
-                onClick={handleShow}
-            >
-                Show industry benchmark comparison
-            </div>
-        );
-    }
-
-    const average = stats?.average ?? 38;
-    const topTen = stats?.topTenPercent ?? 71;
-
-    return (
-        <div className="bg-[#818cf8]/5 border border-[#818cf8]/20 rounded-2xl p-5 relative mb-4">
-            <button
-                onClick={handleDismiss}
-                className="absolute top-3 right-3 text-muted-foreground/60 hover:text-foreground transition-colors text-sm"
-            >
-                ✕
-            </button>
-            <div className="flex items-center gap-2 mb-3">
-                <span className="text-brand text-sm">◈</span>
-                <span className="text-xs font-bold text-foreground">Industry Comparison — SaaS Tools</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#818cf8]/10 text-[#818cf8] border border-[#818cf8]/20 font-bold uppercase tracking-wider">
-                    First Audit
-                </span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2.5 mb-3.5">
-                <div className="bg-white/[0.02] border border-[#21262d] rounded-xl p-2.5 text-center">
-                    <div className="text-lg font-black text-[#818cf8]">{yourScore}</div>
-                    <div className="text-[10px] font-semibold text-muted-foreground/80 mt-0.5">Your score</div>
-                    <div className="text-[9px] text-muted-foreground/50 mt-0.5">Just audited</div>
-                </div>
-                <div className="bg-white/[0.02] border border-[#21262d] rounded-xl p-2.5 text-center">
-                    <div className="text-lg font-black text-muted-foreground">{average}</div>
-                    <div className="text-[10px] font-semibold text-muted-foreground/80 mt-0.5">Category avg</div>
-                    <div className="text-[9px] text-muted-foreground/50 mt-0.5">Global benchmark</div>
-                </div>
-                <div className="bg-white/[0.02] border border-[#21262d] rounded-xl p-2.5 text-center">
-                    <div className="text-lg font-black text-[#f59e0b]">{topTen}</div>
-                    <div className="text-[10px] font-semibold text-muted-foreground/80 mt-0.5">Top 10%</div>
-                    <div className="text-[9px] text-muted-foreground/50 mt-0.5">Target to aim for</div>
-                </div>
-            </div>
-
-            <div className="h-1.5 rounded-full bg-muted/40 relative overflow-visible mb-2">
-                <div
-                    className="absolute top-[-3px] w-0.5 h-3 bg-muted-foreground/50 rounded-full"
-                    style={{ left: `${Math.min(average, 100)}%` }}
-                />
-                <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-[#818cf8] rounded-full"
-                    style={{ width: `${Math.min(yourScore, 100)}%` }}
-                />
-                <div
-                    className="absolute top-[-3px] w-0.5 h-3 bg-[#f59e0b] rounded-full"
-                    style={{ left: `${Math.min(topTen, 100)}%` }}
-                />
-            </div>
-            <div className="flex justify-between text-[9px] text-muted-foreground/50 font-mono">
-                <span>0</span>
-                <span>Category avg {average}</span>
-                <span className="text-[#f59e0b]">Top 10% → {topTen}</span>
-                <span>100</span>
-            </div>
-        </div>
-    );
-}
-
-// ─── Suspense shell ───────────────────────────────────────────────────────────
+// ─── Suspense shell ────────────────────────────────────────────────────────
 
 export default function AeoRankPage() {
     return (
