@@ -556,12 +556,12 @@ export function GenerateBlogModal({
             if (res.success && res.site) {
                 setForm(prev => ({
                     ...prev,
-                    authorName:     res.site!.authorName     || "",
-                    authorRole:     res.site!.authorRole     || "",
-                    authorBio:      res.site!.authorBio      || "",
-                    realExperience: res.site!.realExperience || "",
-                    realNumbers:    res.site!.realNumbers    || "",
-                    localContext:   res.site!.localContext   || "",
+                    authorName:     res.site?.authorName     || "",
+                    authorRole:     res.site?.authorRole     || "",
+                    authorBio:      res.site?.authorBio      || "",
+                    realExperience: res.site?.realExperience || "",
+                    realNumbers:    res.site?.realNumbers    || "",
+                    localContext:   res.site?.localContext   || "",
                 }));
             }
         });
@@ -591,12 +591,10 @@ export function GenerateBlogModal({
                 await onGenerate({ ...form, keyword });
                 onClose();
             }
-        } catch (err: unknown) {
-            console.error("[BlogStepper] Generation failed:", err);
+        } catch {
             try {
                 await onGenerate({ ...form, keyword });
             } catch {
-                // onGenerate itself failed — user already saw a toast from the action
             }
             onClose();
         } finally {

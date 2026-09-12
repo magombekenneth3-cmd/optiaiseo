@@ -189,10 +189,6 @@ export const cronWeeklyCompetitorAlerts = inngest.createFunction(
     },
 );
 
-// Runs 30 min after the credits reset job (00:00 UTC) to avoid Redis contention.
-// Scans all rl:* keys and deletes any whose prefix is no longer in ACTIVE_PREFIXES.
-// @upstash/ratelimit sets TTLs automatically so this is a belt-and-suspenders safety net.
-
 export const cronMonthlyRateLimitCleanup = inngest.createFunction(
     {
         id: "cron-monthly-ratelimit-cleanup",
@@ -286,7 +282,7 @@ export const cronStuckBlogSweep = inngest.createFunction(
         id: "cron-stuck-blog-sweep",
         name: "Cron: Stuck Blog GENERATING Sweep",
         retries: 1,
-        triggers: [{ cron: "*/30 * * * *" }], // every 30 min
+        triggers: [{ cron: "*/30 * * * *" }],
     },
     async ({ step }) => {
         const STUCK_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutes
@@ -305,7 +301,7 @@ export const cronStuckBlogSweep = inngest.createFunction(
                     createdAt: true,
                     site: { select: { userId: true } },
                 },
-                take: 50, // safety cap — shouldn't need more
+                take: 50,
             })
         );
 
@@ -324,8 +320,6 @@ export const cronStuckBlogSweep = inngest.createFunction(
             });
         });
 
-        // Refund credits for each affected user — group by userId to avoid
-        // multiple increments hitting the DB simultaneously per user.
         const userCounts = new Map<string, number>();
         for (const blog of stuckBlogs) {
             const uid = blog.site?.userId;
@@ -341,7 +335,7 @@ export const cronStuckBlogSweep = inngest.createFunction(
                         logger.error("[StuckBlogSweep] Credit refund failed", {
                             userId,
                             refund,
-                            error: (e as Error)?.message,
+                            error: e instanceof Error ? e.message : String(e),
                         })
                     );
                 logger.info(`[StuckBlogSweep] Refunded ${refund} credits to user ${userId} (${count} stuck blog${count > 1 ? "s" : ""})`);
@@ -352,17 +346,6 @@ export const cronStuckBlogSweep = inngest.createFunction(
     },
 );
 
-/**
- * Subscription Grace Period Enforcer — runs daily at 01:00 UTC.
- *
- * After a subscription is cancelled, the user keeps their tier + credits for
- * 2 days (grace period). This cron catches users whose grace has expired and:
- *   1. Downgrades them to FREE
- *   2. LOCKS their credits (sets creditsLockedAt) — credits become read-only
- *
- * The in-request guard (guards.ts getUserTier) also does lazy enforcement,
- * but this cron catches users who never log in after cancellation.
- */
 export const cronGracePeriodEnforcer = inngest.createFunction(
     {
         id: "cron-grace-period-enforcer",
@@ -410,7 +393,7 @@ export const cronGracePeriodEnforcer = inngest.createFunction(
                 }).catch((e: unknown) =>
                     logger.error("[GracePeriodEnforcer] Failed to lock user", {
                         userId: sub.userId,
-                        error: (e as Error)?.message,
+                        error: e instanceof Error ? e.message : String(e),
                     })
                 );
             }
@@ -421,18 +404,6 @@ export const cronGracePeriodEnforcer = inngest.createFunction(
     },
 );
 
-/**
- * Credit Wipe Finalizer — runs daily at 02:00 UTC.
- *
- * After credits are locked (creditsLockedAt is set), the user has 2 more days
- * to top-up or resubscribe and reclaim them. If they don't act within that
- * window, this cron wipes the balance to 0 permanently.
- *
- * Timeline:
- *   Day 0: Subscription cancelled → credits still fully usable
- *   Day 2: Grace expires → credits locked (read-only, visible but unusable)
- *   Day 4: Finalizer runs → locked credits wiped to 0
- */
 export const cronCreditWipeFinalizer = inngest.createFunction(
     {
         id: "cron-credit-wipe-finalizer",
@@ -473,7 +444,7 @@ export const cronCreditWipeFinalizer = inngest.createFunction(
                 }).catch((e: unknown) =>
                     logger.error("[CreditWipeFinalizer] Failed to wipe credits", {
                         userId: u.id,
-                        error: (e as Error)?.message,
+                        error: e instanceof Error ? e.message : String(e),
                     })
                 );
             }
@@ -484,11 +455,6 @@ export const cronCreditWipeFinalizer = inngest.createFunction(
     },
 );
 
-
-// ────────────────────────────────────────────────────────────────────────────
-// Growth Pipeline: Weekly recommendation refresh for all paid sites
-// Runs Wednesday 03:00 UTC — offset from Monday audit/backlink crons
-// ────────────────────────────────────────────────────────────────────────────
 
 export const cronWeeklyGrowthPipeline = inngest.createFunction(
     {
@@ -539,7 +505,7 @@ export const cronDailyExperimentMeasurement = inngest.createFunction(
                 return await measureRunningExperiments();
             } catch (err: unknown) {
                 logger.error("[CronExperimentMeasurement] Measurement failed", {
-                    error: (err as Error)?.message,
+                    error: err instanceof Error ? err.message : String(err),
                 });
                 return [];
             }
@@ -549,11 +515,6 @@ export const cronDailyExperimentMeasurement = inngest.createFunction(
         return { measured: results.length };
     },
 );
-
-// ────────────────────────────────────────────────────────────────────────────
-// D.5: Experiment Safety Enforcement — auto-abort experiments with violations
-// Runs daily at 04:45 UTC — after measurement, before evaluation
-// ────────────────────────────────────────────────────────────────────────────
 
 export const cronDailyExperimentSafety = inngest.createFunction(
     {
@@ -570,7 +531,7 @@ export const cronDailyExperimentSafety = inngest.createFunction(
                 return await enforceSafetyOnAllExperiments();
             } catch (err: unknown) {
                 logger.error("[CronExperimentSafety] Safety enforcement failed", {
-                    error: (err as Error)?.message,
+                    error: err instanceof Error ? err.message : String(err),
                 });
                 return { checked: 0, aborted: 0 };
             }
@@ -580,12 +541,6 @@ export const cronDailyExperimentSafety = inngest.createFunction(
         return result;
     },
 );
-
-// ────────────────────────────────────────────────────────────────────────────
-// Experiment Auto-Evaluation: daily scan for mature experiments
-// Runs daily at 05:00 UTC — queries PostgreSQL (source of truth)
-// Handles both legacy (tracker.ts) and D.5 (evaluator.ts) experiment formats
-// ────────────────────────────────────────────────────────────────────────────
 
 export const cronDailyExperimentEval = inngest.createFunction(
     {
@@ -598,7 +553,6 @@ export const cronDailyExperimentEval = inngest.createFunction(
         const { evaluate28DayExperimentLift } = await import("@/lib/experiments/tracker");
         const { evaluateMaturedExperiments } = await import("@/lib/experiments/evaluator");
 
-        // 1. Legacy experiments (status: RECORDED/EVALUATING with evaluationDate)
         const readyExperiments = await step.run("fetch-mature-experiments", async () => {
             try {
                 const rows = await (prisma as any).experiment.findMany({
@@ -631,20 +585,19 @@ export const cronDailyExperimentEval = inngest.createFunction(
                     } catch (err: unknown) {
                         logger.warn("[CronExperimentEval] Failed to evaluate legacy", {
                             expId,
-                            error: (err as Error)?.message,
+                            error: err instanceof Error ? err.message : String(err),
                         });
                     }
                 }
             });
         }
 
-        // 2. D.5 experiments (status: RUNNING with endsAt past)
         const d5Result = await step.run("evaluate-d5-experiments", async () => {
             try {
                 return await evaluateMaturedExperiments();
             } catch (err: unknown) {
                 logger.warn("[CronExperimentEval] D.5 evaluation failed", {
-                    error: (err as Error)?.message,
+                    error: err instanceof Error ? err.message : String(err),
                 });
                 return { evaluated: 0, outcomes: { WIN: 0, LOSS: 0, INCONCLUSIVE: 0, ABORTED: 0 } };
             }
@@ -663,11 +616,6 @@ export const cronDailyExperimentEval = inngest.createFunction(
         };
     },
 );
-
-// ────────────────────────────────────────────────────────────────────────────
-// D.6: Weekly Learning Loop — aggregates experiment outcomes into learned signals
-// Runs every Sunday at 06:00 UTC — after experiment evaluation cron
-// ────────────────────────────────────────────────────────────────────────────
 
 export const cronWeeklyLearningLoop = inngest.createFunction(
     {
@@ -701,7 +649,6 @@ export const cronWeeklyLearningLoop = inngest.createFunction(
             return { sites: 0, signals: 0 };
         }
 
-        // 2. Process each site
         let totalSignals = 0;
 
         for (const siteId of sites) {
@@ -709,18 +656,14 @@ export const cronWeeklyLearningLoop = inngest.createFunction(
                 let siteSignals = 0;
 
                 try {
-                    // Aggregate outcomes by action type
                     const aggregations = await aggregateOutcomesByAction(siteId);
 
                     for (const agg of aggregations) {
-                        // Persist performance snapshot
                         await persistActionPerformance(agg);
 
-                        // Generate signals
                         const signals = generateSignals(agg);
 
                         for (const signal of signals) {
-                            // Validate before activation
                             const validation = validateSignal(signal, agg);
                             if (validation.valid) {
                                 await persistAndActivateSignal(siteId, signal);
@@ -738,7 +681,7 @@ export const cronWeeklyLearningLoop = inngest.createFunction(
                 } catch (err: unknown) {
                     logger.error("[CronLearningLoop] Failed to process site", {
                         siteId,
-                        error: (err as Error)?.message,
+                        error: err instanceof Error ? err.message : String(err),
                     });
                 }
 
@@ -756,20 +699,6 @@ export const cronWeeklyLearningLoop = inngest.createFunction(
         return { sites: sites.length, signals: totalSignals };
     },
 );
-
-// ────────────────────────────────────────────────────────────────────────────
-// D.7 PORTFOLIO ALLOCATION — 06:30 UTC daily
-//
-// Cron ordering:
-//   04:30 D.5 measurement
-//   04:45 D.5 safety
-//   05:00 D.5 evaluation
-//   06:00 D.6 learning (Sunday only)
-//   06:30 D.7 portfolio allocation (daily)
-//
-// INVARIANT: D.7 chooses priority and allocation intent.
-//   It NEVER reserves budget, claims execution, transitions lifecycle, or mutates a site.
-// ────────────────────────────────────────────────────────────────────────────
 
 export const cronDailyPortfolioAllocation = inngest.createFunction(
     {
@@ -800,7 +729,6 @@ export const cronDailyPortfolioAllocation = inngest.createFunction(
             return { sites: 0, allocations: 0 };
         }
 
-        // 2. Allocate for each site
         let totalSelected = 0;
 
         for (const siteId of sites) {
@@ -811,7 +739,7 @@ export const cronDailyPortfolioAllocation = inngest.createFunction(
                 } catch (err: unknown) {
                     logger.error("[CronPortfolio] Failed to allocate for site", {
                         siteId,
-                        error: (err as Error)?.message,
+                        error: err instanceof Error ? err.message : String(err),
                     });
                     return 0;
                 }
@@ -830,33 +758,12 @@ export const cronDailyPortfolioAllocation = inngest.createFunction(
 );
 
 
-/**
- * Stuck-Audit Sweep — runs every 15 minutes.
- *
- * Detects audits stuck in non-terminal states and transitions them to FAILED.
- *
- * Two sweep categories:
- *   1. PENDING audits older than 20 minutes — the Inngest job was never picked
- *      up, or the worker crashed before reaching save-homepage-audit.
- *   2. IN_PROGRESS audits older than 45 minutes — page fan-out coordinator
- *      crashed, or child page jobs were lost/silently dropped.
- *
- * This is the last-resort safety net — not the primary failure handler.
- * The primary handlers are onFailure in processManualAuditJob and runPageAuditJob.
- *
- * Threshold reasoning:
- *   - PENDING 20min: matches stuck-blog sweep. Covers Inngest retries + cold starts.
- *   - IN_PROGRESS 45min: AGENCY tier can audit 500 pages at concurrency 5.
- *     At ~3s/page = ~5 min. 45 min = generous 9× buffer.
- *
- * Also releases held Redis audit leases for stuck audits.
- */
 export const cronStuckAuditSweep = inngest.createFunction(
     {
         id: "cron-stuck-audit-sweep",
         name: "Cron: Stuck Audit PENDING/IN_PROGRESS Sweep",
         retries: 1,
-        triggers: [{ cron: "*/15 * * * *" }], // every 15 min
+        triggers: [{ cron: "*/15 * * * *" }],
     },
     async ({ step }) => {
         const PENDING_THRESHOLD_MS = 20 * 60 * 1000;   // 20 minutes
@@ -865,7 +772,6 @@ export const cronStuckAuditSweep = inngest.createFunction(
         const pendingCutoff = new Date(Date.now() - PENDING_THRESHOLD_MS);
         const inProgressCutoff = new Date(Date.now() - IN_PROGRESS_THRESHOLD_MS);
 
-        // 1. Find stuck PENDING audits
         const stuckPending = await step.run("find-stuck-pending", () =>
             prisma.audit.findMany({
                 where: {
@@ -882,7 +788,6 @@ export const cronStuckAuditSweep = inngest.createFunction(
             })
         );
 
-        // 2. Find stuck IN_PROGRESS audits
         const stuckInProgress = await step.run("find-stuck-in-progress", () =>
             prisma.audit.findMany({
                 where: {
@@ -902,8 +807,6 @@ export const cronStuckAuditSweep = inngest.createFunction(
             })
         );
 
-        // 2b. Check if any IN_PROGRESS audits actually have all pages done
-        // (counter race condition: processed >= total but transition didn't fire)
         const reconciled: string[] = [];
         for (const audit of stuckInProgress) {
             const processed = audit.completedPages + audit.failedPages;
@@ -931,7 +834,6 @@ export const cronStuckAuditSweep = inngest.createFunction(
             }
         }
 
-        // Filter out reconciled audits — they're no longer stuck
         const trulyStuckInProgress = stuckInProgress.filter(
             (a) => !reconciled.includes(a.id)
         );
@@ -949,7 +851,6 @@ export const cronStuckAuditSweep = inngest.createFunction(
                 ids: allStuck.map((a) => a.id),
             });
 
-            // Mark all stuck audits as FAILED (idempotent — updateMany won't touch already-terminal)
             await step.run("mark-stuck-audits-failed", async () => {
                 await prisma.audit.updateMany({
                     where: {
@@ -960,7 +861,6 @@ export const cronStuckAuditSweep = inngest.createFunction(
                 });
             });
 
-            // Release any held audit leases
             await step.run("release-stuck-audit-leases", async () => {
                 const { releaseAuditLease } = await import("@/lib/audit-lock");
                 for (const audit of allStuck) {

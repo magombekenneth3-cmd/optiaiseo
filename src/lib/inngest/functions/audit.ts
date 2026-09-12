@@ -15,6 +15,23 @@ import { writeMetricSnapshot } from "@/lib/metrics/metric-snapshot";
 import { redis } from "@/lib/redis";
 import { fireWhiteLabelWebhook } from "@/lib/webhooks/white-label";
 
+function resolveFixStatus(
+    d: { fixed: unknown[]; newIssues?: unknown[] } | null,
+    isFirstRun: boolean
+): "FIRST_RUN" | "FIXED" | "IMPROVED" | "PENDING" {
+    if (isFirstRun || d === null) return "FIRST_RUN";
+    if (d.fixed.length > 0 && (!d.newIssues || d.newIssues.length === 0)) return "FIXED";
+    if (d.fixed.length > 0) return "IMPROVED";
+    return "PENDING";
+}
+
+function getPerfMetric(
+    cat: { items?: { id: string; value?: number }[] } | undefined,
+    id: string
+): number | null {
+    const item = cat?.items?.find((i) => i.id === id);
+    return typeof item?.value === "number" ? item.value : null;
+}
 
 export const processManualAuditJob = inngest.createFunction(
     {
@@ -214,15 +231,9 @@ export const runWeeklyAuditJob = inngest.createFunction(
 
             const diff = prevItems.length > 0 ? diffAuditSnapshots(prevItems, allItems) : null;
 
-            function resolveFixStatus(
-                d: typeof diff,
-                isFirstRun: boolean
-            ): "FIRST_RUN" | "FIXED" | "IMPROVED" | "PENDING" {
-                if (isFirstRun || d === null) return "FIRST_RUN";
-                if (d.fixed.length > 0 && (!d.newIssues || d.newIssues.length === 0)) return "FIXED";
-                if (d.fixed.length > 0) return "IMPROVED";
-                return "PENDING";
-            }
+            const perfCat = auditResult.categories.find(
+                (c: any) => c.id === "performance"
+            ) as { items?: { id: string; value?: number }[] } | undefined;
 
             const created = await prisma.audit.create({
                 data: {
@@ -233,20 +244,9 @@ export const runWeeklyAuditJob = inngest.createFunction(
                     ),
                     issueList: auditResult as any,
                     fixStatus: resolveFixStatus(diff, prevItems.length === 0),
-                    ...(() => {
-                        const perfCat = auditResult.categories.find(
-                            (c: any) => c.id === "performance"
-                        ) as { items?: { id: string; value?: number }[] } | undefined;
-                        const getMetric = (id: string): number | null => {
-                            const item = perfCat?.items?.find((i) => i.id === id);
-                            return typeof item?.value === "number" ? item.value : null;
-                        };
-                        return {
-                            lcp: getMetric("lcp"),
-                            cls: getMetric("cls"),
-                            inp: getMetric("inp"),
-                        };
-                    })(),
+                    lcp: getPerfMetric(perfCat, "lcp"),
+                    cls: getPerfMetric(perfCat, "cls"),
+                    inp: getPerfMetric(perfCat, "inp"),
                 },
             });
             const perfCatForSnap = auditResult.categories.find(
@@ -255,17 +255,13 @@ export const runWeeklyAuditJob = inngest.createFunction(
             const schemaCat = auditResult.categories.find(
                 (c: any) => c.id === "schema"
             ) as { score?: number } | undefined;
-            const getSnapMetric = (id: string): number | null => {
-                const item = perfCatForSnap?.items?.find((i) => i.id === id);
-                return typeof item?.value === "number" ? item.value : null;
-            };
             await writeMetricSnapshot({
                 siteId: site.id,
                 overallScore: auditResult.overallScore,
                 schemaScore: schemaCat?.score ?? null,
-                lcp: getSnapMetric("lcp"),
-                cls: getSnapMetric("cls"),
-                inp: getSnapMetric("inp"),
+                lcp: getPerfMetric(perfCatForSnap, "lcp"),
+                cls: getPerfMetric(perfCatForSnap, "cls"),
+                inp: getPerfMetric(perfCatForSnap, "inp"),
             }).catch(() => {/* non-fatal */ });
 
             return { score: auditResult.overallScore, diff: diff?.summary, auditId: created.id };
@@ -289,8 +285,7 @@ export const runWeeklyAuditJob = inngest.createFunction(
                 delta: scoreDelta,
             });
 
-            const { detectGsovDrop: _detectGsovDrop, generateHealingPlan } = await import("@/lib/self-healing/engine");
-            const gsovStatus = await _detectGsovDrop(site.id);
+            const gsovStatus = await detectGsovDrop(site.id);
             const actions = await generateHealingPlan(
                 site.id,
                 gsovStatus.currentGsov,
@@ -431,7 +426,7 @@ export const sendWeeklyDigestJob = inngest.createFunction(
                         impressions: o.impressions,
                     }));
                 } catch (err: unknown) {
-                    logger.warn(`[Inngest/EmailDigest] GSC fetch failed for ${user.email}:`, { error: (err as Error)?.message || String(err) });
+                    logger.warn(`[Inngest/EmailDigest] GSC fetch failed for ${user.email}:`, { error: err instanceof Error ? err.message : String(err) });
                 }
             }
             return [];
