@@ -57,26 +57,26 @@ interface Pagination {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; icon: typeof Activity }> = {
-    PROPOSED:              { color: "text-blue-400",    bg: "bg-blue-500/10 border-blue-500/20",    icon: Clock },
-    PENDING_APPROVAL:      { color: "text-amber-400",   bg: "bg-amber-500/10 border-amber-500/20",  icon: Shield },
-    APPROVED:              { color: "text-emerald-400",  bg: "bg-emerald-500/10 border-emerald-500/20", icon: CheckCircle2 },
-    EXECUTING:             { color: "text-cyan-400",     bg: "bg-cyan-500/10 border-cyan-500/20",    icon: Loader2 },
-    COMMITTED:             { color: "text-emerald-400",  bg: "bg-emerald-500/10 border-emerald-500/20", icon: CheckCircle2 },
-    EFFECTS_PENDING:       { color: "text-purple-400",   bg: "bg-purple-500/10 border-purple-500/20", icon: Zap },
-    COMPLETED:             { color: "text-emerald-400",  bg: "bg-emerald-500/10 border-emerald-500/20", icon: CheckCircle2 },
-    REJECTED:              { color: "text-rose-400",     bg: "bg-rose-500/10 border-rose-500/20",    icon: XCircle },
-    FAILED:                { color: "text-rose-400",     bg: "bg-rose-500/10 border-rose-500/20",    icon: XCircle },
-    STALE:                 { color: "text-zinc-400",     bg: "bg-zinc-500/10 border-zinc-500/20",    icon: Clock },
-    CANCELLED:             { color: "text-zinc-400",     bg: "bg-zinc-500/10 border-zinc-500/20",    icon: XCircle },
-    ROLLED_BACK:           { color: "text-orange-400",   bg: "bg-orange-500/10 border-orange-500/20", icon: RotateCcw },
-    COMPLETED_WITH_ERRORS: { color: "text-amber-400",    bg: "bg-amber-500/10 border-amber-500/20",  icon: AlertTriangle },
-    EXPIRED:               { color: "text-zinc-500",     bg: "bg-zinc-500/10 border-zinc-500/20",    icon: Clock },
+    PROPOSED: { color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", icon: Clock },
+    PENDING_APPROVAL: { color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20", icon: Shield },
+    APPROVED: { color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", icon: CheckCircle2 },
+    EXECUTING: { color: "text-cyan-400", bg: "bg-cyan-500/10 border-cyan-500/20", icon: Loader2 },
+    COMMITTED: { color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", icon: CheckCircle2 },
+    EFFECTS_PENDING: { color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20", icon: Zap },
+    COMPLETED: { color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", icon: CheckCircle2 },
+    REJECTED: { color: "text-rose-400", bg: "bg-rose-500/10 border-rose-500/20", icon: XCircle },
+    FAILED: { color: "text-rose-400", bg: "bg-rose-500/10 border-rose-500/20", icon: XCircle },
+    STALE: { color: "text-zinc-400", bg: "bg-zinc-500/10 border-zinc-500/20", icon: Clock },
+    CANCELLED: { color: "text-zinc-400", bg: "bg-zinc-500/10 border-zinc-500/20", icon: XCircle },
+    ROLLED_BACK: { color: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20", icon: RotateCcw },
+    COMPLETED_WITH_ERRORS: { color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20", icon: AlertTriangle },
+    EXPIRED: { color: "text-zinc-500", bg: "bg-zinc-500/10 border-zinc-500/20", icon: Clock },
 };
 
 const RISK_COLORS: Record<string, string> = {
-    LOW:      "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-    MEDIUM:   "text-amber-400 bg-amber-500/10 border-amber-500/20",
-    HIGH:     "text-orange-400 bg-orange-500/10 border-orange-500/20",
+    LOW: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+    MEDIUM: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+    HIGH: "text-orange-400 bg-orange-500/10 border-orange-500/20",
     CRITICAL: "text-rose-400 bg-rose-500/10 border-rose-500/20",
 };
 
@@ -240,7 +240,6 @@ export default function OperationsPage() {
 
     return (
         <div className="flex flex-col gap-6 w-full max-w-6xl mx-auto">
-            {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
@@ -248,7 +247,7 @@ export default function OperationsPage() {
                         Operations
                     </h1>
                     <p className="text-muted-foreground text-sm mt-1">
-                        Every autonomous action, validated and traceable.
+                        Mutation lifecycle: operation → target → actor → status → risk → effects
                     </p>
                 </div>
                 <button
@@ -294,17 +293,15 @@ export default function OperationsPage() {
                         <button
                             key={s}
                             onClick={() => { setFilter(s); setPage(1); setSelectedId(null); }}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-full border transition-colors whitespace-nowrap ${
-                                isActive
-                                    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
-                                    : "bg-transparent border-border text-muted-foreground hover:text-foreground hover:border-foreground/20"
-                            }`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-full border transition-colors whitespace-nowrap ${isActive
+                                ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                                : "bg-transparent border-border text-muted-foreground hover:text-foreground hover:border-foreground/20"
+                                }`}
                         >
                             {s === "ALL" ? "All" : s.replace(/_/g, " ")}
                             {count > 0 && (
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                                    isActive ? "bg-emerald-500/20" : "bg-white/5"
-                                }`}>
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isActive ? "bg-emerald-500/20" : "bg-white/5"
+                                    }`}>
                                     {count}
                                 </span>
                             )}
@@ -318,10 +315,7 @@ export default function OperationsPage() {
                     {error}
                 </div>
             )}
-
-            {/* Main content: list + detail panel */}
             <div className="flex gap-4 min-h-[500px]">
-                {/* Operations list */}
                 <div className={`flex-1 flex flex-col gap-2 ${selectedId ? "max-w-[55%]" : ""}`}>
                     {loading ? (
                         <div className="flex items-center justify-center gap-3 py-20">
@@ -343,9 +337,8 @@ export default function OperationsPage() {
                                 <button
                                     key={op.id}
                                     onClick={() => loadDetail(op.id)}
-                                    className={`w-full text-left card-surface p-4 hover:border-emerald-500/30 transition-all ${
-                                        selectedId === op.id ? "border-emerald-500/40 ring-1 ring-emerald-500/20" : ""
-                                    }`}
+                                    className={`w-full text-left card-surface p-4 hover:border-emerald-500/30 transition-all ${selectedId === op.id ? "border-emerald-500/40 ring-1 ring-emerald-500/20" : ""
+                                        }`}
                                 >
                                     <div className="flex items-start justify-between gap-3 mb-2">
                                         <div className="flex-1 min-w-0">
@@ -484,36 +477,13 @@ function OperationDetail({
                 </button>
             </div>
 
+            {/* Status + Risk */}
             <div className="flex flex-wrap gap-2">
                 <StatusBadge status={operation.status} />
                 <RiskBadge level={operation.riskLevel} />
                 <span className="text-[10px] text-muted-foreground px-2 py-0.5 rounded-full bg-white/5 border border-white/10">
                     Score: {operation.riskScore}/100
                 </span>
-            </div>
-
-            <div className="lifecycle-track">
-                {[
-                    { label: "Detected", phase: "PROPOSED" },
-                    { label: "AI proposal generated", phase: "PENDING_APPROVAL" },
-                    { label: "Safety validation", phase: "APPROVED" },
-                    { label: "Executing", phase: "EXECUTING" },
-                    { label: "Verification", phase: "COMPLETED" },
-                ].map((step) => {
-                    const statusOrder = ["PROPOSED", "PENDING_APPROVAL", "APPROVED", "EXECUTING", "COMMITTED", "EFFECTS_PENDING", "COMPLETED"];
-                    const opIdx = statusOrder.indexOf(operation.status);
-                    const stepIdx = statusOrder.indexOf(step.phase);
-                    const isFailed = operation.status === "FAILED" || operation.status === "REJECTED";
-                    const isCompleted = !isFailed && opIdx >= 0 && stepIdx >= 0 && stepIdx < opIdx;
-                    const isActive = !isFailed && opIdx === stepIdx;
-                    const isFailedStep = isFailed && stepIdx === opIdx;
-                    const cls = isFailedStep ? "failed" : isCompleted ? "completed" : isActive ? "active" : "";
-                    return (
-                        <div key={step.phase} className={`lifecycle-step ${cls}`}>
-                            {step.label}
-                        </div>
-                    );
-                })}
             </div>
 
             {/* Metadata grid */}
@@ -548,6 +518,7 @@ function OperationDetail({
                 </div>
             </div>
 
+            {/* Snapshot */}
             {operation.snapshot && (
                 <div>
                     <button
@@ -575,28 +546,6 @@ function OperationDetail({
                             )}
                         </div>
                     )}
-                </div>
-            )}
-
-            {(operation.status === "COMPLETED" || operation.status === "COMMITTED" || operation.status === "APPROVED") && (
-                <div>
-                    <h3 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        Validation
-                    </h3>
-                    <div className="space-y-0">
-                        {[
-                            "No placeholders detected",
-                            "Valid JSON-LD schema",
-                            "Syntax check passed",
-                            "No prompt injection",
-                        ].map((check) => (
-                            <div key={check} className="validation-check passed">
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>{check}</span>
-                            </div>
-                        ))}
-                    </div>
                 </div>
             )}
 
