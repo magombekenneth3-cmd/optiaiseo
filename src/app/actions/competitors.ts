@@ -78,6 +78,68 @@ export async function getCompetitors(siteId: string) {
     }
 }
 
+/**
+ * Load additional competitor keywords beyond the initial 50-keyword server render.
+ * Cursor-based: pass the last keyword's id to get the next page.
+ * Pro users get up to 200 keywords per page (vs FREE cap of 50).
+ */
+export async function loadMoreCompetitorKeywords(
+    siteId: string,
+    competitorId: string,
+    cursor: string | null,
+    isPaid: boolean,
+): Promise<{
+    success: boolean;
+    keywords?: { id: string; keyword: string; position: number; searchVolume: number; difficulty: number | null; clicks: number | null; dataSource: string | null }[];
+    nextCursor?: string | null;
+    hasMore?: boolean;
+    error?: string;
+}> {
+    try {
+        const session = await getServerSession(authOptions);
+        if (!session?.user?.email) return { success: false, error: "Unauthorized" };
+
+        const site = await assertSiteOwnership(siteId, session.user.email);
+        if (!site) return { success: false, error: "Site not found or access denied" };
+
+        const pageSize = isPaid ? 200 : 50;
+
+        const rows = await prisma.competitorKeyword.findMany({
+            where: { competitorId },
+            orderBy: { searchVolume: "desc" },
+            take: pageSize + 1,
+            ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+            select: {
+                id: true,
+                keyword: true,
+                position: true,
+                searchVolume: true,
+                difficulty: true,
+                clicks: true,
+                dataSource: true,
+            },
+        });
+
+        const hasMore = rows.length > pageSize;
+        const page = hasMore ? rows.slice(0, pageSize) : rows;
+        const nextCursor = hasMore ? (page[page.length - 1]?.id ?? null) : null;
+
+        return {
+            success: true,
+            keywords: page.map(k => ({
+                ...k,
+                position: k.position ?? 0,
+                searchVolume: k.searchVolume ?? 0,
+            })),
+            nextCursor,
+            hasMore,
+        };
+    } catch (e: unknown) {
+        logger.error("Failed to load more competitor keywords:", { error: (e as Error)?.message || String(e) });
+        return { success: false, error: "Server error loading keywords" };
+    }
+}
+
 export async function refreshCompetitorKeywords(siteId: string, competitorId: string) {
     try {
         const session = await getServerSession(authOptions);

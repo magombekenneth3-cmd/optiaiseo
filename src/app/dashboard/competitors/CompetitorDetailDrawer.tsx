@@ -10,6 +10,7 @@ import {
 import {
   refreshCompetitorKeywords,
   fetchCompetitorBacklinkGap,
+  loadMoreCompetitorKeywords,
 } from "@/app/actions/competitors";
 
 type Snapshot = { month: string; traffic: number; organicKeywords: number | null };
@@ -17,6 +18,7 @@ type KW = { id: string; keyword: string; position: number; searchVolume: number;
 type Competitor = { id: string; domain: string; addedAt: string | Date; metadata: Record<string, unknown> | null; keywords: KW[]; snapshots: Snapshot[] };
 type GapReport = { gap: { referringDomains: number; domainRating: number; totalBacklinks: number; opportunityDomains: string[] }; you: { domainRating: number; referringDomains: number }; competitor: { domainRating: number; referringDomains: number } };
 type DetailTab = "overview" | "gaps" | "backlinks" | "trend";
+import { Loader2 } from "lucide-react";
 
 function fmt(n: number | null | undefined) {
   if (n == null) return "—";
@@ -113,6 +115,12 @@ export function CompetitorDetailDrawer({ comp, siteId, isPaid, onClose, onRefres
   const [gapLoading, setGapLoading] = useState(false);
   const [gapError, setGapError] = useState<string | null>(null);
 
+  // Keyword pagination state
+  const [extraKeywords, setExtraKeywords] = useState<KW[]>([]);
+  const [kwHasMore, setKwHasMore] = useState(comp.keywords.length >= 50);
+  const [kwLoading, setKwLoading] = useState(false);
+  const allKeywords = [...comp.keywords, ...extraKeywords];
+
   const meta = comp.metadata as Record<string, unknown> | null;
   const traffic = meta?.estimatedMonthlyVisits as number | null;
   const orgKws = meta?.organicKeywords as number | null;
@@ -124,11 +132,12 @@ export function CompetitorDetailDrawer({ comp, siteId, isPaid, onClose, onRefres
   const trendColor = trend === "growing" ? "#2ea043" : trend === "declining" ? "#f85149" : "#6e7681";
   const trendLabel = trend === "growing" ? `Growing +${pct}%` : trend === "declining" ? `Declining ${pct}%` : "Stable";
 
-  const topGaps = comp.keywords.slice(0, 8);
+  const topGaps = allKeywords.slice(0, 8);
 
   const onEsc = useCallback((e: KeyboardEvent) => {
     if (e.key === "Escape") onClose();
   }, [onClose]);
+
 
   useEffect(() => {
     document.addEventListener("keydown", onEsc);
@@ -174,8 +183,25 @@ export function CompetitorDetailDrawer({ comp, siteId, isPaid, onClose, onRefres
     if (t === "backlinks") loadGap();
   };
 
+  const realisticTargets = allKeywords.filter(kw => kw.position <= 20).length;
   const estBestAction = topGaps.length > 0 ? topGaps[0] : null;
-  const realisticTargets = comp.keywords.filter(kw => kw.position <= 20).length;
+
+  const handleLoadMore = async () => {
+    if (kwLoading || !kwHasMore) return;
+    setKwLoading(true);
+    try {
+      const lastId = extraKeywords.length > 0
+        ? extraKeywords[extraKeywords.length - 1].id
+        : (comp.keywords[comp.keywords.length - 1]?.id ?? null);
+      const r = await loadMoreCompetitorKeywords(siteId, comp.id, lastId, isPaid);
+      if (r.success && r.keywords) {
+        setExtraKeywords(prev => [...prev, ...r.keywords!]);
+        setKwHasMore(r.hasMore ?? false);
+      }
+    } finally {
+      setKwLoading(false);
+    }
+  };
 
   return (
     <>
@@ -383,9 +409,9 @@ export function CompetitorDetailDrawer({ comp, siteId, isPaid, onClose, onRefres
             <div className="flex-1 px-5 py-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-[13px] font-semibold text-[#e6edf3]">Keyword Gaps</h3>
-                <span className="text-[10px] text-[#6e7681]">{comp.keywords.length} loaded (of {gapCount} total)</span>
+                <span className="text-[10px] text-[#6e7681]">{allKeywords.length} loaded{kwHasMore ? " — more available" : " (all)"}</span>
               </div>
-              {comp.keywords.length === 0 ? (
+              {allKeywords.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-[11px] text-[#6e7681] mb-2">No keyword gap data yet.</p>
                   <button
@@ -398,18 +424,33 @@ export function CompetitorDetailDrawer({ comp, siteId, isPaid, onClose, onRefres
                   </button>
                 </div>
               ) : (
-                <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-1">
-                  {comp.keywords.map(kw => (
-                    <div key={kw.id} className="flex items-center justify-between px-2.5 py-2 bg-[#161b22] rounded-md text-[11px] gap-2">
-                      <span className="truncate font-medium text-[#c9d1d9] flex-1">{kw.keyword}</span>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[#8b949e] w-7 text-right">#{kw.position}</span>
-                        <span className="text-[#388bfd] w-9 text-right tabular-nums">{fmt(kw.searchVolume)}</span>
-                        <KdBadge score={kw.difficulty} />
+                <>
+                  <div className="space-y-1 max-h-[55vh] overflow-y-auto pr-1">
+                    {allKeywords.map(kw => (
+                      <div key={kw.id} className="flex items-center justify-between px-2.5 py-2 bg-[#161b22] rounded-md text-[11px] gap-2">
+                        <span className="truncate font-medium text-[#c9d1d9] flex-1">{kw.keyword}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[#8b949e] w-7 text-right">#{kw.position}</span>
+                          <span className="text-[#388bfd] w-9 text-right tabular-nums">{fmt(kw.searchVolume)}</span>
+                          <KdBadge score={kw.difficulty} />
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                  {kwHasMore && (
+                    <button
+                      onClick={handleLoadMore}
+                      disabled={kwLoading}
+                      className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-[11px] font-semibold border border-[#30363d] bg-[#161b22] text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d] transition-colors disabled:opacity-40"
+                    >
+                      {kwLoading ? (
+                        <><Loader2 className="w-3 h-3 animate-spin" /> Loading more…</>
+                      ) : (
+                        isPaid ? `Load more keywords` : "Upgrade to load more"
+                      )}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )}

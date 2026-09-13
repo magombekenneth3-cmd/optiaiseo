@@ -9,7 +9,7 @@ import {
     ShieldAlert, Globe, RefreshCw, ChevronDown,
     ChevronUp, ArrowUpRight, Loader2, Search,
     CheckCircle2, XCircle, Minus, Download, Plus, X,
-    ExternalLink, BarChart3,
+    ExternalLink, BarChart3, Settings,
 } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip,
@@ -137,6 +137,7 @@ interface BacklinksClientProps {
     domain: string;
     initialSummary: BacklinkSummary | null;
     initialStored: StoredBacklink[];
+    dataForSeoConfigured: boolean;
 }
 
 export default function BacklinksClient({
@@ -144,6 +145,7 @@ export default function BacklinksClient({
     domain: _domain,
     initialSummary,
     initialStored,
+    dataForSeoConfigured,
 }: BacklinksClientProps) {
     const searchParams = useSearchParams();
     const effectiveSiteId = siteId || searchParams.get("siteId");
@@ -333,6 +335,30 @@ export default function BacklinksClient({
                     </div>
                 </div>
             </div>
+
+            {/* ── DataForSEO Setup Banner ── */}
+            {!dataForSeoConfigured && (
+                <div className="mb-6 px-5 py-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 flex items-start gap-4">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0 mt-0.5">
+                        <Settings size={16} className="text-amber-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-semibold text-amber-400 mb-1">DataForSEO integration not configured</p>
+                        <p className="text-[12px] text-[#8b949e] leading-relaxed">
+                            Set <code className="px-1.5 py-0.5 rounded bg-[#21262d] text-[#e6edf3] font-mono text-[11px]">DATAFORSEO_LOGIN</code> and{" "}
+                            <code className="px-1.5 py-0.5 rounded bg-[#21262d] text-[#e6edf3] font-mono text-[11px]">DATAFORSEO_PASSWORD</code> in your environment to enable live backlink data — Domain Rating, referring domains, toxic link detection, and competitor gap analysis.
+                        </p>
+                        <a
+                            href="https://dataforseo.com/apis/backlinks-api"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 mt-2.5 text-[11px] font-semibold text-amber-400 hover:text-amber-300 transition-colors"
+                        >
+                            <ExternalLink size={11} /> Get DataForSEO credentials
+                        </a>
+                    </div>
+                </div>
+            )}
 
             {/* ── Error ── */}
             {error && (

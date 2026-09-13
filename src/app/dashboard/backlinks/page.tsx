@@ -10,6 +10,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getBacklinkSummary } from "@/lib/backlinks/index";
+import { isConfigured as isDataForSeoConfigured } from "@/lib/backlinks/client";
 import BacklinksClient from "./BacklinksClient";
 
 export const metadata = {
@@ -39,6 +40,8 @@ export default async function BacklinksPage({
         select: { id: true, domain: true },
     });
     if (!site) redirect("/dashboard");
+
+    const dataForSeoConfigured = isDataForSeoConfigured();
 
     // Pre-fetch summary + stored concurrently so the client gets instant data
     const [summary, stored] = await Promise.all([
@@ -90,6 +93,7 @@ export default async function BacklinksPage({
             domain={site.domain}
             initialSummary={summary}
             initialStored={storedSerialized}
+            dataForSeoConfigured={dataForSeoConfigured}
         />
     );
 }
