@@ -10,19 +10,17 @@ import { KeywordDiscovery } from "./KeywordDiscovery";
 import { CompetitorManager } from "./CompetitorManager";
 import { ShareOfVoiceChart } from "./ShareOfVoiceChart";
 import { TrackedKeywordsPanel } from "./TrackedKeywordsPanel";
-import { RevenueSimulator } from "@/components/dashboard/RevenueSimulator";
 import { KeywordClustersPanel } from "./KeywordClustersPanel";
 import { AllKeywordsTable } from "./AllKeywordsTable";
 import { estimateKeywordRoi } from "@/lib/keywords/roi";
 import { SerpFeatureHistoryPanel } from "./SerpFeatureHistoryPanel";
 
 const TABS = [
-    { id: "keywords",    label: "All Keywords",label2: "Keywords", desc: "Full keyword rankings from Search Console" },
-    { id: "playbook",    label: "Playbook",    desc: "AI-ranked quick wins & fixes"       },
-    { id: "research",    label: "Research",    desc: "Discover new keyword opportunities"  },
-    { id: "competitors", label: "Competitors", desc: "Benchmark against rivals"            },
-    { id: "tracked",     label: "Tracked",     desc: "Position history & rank tracking"    },
-    { id: "revenue",     label: "Revenue",     desc: "Simulate ranking revenue impact"     },
+    { id: "keywords", label: "Keywords", desc: "Full keyword rankings from Search Console" },
+    { id: "opportunities", label: "Opportunities", desc: "AI-ranked actions to improve rankings" },
+    { id: "research", label: "Research", desc: "Discover new keyword opportunities" },
+    { id: "competitors", label: "Competitors", desc: "Benchmark against rivals" },
+    { id: "tracked", label: "Tracked", desc: "Position history & rank tracking" },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];
@@ -45,7 +43,6 @@ interface Props {
     competitors: unknown;
     hasRankTracking: boolean;
     hasShareOfVoice: boolean;
-    revenueKeywords: { id: string; keyword: string; position: number; searchVolume: number; cpc: number }[];
     competitorCount?: number;
     trackedCount?: number;
     keywords?: { keyword: string; position: number; clicks: number; impressions: number; ctr: number; url: string; intent?: string | null; difficulty?: number | null; positionHistory?: { date: string; position: number }[] }[];
@@ -54,35 +51,43 @@ interface Props {
 export function KeywordTabPanels({
     siteId, categorised, opportunities, summary, domain,
     userTier, maxTracked, trackedKeywordsData, competitors,
-    hasRankTracking, hasShareOfVoice, revenueKeywords,
+    hasRankTracking, hasShareOfVoice,
     competitorCount = 0, trackedCount = 0, keywords = [],
 }: Props) {
     const [activeTab, setActiveTab] = useState<TabId>("keywords");
 
+    const needAttention = keywords.filter(k => k.position > 10).length;
+    const badges: Partial<Record<TabId, number>> = {};
+    if (keywords.length > 0) badges.keywords = keywords.length;
+    if (needAttention > 0) badges.opportunities = needAttention;
+    if (competitorCount > 0) badges.competitors = competitorCount;
+    if (trackedCount > 0) badges.tracked = trackedCount;
+
     return (
-        <div className="rounded-2xl border border-border bg-card overflow-hidden">
-            {/* Tab bar */}
-            <div className="flex overflow-x-auto border-b border-[#21262d] scrollbar-none bg-[#0a0d11]">
-                {TABS.map((tab) => {
+        <div id="workspace" className="rounded-xl border border-[#21262d] bg-[#0d1117] overflow-hidden">
+            <div className="px-5 pt-4 pb-0">
+                <h2 className="text-[14px] font-semibold text-[#e6edf3] mb-3">Keyword Workspace</h2>
+            </div>
+            <div className="flex overflow-x-auto border-b border-[#21262d] scrollbar-none px-5">
+                {TABS.map(tab => {
                     const isActive = activeTab === tab.id;
-                    const badge =
-                        tab.id === "keywords"    && keywords.length    > 0 ? keywords.length    :
-                        tab.id === "competitors" && competitorCount > 0 ? competitorCount :
-                        tab.id === "tracked"     && trackedCount    > 0 ? trackedCount    : undefined;
+                    const badge = badges[tab.id];
                     return (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
                             className={[
-                                "shrink-0 flex items-center gap-2 px-5 py-3.5 text-[13px] font-medium transition-colors whitespace-nowrap border-b-2 -mb-px",
+                                "shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-medium transition-colors whitespace-nowrap border-b-2 -mb-px",
                                 isActive
                                     ? "border-[#388bfd] text-[#e6edf3]"
-                                    : "border-transparent text-[#6e7681] hover:text-[#c9d1d9] hover:border-[#30363d]",
+                                    : "border-transparent text-[#6e7681] hover:text-[#c9d1d9]",
                             ].join(" ")}
                         >
                             {tab.label}
                             {badge !== undefined && (
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isActive ? "bg-[#388bfd]/20 text-[#388bfd]" : "bg-[#21262d] text-[#6e7681]"}`}>
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                                    isActive ? "bg-[#388bfd]/20 text-[#388bfd]" : "bg-[#21262d] text-[#6e7681]"
+                                }`}>
                                     {badge}
                                 </span>
                             )}
@@ -91,24 +96,14 @@ export function KeywordTabPanels({
                 })}
             </div>
 
-            {/* Description sub-line */}
-            <div className="px-5 py-2 border-b border-[#161b22]">
-                <p className="text-[11px] text-[#6e7681]">
-                    {TABS.find(t => t.id === activeTab)?.desc}
-                </p>
-            </div>
-
-            {/* Panel content */}
-            <div className="p-1">
+            <div>
                 {activeTab === "keywords" && (
                     <PanelErrorBoundary fallbackTitle="Keywords table failed to load">
-                        <div className="p-0">
-                            <AllKeywordsTable keywords={keywords} siteId={siteId} />
-                        </div>
+                        <AllKeywordsTable keywords={keywords} siteId={siteId} />
                     </PanelErrorBoundary>
                 )}
-                {activeTab === "playbook" && (
-                    <PanelErrorBoundary fallbackTitle="Playbook panel failed to load">
+                {activeTab === "opportunities" && (
+                    <PanelErrorBoundary fallbackTitle="Opportunities panel failed to load">
                         <div className="flex flex-col gap-4 p-5">
                             <KeywordPlaybookPanel categorised={categorised as never} opportunities={opportunities as never} summary={summary as never} domain={domain} siteId={siteId} />
                             <CannibalizationPanel siteId={siteId} />
@@ -138,22 +133,10 @@ export function KeywordTabPanels({
                             {hasRankTracking ? (
                                 <TrackedKeywordsPanel siteId={siteId} initialData={trackedKeywordsData} tier={userTier} maxTracked={maxTracked} />
                             ) : (
-                                <div className="py-12 text-center text-[#6e7681] text-sm">Rank tracking is available on the Pro plan and above.</div>
+                                <div className="py-12 text-center text-[#6e7681] text-[12px]">Rank tracking is available on the Pro plan and above.</div>
                             )}
                             {hasShareOfVoice && <ShareOfVoiceChart siteId={siteId} />}
-                            {/* SERP Feature History — reads SerpFeatureSnapshot written by the weekly cron */}
                             <SerpFeatureHistoryPanel siteId={siteId} />
-                        </div>
-                    </PanelErrorBoundary>
-                )}
-                {activeTab === "revenue" && (
-                    <PanelErrorBoundary fallbackTitle="Revenue panel failed to load">
-                        <div className="p-5">
-                            {revenueKeywords.length >= 2 ? (
-                                <RevenueSimulator keywords={revenueKeywords} />
-                            ) : (
-                                <div className="py-12 text-center text-[#6e7681] text-sm">Track at least 2 keywords with search volume and CPC data to unlock the Revenue Simulator.</div>
-                            )}
                         </div>
                     </PanelErrorBoundary>
                 )}
