@@ -471,7 +471,7 @@ export default async function DashboardPage() {
                   <p className="stat-label">Organic Clicks</p>
                   <p className="empty-state-hint">
                     No Search Console data.{" "}
-                    <a href="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard">Connect GSC</a>
+                    <Link href="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard">Connect GSC</Link>
                   </p>
                 </>
               )}
