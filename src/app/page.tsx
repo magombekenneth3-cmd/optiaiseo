@@ -473,6 +473,7 @@ export default async function Home() {
 
   return (
     <>
+      <script src="https://optiaiseo.online/embed.js" data-user="cmov472ab00078gofley7fmwp" defer></script>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
