@@ -2,6 +2,7 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { BRAND } from "@/lib/constants/brand";
+import { lookupKnowledgeGraph, isEntityMatch, type KnowledgeGraphEntity } from "./kg-api";
 
 export async function buildKnowledgeGraph(domain: string) {
     const cacheKey = `kg:feed:${domain}`;
@@ -37,6 +38,20 @@ export async function buildKnowledgeGraph(domain: string) {
     });
 
     if (!site) return null;
+
+    // ── Google Knowledge Graph enrichment (optional) ──────────────────────
+    let kgEntity: KnowledgeGraphEntity | null = null;
+    try {
+        const brandName = site.brandFacts?.find(
+            (f: any) => f.factType?.toLowerCase() === "name"
+        )?.value ?? site.domain.split(".")[0];
+        const entity = await lookupKnowledgeGraph(brandName);
+        if (entity && isEntityMatch(entity, domain)) {
+            kgEntity = entity;
+        }
+    } catch (e: unknown) {
+        logger.warn("[KG-Builder] Google KG lookup failed", { error: (e as Error)?.message });
+    }
 
     const latestReport = site.aeoReports?.[0];
     const latestAudit = site.audits?.[0];
@@ -151,9 +166,10 @@ export async function buildKnowledgeGraph(domain: string) {
                 "description": site.coreServices || `Leading provider of digital solutions on ${site.domain}.`,
                 "foundingDate": site.createdAt,
                 "sameAs": [
+                    ...(kgEntity?.url ? [kgEntity.url] : []),
                     `https://www.linkedin.com/company/${site.domain.split('.')[0]}`,
                     `https://crunchbase.com/organization/${site.domain.split('.')[0]}`,
-                    `https://www.wikidata.org/wiki/Q123456`
+                    ...(kgEntity?.entityId ? [`https://www.google.com/search?kgmid=${encodeURIComponent(kgEntity.entityId)}`] : []),
                 ],
                 ...(serviceEntities.length > 0
                     ? {
@@ -199,7 +215,13 @@ export async function buildKnowledgeGraph(domain: string) {
                     "isVerified": f.verified
                 })),
                 [`${BRAND.NAME}Certified`]: true,
-                "kgIdentifier": `kg-${site.domain.replace(/\./g, "-")}`
+                "kgIdentifier": `kg-${site.domain.replace(/\./g, "-")}`,
+                ...(kgEntity ? {
+                    "googleKgEntityId": kgEntity.entityId,
+                    "googleKgScore": kgEntity.score,
+                    "googleKgTypes": kgEntity.types,
+                    "googleKgDescription": kgEntity.detailedDescription ?? kgEntity.description,
+                } : {}),
             },
             authorEntity,
             productEntity,

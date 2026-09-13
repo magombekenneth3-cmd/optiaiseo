@@ -2,6 +2,7 @@ import { logger } from "@/lib/logger";
 import { MentionResult, analyzeCitationQuality } from "./multi-model";
 import { TIMEOUTS } from "@/lib/constants/timeouts";
 import { type ProviderStatus, type ProviderTelemetry, classifyError } from "./provider-result";
+import { buildAeoQuestion } from "./aeo-prompt";
 
 /**
  * P0.1 — ChatGPT AEO mention check using the OpenAI Responses API.
@@ -27,11 +28,7 @@ export async function checkChatGptMention(
         };
     }
 
-    const question = keyword
-        ? `${keyword} — what are the best options?`
-        : coreServices
-            ? `What are the best tools for ${coreServices}? List top options with descriptions.`
-            : `What is ${domain} and what do they offer?`;
+    const question = buildAeoQuestion({ domain, keyword, coreServices });
 
     const startMs = Date.now();
     let httpStatus: number | undefined;

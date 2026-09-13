@@ -12,6 +12,8 @@ import { cachedMentionCheck } from "./response-cache";
 import { semanticMentionCheck, semanticPerplexityCheck } from "./vector-response-cache";
 import { redis } from "@/lib/redis";
 import { TTL } from "@/lib/constants/ttl";
+import { buildAeoQuestion } from "./aeo-prompt";
+import { lookupKnowledgeGraph, isEntityMatch, type KnowledgeGraphEntity } from "./kg-api";
 import {
     extractBrandIdentity,
     isBrandCited,
@@ -121,8 +123,10 @@ export async function checkGeminiMention(
         const identity = extractBrandIdentity(domain, brandNameOverride);
 
         const prompt = `
-            Act as an AI Search Engine. I will give you a brand name and website.
-            Tell me if you have knowledge of this brand and what it does.
+            Act as an AI Search Engine. A user is asking the following question.
+            Search the web and answer it, then evaluate whether the brand below is relevant.
+
+            User question: ${buildAeoQuestion({ domain, coreServices })}
 
             Brand Name: ${identity.displayName}
             Website: ${identity.domain}
@@ -221,9 +225,7 @@ export async function checkPerplexityMention(
         return { model: "Perplexity", mentioned: false, confidence: 0, details: "Perplexity API key missing" };
     }
 
-    const query = coreServices
-        ? `Best ${coreServices} — top recommendations`
-        : `What are the top tools and resources for ${domain.split(".")[0]}?`;
+    const query = buildAeoQuestion({ domain, coreServices });
 
     return semanticPerplexityCheck(query, async () => {
     try {
@@ -276,19 +278,23 @@ export async function auditMultiModelMentions(domain: string, coreServices?: str
     if (cached) {
         const parsed = typeof cached === "string" ? JSON.parse(cached) : cached;
         logger.debug("[MultiModel] Full results from cache", { domain });
-        return parsed as { results: MentionResult[]; overallScore: number };
+        return parsed as { results: MentionResult[]; overallScore: number; knowledgeGraphEntity?: KnowledgeGraphEntity | null };
     }
 
-    const [geminiSettled, perplexitySettled, chatgptSettled, claudeSettled, grokSettled, copilotSettled, deepseekSettled] =
-        await Promise.allSettled([
+    const [mentionResults, kgEntity] = await Promise.all([
+        Promise.allSettled([
             cachedMentionCheck("Gemini",     domain, coreServices, (d, s) => checkGeminiMention(d, s, brandNameOverride)),
             cachedMentionCheck("Perplexity", domain, coreServices, (d, s) => checkPerplexityMention(d, s, brandNameOverride)),
             cachedMentionCheck("ChatGPT",    domain, coreServices, checkChatGptMention),
             cachedMentionCheck("Claude",     domain, coreServices, checkClaudeMention),
-            cachedMentionCheck("Grok",       domain, coreServices, checkGrokMention),
-            cachedMentionCheck("Copilot",    domain, coreServices, checkCopilotMention),
+            cachedMentionCheck("Grok",       domain, coreServices, (d, s) => checkGrokMention(d, s)),
+            cachedMentionCheck("Copilot",    domain, coreServices, (d, s) => checkCopilotMention(d, s)),
             cachedMentionCheck("DeepSeek",   domain, coreServices, checkDeepSeekMention),
-        ]);
+        ]),
+        lookupKnowledgeGraph(brandNameOverride ?? domain.split(".")[0]).catch(() => null),
+    ]);
+
+    const [geminiSettled, perplexitySettled, chatgptSettled, claudeSettled, grokSettled, copilotSettled, deepseekSettled] = mentionResults;
 
     const toResult = (settled: PromiseSettledResult<MentionResult>, engineName: string): MentionResult =>
         settled.status === "fulfilled"
@@ -324,7 +330,11 @@ export async function auditMultiModelMentions(domain: string, coreServices?: str
     const score = availableResults.length > 0
         ? availableResults.reduce((acc, curr) => acc + (curr.mentioned ? curr.confidence : 0), 0) / availableResults.length
         : 0;
-    const output = { results, overallScore: Math.round(score) };
+
+    // Validate KG entity match against domain
+    const validatedKgEntity = kgEntity && isEntityMatch(kgEntity, domain) ? kgEntity : null;
+
+    const output = { results, overallScore: Math.round(score), knowledgeGraphEntity: validatedKgEntity };
 
     await redis.set(multiCacheKey, JSON.stringify(output), { ex: TTL.MULTI_MODEL_S }).catch(() => undefined);
 

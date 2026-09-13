@@ -3,17 +3,17 @@ import type { MentionResult } from "./multi-model";
 import { analyzeCitationQuality } from "./multi-model";
 import { TIMEOUTS } from "@/lib/constants/timeouts";
 import { type ProviderStatus, type ProviderTelemetry, classifyError } from "./provider-result";
+import { buildAeoQuestion } from "./aeo-prompt";
 
 export async function checkGrokMention(
   brand: string,
-  services?: string | null
+  services?: string | null,
+  keyword?: string | null
 ): Promise<MentionResult> {
   if (!process.env.XAI_API_KEY) {
     return { model: "Grok", mentioned: false, confidence: 0, details: "xAI API key missing", providerStatus: "NO_API_KEY" };
   }
-  const question = services
-    ? `What are the top platforms for ${services}?`
-    : `What do you know about ${brand}?`;
+  const question = buildAeoQuestion({ domain: brand, keyword, coreServices: services });
 
   const startMs = Date.now();
   let httpStatus: number | undefined;

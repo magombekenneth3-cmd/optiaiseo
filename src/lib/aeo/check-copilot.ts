@@ -3,17 +3,17 @@ import type { MentionResult } from "./multi-model";
 import { analyzeCitationQuality } from "./multi-model";
 import { TIMEOUTS } from "@/lib/constants/timeouts";
 import { type ProviderStatus, type ProviderTelemetry, classifyError } from "./provider-result";
+import { buildAeoQuestion } from "./aeo-prompt";
 
 export async function checkCopilotMention(
   brand: string,
-  services?: string | null
+  services?: string | null,
+  keyword?: string | null
 ): Promise<MentionResult> {
   if (!process.env.AZURE_OAI_ENDPOINT || !process.env.AZURE_OAI_KEY) {
     return { model: "Copilot", mentioned: false, confidence: 0, details: "Azure OAI credentials missing", providerStatus: "NO_API_KEY" };
   }
-  const question = services
-    ? `What are the best tools for ${services}?`
-    : `Tell me about ${brand}.`;
+  const question = buildAeoQuestion({ domain: brand, keyword, coreServices: services });
 
   const startMs = Date.now();
   let httpStatus: number | undefined;

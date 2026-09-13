@@ -2,6 +2,7 @@ import { logger } from "@/lib/logger";
 import { MentionResult, analyzeCitationQuality } from "./multi-model";
 import { TIMEOUTS } from "@/lib/constants/timeouts";
 import { type ProviderStatus, type ProviderTelemetry, classifyError } from "./provider-result";
+import { buildAeoQuestion } from "./aeo-prompt";
 
 /**
  * P0.2 — Claude AEO mention check using web_search_20250305 tool.
@@ -31,11 +32,7 @@ export async function checkClaudeMention(
         };
     }
 
-    const question = keyword
-        ? `${keyword} — what are the leading platforms?`
-        : coreServices
-            ? `What are the leading platforms for ${coreServices}?`
-            : `Tell me about ${domain} — what do they do?`;
+    const question = buildAeoQuestion({ domain, keyword, coreServices });
 
     const startMs = Date.now();
     let httpStatus: number | undefined;
