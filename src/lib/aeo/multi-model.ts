@@ -171,8 +171,8 @@ export async function checkGeminiMention(
         const quality = mentioned ? analyzeCitationQuality(description, identity) : undefined;
 
         const prominenceScore = quality?.positionScore ?? 0;
-        const confidenceTier  = classifyMentionConfidence(prominenceScore);
-        const lowConfidence   = confidenceTier === "low_confidence";
+        const confidenceTier = classifyMentionConfidence(prominenceScore);
+        const lowConfidence = confidenceTier === "low_confidence";
 
         if (lowConfidence && domain) {
             prisma.site.findFirst({ where: { domain }, select: { id: true } })
@@ -228,46 +228,46 @@ export async function checkPerplexityMention(
     const query = buildAeoQuestion({ domain, coreServices });
 
     return semanticPerplexityCheck(query, async () => {
-    try {
-        const result = await checkPerplexityCitation(query, domain);
-        const identity = extractBrandIdentity(domain, brandNameOverride);
+        try {
+            const result = await checkPerplexityCitation(query, domain);
+            const identity = extractBrandIdentity(domain, brandNameOverride);
 
-        const quality = analyzeCitationQuality(result.responseText, identity);
-        const citationPositionScore = result.citationPosition
-            ? Math.max(10, 100 - (result.citationPosition - 1) * 15)
-            : 0;
-        const confidence = result.cited
-            ? Math.round((citationPositionScore + result.textMentionScore) / 2)
-            : 0;
+            const quality = analyzeCitationQuality(result.responseText, identity);
+            const citationPositionScore = result.citationPosition
+                ? Math.max(10, 100 - (result.citationPosition - 1) * 15)
+                : 0;
+            const confidence = result.cited
+                ? Math.round((citationPositionScore + result.textMentionScore) / 2)
+                : 0;
 
-        return {
-            model: "Perplexity",
-            mentioned: result.cited || result.textMentionScore > 20,
-            confidence,
-            snippet: result.responseText.substring(0, 200) + (result.responseText.length > 200 ? "..." : ""),
-            details: result.cited
-                ? `Cited at position #${result.citationPosition} — URL: ${result.citationUrl}. Competitors also cited: ${result.competitorsCited.slice(0, 3).join(", ") || "none"}`
-                : result.textMentionScore > 20
-                    ? `Mentioned in response text but NOT in Perplexity's source Citations. Competitors cited: ${result.competitorsCited.slice(0, 3).join(", ") || "none"}`
-                    : `Not cited. Perplexity retrieved: ${result.competitorsCited.slice(0, 3).join(", ") || "no competitors identified"}`,
-            quality,
-            positionInResponse: quality?.positionInResponse !== -1 ? quality?.positionInResponse : (result.citationPosition ?? undefined),
-            sentiment: quality?.sentiment,
-            linkedSourceUrls: result.citationUrl ? [result.citationUrl] : [],
-            citation: {
-                cited: result.cited,
-                citationPosition: result.citationPosition,
-                citationUrl: result.citationUrl,
-                competitorsCited: result.competitorsCited,
-                citationCount: result.citations.length,
-            },
-        };
-    } catch (error: unknown) {
-        logger.error("[Multi-Model] Perplexity citation check failed:", {
-            error: (error as Error)?.message || String(error),
-        });
-        return { model: "Perplexity", mentioned: false, confidence: 0, details: "Check failed" };
-    }
+            return {
+                model: "Perplexity",
+                mentioned: result.cited || result.textMentionScore > 20,
+                confidence,
+                snippet: result.responseText.substring(0, 200) + (result.responseText.length > 200 ? "..." : ""),
+                details: result.cited
+                    ? `Cited at position #${result.citationPosition} — URL: ${result.citationUrl}. Competitors also cited: ${result.competitorsCited.slice(0, 3).join(", ") || "none"}`
+                    : result.textMentionScore > 20
+                        ? `Mentioned in response text but NOT in Perplexity's source Citations. Competitors cited: ${result.competitorsCited.slice(0, 3).join(", ") || "none"}`
+                        : `Not cited. Perplexity retrieved: ${result.competitorsCited.slice(0, 3).join(", ") || "no competitors identified"}`,
+                quality,
+                positionInResponse: quality?.positionInResponse !== -1 ? quality?.positionInResponse : (result.citationPosition ?? undefined),
+                sentiment: quality?.sentiment,
+                linkedSourceUrls: result.citationUrl ? [result.citationUrl] : [],
+                citation: {
+                    cited: result.cited,
+                    citationPosition: result.citationPosition,
+                    citationUrl: result.citationUrl,
+                    competitorsCited: result.competitorsCited,
+                    citationCount: result.citations.length,
+                },
+            };
+        } catch (error: unknown) {
+            logger.error("[Multi-Model] Perplexity citation check failed:", {
+                error: (error as Error)?.message || String(error),
+            });
+            return { model: "Perplexity", mentioned: false, confidence: 0, details: "Check failed" };
+        }
     });
 }
 
@@ -283,13 +283,13 @@ export async function auditMultiModelMentions(domain: string, coreServices?: str
 
     const [mentionResults, kgEntity] = await Promise.all([
         Promise.allSettled([
-            cachedMentionCheck("Gemini",     domain, coreServices, (d, s) => checkGeminiMention(d, s, brandNameOverride)),
+            cachedMentionCheck("Gemini", domain, coreServices, (d, s) => checkGeminiMention(d, s, brandNameOverride)),
             cachedMentionCheck("Perplexity", domain, coreServices, (d, s) => checkPerplexityMention(d, s, brandNameOverride)),
-            cachedMentionCheck("ChatGPT",    domain, coreServices, checkChatGptMention),
-            cachedMentionCheck("Claude",     domain, coreServices, checkClaudeMention),
-            cachedMentionCheck("Grok",       domain, coreServices, (d, s) => checkGrokMention(d, s)),
-            cachedMentionCheck("Copilot",    domain, coreServices, (d, s) => checkCopilotMention(d, s)),
-            cachedMentionCheck("DeepSeek",   domain, coreServices, checkDeepSeekMention),
+            cachedMentionCheck("ChatGPT", domain, coreServices, checkChatGptMention),
+            cachedMentionCheck("Claude", domain, coreServices, checkClaudeMention),
+            cachedMentionCheck("Grok", domain, coreServices, (d, s) => checkGrokMention(d, s)),
+            cachedMentionCheck("Copilot", domain, coreServices, (d, s) => checkCopilotMention(d, s)),
+            cachedMentionCheck("DeepSeek", domain, coreServices, checkDeepSeekMention),
         ]),
         lookupKnowledgeGraph(brandNameOverride ?? domain.split(".")[0]).catch(() => null),
     ]);
@@ -305,7 +305,7 @@ export async function auditMultiModelMentions(domain: string, coreServices?: str
                 confidence: 0,
                 error: (settled.reason as Error)?.message ?? "Unknown error",
                 providerStatus: "PROVIDER_ERROR" as ProviderStatus,
-              } as MentionResult;
+            } as MentionResult;
 
     const results: MentionResult[] = [
         toResult(geminiSettled, "Gemini"),
@@ -321,19 +321,13 @@ export async function auditMultiModelMentions(domain: string, coreServices?: str
         .filter((s) => s.status === "fulfilled" && (s.value as MentionResult & { fromCache?: boolean }).fromCache)
         .length;
     logger.debug("[MultiModel] Cache", { domain, cacheHits, liveCalls: 7 - cacheHits });
-
-    // P0.9: Only include providers with SUCCESS or NO_RESULT status in the score.
-    // Unavailable providers must NOT drag the average down.
     const availableResults = results.filter(r =>
         !r.providerStatus || r.providerStatus === "SUCCESS" || r.providerStatus === "NO_RESULT"
     );
     const score = availableResults.length > 0
         ? availableResults.reduce((acc, curr) => acc + (curr.mentioned ? curr.confidence : 0), 0) / availableResults.length
         : 0;
-
-    // Validate KG entity match against domain
     const validatedKgEntity = kgEntity && isEntityMatch(kgEntity, domain) ? kgEntity : null;
-
     const output = { results, overallScore: Math.round(score), knowledgeGraphEntity: validatedKgEntity };
 
     await redis.set(multiCacheKey, JSON.stringify(output), { ex: TTL.MULTI_MODEL_S }).catch(() => undefined);

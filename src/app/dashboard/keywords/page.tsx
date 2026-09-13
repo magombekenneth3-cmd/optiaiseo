@@ -1,6 +1,6 @@
 import type { Metadata, } from "next";
 import type { ReactNode } from "react";
-import { getKeywordRankingsFast } from "@/app/actions/keywords";
+import { getKeywordRankingsFast, getKeywordRankingsByDateRange } from "@/app/actions/keywords";
 import { AlertCircle, Search, BarChart3, TrendingUp, AlertTriangle, Target, Eye } from "lucide-react";
 import { ConnectGSCButton } from "@/components/ConnectGSCButton";
 import { GscConnectCard } from "@/components/dashboard/GscConnectCard";
@@ -17,6 +17,8 @@ import { hasFeature, getPlan } from "@/lib/stripe/plans";
 import { KeywordTabPanels } from "./KeywordTabPanels";
 import { CollapsibleAnalytics } from "./CollapsibleAnalytics";
 import { PriorityActions } from "./OpportunitiesList";
+import { GscDateRangePicker } from "./components/GscDateRangePicker";
+import { normalizeKeywordDateRange, isDefaultRange } from "@/lib/gsc/gsc-date-range";
 
 export const metadata: Metadata = {
     title: "Keywords | OptiAISEO",
@@ -135,10 +137,25 @@ function TrafficMini({ summary, visibilityScore }: {
     );
 }
 
-export default async function KeywordsPage({ searchParams }: { searchParams: Promise<{ siteId?: string }> }) {
+export default async function KeywordsPage({ searchParams }: { searchParams: Promise<{ siteId?: string; days?: string; startDate?: string; endDate?: string }> }) {
     const session = await getServerSession(authOptions);
     const resolvedParams = await searchParams;
     let siteId = resolvedParams.siteId || "";
+
+    // Resolve date range from URL params
+    const dateParams = {
+        days: resolvedParams.days,
+        startDate: resolvedParams.startDate,
+        endDate: resolvedParams.endDate,
+    };
+    const useCustomRange = !isDefaultRange(dateParams);
+    let dateLabel = "Last 90 days";
+    try {
+        const range = normalizeKeywordDateRange(dateParams);
+        dateLabel = range.label;
+    } catch {
+        // Invalid date params — fall back to default 90d
+    }
 
     let competitors: Awaited<ReturnType<typeof getCompetitors>>["competitors"] = [];
     let userSites: SiteRow[] = [];
@@ -165,7 +182,9 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
         }
     }
 
-    const rankingsRes = await getKeywordRankingsFast(siteId);
+    const rankingsRes = useCustomRange && siteId
+        ? await getKeywordRankingsByDateRange(siteId, dateParams)
+        : await getKeywordRankingsFast(siteId);
 
     let trackedKeywordsData: TrackedKwRow[] = [];
     let visibilityScore: VisibilityRow = null;
@@ -248,7 +267,7 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
                     <h1 className="text-[22px] font-bold tracking-[-0.4px] text-[#e6edf3] mb-1">Keyword Performance</h1>
                     <p className="text-[13px] text-[#8b949e] mb-1.5">Track rankings, find opportunities and grow organic traffic.</p>
                     <div className="flex items-center gap-1.5 text-[11px] text-[#6e7681] flex-wrap">
-                        <span>Last 90 days</span>
+                        <span>{"dateLabel" in (rankingsRes.data ?? {}) ? (rankingsRes.data as { dateLabel?: string }).dateLabel ?? dateLabel : dateLabel}</span>
                         <span className="text-[#30363d]">·</span>
                         <span>Google Search Console + GA4</span>
                         {activeSite && (
@@ -266,6 +285,8 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
                     />
                 )}
             </div>
+
+            <GscDateRangePicker activeLabel={dateLabel} siteId={activeSiteId} />
 
             {summary.total === 0 && <GscConnectCard siteDomain={activeSite?.domain} />}
 

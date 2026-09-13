@@ -37,6 +37,7 @@ import { limiters } from "@/lib/rate-limit";
 import { guardErrorToResult } from "@/lib/stripe/guards";
 import { consumeCredits } from "@/lib/credits";
 import { checkBlogLimit } from "@/lib/rate-limit";
+import { normalizeKeywordDateRange, fmtDate, type DateRangeParams } from "@/lib/gsc/gsc-date-range";
 
 type EnrichedKeywordRow = KeywordRow & {
     positionHistory: Array<{ date: string; position: number }>;
@@ -669,5 +670,276 @@ export async function getDeviceBreakdown(siteId: string): Promise<{
     } catch (error: unknown) {
         logger.error("[Keywords] getDeviceBreakdown failed:", { error: (error as Error)?.message || String(error) });
         return { success: false, error: "Failed to fetch device breakdown." };
+    }
+}
+
+/**
+ * Fetches keyword rankings for an explicit date range.
+ *
+ * Uses the same dedup + enrichment logic as getKeywordRankingsFast,
+ * but with user-controlled start/end dates validated via normalizeKeywordDateRange.
+ */
+export async function getKeywordRankingsByDateRange(
+    siteId: string,
+    dateParams: DateRangeParams,
+): Promise<{
+    success: boolean;
+    data?: {
+        keywords: EnrichedKeywordRow[];
+        categorised: CategorisedKeywords;
+        summary: RankingSummary;
+        opportunities: KeywordOpportunity[];
+        cannibalization: CannibalizationIssue[];
+        siteId: string;
+        dateLabel: string;
+    };
+    error?: string;
+}> {
+    try {
+        const userId = await getSessionUserId();
+        if (!userId) return { success: false, error: "Not authenticated" };
+
+        const site = await prisma.site.findFirst({
+            where: { id: siteId, userId },
+            select: SITE_SELECT,
+        });
+        if (!site) return { success: false, error: "Site not found" };
+
+        // Normalize and validate the date range
+        let range;
+        try {
+            range = normalizeKeywordDateRange(dateParams);
+        } catch (e) {
+            return { success: false, error: (e as Error).message };
+        }
+
+        const tokenResult = await resolveGscToken(userId);
+        if ("error" in tokenResult) return { success: false, error: tokenResult.error };
+
+        const primaryUrl = normaliseSiteUrl(site.domain);
+
+        let keywords: KeywordRow[];
+        try {
+            keywords = await fetchGSCKeywordsByDateRange(
+                tokenResult.token,
+                primaryUrl,
+                range.startDate,
+                range.endDate,
+            );
+        } catch (firstErr: unknown) {
+            const msg = (firstErr as Error)?.message ?? "";
+            if (!msg.includes("403")) throw firstErr;
+            logger.warn(`[Keywords] 403 for ${primaryUrl} — auto-detecting GSC property`, { siteId });
+            const resolved = await resolveGscPropertyUrl(tokenResult.token, site.domain);
+            if (!resolved || resolved === primaryUrl) {
+                throw new Error(
+                    "GSC 403: Your site is not verified in Google Search Console, or this account doesn't have access to it."
+                );
+            }
+            keywords = await fetchGSCKeywordsByDateRange(
+                tokenResult.token,
+                resolved,
+                range.startDate,
+                range.endDate,
+            );
+        }
+
+        // Dedup: same logic as getKeywordRankingsFast
+        const kwMap = new Map<string, KeywordRow>();
+        for (const row of keywords) {
+            const mapKey = `${row.keyword}\x00${row.url}`;
+            const existing = kwMap.get(mapKey);
+            if (!existing) {
+                kwMap.set(mapKey, { ...row });
+            } else {
+                kwMap.set(mapKey, {
+                    ...existing,
+                    clicks: existing.clicks + row.clicks,
+                    impressions: existing.impressions + row.impressions,
+                    position: Math.min(existing.position, row.position),
+                });
+            }
+        }
+
+        const perKeyword = new Map<string, KeywordRow>();
+        for (const row of kwMap.values()) {
+            const existing = perKeyword.get(row.keyword);
+            if (!existing || row.position < existing.position) {
+                perKeyword.set(row.keyword, {
+                    ...row,
+                    clicks: (existing?.clicks ?? 0) + row.clicks,
+                    impressions: (existing?.impressions ?? 0) + row.impressions,
+                });
+            } else {
+                perKeyword.set(row.keyword, {
+                    ...existing,
+                    clicks: existing.clicks + row.clicks,
+                    impressions: existing.impressions + row.impressions,
+                });
+            }
+        }
+        const dedupedKeywords: KeywordRow[] = Array.from(perKeyword.values())
+            .map(kw => ({
+                ...kw,
+                ctr: kw.impressions > 0
+                    ? parseFloat(((kw.clicks / kw.impressions) * 100).toFixed(2))
+                    : 0,
+            }))
+            .sort((a, b) => b.impressions - a.impressions);
+
+        // Enrichment: position history + metadata
+        const SIX_WEEKS_AGO = new Date(Date.now() - 42 * 24 * 60 * 60 * 1000);
+        const rawHistory = await prisma.rankSnapshot.findMany({
+            where: { siteId: site.id, recordedAt: { gte: SIX_WEEKS_AGO } },
+            select: { keyword: true, position: true, recordedAt: true },
+            orderBy: { recordedAt: "asc" },
+            take: 10_000,
+        });
+        const historyMap = new Map<string, Array<{ date: string; position: number }>>();
+        for (const snap of rawHistory) {
+            const key = snap.keyword.toLowerCase();
+            const list = historyMap.get(key) ?? [];
+            list.push({
+                date: snap.recordedAt.toISOString().slice(0, 10),
+                position: snap.position,
+            });
+            historyMap.set(key, list);
+        }
+
+        const WEEK_AGO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const metaSnaps = await prisma.rankSnapshot.findMany({
+            where: { siteId: site.id, recordedAt: { gte: WEEK_AGO } },
+            select: { keyword: true, difficulty: true, intent: true },
+            orderBy: { recordedAt: "desc" },
+            take: 2000,
+        });
+        const metaMap = new Map<string, { difficulty: number | null; intent: string | null }>();
+        for (const r of metaSnaps) {
+            if (!metaMap.has(r.keyword.toLowerCase())) {
+                metaMap.set(r.keyword.toLowerCase(), {
+                    difficulty: r.difficulty ?? null,
+                    intent: r.intent ?? null,
+                });
+            }
+        }
+
+        const enrichedKeywords: EnrichedKeywordRow[] = dedupedKeywords.map((kw) => {
+            const key = kw.keyword.toLowerCase();
+            const meta = metaMap.get(key);
+            return {
+                ...kw,
+                positionHistory: historyMap.get(key) ?? [],
+                difficulty: meta?.difficulty ?? null,
+                intent: meta?.intent ?? null,
+            };
+        });
+
+        const categorised = categoriseKeywords(dedupedKeywords);
+        const summary = buildRankingSummary(dedupedKeywords);
+        const opportunities = findOpportunities(dedupedKeywords, 20);
+        const cannibalization = detectCannibalization(dedupedKeywords);
+
+        return {
+            success: true,
+            data: {
+                keywords: enrichedKeywords,
+                categorised,
+                summary,
+                opportunities,
+                cannibalization,
+                siteId: site.id,
+                dateLabel: range.label,
+            },
+        };
+    } catch (error: unknown) {
+        logger.error("[Keywords] getKeywordRankingsByDateRange failed:", { error: (error as Error)?.message || String(error) });
+        return { success: false, error: "Failed to fetch keyword rankings for the selected date range." };
+    }
+}
+
+/**
+ * Period-vs-period keyword comparison for custom date ranges.
+ *
+ * The comparison period is automatically derived:
+ *   selected range → preceding period of equal length
+ *
+ * This replaces getKeywordsComparison for custom date ranges while keeping
+ * the same delta calculation semantics.
+ */
+export async function getKeywordComparisonByDateRange(
+    siteId: string,
+    dateParams: DateRangeParams,
+): Promise<{
+    success: boolean;
+    deltas?: {
+        keyword: string;
+        clicks: number;
+        impressions: number;
+        avgPosition: number;
+        prevClicks: number;
+        prevPosition: number | null;
+        positionDelta: number | null;
+        clicksDelta: number;
+    }[];
+    periodLabel?: string;
+    comparisonLabel?: string;
+    error?: string;
+}> {
+    try {
+        const userId = await getSessionUserId();
+        if (!userId) return { success: false, error: "Unauthorized" };
+
+        const site = await prisma.site.findFirst({
+            where: { id: siteId, userId },
+            select: SITE_SELECT,
+        });
+        if (!site) return { success: false, error: "Site not found" };
+
+        let range;
+        try {
+            range = normalizeKeywordDateRange(dateParams);
+        } catch (e) {
+            return { success: false, error: (e as Error).message };
+        }
+
+        const tokenResult = await resolveGscToken(userId);
+        if ("error" in tokenResult) return { success: false, error: tokenResult.error };
+
+        const primaryUrl = normaliseSiteUrl(site.domain);
+
+        const [current, previous] = await Promise.all([
+            fetchGSCKeywordsByDateRange(tokenResult.token, primaryUrl, range.startDate, range.endDate),
+            fetchGSCKeywordsByDateRange(tokenResult.token, primaryUrl, range.comparisonStart, range.comparisonEnd),
+        ]);
+
+        const prevMap = new Map(
+            aggregateKeywords(previous).map(k => [k.keyword, k])
+        );
+
+        const deltas = aggregateKeywords(current).map(kw => {
+            const prev = prevMap.get(kw.keyword);
+            return {
+                keyword: kw.keyword,
+                clicks: kw.clicks,
+                impressions: kw.impressions,
+                avgPosition: kw.avgPosition,
+                prevClicks: prev?.clicks ?? 0,
+                prevPosition: prev?.avgPosition ?? null,
+                positionDelta: prev ? kw.avgPosition - prev.avgPosition : null,
+                clicksDelta: prev ? kw.clicks - prev.clicks : kw.clicks,
+            };
+        });
+
+        deltas.sort((a, b) => b.impressions - a.impressions);
+
+        return {
+            success: true,
+            deltas: deltas.slice(0, 200),
+            periodLabel: `${fmtDate(range.startDate)} — ${fmtDate(range.endDate)}`,
+            comparisonLabel: `${fmtDate(range.comparisonStart)} — ${fmtDate(range.comparisonEnd)}`,
+        };
+    } catch (error: unknown) {
+        logger.error("[Keywords] getKeywordComparisonByDateRange failed:", { error: (error as Error)?.message || String(error) });
+        return { success: false, error: "Failed to fetch comparison data." };
     }
 }
