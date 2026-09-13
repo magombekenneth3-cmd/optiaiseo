@@ -13,11 +13,7 @@ describe("Instant Indexing Protocol Unit Tests", () => {
     });
 
     it("submitIndexNow returns NOT_CONFIGURED when no IndexNow config exists", async () => {
-        // Import dynamically to allow module mocking
         const { submitIndexNow } = await import("@/lib/indexing/indexnow");
-
-        // submitIndexNow now takes siteId, not raw hostname
-        // Without a real DB config, it should return NOT_CONFIGURED
         const result: ProviderResult = await submitIndexNow(
             "nonexistent-site",
             ["/blog/test-article"]
@@ -34,7 +30,6 @@ describe("Instant Indexing Protocol Unit Tests", () => {
 
         expect(result).toBeDefined();
         expect(result.siteId).toBe("site-123");
-        // Without DB, site won't be found → both providers NOT_CONFIGURED
         expect(result.success).toBe(false);
         expect(result.google.provider).toBe("GOOGLE");
         expect(result.indexNow.provider).toBe("INDEXNOW");

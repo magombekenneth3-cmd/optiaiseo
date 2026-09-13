@@ -10,7 +10,7 @@ import {
     Tooltip,
     CartesianGrid,
 } from "recharts";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, BarChart3 } from "lucide-react";
 
 interface DataPoint {
     capturedAt: string;
@@ -32,7 +32,7 @@ type TabKey = MetricKey | "auditTrend";
 
 const TABS: { key: TabKey; label: string; color: string; unit?: string; metricKey?: MetricKey }[] = [
     { key: "overallScore",   label: "SEO Score",       color: "#10b981", metricKey: "overallScore" },
-    { key: "aeoScore",       label: "AEO Visibility",  color: "#6366f1", metricKey: "aeoScore" },
+    { key: "aeoScore",       label: "AEO Visibility",  color: "#a78bfa", metricKey: "aeoScore" },
     { key: "organicTraffic", label: "Organic Traffic",  color: "#06b6d4", unit: "clicks", metricKey: "organicTraffic" },
     { key: "auditTrend",     label: "Rankings",         color: "#f59e0b" },
 ];
@@ -72,10 +72,15 @@ export function MetricTrendChart({ data, auditData, className = "" }: MetricTren
 
     if (data.length === 0 && !hasAuditData) {
         return (
-            <div className={`card-elevated p-6 ${className}`}>
-                <p className="text-sm text-muted-foreground text-center py-8">
-                    No trend data yet — run your first audit to start tracking.
-                </p>
+            <div className={`border border-border rounded-2xl bg-card p-6 ${className}`}>
+                <div className="flex flex-col items-center justify-center py-10 gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+                        <BarChart3 className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                    <p className="text-sm text-muted-foreground text-center">
+                        No trend data yet — run your first audit to start tracking.
+                    </p>
+                </div>
             </div>
         );
     }
@@ -120,9 +125,9 @@ export function MetricTrendChart({ data, auditData, className = "" }: MetricTren
     const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) => {
         if (!active || !payload?.[0]) return null;
         return (
-            <div className="card-elevated px-3 py-2 text-xs">
+            <div className="bg-card border border-border rounded-xl px-3.5 py-2.5 text-xs shadow-xl backdrop-blur-sm">
                 <p className="text-muted-foreground mb-0.5">{label}</p>
-                <p className="font-semibold text-foreground">
+                <p className="font-semibold text-foreground text-sm">
                     {payload[0].value?.toFixed(1)}{activeUnit ? ` ${activeUnit}` : ""}
                 </p>
             </div>
@@ -130,11 +135,11 @@ export function MetricTrendChart({ data, auditData, className = "" }: MetricTren
     };
 
     return (
-        <div className={`border border-border rounded-[10px] bg-card p-5 ${className}`}>
+        <div className={`border border-border rounded-2xl bg-card p-5 ${className}`}>
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 min-w-0">
-                <h3 className="text-[13px] font-semibold text-foreground">{headerLabel}</h3>
-                <div className="flex items-center gap-1.5">
+                <h3 className="text-[15px] font-semibold text-foreground">{headerLabel}</h3>
+                <div className="flex items-center gap-2">
                     {last != null && (
                         <span className="text-lg font-bold tabular-nums" style={{ color: activeColor }}>
                             {last.toFixed(0)}{activeUnit ? " " + activeUnit : ""}
@@ -159,7 +164,7 @@ export function MetricTrendChart({ data, auditData, className = "" }: MetricTren
                         {t.label}
                         {activeTab === t.key && (
                             <span
-                                className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full"
+                                className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full transition-all"
                                 style={{ background: t.color }}
                             />
                         )}
@@ -173,20 +178,20 @@ export function MetricTrendChart({ data, auditData, className = "" }: MetricTren
                     <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                         <defs>
                             <linearGradient id={`gradient-${activeTab}`} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%"  stopColor={activeColor} stopOpacity={0.15} />
+                                <stop offset="5%"  stopColor={activeColor} stopOpacity={0.18} />
                                 <stop offset="95%" stopColor={activeColor} stopOpacity={0}   />
                             </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
                         <XAxis
                             dataKey="date"
-                            tick={{ fill: "#6b7280", fontSize: 10 }}
+                            tick={{ fill: "#6b7280", fontSize: 11 }}
                             axisLine={false}
                             tickLine={false}
                             interval="preserveStartEnd"
                         />
                         <YAxis
-                            tick={{ fill: "#6b7280", fontSize: 10 }}
+                            tick={{ fill: "#6b7280", fontSize: 11 }}
                             axisLine={false}
                             tickLine={false}
                             domain={["auto", "auto"]}

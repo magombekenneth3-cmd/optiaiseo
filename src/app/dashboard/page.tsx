@@ -8,7 +8,10 @@ import {
   Sparkles,
   ChevronRight,
   CheckCircle2,
-  MoreHorizontal,
+  AlertTriangle,
+  Activity,
+  TrendingUp,
+  Link2,
 } from "lucide-react";
 import { extractAuditMetrics } from "@/lib/audit/helpers";
 import { getCachedDashboardMetricsForUser } from "@/lib/cache/dashboard";
@@ -182,26 +185,21 @@ export default async function DashboardPage() {
     prisma.teamMember.count({ where: { ownerId: user.id } }).then((n) => n > 0).catch(() => false),
   ]);
 
-  // startOfMonth already defined above (line ~156) — reused here
-
   const [
     creditHistoryThisMonth,
     aiCitationsThisMonth,
     prsCreatedThisMonth,
     metricSnapshots,
   ] = await Promise.all([
-    // Credit usage breakdown by action this month
     prisma.creditHistory.findMany({
       where: { userId: user.id, createdAt: { gte: startOfMonth } },
       select: { action: true, cost: true },
     }).catch(() => [] as { action: string; cost: number }[]),
-    // AI citations this month (AeoEvent with eventType CITED)
     primarySiteId
       ? prisma.aeoEvent.count({
         where: { siteId: primarySiteId, eventType: "CITED", createdAt: { gte: startOfMonth } },
       }).catch(() => 0)
       : Promise.resolve(0),
-    // GitHub auto-fix PRs this month (selfHealingLog = the fix queue)
     primarySiteId
       ? prisma.selfHealingLog.count({
         where: {
@@ -210,7 +208,6 @@ export default async function DashboardPage() {
         },
       }).catch(() => 0)
       : Promise.resolve(0),
-    // Organic traffic delta: latest two MetricSnapshots
     primarySiteId
       ? prisma.metricSnapshot.findMany({
         where: { siteId: primarySiteId },
@@ -257,6 +254,19 @@ export default async function DashboardPage() {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
     if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
     return n.toLocaleString();
+  }
+
+  function timeAgo(date: Date): string {
+    const diff = Date.now() - date.getTime();
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days === 1) return "Yesterday";
+    if (days < 7) return `${days}d ago`;
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
 
   const priorityActions: { id: string; impact: "critical" | "high" | "medium" | "low"; title: string; subtitle: string; href: string; ctaLabel: string }[] = [];
@@ -309,6 +319,30 @@ export default async function DashboardPage() {
       date: new Date(audit.runTimestamp),
     };
   });
+
+  // ── Score Ring helper ──────────────────────────────────────────────────────
+  function ScoreRing({ score, max = 100, size = 56, strokeWidth = 5, color }: { score: number; max?: number; size?: number; strokeWidth?: number; color: string }) {
+    const radius = (size - strokeWidth) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const pct = Math.min(score / max, 1);
+    const offset = circumference * (1 - pct);
+    return (
+      <div className="score-ring" style={{ width: size, height: size }}>
+        <svg width={size} height={size} aria-hidden="true">
+          <circle className="score-ring-track" cx={size / 2} cy={size / 2} r={radius} strokeWidth={strokeWidth} />
+          <circle className="score-ring-fill" cx={size / 2} cy={size / 2} r={radius} strokeWidth={strokeWidth} stroke={color} strokeDasharray={circumference} strokeDashoffset={offset} />
+        </svg>
+        <span className="score-ring-value" style={{ fontSize: size > 48 ? '16px' : '13px' }}>{score}</span>
+      </div>
+    );
+  }
+
+  // ── Score color helper ─────────────────────────────────────────────────────
+  function scoreColor(score: number): string {
+    if (score >= 80) return "text-emerald-400";
+    if (score >= 60) return "text-amber-400";
+    return "text-rose-400";
+  }
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-6xl mx-auto">
@@ -364,63 +398,157 @@ export default async function DashboardPage() {
         />
       )}
 
-      {/* ── 2. PRIMARY KPI ROW — 4 cards ───────────────────────────────── */}
+      {/* ── 2. KPI OVERVIEW — Score Rings + Metrics ────────────────────── */}
       {!isNewUser && hasAudits && (
-        <section aria-label="Score overview" className="fade-in-up">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
-            <div>
-              <p className="stat-value">{latestScore ?? (auditsWithSeo > 0 ? avgSeoScore : "—")}</p>
-              <p className="stat-label">SEO Score</p>
-              {scoreDelta !== null && scoreDelta !== 0 && (
-                <span className={`text-xs font-semibold mt-1 inline-block ${scoreDelta > 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                  {scoreDelta > 0 ? "+" : ""}{scoreDelta} {prevAuditDateStr}
-                </span>
-              )}
+        <section aria-label="Performance overview" className="fade-in-up">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+
+            {/* SEO Score */}
+            <div className="kpi-card">
+              <div className="flex items-center gap-3">
+                <ScoreRing score={latestScore ?? (auditsWithSeo > 0 ? avgSeoScore : 0)} color="var(--brand)" size={52} strokeWidth={4.5} />
+                <div className="min-w-0">
+                  <p className="stat-label" style={{ marginTop: 0 }}>SEO Score</p>
+                  {scoreDelta !== null && scoreDelta !== 0 && (
+                    <span className={`text-xs font-semibold ${scoreDelta > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      {scoreDelta > 0 ? "+" : ""}{scoreDelta} {prevAuditDateStr}
+                    </span>
+                  )}
+                  {(scoreDelta === null || scoreDelta === 0) && (
+                    <span className="text-xs text-muted-foreground/60">out of 100</span>
+                  )}
+                </div>
+              </div>
+              {/* Score bar for accessibility */}
+              <div className="score-bar mt-1" role="progressbar" aria-valuenow={latestScore ?? 0} aria-valuemin={0} aria-valuemax={100} aria-label={`SEO Score: ${latestScore ?? 0} out of 100`}>
+                <div className="score-bar-fill" style={{ width: `${latestScore ?? 0}%` }} />
+              </div>
             </div>
-            <div>
-              <p className="stat-value">{aeoScore > 0 ? aeoScore : "—"}</p>
-              <p className="stat-label">AEO Visibility</p>
+
+            {/* AEO Visibility */}
+            <div className="kpi-card">
+              <div className="flex items-center gap-3">
+                {aeoScore > 0 ? (
+                  <ScoreRing score={aeoScore} color="var(--ai-accent, #a78bfa)" size={52} strokeWidth={4.5} />
+                ) : (
+                  <div className="w-[52px] h-[52px] rounded-full border-[4.5px] border-border flex items-center justify-center">
+                    <span className="text-base font-bold text-muted-foreground">—</span>
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="stat-label" style={{ marginTop: 0 }}>AEO Visibility</p>
+                  {aeoScore > 0 ? (
+                    <span className={`text-xs font-semibold ${aeoScore >= 80 ? "text-emerald-400" : aeoScore >= 60 ? "text-amber-400" : "text-rose-400"}`}>
+                      {aeoScore >= 80 ? "Strong" : aeoScore >= 60 ? "Moderate" : "Low"}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground/60">Not checked yet</span>
+                  )}
+                </div>
+              </div>
               {aeoScore > 0 && (
-                <span className={`text-xs font-semibold mt-1 inline-block ${aeoScore >= 80 ? "text-emerald-400" : aeoScore >= 60 ? "text-amber-400" : "text-rose-400"}`}>
-                  {aeoScore >= 80 ? "Strong" : aeoScore >= 60 ? "Moderate" : "Low"}
-                </span>
+                <div className="score-bar mt-1" role="progressbar" aria-valuenow={aeoScore} aria-valuemin={0} aria-valuemax={100} aria-label={`AEO Score: ${aeoScore} out of 100`}>
+                  <div className="score-bar-fill" style={{ width: `${aeoScore}%`, background: "var(--ai-accent, #a78bfa)" }} />
+                </div>
               )}
             </div>
-            <div>
-              <p className="stat-value">{organicClicks !== null ? formatCompact(organicClicks) : "—"}</p>
-              <p className="stat-label">Organic Clicks</p>
-              {organicClicksDeltaPct !== null && organicClicksDeltaPct !== 0 && (
-                <span className={`text-xs font-semibold mt-1 inline-block ${organicClicksDeltaPct > 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                  {organicClicksDeltaPct > 0 ? "+" : ""}{organicClicksDeltaPct}% {prevAuditDateStr}
-                </span>
+
+            {/* Organic Clicks */}
+            <div className="kpi-card">
+              {organicClicks !== null ? (
+                <>
+                  <p className="stat-value" style={{ fontSize: '1.75rem' }}>{formatCompact(organicClicks)}</p>
+                  <p className="stat-label">Organic Clicks</p>
+                  {organicClicksDeltaPct !== null && organicClicksDeltaPct !== 0 && (
+                    <span className={`text-xs font-semibold ${organicClicksDeltaPct > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      {organicClicksDeltaPct > 0 ? "+" : ""}{organicClicksDeltaPct}% {prevAuditDateStr}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="stat-value text-muted-foreground/30" style={{ fontSize: '1.75rem' }}>—</p>
+                  <p className="stat-label">Organic Clicks</p>
+                  <p className="empty-state-hint">
+                    No Search Console data.{" "}
+                    <a href="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard">Connect GSC</a>
+                  </p>
+                </>
               )}
             </div>
-            <div>
-              <p className="stat-value">{rankMovement !== null ? `↑${rankMovement}` : "—"}</p>
-              <p className="stat-label">Rank Movement</p>
-              {rankMovement !== null && (
-                <span className="text-xs font-semibold mt-1 inline-block text-emerald-400">
-                  Positions improved
-                </span>
+
+            {/* Rank Movement */}
+            <div className="kpi-card">
+              {rankMovement !== null ? (
+                <>
+                  <p className="stat-value text-emerald-400" style={{ fontSize: '1.75rem' }}>↑{rankMovement}</p>
+                  <p className="stat-label">Rank Movement</p>
+                  <span className="text-xs font-semibold text-emerald-400">
+                    Positions improved
+                  </span>
+                </>
+              ) : (
+                <>
+                  <p className="stat-value text-muted-foreground/30" style={{ fontSize: '1.75rem' }}>—</p>
+                  <p className="stat-label">Rank Movement</p>
+                  <p className="empty-state-hint">
+                    No movement tracked this week
+                  </p>
+                </>
               )}
             </div>
+
           </div>
         </section>
       )}
 
-      {/* ── Priority Actions ───────────────────────────────────────────── */}
-      {!isNewUser && priorityActions.length > 0 && (
+      {/* ── 3. RECOMMENDED ACTIONS — Consolidated ─────────────────────── */}
+      {!isNewUser && (priorityActions.length > 0 || (onboardingDone && hasSites)) && (
         <>
           <hr className="section-divider" />
-          <PriorityActions actions={priorityActions} />
+          <section aria-label="Recommended actions">
+            <p className="section-label mb-3">Recommended Actions</p>
+
+            {/* Next Best Action — always first when available */}
+            {onboardingDone && hasSites && (
+              <div className="mb-2">
+                <NextBestActionCard
+                  hasSite={hasSites}
+                  hasAudit={hasAudits}
+                  hasAeo={aeoScore > 0}
+                  hasKeywords={hasTrackedKeywords}
+                  hasBlogs={hasBlogPosts}
+                  hasTeam={hasTeamMember}
+                  hasGsc={hasGscToken}
+                  siteId={primarySiteId}
+                />
+              </div>
+            )}
+
+            {/* Priority Actions below */}
+            {priorityActions.length > 0 && (
+              <PriorityActions actions={priorityActions} />
+            )}
+          </section>
         </>
       )}
 
-      {/* ── Autonomous Activity ────────────────────────────────────────── */}
-      {!isNewUser && primarySiteId && (
+      {/* ── 4. SEO PERFORMANCE — Trend chart ───────────────────────────── */}
+      {(metricTrend.length > 0 || chartData.length > 0) && (
         <>
           <hr className="section-divider" />
-          <AutonomousActivity siteId={primarySiteId} />
+          <MetricTrendChart
+            data={metricTrend.map(m => ({
+              capturedAt: m.capturedAt.toISOString(),
+              overallScore: m.overallScore,
+              aeoScore: m.aeoScore,
+              coreWebVitals: m.coreWebVitals,
+              schemaScore: m.schemaScore,
+              organicTraffic: m.organicTraffic,
+            }))}
+            auditData={chartData}
+            className="fade-in-up fade-in-up-1"
+          />
         </>
       )}
 
@@ -430,14 +558,14 @@ export default async function DashboardPage() {
           <hr className="section-divider" />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 fade-in-up fade-in-up-2">
 
-            {/* AI Visibility */}
-            <div className="border border-border rounded-[10px] bg-card p-5">
+            {/* AI Search Presence */}
+            <div className="border border-border rounded-2xl bg-card p-5">
               <div className="flex items-center gap-2 mb-4">
-                <Sparkles className="w-4 h-4 text-purple-400" aria-hidden="true" />
-                <h3 className="text-[13px] font-semibold text-foreground">AI Visibility</h3>
+                <Sparkles className="w-4 h-4" style={{ color: "var(--ai-accent, #a78bfa)" }} aria-hidden="true" />
+                <h3 className="text-[13px] font-semibold text-foreground">AI Search Presence</h3>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="flex items-start gap-6">
                 {/* Main score */}
                 <div className="flex flex-col">
                   <div className="flex items-baseline gap-1">
@@ -446,28 +574,25 @@ export default async function DashboardPage() {
                     </span>
                     {aeoScore > 0 && <span className="text-xs text-muted-foreground">/100</span>}
                   </div>
-                  <span className="text-[11px] text-muted-foreground mt-1">AI search presence</span>
+                  {aeoScore > 0 ? (
+                    <span className={`text-[11px] font-semibold mt-1.5 ${aeoScore >= 80 ? "text-emerald-400" : aeoScore >= 60 ? "text-amber-400" : "text-rose-400"}`}>
+                      {aeoScore >= 80 ? "Strong" : aeoScore >= 60 ? "Moderate" : "Low"} visibility
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground mt-1.5">Run an AEO check to start</span>
+                  )}
                 </div>
 
                 {/* Citations */}
-                <div className="flex flex-col border-l border-border pl-4">
+                <div className="flex flex-col border-l border-border pl-5">
                   <span className="text-xs text-muted-foreground mb-0.5">Citations</span>
                   <span className="text-lg font-bold tabular-nums text-foreground">
                     {aiCitationsThisMonth > 0 ? aiCitationsThisMonth : "—"}
                   </span>
-                  {aiCitationsThisMonth > 0 && (
+                  {aiCitationsThisMonth > 0 ? (
                     <span className="text-[10px] text-emerald-400 font-medium">this month</span>
-                  )}
-                </div>
-
-                {/* Impressions */}
-                <div className="flex flex-col border-l border-border pl-4">
-                  <span className="text-xs text-muted-foreground mb-0.5">Impressions</span>
-                  <span className="text-lg font-bold tabular-nums text-foreground">
-                    {organicClicks !== null ? formatCompact(organicClicks) : "—"}
-                  </span>
-                  {organicClicksDeltaPct !== null && organicClicksDeltaPct > 0 && (
-                    <span className="text-[10px] text-emerald-400 font-medium">+{organicClicksDeltaPct}%</span>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">Connect data source</span>
                   )}
                 </div>
               </div>
@@ -483,42 +608,47 @@ export default async function DashboardPage() {
             </div>
 
             {/* Technical Health */}
-            <div className="border border-border rounded-[10px] bg-card p-5">
+            <div className="border border-border rounded-2xl bg-card p-5">
               <div className="flex items-center gap-2 mb-4">
                 <Shield className="w-4 h-4 text-emerald-400" aria-hidden="true" />
                 <h3 className="text-[13px] font-semibold text-foreground">Technical Health</h3>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="flex items-start gap-6">
                 {/* Issues found */}
                 <div className="flex flex-col">
                   <span className="text-xs text-muted-foreground mb-0.5">Issues found</span>
                   <span className="text-lg font-bold tabular-nums text-foreground">{latestIssueCount}</span>
-                  {pendingPrsCount > 0 && (
-                    <span className="text-[10px] text-amber-400 font-medium">
-                      {pendingPrsCount} pending
-                    </span>
+                  {latestIssueCount === 0 ? (
+                    <span className="text-[10px] text-emerald-400 font-medium">All clear</span>
+                  ) : (
+                    <span className="text-[10px] text-amber-400 font-medium">Needs attention</span>
                   )}
                 </div>
 
-                {/* Opportunities */}
-                <div className="flex flex-col border-l border-border pl-4">
-                  <span className="text-xs text-muted-foreground mb-0.5">Opportunities</span>
+                {/* Pending fixes */}
+                <div className="flex flex-col border-l border-border pl-5">
+                  <span className="text-xs text-muted-foreground mb-0.5">Pending fixes</span>
                   <span className="text-lg font-bold tabular-nums text-foreground">
-                    {latestIssueCount > 0 ? Math.max(1, Math.floor(latestIssueCount * 0.4)) : 0}
+                    {pendingPrsCount}
                   </span>
+                  {pendingPrsCount === 0 ? (
+                    <span className="text-[10px] text-emerald-400 font-medium">None pending</span>
+                  ) : (
+                    <span className="text-[10px] text-amber-400 font-medium">Awaiting review</span>
+                  )}
                 </div>
 
-                {/* Fix success rate */}
-                <div className="flex flex-col border-l border-border pl-4">
-                  <span className="text-xs text-muted-foreground mb-0.5">Fix success rate</span>
+                {/* Fixes applied */}
+                <div className="flex flex-col border-l border-border pl-5">
+                  <span className="text-xs text-muted-foreground mb-0.5">Fixes applied</span>
                   <span className="text-lg font-bold tabular-nums text-foreground">
-                    {prsCreatedThisMonth > 0
-                      ? `${Math.min(100, Math.round(((prsCreatedThisMonth) / Math.max(1, prsCreatedThisMonth + pendingPrsCount)) * 100))}%`
-                      : "—"}
+                    {prsCreatedThisMonth > 0 ? prsCreatedThisMonth : "—"}
                   </span>
-                  {prsCreatedThisMonth > 0 && pendingPrsCount === 0 && (
-                    <span className="text-[10px] text-emerald-400 font-medium">Excellent</span>
+                  {prsCreatedThisMonth > 0 ? (
+                    <span className="text-[10px] text-emerald-400 font-medium">this month</span>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">No fixes yet</span>
                   )}
                 </div>
               </div>
@@ -536,80 +666,56 @@ export default async function DashboardPage() {
         </>
       )}
 
-      {/* ── 3. SEO PERFORMANCE — Trend chart ───────────────────────────── */}
-      {(metricTrend.length > 0 || chartData.length > 0) && (
-        <MetricTrendChart
-          data={metricTrend.map(m => ({
-            capturedAt: m.capturedAt.toISOString(),
-            overallScore: m.overallScore,
-            aeoScore: m.aeoScore,
-            coreWebVitals: m.coreWebVitals,
-            schemaScore: m.schemaScore,
-            organicTraffic: m.organicTraffic,
-          }))}
-          auditData={chartData}
-          className="fade-in-up fade-in-up-1"
-        />
+      {/* ── 6. AUTONOMOUS ACTIVITY ─────────────────────────────────────── */}
+      {!isNewUser && primarySiteId && (
+        <>
+          <hr className="section-divider" />
+          <AutonomousActivity siteId={primarySiteId} />
+        </>
       )}
 
-      {/* ── 4. NEXT BEST ACTION — compact strip ───────────────────────── */}
-      {onboardingDone && hasSites && (
-        <NextBestActionCard
-          hasSite={hasSites}
-          hasAudit={hasAudits}
-          hasAeo={aeoScore > 0}
-          hasKeywords={hasTrackedKeywords}
-          hasBlogs={hasBlogPosts}
-          hasTeam={hasTeamMember}
-          hasGsc={hasGscToken}
-          siteId={primarySiteId}
-        />
-      )}
-
-      {/* ── 6. RECENT AUDITS TABLE ─────────────────────────────────────── */}
+      {/* ── 7. RECENT AUDITS TABLE ─────────────────────────────────────── */}
       {!isNewUser && recentAuditRows.length > 0 && (
-        <div className="border border-border rounded-[10px] bg-card overflow-hidden fade-in-up fade-in-up-3">
+        <div className="border border-border rounded-2xl bg-card overflow-hidden fade-in-up fade-in-up-3">
           <div className="px-5 py-4 flex items-center justify-between">
             <h3 className="text-[13px] font-semibold text-foreground">Recent Audits</h3>
+            <Link
+              href="/dashboard/audits"
+              className="text-xs font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1 transition-colors"
+            >
+              View all <ChevronRight className="w-3 h-3" />
+            </Link>
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto">
+          <div className="table-scroll">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-t border-border">
                   <th className="px-5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Audit</th>
                   <th className="px-5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">SEO Score</th>
-                  <th className="px-5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">AEO Visibility</th>
                   <th className="px-5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Change</th>
                   <th className="px-5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Date</th>
-                  <th className="px-5 py-2.5 w-8"></th>
+                  <th className="px-5 py-2.5 w-8"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
                 {recentAuditRows.map((row) => (
-                  <tr key={row.id} className="border-t border-border hover:bg-accent/30 transition-colors">
-                    <td className="px-5 py-3">
+                  <tr key={row.id} className="border-t border-border hover:bg-accent/20 transition-colors">
+                    <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-[13px] font-medium text-foreground truncate">Technical &amp; Content Audit</p>
-                        </div>
+                        <p className="text-[13px] font-medium text-foreground">Technical &amp; Content Audit</p>
                       </div>
                     </td>
-                    <td className="px-5 py-3">
-                      <span className="text-[13px] font-semibold text-foreground tabular-nums">{row.seoScore}</span>
+                    <td className="px-5 py-3.5">
+                      <span className={`text-[13px] font-semibold tabular-nums ${scoreColor(row.seoScore)}`}>{row.seoScore}</span>
                       <span className="text-xs text-muted-foreground ml-0.5">/100</span>
                     </td>
-                    <td className="px-5 py-3">
-                      <span className="text-[13px] font-semibold text-foreground tabular-nums">{aeoScore > 0 ? aeoScore : "—"}</span>
-                      {aeoScore > 0 && <span className="text-xs text-muted-foreground ml-0.5">/100</span>}
-                    </td>
-                    <td className="px-5 py-3">
+                    <td className="px-5 py-3.5">
                       {row.change !== null ? (
-                        <span className={`inline-flex items-center gap-0.5 text-xs font-semibold ${
-                          row.change > 0 ? "text-emerald-400" : row.change < 0 ? "text-rose-400" : "text-muted-foreground"
-                        }`}>
+                        <span className={`inline-flex items-center gap-0.5 text-xs font-semibold ${row.change > 0 ? "text-emerald-400" : row.change < 0 ? "text-rose-400" : "text-muted-foreground"
+                          }`}>
                           {row.change > 0 ? <ArrowUpRight className="w-3 h-3" /> : row.change < 0 ? <ArrowUpRight className="w-3 h-3 rotate-90" /> : null}
                           {row.change > 0 ? "+" : ""}{row.change}
                         </span>
@@ -617,14 +723,12 @@ export default async function DashboardPage() {
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-5 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                      {row.date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                      {" · "}
-                      {row.date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                    <td className="px-5 py-3.5 text-xs text-muted-foreground whitespace-nowrap">
+                      {timeAgo(row.date)}
                     </td>
-                    <td className="px-5 py-3">
-                      <Link href={`/dashboard/audits/${row.id}`} className="text-muted-foreground hover:text-foreground transition-colors">
-                        <MoreHorizontal className="w-4 h-4" />
+                    <td className="px-5 py-3.5">
+                      <Link href={`/dashboard/audits/${row.id}`} className="text-muted-foreground hover:text-foreground transition-colors" aria-label={`View audit from ${timeAgo(row.date)}`}>
+                        <ChevronRight className="w-4 h-4" />
                       </Link>
                     </td>
                   </tr>
@@ -632,15 +736,27 @@ export default async function DashboardPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
 
-          <div className="px-5 py-3 border-t border-border">
-            <Link
-              href="/dashboard/audits"
-              className="text-xs font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1 transition-colors"
-            >
-              View all audits <ChevronRight className="w-3 h-3" />
-            </Link>
+      {/* ── Empty state — no audits yet ─────────────────────────────────── */}
+      {!isNewUser && hasSites && !hasAudits && (
+        <div className="border border-border rounded-2xl bg-card p-8 text-center fade-in-up">
+          <div className="w-12 h-12 rounded-2xl bg-brand/10 border border-brand/20 flex items-center justify-center mx-auto mb-4">
+            <TrendingUp className="w-6 h-6 text-brand" />
           </div>
+          <h3 className="text-sm font-semibold text-foreground mb-1">Run your first audit</h3>
+          <p className="text-xs text-muted-foreground mb-4 max-w-sm mx-auto">
+            Start tracking your SEO performance, discover issues, and get actionable recommendations.
+          </p>
+          {primarySiteId && (
+            <Link
+              href={`/dashboard/audits?siteId=${primarySiteId}`}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand hover:bg-brand/90 text-white text-xs font-semibold transition-colors"
+            >
+              Run Audit <ArrowRight className="w-3 h-3" />
+            </Link>
+          )}
         </div>
       )}
     </div>

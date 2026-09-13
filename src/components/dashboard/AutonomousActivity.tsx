@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Activity, ArrowRight } from "lucide-react";
+import { Activity, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 
 interface ActivityEvent {
     id: string;
@@ -34,6 +34,35 @@ function resolveStepState(status: string): "completed" | "active" | "failed" | "
     if (upper === "EXECUTING" || upper === "EFFECTS_PENDING" || upper === "PENDING_APPROVAL") return "active";
     if (upper === "FAILED" || upper === "REJECTED") return "failed";
     return "";
+}
+
+function StatusBadge({ status }: { status: string }) {
+    const state = resolveStepState(status);
+    if (state === "completed") {
+        return (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
+                <CheckCircle2 className="w-3 h-3" />
+                Completed
+            </span>
+        );
+    }
+    if (state === "active") {
+        return (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-brand">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Active
+            </span>
+        );
+    }
+    if (state === "failed") {
+        return (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-400">
+                <AlertCircle className="w-3 h-3" />
+                Failed
+            </span>
+        );
+    }
+    return <span className="text-[10px] text-muted-foreground font-medium">{status}</span>;
 }
 
 export function AutonomousActivity({ siteId, initialEvents }: Props) {
@@ -69,11 +98,11 @@ export function AutonomousActivity({ siteId, initialEvents }: Props) {
     if (!loaded || events.length === 0) return null;
 
     return (
-        <section aria-label="Autonomous activity">
+        <section aria-label="System activity">
             <div className="flex items-center justify-between mb-3">
                 <p className="section-label flex items-center gap-1.5">
                     <Activity className="w-3.5 h-3.5" aria-hidden="true" />
-                    Autonomous Activity
+                    System Activity
                 </p>
                 {siteId && (
                     <Link
@@ -94,7 +123,8 @@ export function AutonomousActivity({ siteId, initialEvents }: Props) {
                             className={`lifecycle-step ${stepState}`}
                         >
                             <span className="flex-1 min-w-0 truncate">{event.description}</span>
-                            <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+                            <StatusBadge status={event.status} />
+                            <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums ml-1">
                                 {timeAgo(event.timestamp)}
                             </span>
                         </div>

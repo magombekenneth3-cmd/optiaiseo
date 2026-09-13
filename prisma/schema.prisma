@@ -1,4 +1,3 @@
-
 generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
@@ -8,7 +7,6 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-
 
 enum AgentRunStatus {
   QUEUED
@@ -144,7 +142,7 @@ model User {
   commissions            Commission[]
   embedLeads             EmbedLead[]
   credits                Int                      @default(50)
-  creditsLockedAt        DateTime?
+  creditsLockedAt        DateTime?  
   voiceSessions          VoiceSession[]
   wpApiKey               String?                  @unique
   apiKeys                ApiKey[]
@@ -171,7 +169,7 @@ model Site {
   userId                  String
   viewerId                String?
   domain                  String
-  brandName               String?
+  brandName               String? 
   targetKeyword           String?
   operatingMode           String                   @default("REPORT_ONLY")
   githubRepoUrl           String?
@@ -271,15 +269,19 @@ model Site {
   pseoTemplates PseoTemplate[]
   pseoPages     PseoPage[]
 
+  // Site-level mutation kill switch — pauses all automated mutations for this site
   automationsPaused     Boolean @default(false)
 
+  // Per-channel effect kill switches (default: enabled)
   effectCmsEnabled      Boolean @default(true)
   effectGithubEnabled   Boolean @default(true)
   effectIndexNowEnabled Boolean @default(true)
 
-  dailyMutationLimit      Int      @default(10)
-  maxConcurrentExecutions Int      @default(2)
+  
+  dailyMutationLimit      Int      @default(10)    
+  maxConcurrentExecutions Int      @default(2)    
 
+  
   budgetReservations          BudgetReservation[]
   circuitBreakers             CircuitBreaker[]
   autonomousExecutionClaims   AutonomousExecutionClaim[]
@@ -365,26 +367,29 @@ model AiShareOfVoice {
   brandMentioned       Boolean  @default(false)
   competitorsMentioned String[] @default([])
   recordedAt           DateTime @default(now())
-  gapReason            String?
+  // Gap 1 — persisted from live citation-gap analysis so cached path skips Gemini
+  gapReason            String? // GapReason enum value
   gapExplanation       String?
   gapFix               String?
   embeddingGapSignals  String[] @default([])
+  // Gap 2 — mention confidence for false-negative detection (0.0–1.0; null = binary check)
   mentionConfidence    Float?
   site                 Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId, keyword])
   @@index([recordedAt])
-  @@index([siteId, mentionConfidence])
+  @@index([siteId, mentionConfidence]) 
   @@index([siteId, modelName, recordedAt(sort: Desc)])
 }
+
 
 model MentionCorrectionLog {
   id           String   @id @default(cuid())
   siteId       String
   keyword      String
   modelName    String
-  correctValue Boolean
-  rawSnippet   String?
+  correctValue Boolean 
+  rawSnippet   String? 
   flaggedAt    DateTime @default(now())
   site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -539,7 +544,7 @@ model Blog {
   sourceLinks          InternalLink[]    @relation("SourceLinks")
   targetLinks          InternalLink[]    @relation("TargetLinks")
   site                 Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  version              Int               @default(1)
+  version              Int               @default(1) // optimistic concurrency token
 
   @@unique([siteId, slug])
   @@index([siteId])
@@ -573,10 +578,11 @@ model TrendingTopic {
   keywords  String[]
   newsData  Json
   fetchedAt DateTime @default(now())
+  // Rows older than 30 days are stale; purged by the weekly cron job
   expiresAt DateTime @default(dbgenerated("now() + interval '30 days'"))
 
   @@index([fetchedAt(sort: Desc)])
-  @@index([expiresAt])
+  @@index([expiresAt]) 
 }
 
 model MarketCategory {
@@ -699,7 +705,8 @@ model AeoSnapshot {
 
   @@unique([siteId, createdAt])
   @@index([siteId])
-  @@index([siteId, createdAt(sort: Desc)])
+  @@index([siteId, createdAt(sort: Desc)]) 
+  
   @@index([createdAt])
 }
 
@@ -718,8 +725,8 @@ model AeoReport {
   generativeShareOfVoice Int        @default(0)
   multiEngineScore       Json?
   multiModelResults      Json?
-  layerScores            Json?
-  diagnosis              Json?
+  layerScores            Json? 
+  diagnosis              Json? 
   site                   Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
   proofs                 AeoProof[]
 
@@ -1296,11 +1303,11 @@ model HealingPlan {
 model CreditHistory {
   id           String   @id @default(cuid())
   userId       String
-  action       String
-  label        String
-  cost         Int
-  balanceAfter Int
-  metadata     Json?
+  action       String 
+  label        String 
+  cost         Int 
+  balanceAfter Int 
+  metadata     Json? 
   createdAt    DateTime @default(now())
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1311,9 +1318,9 @@ model CreditHistory {
 model CreditLedger {
   id          String   @id @default(cuid())
   userId      String
-  amount      Int
-  type        String
-  referenceId String
+  amount      Int 
+  type        String 
+  referenceId String 
   reason      String?
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1335,22 +1342,23 @@ model GrowthDecision {
   impact                Json
   executionPlan         Json
   status                String    @default("ACTIVE")
-  opportunityStatus     String    @default("OPEN")
+  opportunityStatus     String    @default("OPEN") 
   engineVersion         String    @default("v2")
 
   
   maxProposalRetries    Int       @default(3)
-  proposalRetryCount    Int       @default(0)
-  fingerprint           String?
+  proposalRetryCount    Int       @default(0) 
+  fingerprint           String?   
   inputPeriodStart      DateTime?
   inputPeriodEnd        DateTime?
   generatedAt           DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
+  // Approval metadata (populated when a human approves this decision)
   approvedBy            String?
   approvedAt            DateTime?
   approvalExpiresAt     DateTime?
-  mutationHash          String?
+  mutationHash          String?  
 
   site       Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
   experiment Experiment?
@@ -1359,14 +1367,14 @@ model GrowthDecision {
   scoreRecords   OpportunityScoreRecord[]
   portfolioAllocations PortfolioAllocation[]
 
-  primaryDiscoverySource  String?
-  discoveredAt            DateTime?
-  lastRefreshedAt         DateTime?
-  expiresAt               DateTime?
-  discoveryConfidence     Float?
+  primaryDiscoverySource  String?    
+  discoveredAt            DateTime?  
+  lastRefreshedAt         DateTime?  
+  expiresAt               DateTime?  
+  discoveryConfidence     Float?     
 
-  lastScoredAt            DateTime?
-  scoringVersion          String?
+  lastScoredAt            DateTime?  
+  scoringVersion          String?    
 
   @@unique([siteId, url, primaryKeyword, action])
   @@index([siteId, status])
@@ -1377,29 +1385,31 @@ model GrowthDecision {
   @@index([siteId, opportunityStatus, expiresAt])
 }
 
+
 model OpportunityScoreRecord {
   id                   String   @id @default(cuid())
   opportunityId        String
-  scoringVersion       String
+  scoringVersion       String   
 
-  impactScore          Float
-  confidenceScore      Float
-  evidenceScore        Float
-  urgencyScore         Float
-  effortScore          Float
-  riskScore            Float
+  // Score components (all 0–100)
+  impactScore          Float    
+  confidenceScore      Float    
+  evidenceScore        Float    
+  urgencyScore         Float    
+  effortScore          Float    
+  riskScore            Float    
 
-  finalScore           Float
+  finalScore           Float    
 
-  decision             String
-  decisionReasons      Json
+  decision             String   
+  decisionReasons      Json     
 
-  evidenceHash         String
-  evidenceVerifiedAt   DateTime?
+  evidenceHash         String   
+  evidenceVerifiedAt   DateTime? 
 
-  weightsUsed          Json
+  weightsUsed          Json     
 
-  learningVersion      String?
+  learningVersion      String?  
 
   scoredAt             DateTime @default(now())
 
@@ -1414,28 +1424,34 @@ model Experiment {
   siteId               String
   opportunityId        String?
 
+  // Hypothesis
   hypothesis           String   @db.Text
-  successMetric        String
-  successThreshold     Float
+  successMetric        String   
+  successThreshold     Float    
 
+  // Lifecycle: DRAFT → RUNNING → COMPLETED | ABORTED | PAUSED
   status               String   @default("DRAFT")
   statusReason         String?
 
+  // Immutable config (set at creation, never modified)
   configVersion        String   @default("d5-v1")
-  configHash           String
+  configHash           String   // sha256 of canonical config — immutability proof
   maxDurationDays      Int      @default(28)
   maxMutationCount     Int      @default(1)
   maxBudgetUnits       Int      @default(1)
 
+  // Timing
   startedAt            DateTime?
-  endsAt               DateTime?
+  endsAt               DateTime?  
   completedAt          DateTime?
 
-  outcome              String?
-  outcomeConfidence    Float?
+  // Outcome (populated on completion)
+  outcome              String?   
+  outcomeConfidence    Float?    
   outcomeDetails       Json?
 
-  decisionId           String?   @unique
+  
+  decisionId           String?   @unique  
   targetUrl            String?
   actionExecuted       String?
   executedAt           DateTime?
@@ -1461,24 +1477,29 @@ model Experiment {
 model ExperimentVariant {
   id                   String   @id @default(cuid())
   experimentId         String
-  variantKey           String
+  variantKey           String   
   isControl            Boolean  @default(false)
 
+  
   targetUrl            String
   targetKeyword        String?
-  actionType           String?
-  actionParameters     Json?
+  actionType           String?  
+  actionParameters     Json?    
 
+  
   assignmentHash       String
   assignedAt           DateTime @default(now())
 
+  
   proposalId           String?  @unique
   operationId          String?  @unique
   executedAt           DateTime?
 
-  baselineMetrics      Json?
-  baselineWindow       String?
+  
+  baselineMetrics      Json?    
+  baselineWindow       String?  
 
+  
   postMetrics          Json?
   postWindow           String?
 
@@ -1493,8 +1514,9 @@ model ExperimentMeasurement {
   id                   String   @id @default(cuid())
   experimentId         String
   variantKey           String
-  measurementDay       Int
+  measurementDay       Int      
 
+  
   position             Float?
   clicks               Int?
   impressions          Int?
@@ -1576,7 +1598,7 @@ model KeywordSerpAnalysis {
 
   @@unique([siteId, keyword])
   @@index([siteId])
-  @@index([siteId, status])
+  @@index([siteId, status]) // purge job + dashboard status filter
   @@index([expiresAt])
 }
 
@@ -1642,7 +1664,7 @@ model RssSocialPost {
   siteId       String
   articleUrl   String
   articleTitle String
-  posts        Json
+  posts        Json 
   createdAt    DateTime @default(now())
   site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -1683,12 +1705,12 @@ model GscDailyPerformance {
   siteId      String
   url         String
   keyword     String
-  date        String
+  date        String 
   clicks      Int      @default(0)
   impressions Int      @default(0)
   ctr         Float    @default(0)
   position    Float    @default(0)
-  device      String   @default("ALL")
+  device      String   @default("ALL") 
   fetchedAt   DateTime @default(now())
   site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -1736,46 +1758,61 @@ model PseoPage {
   @@index([siteId, status])
 }
 
+// ── MUTATION OPERATION LIFECYCLE ──────────────────────────────────────────────
+// Central abstraction for ALL mutations in the system.
+// See: implementation_plan.md v2.1
+// ─────────────────────────────────────────────────────────────────────────────
 
 model MutationOperation {
   id                 String   @id @default(cuid())
   siteId             String
   idempotencyKey     String   @unique
 
-  actorId            String
-  actorType          String
-  authorizedBy       String?
-  authPolicyVersion  String?
+  // Actor + Authorization snapshot
+  actorId            String   // userId or "system:inngest" or "system:cron"
+  actorType          String   // "USER" | "SYSTEM" | "CRON"
+  authorizedBy       String?  // policy or userId that granted permission
+  authPolicyVersion  String?  // e.g. "rbac-v3" — auditable: "why was this allowed?"
   authorizedAt       DateTime?
 
-  mutationType       String
-  targetModel        String
-  targetId           String
-  expectedVersion    Int
+  // What
+  mutationType       String   // "BLOG_CONTENT_UPDATE" | "CMS_PUBLISH" | "GITHUB_PR" | ...
+  targetModel        String   // "Blog" | "Site" | "InternalLink"
+  targetId           String   // e.g. blog.id
+  expectedVersion    Int      // optimistic concurrency: version we expect on target
 
-  mutationPayload    Json
-  mutationHash       String
+  // Canonical mutation
+  mutationPayload    Json     // The exact executable mutation (patch object)
+  mutationHash       String   // SHA-256 of canonicalized mutationPayload
 
-  riskLevel          String
-  riskScore          Int
-  affectedFields     String[]
+  // Risk
+  riskLevel          String   // "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+  riskScore          Int      // 0-100
+  affectedFields     String[] // ["content", "schemaMarkup"]
   diffSizeBytes      Int      @default(0)
 
+  // Lifecycle
+  // PROPOSED → PENDING_APPROVAL → APPROVED → EXECUTING → COMMITTED → EFFECTS_PENDING → COMPLETED
+  // Terminal: REJECTED | EXPIRED | CANCELLED | FAILED | STALE | COMPLETED_WITH_ERRORS
   status             String   @default("PROPOSED")
 
-  executionClaimedBy       String?
+  // Execution claim (prevents two workers executing the same operation)
+  executionClaimedBy       String?   // worker/process ID that claimed execution
   executionClaimedAt       DateTime?
-  executionLeaseExpiresAt  DateTime?
+  executionLeaseExpiresAt  DateTime? // lease expires → another worker can reclaim
 
+  // Approval (populated when status reaches APPROVED)
   approvedBy         String?
   approvedAt         DateTime?
   approvalExpiresAt  DateTime?
-  approvalHash       String?
+  approvalHash       String?  // SHA-256 of canonical mutation AT approval time
 
+  // Metadata
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   completedAt        DateTime?
 
+  // Relations — onDelete: Restrict prevents cascade-destroying audit history
   site               Site              @relation(fields: [siteId], references: [id], onDelete: Restrict)
   snapshot           MutationSnapshot?
   effects            MutationEffect[]
@@ -1792,13 +1829,14 @@ model MutationOperation {
 model MutationSnapshot {
   id              String   @id @default(cuid())
   operationId     String   @unique
-  targetModel     String
-  targetId        String
-  targetVersion   Int
-  beforeState     Json
-  afterState      Json?
+  targetModel     String   // "Blog"
+  targetId        String   // e.g. blog.id
+  targetVersion   Int      // version AT snapshot time (before mutation)
+  beforeState     Json     // full state before mutation
+  afterState      Json?    // full state after (null until COMMITTED)
   createdAt       DateTime @default(now())
 
+  // Cascade from operation only (operation itself uses Restrict from Site)
   operation       MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
 
   @@index([targetModel, targetId, targetVersion])
@@ -1810,22 +1848,28 @@ model MutationEffect {
   operationId        String
   idempotencyKey     String   @unique
 
-  effectType         String
-  platform           String?
-  payload            Json
+  
+  effectType         String   
+  platform           String?  
+  payload            Json     
 
+ 
   status             String   @default("QUEUED")
 
-  confirmationMode   String   @default("POLL")
-  compensationPolicy String   @default("IRREVERSIBLE")
+  
+  confirmationMode   String   @default("POLL")        
+  compensationPolicy String   @default("IRREVERSIBLE") 
 
-  externalId         String?
+  
+  externalId         String?  
   externalError      String?
 
+  // Retry
   attempts           Int      @default(0)
   maxAttempts        Int      @default(5)
   nextRetryAt        DateTime?
 
+  // Timestamps
   dispatchedAt       DateTime?
   confirmedAt        DateTime?
   failedAt           DateTime?
@@ -1842,11 +1886,12 @@ model MutationEffect {
 model MutationAuditEvent {
   id            String   @id @default(cuid())
   operationId   String
-  eventType     String
-  actorId       String
-  details       Json?
+  eventType     String  
+  actorId       String  
+  details       Json?    
   createdAt     DateTime @default(now())
 
+  
   operation     MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
 
   @@index([operationId, createdAt])
@@ -1855,20 +1900,22 @@ model MutationAuditEvent {
 }
 
 
+
 model AgentRun {
   id             String         @id @default(cuid())
   siteId         String
 
-  agentType      String
+  agentType      String         
   status         AgentRunStatus @default(QUEUED)
 
+  
   parentRunId    String?
   parentRun      AgentRun?      @relation("AgentRunHierarchy", fields: [parentRunId], references: [id], onDelete: SetNull)
   childRuns      AgentRun[]     @relation("AgentRunHierarchy")
 
   startedAt      DateTime?
   completedAt    DateTime?
-  lastHeartbeatAt DateTime?
+  lastHeartbeatAt DateTime?  
 
   itemsProcessed Int            @default(0)
   findingCount   Int            @default(0)
@@ -1876,8 +1923,8 @@ model AgentRun {
   tokensUsed     Int?
   costUsd        Decimal?
 
-  triggerEvent   String?
-  metadata       Json?
+  triggerEvent   String?        
+  metadata       Json?          
 
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -1895,19 +1942,22 @@ model AgentFinding {
   id             String          @id @default(cuid())
   agentRunId     String
 
+  // Stable identity of the underlying issue.
+  // sha256(siteId:type:resourceType:resourceId)
   fingerprint    String
 
-  type           String
+  type           String          
   severity       FindingSeverity
   status         FindingStatus   @default(OPEN)
 
   title          String
   description    String          @db.Text
 
+  // 0.0–1.0
   confidence     Float
 
-  resourceType   String?
-  resourceId     String?
+  resourceType   String?         
+  resourceId     String?         
 
   recommendation String?         @db.Text
 
@@ -1930,20 +1980,21 @@ model FindingEvidence {
   id          String   @id @default(cuid())
   findingId   String
 
-  sourceType  String
-  sourceId    String?
+  sourceType  String          
+  sourceId    String?         
 
-  metric      String?
-  value       String?
-  metadata    Json?
+  metric      String?         
+  value       String?         
+  metadata    Json?           
 
-  observedAt  DateTime @default(now())
+  observedAt  DateTime @default(now()) 
 
   finding     AgentFinding    @relation(fields: [findingId], references: [id], onDelete: Cascade)
 
   @@index([findingId])
   @@index([sourceType, sourceId])
 }
+
 
 model OpportunityFinding {
   id              String   @id @default(cuid())
@@ -1963,7 +2014,7 @@ model OpportunityFinding {
 model Ga4DailyPerformance {
   id              String   @id @default(cuid())
   siteId          String
-  date            String
+  date            String   
   landingPage     String
 
   sessions        Int      @default(0)
@@ -1990,53 +2041,64 @@ model ActionProposal {
   operationId         String?   @unique
   idempotencyKey      String    @unique
 
+  
   previousProposalId  String?
   previousProposal    ActionProposal?  @relation("ProposalRetryChain", fields: [previousProposalId], references: [id])
   retryProposals      ActionProposal[] @relation("ProposalRetryChain")
 
-  actionType          String
+  
+  actionType          String    
   targetUrl           String
-  targetModel         String
+  targetModel         String    
   targetId            String
 
-  proposedChanges     Json
+ 
+  proposedChanges     Json      
   expectedOutcome     String    @db.Text
 
-  riskLevel           String
-  safetyTier          Int       @default(1)
+  
+  riskLevel           String   
+  safetyTier          Int       @default(1) 
   confidence          Float
 
+  
   status              String    @default("DRAFT")
+ 
 
+ 
   requiresApproval    Boolean   @default(true)
   approvedBy          String?
   approvedAt          DateTime?
   approvalExpiresAt   DateTime?
-  approvalHash        String?
+  approvalHash        String? 
 
+  
   attemptCount        Int       @default(0)
   maxAttempts         Int       @default(3)
   lastAttemptAt       DateTime?
   lastAttemptError    String?   @db.Text
 
-  verificationCriteria  Json
-  verificationUrl       String?
+  
+  verificationCriteria  Json   
+  verificationUrl       String? 
   verifiedAt            DateTime?
-  verificationResult    String?
-  verificationDetails   Json?
+  verificationResult    String? 
+  verificationDetails   Json?   
 
-  rolledBackBy        String?
+  
+  rolledBackBy        String?   
   rolledBackAt        DateTime?
-  rollbackReason      String?   @db.Text
+  rollbackReason      String?   
 
+ 
   generatedBy         String    @default("system:proposal-generator")
+
 
   metadata            Json?
 
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   completedAt         DateTime?
-
   site                Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
   decision            GrowthDecision     @relation(fields: [decisionId], references: [id], onDelete: Cascade)
   operation           MutationOperation? @relation(fields: [operationId], references: [id], onDelete: SetNull)
@@ -2050,18 +2112,16 @@ model ActionProposal {
   @@index([previousProposalId])
 }
 
-
 model BudgetReservation {
   id          String    @id @default(cuid())
   siteId      String
-  operationId String?
-  traceId     String?
-
+  operationId String?   
+  traceId     String?   
   status      String    @default("RESERVED")
   reservedAt  DateTime  @default(now())
   consumedAt  DateTime?
   releasedAt  DateTime?
-  reason      String?
+  reason      String?   
 
   site        Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -2069,38 +2129,37 @@ model BudgetReservation {
   @@index([siteId, reservedAt])
 }
 
+
 model CircuitBreaker {
   id                    String    @id @default(cuid())
   siteId                String
-  channel               String
+  channel               String    
+
 
   state                 String    @default("CLOSED")
   consecutiveFailures   Int       @default(0)
-  consecutiveSuccesses  Int       @default(0)
+  consecutiveSuccesses  Int       @default(0)  
   lastFailureAt         DateTime?
   lastSuccessAt         DateTime?
   openedAt              DateTime?
-  nextAttemptAt         DateTime?
-  halfOpenProbeInFlight Boolean   @default(false)
-
+  nextAttemptAt         DateTime? 
+  halfOpenProbeInFlight Boolean   @default(false) 
   updatedAt             DateTime  @updatedAt
-
   site                  Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@unique([siteId, channel])
   @@index([state])
 }
 
+
 model AutonomousExecutionClaim {
   id            String   @id @default(cuid())
   siteId        String
-  opportunityId String   @unique
+  opportunityId String   @unique  
   proposalId    String
-  claimedBy     String
+  claimedBy     String   
   claimedAt     DateTime @default(now())
-
   generation    Int      @default(1)
-
   status        String   @default("ACTIVE")
   completedAt   DateTime?
   releasedAt    DateTime?
@@ -2114,44 +2173,35 @@ model AutonomousExecutionClaim {
 model ExecutionTrace {
   id                  String    @id @default(cuid())
   siteId              String
-  parentTraceId       String?
-
-  triggerType          String
-  triggerId            String?
-
+  parentTraceId       String?   
+  triggerType          String   
+  triggerId            String?  
   findingId            String?
   findingType          String?
-
   opportunityId        String
   opportunityScore     Float
-
   proposalId           String?
   actionType           String
   safetyTier           Int
   riskLevel            String?
   riskScore            Int?
-
   operatingMode        String
   effectiveTierLimit   Int
-  policyDecision       String
+  policyDecision       String   
   policyReason         String
   budgetReservationId  String?
-  circuitBreakerState  String?
-
+  circuitBreakerState  String? 
   operationId          String?
   attemptNumber        Int      @default(1)
-  executionResult      String?
-  failureClass         String?
+  executionResult      String? 
+  failureClass         String?  
   retryCount           Int      @default(0)
-
-  actorType            String
+  actorType            String   
   actorId              String?
-
-  verificationStatus   String?
+  verificationStatus   String?  
   verificationAt       DateTime?
   metricsBaseline      Json?
   metricsAfter         Json?
-
   discoveredAt         DateTime
   authorizedAt         DateTime?
   executedAt           DateTime?
@@ -2167,19 +2217,16 @@ model ExecutionTrace {
   @@index([parentTraceId])
 }
 
-
 model ActionPerformance {
   id                String   @id @default(cuid())
   siteId            String
   actionType        String
-
   totalExperiments  Int
   wins              Int
   losses            Int
   inconclusive      Int
   aborted           Int
-  winRate           Float
-
+  winRate           Float    
   avgPositionDelta  Float?
   avgClicksLift     Float?
   avgCtrLift        Float?
@@ -2187,7 +2234,7 @@ model ActionPerformance {
 
   computedAt        DateTime @default(now())
   computedVersion   String   @default("d6-v1")
-  experimentCount   Int
+  experimentCount   Int     
 
   site              Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -2198,27 +2245,26 @@ model ActionPerformance {
 model LearnedSignal {
   id                String   @id @default(cuid())
   siteId            String
-  signalType        String
+  signalType        String   
   actionType        String
 
-  adjustment        Float
-  magnitude         String
+  adjustment        Float    
+  magnitude         String   
 
-  derivedFrom       Int
-  winRate           Float
-  reason            String
+  derivedFrom       Int      
+  winRate           Float    
+  reason            String   
 
   status            String   @default("PROPOSED")
   version           Int      @default(1)
   activatedAt       DateTime?
   supersededAt      DateTime?
-  supersededBy      String?
+  supersededBy      String?  
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   site              Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
 
   @@index([siteId, status])
   @@index([siteId, actionType])
@@ -2230,26 +2276,26 @@ model PortfolioAllocation {
   siteId             String
   opportunityId      String
 
-  cycleId            String
-  optimizerVersion   String
+  cycleId            String      
+  optimizerVersion   String      
 
-  decision           String
-  rank               Int?
+  decision           String      
+  rank               Int?        
   utilityScore       Float?
 
-  reasonCodes        Json
+  reasonCodes        Json        
 
   scoreRecordId      String
   evidenceHash       String
-  learningVersion    String?
+  learningVersion    String?     
 
-  constraintSnapshot Json
-  candidateSnapshot  Json
+  constraintSnapshot Json        
+  candidateSnapshot  Json        
 
-  experimentPreference String?
+  experimentPreference String?   
 
   allocatedAt        DateTime    @default(now())
-  expiresAt          DateTime
+  expiresAt          DateTime     
 
   site               Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
   opportunity        GrowthDecision @relation(fields: [opportunityId], references: [id], onDelete: Cascade)

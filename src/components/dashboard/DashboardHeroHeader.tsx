@@ -22,20 +22,21 @@ export function DashboardHeroHeader({
     statusHeadline,
 }: Props) {
     return (
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="min-w-0">
                 <h1
-                    className="text-2xl font-bold tracking-tight text-foreground leading-tight"
+                    className="text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-tight"
                     style={{ fontFamily: "var(--font-display)" }}
                 >
                     {domain || "Command Center"}
                 </h1>
-                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                    <span className="text-sm text-muted-foreground font-medium">
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <span className="text-[13px] text-muted-foreground font-medium leading-snug">
                         {statusHeadline}
                     </span>
                     {lastAuditDate && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground/60">
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground/50">
+                            <span aria-hidden="true">·</span>
                             <Clock className="w-3 h-3 shrink-0" aria-hidden="true" />
                             {lastAuditDate}
                         </span>
@@ -46,7 +47,7 @@ export function DashboardHeroHeader({
             {siteId && (
                 <Link
                     href={`/dashboard/audits?siteId=${siteId}`}
-                    className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand hover:bg-brand/90 text-white text-xs font-semibold transition-colors"
+                    className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand hover:bg-brand/90 text-white text-xs font-semibold transition-colors shadow-sm shadow-brand/20"
                 >
                     <Zap className="w-3.5 h-3.5" aria-hidden="true" />
                     Run Audit
