@@ -21,7 +21,7 @@ const PLATFORMS = [
   { key: "perplexity", label: "Perplexity", color: "#a78bfa" },
   { key: "chatgpt", label: "ChatGPT", color: "#34d399" },
   { key: "claude", label: "Claude", color: "#fb923c" },
-  { key: "googleAio", label: "Google AIO", color: "#60a5fa" },
+  { key: "googleAio", label: "AIO Eligibility", color: "#60a5fa" },
   { key: "grok", label: "Grok", color: "#f472b6" },
   { key: "copilot", label: "Copilot", color: "#facc15" },
 ];

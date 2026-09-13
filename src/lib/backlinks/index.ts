@@ -36,6 +36,7 @@ const EMPTY_SUMMARY: BacklinkSummary = {
     brokenBacklinks:  0,
     toxicCount:       0,
     avgReferringDR:   null,
+    providerStatus:   "NO_API_KEY",
 };
 
 /**
@@ -67,28 +68,30 @@ export async function getBacklinkSummary(
 
                 if (!result) throw new Error("Empty result from DataForSEO");
 
-                return {
-                    totalBacklinks:   result.backlinks          ?? 0,
-                    referringDomains: result.referring_domains  ?? 0,
-                    domainRating:     result.rank               ?? 0,
-                    drDelta30d:       null,     // computed below from DB
-                    newLastWeek:      result.new_backlinks_7d   ?? 0,
-                    lostLastWeek:     result.lost_backlinks_7d  ?? 0,
-                    doFollowRatio:    0,         // computed below from DB
-                    topLinkedPage:    null,       // computed below from DB
-                    topAnchors:       (result.anchors ?? []).slice(0, 10).map((a: any) => ({
-                        anchor: a.anchor,
-                        count:  a.backlinks,
-                    })),
-                    brokenBacklinks:  result.broken_backlinks   ?? 0,
-                    toxicCount:       0,         // overwritten below if siteId provided
-                    avgReferringDR:   null,       // computed below from DB
-                } satisfies BacklinkSummary;
+                    return {
+                        totalBacklinks:   result.backlinks          ?? 0,
+                        referringDomains: result.referring_domains  ?? 0,
+                        domainRating:     result.rank               ?? 0,
+                        drDelta30d:       null,
+                        newLastWeek:      result.new_backlinks_7d   ?? 0,
+                        lostLastWeek:     result.lost_backlinks_7d  ?? 0,
+                        doFollowRatio:    0,
+                        topLinkedPage:    null,
+                        topAnchors:       (result.anchors ?? []).slice(0, 10).map((a: any) => ({
+                            anchor: a.anchor,
+                            count:  a.backlinks,
+                        })),
+                        brokenBacklinks:  result.broken_backlinks   ?? 0,
+                        toxicCount:       0,
+                        avgReferringDR:   null,
+                        providerStatus:   "SUCCESS",
+                    } satisfies BacklinkSummary;
             } catch (err) {
                 logger.error("[Backlinks] Failed to fetch backlink summary", {
                     domain, error: String(err),
                 });
-                return { ...EMPTY_SUMMARY };
+                // P0.5: Return PROVIDER_ERROR so callers know 0 ≠ observed
+                return { ...EMPTY_SUMMARY, providerStatus: "PROVIDER_ERROR" as const };
             }
         },
     );

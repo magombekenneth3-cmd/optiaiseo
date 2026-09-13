@@ -14,7 +14,7 @@ export function GsiMetrics({ result }: { result: AeoResult }) {
     const engines = [
         { name: "Perplexity", score: multiEngineScore.perplexity, icon: "🔍", color: "text-blue-400" },
         { name: "ChatGPT Search", score: multiEngineScore.chatgpt, icon: "💬", color: "text-emerald-400" },
-        { name: "Google AI Overview", score: multiEngineScore.googleAio, icon: "🤖", color: "text-yellow-400" },
+        { name: "AI Overview Eligibility", score: multiEngineScore.googleAio, icon: "🤖", color: "text-yellow-400" },
     ];
 
     return (

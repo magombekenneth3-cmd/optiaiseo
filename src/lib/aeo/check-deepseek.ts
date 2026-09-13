@@ -1,6 +1,7 @@
 import { logger } from "@/lib/logger";
 import { MentionResult, analyzeCitationQuality } from "./multi-model";
 import { TIMEOUTS } from "@/lib/constants/timeouts";
+import { type ProviderStatus, type ProviderTelemetry, classifyError } from "./provider-result";
 
 export async function checkDeepSeekMention(
     domain: string,
@@ -8,7 +9,7 @@ export async function checkDeepSeekMention(
     keyword?: string | null
 ): Promise<MentionResult> {
     if (!process.env.DEEPSEEK_API_KEY) {
-        return { model: "DeepSeek", mentioned: false, confidence: 0, details: "No API key" };
+        return { model: "DeepSeek", mentioned: false, confidence: 0, details: "No API key", providerStatus: "NO_API_KEY" };
     }
 
     const question = keyword
@@ -16,6 +17,9 @@ export async function checkDeepSeekMention(
         : coreServices
             ? `What are the best tools for ${coreServices}? List top options with descriptions.`
             : `What is ${domain} and what do they offer?`;
+
+    const startMs = Date.now();
+    let httpStatus: number | undefined;
 
     try {
         const res = await fetch("https://api.deepseek.com/chat/completions", {
@@ -31,17 +35,32 @@ export async function checkDeepSeekMention(
             signal: AbortSignal.timeout(TIMEOUTS.AI_CLAUDE_MS),
         });
 
+        httpStatus = res.status;
+
         if (!res.ok) {
-            throw new Error(`DeepSeek API error: ${res.status}`);
+            const durationMs = Date.now() - startMs;
+            const telemetry: ProviderTelemetry = { provider: "deepseek", operation: "aeo_mention_check", status: "PROVIDER_ERROR", httpStatus, durationMs };
+            logger.error("[Multi-Model] DeepSeek API error:", telemetry);
+            return { model: "DeepSeek", mentioned: false, confidence: 0, details: `DeepSeek API error: ${res.status}`, providerStatus: "PROVIDER_ERROR" };
         }
 
         const data = await res.json();
+        const durationMs = Date.now() - startMs;
         const content: string = data.choices?.[0]?.message?.content ?? "";
+
+        if (!content) {
+            logger.info("[Multi-Model] DeepSeek returned empty response:", { provider: "deepseek", operation: "aeo_mention_check", status: "NO_RESULT", durationMs });
+            return { model: "DeepSeek", mentioned: false, confidence: 0, details: "DeepSeek returned no content", providerStatus: "NO_RESULT" };
+        }
+
         const mentioned = content.toLowerCase().includes(domain.toLowerCase());
         const quality = analyzeCitationQuality(content, domain);
 
         const urlMatches = content.match(/https?:\/\/[^\s\)\>\]]+/g) ?? [];
         const linkedSourceUrls = [...new Set(urlMatches)];
+
+        const telemetry: ProviderTelemetry = { provider: "deepseek", operation: "aeo_mention_check", status: "SUCCESS", httpStatus: 200, durationMs };
+        logger.info("[Multi-Model] DeepSeek check completed:", telemetry);
 
         return {
             model: "DeepSeek",
@@ -55,9 +74,13 @@ export async function checkDeepSeekMention(
             sentiment: quality.sentiment,
             linkedSourceUrls,
             quality: mentioned ? quality : undefined,
+            providerStatus: "SUCCESS",
         };
     } catch (error: unknown) {
-        logger.error("[Multi-Model] DeepSeek check failed:", { error: (error as Error)?.message || String(error) });
-        return { model: "DeepSeek", mentioned: false, confidence: 0, details: "Check failed" };
+        const durationMs = Date.now() - startMs;
+        const providerStatus: ProviderStatus = classifyError(error);
+        const telemetry: ProviderTelemetry = { provider: "deepseek", operation: "aeo_mention_check", status: providerStatus, httpStatus, durationMs, error: (error as Error)?.message || String(error) };
+        logger.error("[Multi-Model] DeepSeek check failed:", telemetry);
+        return { model: "DeepSeek", mentioned: false, confidence: 0, details: `Check failed: ${providerStatus}`, providerStatus };
     }
 }

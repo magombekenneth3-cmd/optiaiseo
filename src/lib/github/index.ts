@@ -151,8 +151,10 @@ export async function createAutoFixPR(
         });
         const defaultBranchSha = refData.object.sha;
 
-        const today = new Date().toISOString().slice(0, 10);
-        const branchName = `ai-seo-fixes-${owner}-${repo}-${today}`;
+        // P0.3: Each operation gets a unique branch — prevents force-overwrite collisions.
+        // Invariant: one MutationOperation → one branch → one PR.
+        const branchId = operationId ?? crypto.randomUUID();
+        const branchName = `ai-seo-fix/${branchId}`;
 
         const existingPRs = await octokit.pulls.list({
             owner,
@@ -171,6 +173,9 @@ export async function createAutoFixPR(
             return { success: true, prUrl: pr.html_url, branchName, effectId };
         }
 
+        // P0.3: Create the branch. If it already exists for this operationId,
+        // that means a previous attempt partially completed — re-use the branch
+        // but do NOT force-overwrite it. Let the PR-exists check above handle dedup.
         try {
             await octokit.git.createRef({
                 owner,
@@ -180,14 +185,8 @@ export async function createAutoFixPR(
             });
         } catch (err: unknown) {
             if (!(err as Error)?.message?.includes("already exists")) throw err;
-            logger.debug("[GitHub Engine] Branch exists — resetting to default branch HEAD", { branchName });
-            await octokit.git.updateRef({
-                owner,
-                repo,
-                ref: `heads/${branchName}`,
-                sha: defaultBranchSha,
-                force: true,
-            });
+            logger.info("[GitHub Engine] Branch already exists — reusing", { branchName });
+            // Do NOT force: true. If the branch diverged, that's a conflict to surface.
         }
 
         const { data: branchRef } = await octokit.git.getRef({

@@ -501,7 +501,7 @@ export default function AeoPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <div className="w-3 h-3 rounded-full bg-orange-500" />
-                                    <span className="text-[10px] uppercase font-bold text-muted-foreground">Google AIO</span>
+                                    <span className="text-[10px] uppercase font-bold text-muted-foreground">AIO Eligibility</span>
                                 </div>
                             </div>
                         </div>
@@ -510,7 +510,7 @@ export default function AeoPage() {
                             {[
                                 { label: "Perplexity", score: result.multiEngineScore?.perplexity ?? 0, color: "bg-blue-500" },
                                 { label: "ChatGPT Search", score: result.multiEngineScore?.chatgpt ?? 0, color: "bg-emerald-500" },
-                                { label: "Google AI Overview", score: result.multiEngineScore?.googleAio ?? 0, color: "bg-orange-500" },
+                                { label: "AI Overview Eligibility", score: result.multiEngineScore?.googleAio ?? 0, color: "bg-orange-500" },
                             ].map((engine, i) => (
                                 <div key={i} className="flex flex-col items-center gap-2 group h-full justify-end">
                                     <div className="text-xs font-bold text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">

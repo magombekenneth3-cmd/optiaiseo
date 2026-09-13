@@ -1,5 +1,6 @@
 import { logger } from "@/lib/logger";
 import { GoogleGenAI } from "@google/genai";
+import type { ProviderStatus } from "./provider-result";
 import { checkChatGptMention } from "./openai-check";
 import { checkClaudeMention } from "./claude-check";
 import { checkGrokMention } from "./check-grok";
@@ -27,6 +28,8 @@ export interface MentionResult {
     snippet?: string;
     details?: string;
     error?: string;
+    /** P0.8: Phase A — optional during migration, will become required in Phase C */
+    providerStatus?: ProviderStatus;
     positionInResponse?: number;
     sentiment?: "positive" | "neutral" | "negative";
     linkedSourceUrls?: string[];
@@ -295,6 +298,7 @@ export async function auditMultiModelMentions(domain: string, coreServices?: str
                 mentioned: false,
                 confidence: 0,
                 error: (settled.reason as Error)?.message ?? "Unknown error",
+                providerStatus: "PROVIDER_ERROR" as ProviderStatus,
               } as MentionResult;
 
     const results: MentionResult[] = [
@@ -312,7 +316,14 @@ export async function auditMultiModelMentions(domain: string, coreServices?: str
         .length;
     logger.debug("[MultiModel] Cache", { domain, cacheHits, liveCalls: 7 - cacheHits });
 
-    const score = results.reduce((acc, curr) => acc + (curr.mentioned ? curr.confidence : 0), 0) / results.length;
+    // P0.9: Only include providers with SUCCESS or NO_RESULT status in the score.
+    // Unavailable providers must NOT drag the average down.
+    const availableResults = results.filter(r =>
+        !r.providerStatus || r.providerStatus === "SUCCESS" || r.providerStatus === "NO_RESULT"
+    );
+    const score = availableResults.length > 0
+        ? availableResults.reduce((acc, curr) => acc + (curr.mentioned ? curr.confidence : 0), 0) / availableResults.length
+        : 0;
     const output = { results, overallScore: Math.round(score) };
 
     await redis.set(multiCacheKey, JSON.stringify(output), { ex: TTL.MULTI_MODEL_S }).catch(() => undefined);

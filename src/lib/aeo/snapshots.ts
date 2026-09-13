@@ -6,7 +6,11 @@ import { checkCopilotVisibility } from "./check-copilot";
 
 export async function saveAeoSnapshot(siteId: string, result: AeoResult) {
     const platformBreakdown = result.multiModelResults.reduce((acc, r) => {
-        acc[r.model] = { mentioned: r.mentioned, confidence: r.confidence };
+        acc[r.model] = {
+            mentioned: r.mentioned,
+            confidence: r.confidence,
+            status: r.providerStatus ?? "SUCCESS",
+        };
         return acc;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     }, {} as Record<string, any>);
@@ -43,7 +47,20 @@ export async function saveAeoSnapshot(siteId: string, result: AeoResult) {
         googleAioScore: result.multiEngineScore?.googleAio ?? 0,
         grokScore: grokScore.status === "fulfilled" ? grokScore.value : 0,
         copilotScore: copilotScore.status === "fulfilled" ? copilotScore.value : 0,
-        platformBreakdown,
+        platformBreakdown: {
+            ...platformBreakdown,
+            // P0.9: Record visibility check provenance so UI knows 0 ≠ error
+            Grok: {
+                ...(platformBreakdown["Grok"] ?? {}),
+                visibilityScore: grokScore.status === "fulfilled" ? grokScore.value : 0,
+                visibilityStatus: grokScore.status === "fulfilled" ? "SUCCESS" : "PROVIDER_ERROR",
+            },
+            Copilot: {
+                ...(platformBreakdown["Copilot"] ?? {}),
+                visibilityScore: copilotScore.status === "fulfilled" ? copilotScore.value : 0,
+                visibilityStatus: copilotScore.status === "fulfilled" ? "SUCCESS" : "PROVIDER_ERROR",
+            },
+        },
         failedChecks,
     };
 

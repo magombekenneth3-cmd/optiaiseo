@@ -2,6 +2,8 @@
 // Single source of truth for all backlink-related types.
 // Import from here instead of re-declaring in individual files.
 
+import type { ProviderStatus } from "@/lib/aeo/provider-result";
+
 export interface BacklinkSummary {
     totalBacklinks: number;
     referringDomains: number;
@@ -15,6 +17,8 @@ export interface BacklinkSummary {
     brokenBacklinks: number;
     toxicCount: number;
     avgReferringDR: number | null;
+    /** P0.5: Distinguishes "0 backlinks observed" from "provider unavailable" */
+    providerStatus: ProviderStatus;
 }
 
 export interface BacklinkDetail {

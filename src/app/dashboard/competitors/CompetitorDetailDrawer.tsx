@@ -281,7 +281,7 @@ export function CompetitorDetailDrawer({ comp, siteId, isPaid, onClose, onRefres
                       onClick={() => setTab("gaps")}
                       className="mt-2 flex items-center gap-1 text-[11px] font-medium text-[#388bfd] hover:text-[#58a6ff] transition-colors"
                     >
-                      View all {comp.keywords.length} keyword gaps <ArrowRight className="w-3 h-3" />
+                      View {comp.keywords.length} loaded keyword gaps <ArrowRight className="w-3 h-3" />
                     </button>
                   )}
                 </div>
