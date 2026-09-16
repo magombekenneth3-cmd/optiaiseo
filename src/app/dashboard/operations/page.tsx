@@ -19,6 +19,7 @@ import {
     XCircle,
     Zap,
 } from "lucide-react";
+import { PipelineHealthPanel, type PipelineHealth } from "./PipelineHealthPanel";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -153,6 +154,7 @@ export default function OperationsPage() {
     const [filter, setFilter] = useState("ALL");
     const [page, setPage] = useState(1);
     const [refreshing, setRefreshing] = useState(false);
+    const [pipelineHealth, setPipelineHealth] = useState<PipelineHealth | null>(null);
 
     // Detail panel
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -180,14 +182,26 @@ export default function OperationsPage() {
         }
     }, [siteId, page, filter]);
 
+    const fetchPipelineHealth = useCallback(async () => {
+        if (!siteId) return;
+        const response = await fetch(`/api/autonomy/health?siteId=${encodeURIComponent(siteId)}&windowHours=24`);
+        if (!response.ok) throw new Error("Failed to fetch pipeline health");
+        setPipelineHealth(await response.json());
+    }, [siteId]);
+
     useEffect(() => {
         setLoading(true);
         fetchOperations();
     }, [fetchOperations]);
 
+    useEffect(() => {
+        fetchPipelineHealth().catch(() => setPipelineHealth(null));
+    }, [fetchPipelineHealth]);
+
     function handleRefresh() {
         setRefreshing(true);
         fetchOperations();
+        fetchPipelineHealth().catch(() => setPipelineHealth(null));
     }
 
     async function loadDetail(id: string) {
@@ -282,6 +296,8 @@ export default function OperationsPage() {
                     </div>
                 ))}
             </div>
+
+            {pipelineHealth && <PipelineHealthPanel health={pipelineHealth} />}
 
             {/* Filter bar */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1">

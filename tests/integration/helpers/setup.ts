@@ -142,7 +142,13 @@ export class InMemoryStore<T extends Row = Row> {
 
   create(args: { data: Partial<T> & { id?: string } }): T {
     const id = args.data.id ?? `${this.modelName.toLowerCase()}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const row = { ...args.data, id, createdAt: new Date(), updatedAt: new Date() } as T;
+    const now = new Date();
+    const row = {
+      ...args.data,
+      id,
+      createdAt: args.data.createdAt ?? now,
+      updatedAt: args.data.updatedAt ?? now,
+    } as T;
     this.checkUniqueConstraints(row);
     this.rows.set(id, row);
     this.setUniqueIndexes(row);
@@ -233,6 +239,10 @@ export class InMemoryStore<T extends Row = Row> {
 
 function matchesWhere(row: Record<string, unknown>, where: Record<string, unknown>): boolean {
   for (const [key, condition] of Object.entries(where)) {
+    if (key === "OR") {
+      if (!Array.isArray(condition) || !condition.some((branch) => matchesWhere(row, branch as Record<string, unknown>))) return false;
+      continue;
+    }
     const value = (row as any)[key];
 
     if (condition === null || condition === undefined) {

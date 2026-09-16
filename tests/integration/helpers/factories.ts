@@ -95,6 +95,8 @@ export function createBudgetReservation(overrides: BudgetOverrides = {}) {
       traceId: overrides.traceId ?? null,
       reason: overrides.reason ?? null,
       reservedAt: new Date(),
+      consumedAt: overrides.status === "CONSUMED" ? new Date() : null,
+      releasedAt: overrides.status === "RELEASED" ? new Date() : null,
       ...overrides,
     },
   });
