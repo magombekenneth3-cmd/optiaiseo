@@ -546,12 +546,21 @@ function TopOpportunityBanner({ rec, onReview }: { rec: Recommendation | null; o
             Review fix
             <ChevronRight className="w-4 h-4" />
           </button>
-          <a
-            href={`/dashboard/recommendations/${rec.opportunityId ?? rec.id}`}
-            className="inline-flex items-center justify-center rounded-xl border border-border bg-background/60 px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-          >
-            Open detail
-          </a>
+          {rec.opportunityId ? (
+            <a
+              href={`/dashboard/recommendations/${rec.opportunityId}`}
+              className="inline-flex items-center justify-center rounded-xl border border-border bg-background/60 px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              Open detail
+            </a>
+          ) : rec.cta ? (
+            <a
+              href={rec.cta.href}
+              className="inline-flex items-center justify-center rounded-xl border border-border bg-background/60 px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              {rec.cta.label}
+            </a>
+          ) : null}
         </div>
       </div>
     </div>

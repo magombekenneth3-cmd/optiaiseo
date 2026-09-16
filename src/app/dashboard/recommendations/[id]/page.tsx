@@ -4,6 +4,7 @@ import { redirect, notFound } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { OpportunityWorkspace } from "@/components/dashboard/OpportunityWorkspace";
+import { isLlmOptimizationRuleId } from "@/lib/aeo/llm-recommendations";
 
 export const metadata: Metadata = {
     title: "Opportunity Workspace | OptiAISEO",
@@ -21,6 +22,10 @@ export default async function OpportunityWorkspacePage({
     if (!session?.user?.id) redirect("/login");
 
     const { id: decisionId } = await params;
+
+    if (isLlmOptimizationRuleId(decisionId)) {
+        redirect("/dashboard/aeo");
+    }
 
     // 1. Fetch GrowthDecision with ownership check
     const decision = await prisma.growthDecision.findUnique({

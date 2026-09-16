@@ -12,6 +12,18 @@ export interface LlmFormattingRule {
     estimatedImpact: "High" | "Critical" | "Medium";
 }
 
+const LLM_OPTIMIZATION_RULE_IDS = new Set([
+    "llm-rule-micro-answer",
+    "llm-rule-information-gain",
+    "llm-rule-wikidata-linkage",
+    "llm-rule-structured-markdown",
+    "llm-rule-llms-txt",
+]);
+
+export function isLlmOptimizationRuleId(id: string): boolean {
+    return LLM_OPTIMIZATION_RULE_IDS.has(id);
+}
+
 export function generateLlmOptimizationRules(
     domain: string,
     pageHtml?: string,
