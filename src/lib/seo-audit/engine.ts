@@ -153,11 +153,20 @@ export class AuditEngine {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (c) => !(c as any).crashed
         );
-        const overallScore = scoredCategories.length > 0
+        const unblockedScore = scoredCategories.length > 0
             ? Math.round(scoredCategories.reduce((sum, c) => sum + c.score, 0) / scoredCategories.length)
             // No module produced a usable result. This is an unavailable score,
             // not a perfect audit; callers can surface the module failures.
             : 0;
+
+        // A site which cannot be crawled or indexed is not healthy, regardless of
+        // cosmetic passes in other modules. This is deliberately a score cap, not
+        // a hidden weighting tweak, so consumers can explain the result.
+        const indexabilityBlockers = new Set(['indexability', 'robots-txt', 'canonical-url', 'redirect-chain']);
+        const indexingBlocked = categoryResults.some(category =>
+            category.items.some(item => indexabilityBlockers.has(item.id) && item.status === 'Fail')
+        );
+        const overallScore = indexingBlocked ? Math.min(unblockedScore, 20) : unblockedScore;
 
 
         // God Level Impact Sorting: Weighted blend of ROI and AI Visibility
@@ -216,6 +225,12 @@ export class AuditEngine {
             url,
             timestamp: new Date().toISOString(),
             overallScore,
+            indexingBlocked,
+            coverage: {
+                completed: scoredCategories.length,
+                expected: this.modules.length,
+                percent: this.modules.length ? Math.round((scoredCategories.length / this.modules.length) * 100) : 0,
+            },
             aeoScore,
             aeoBreakdown,
             categories: categoryResults,

@@ -11,6 +11,7 @@ node_modules/
 
 # md guides
 *.md
+!docs/SEO_FIXING_LOGIC_GUIDE.md
 
 # Build outputs
 .next/

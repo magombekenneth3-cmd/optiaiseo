@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/dialog";
 
 export interface PrReviewPayload {
+    proposalId?: string;
+    readOnly?: boolean;
     filePath: string;
     content: string;
     language?: string;
@@ -23,7 +25,7 @@ interface Props {
 }
 
 export function PrReviewModal({ payload, onConfirm, onCancel }: Props) {
-    const [code, setCode] = useState(payload.content);
+    const [code] = useState(payload.content);
     const [submitting, setSubmitting] = useState(false);
     const [copied, setCopied] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -63,7 +65,7 @@ export function PrReviewModal({ payload, onConfirm, onCancel }: Props) {
                     <div className="flex items-start gap-2 text-xs text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
                         <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                         <span>
-                            AI-generated fix for <strong className="font-semibold">{payload.issueLabel}</strong>. Review carefully — you can edit the code directly before pushing.
+                            AI-generated fix for <strong className="font-semibold">{payload.issueLabel}</strong>. {payload.readOnly ? "This proposal is SHA-pinned to the reviewed repository version; regenerate it if edits are needed." : "Review carefully before pushing."}
                         </span>
                     </div>
                 </div>
@@ -83,9 +85,9 @@ export function PrReviewModal({ payload, onConfirm, onCancel }: Props) {
                     <textarea
                         ref={textareaRef}
                         value={code}
-                        onChange={e => setCode(e.target.value)}
+                        readOnly={payload.readOnly}
                         spellCheck={false}
-                        className="w-full h-full min-h-[320px] bg-muted/40 border border-input rounded-xl p-4 text-xs font-mono text-foreground leading-relaxed resize-none outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 transition-all"
+                        className="w-full h-full min-h-[320px] bg-muted/40 border border-input rounded-xl p-4 text-xs font-mono text-foreground leading-relaxed resize-none outline-none"
                     />
                 </div>
 

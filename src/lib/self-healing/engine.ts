@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { generateAeoFixInternal as generateAeoFix, validateFixInternal as validateFixWithQA } from "@/lib/aeo/fix-engine";
 import { z } from "zod";
 import { scoreHealingActions } from "./confidence";
-import { measureFixImpact } from "./measure-impact";
 import { createHash } from "crypto";
 import { createAutoFixPR } from "@/lib/github";
 import { getGitHubToken } from "@/lib/github/token";
@@ -43,6 +42,10 @@ function actionFingerprint(action: HealingAction): string {
     return createHash("sha256")
         .update(JSON.stringify({ type: action.type, targetId: action.targetId, filePath: action.filePath, fix: action.fix }))
         .digest("hex");
+}
+
+function healingBucket(): string {
+    return new Date().toISOString().slice(0, 13); // one idempotency window per hour
 }
 
 /** A repeated monitor run must not create a new model call/PR for the same fix. */
@@ -159,8 +162,18 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
 
     const scoredActions = await scoreHealingActions(siteId, actions);
 
+    // AI visibility is a noisy, external signal. A score change alone is never
+    // sufficient evidence to modify a customer repository. Autopilot remains
+    // alert-only unless an operator explicitly enables the guarded channel.
+    const githubAutopilotEnabled = process.env.SELF_HEALING_GITHUB_AUTOPILOT === "true";
     for (const action of scoredActions) {
         try {
+            const fingerprint = actionFingerprint(action);
+            const dedupeBucket = healingBucket();
+            if (action.type === "PR" && !githubAutopilotEnabled) {
+                action.type = "ALERT";
+                action.description += " (Automatic repository changes are disabled pending verified deployment evidence.)";
+            }
             if (action.fix) {
                 const qaResult = await validateFixWithQA(action.fix, action.description);
                 if (!qaResult.valid) {
@@ -188,8 +201,6 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
                         siteId,
                     )
                     : { success: false, error: "GitHub OAuth is not connected for this site owner." };
-                const fingerprint = actionFingerprint(action);
-
                 logRecord = await prisma.selfHealingLog.create({
                     data: {
                         siteId,
@@ -198,6 +209,8 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
                         actionTaken: "DEPLOYED_GITHUB_PR",
                         impactScore: 15,
                         status: res.success ? "COMPLETED" : "FAILED",
+                        fingerprint,
+                        dedupeBucket,
                         metadata: (res.success
                             ? { prUrl: res.prUrl, fingerprint }
                             : { error: res.error, fingerprint }
@@ -213,6 +226,8 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
                         actionTaken: "GENERATED_MANUAL_FIX",
                         impactScore: 10,
                         status: "PENDING",
+                        fingerprint,
+                        dedupeBucket,
                         metadata: { fix: action.fix, filePath: action.filePath, fingerprint: actionFingerprint(action) } as any,
                     }
                 });
@@ -225,15 +240,19 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
                         actionTaken: "LOGGED_ALERT",
                         impactScore: 5,
                         status: "COMPLETED",
+                        fingerprint,
+                        dedupeBucket,
                         metadata: { fix: action.fix, fingerprint: actionFingerprint(action) } as any,
                     }
                 });
             }
 
-            if (logRecord && action.type !== "ALERT") {
-                await measureFixImpact(logRecord.id, siteId);
-            }
+            // Do not measure on PR creation. A deployment/merge integration must
+            // emit the post-fix event after the change is actually live.
         } catch (error: unknown) {
+            // P2002 is the database arbitrating a concurrent duplicate. It is
+            // expected during overlapping monitor runs, not an execution error.
+            if ((error as { code?: string })?.code === "P2002") continue;
             logger.error(`[Self-Healing] Execution failed for site ${siteId}:`, { error: (error as Error)?.message || String(error) });
         }
     }

@@ -17,4 +17,21 @@ describe("AuditEngine failure scoring", () => {
     expect(report.overallScore).toBe(0);
     expect(report.categories[0]).toMatchObject({ id: "unavailable-service", crashed: true });
   });
+
+  it("caps health when an indexability blocker is found", async () => {
+    const module: AuditModule = {
+      id: "technical-seo",
+      label: "Technical SEO",
+      requiresHtml: false,
+      run: async () => ({
+        id: "technical-seo", label: "Technical SEO", score: 95,
+        passed: 9, failed: 1, warnings: 0,
+        items: [{ id: "indexability", label: "Indexability", status: "Fail", finding: "noindex" }],
+      }),
+    };
+    const report = await new AuditEngine([module]).runAudit("https://example.com");
+    expect(report.indexingBlocked).toBe(true);
+    expect(report.overallScore).toBe(20);
+    expect(report.coverage).toEqual({ completed: 1, expected: 1, percent: 100 });
+  });
 });

@@ -29,6 +29,27 @@ export interface GitHubPRResult {
     effectId?: string;
 }
 
+export async function getRepositoryFile(
+    repoUrl: string, path: string, token: string,
+): Promise<{ exists: boolean; sha?: string; content?: string }> {
+    const match = repoUrl.match(/github\.com\/([^/]+)\/([^/.?#]+)(?:\.git)?/);
+    if (!match) throw new Error("Cannot parse GitHub URL");
+    const [, owner, repo] = match;
+    const octokit = new Octokit({ auth: token });
+    try {
+        const { data } = await octokit.repos.getContent({ owner, repo, path });
+        if (Array.isArray(data) || data.type !== "file") throw new Error("Target is not a file");
+        return {
+            exists: true,
+            sha: data.sha,
+            content: "content" in data ? Buffer.from(data.content, "base64").toString("utf8") : undefined,
+        };
+    } catch (error: unknown) {
+        if ((error as { status?: number }).status === 404) return { exists: false };
+        throw error;
+    }
+}
+
 /**
  * Opens a single PR containing all provided fix files.
  *
@@ -53,6 +74,7 @@ export async function createAutoFixPR(
     userEmail?: string,
     operationId?: string,
     siteId?: string,
+    expectedBaseSha?: string | null,
 ): Promise<GitHubPRResult> {
     if (!token) {
         return { success: false, error: "GitHub account not connected." };
@@ -143,6 +165,16 @@ export async function createAutoFixPR(
 
         const { data: repoData } = await octokit.repos.get({ owner, repo });
         const defaultBranch = repoData.default_branch;
+
+        // Protect against stale generation: a proposed replacement is valid only
+        // for the exact repository blob the user reviewed.
+        if (expectedBaseSha !== undefined) {
+            if (files.length !== 1) return { success: false, error: "SHA-pinned proposals must change exactly one file." };
+            const current = await getRepositoryFile(repoUrl, files[0].path, token);
+            if ((current.sha ?? null) !== (expectedBaseSha ?? null)) {
+                return { success: false, error: "The target file changed after this fix was generated. Regenerate and review a new proposal." };
+            }
+        }
 
         const { data: refData } = await octokit.git.getRef({
             owner,

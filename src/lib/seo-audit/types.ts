@@ -86,6 +86,10 @@ export interface FullAuditReport {
     url: string;
     timestamp: string;
     overallScore: number;
+    /** A critical crawl/indexing failure caps the health score until resolved. */
+    indexingBlocked: boolean;
+    /** Successful modules / modules requested. Never compare scores without this. */
+    coverage: { completed: number; expected: number; percent: number };
     /** Weighted AI-visibility score computed from 6 AEO checks (0–100) */
     aeoScore?: number;
     aeoBreakdown?: AeoScoreBreakdown;

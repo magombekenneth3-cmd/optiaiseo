@@ -307,6 +307,8 @@ export function IssueRow({
                             content: result.content,
                             language: result.language,
                             issueLabel: result.issueLabel,
+                            proposalId: result.proposalId,
+                            readOnly: true,
                         },
                     });
                 } else if (result.mode === "pr") {
@@ -323,12 +325,12 @@ export function IssueRow({
     );
 
     const handleConfirmPR = useCallback(
-        async (editedContent: string) => {
+        async () => {
             if (fixState.status !== "review") return;
             const { payload } = fixState;
             setFixState({ status: "pushing" });
             try {
-                const result = await pushAuditFixPR(siteId, payload.filePath, editedContent, payload.issueLabel);
+                const result = await pushAuditFixPR(siteId, payload.proposalId);
                 if (!result.success) {
                     setFixState({ status: "error", message: result.error });
                     return;

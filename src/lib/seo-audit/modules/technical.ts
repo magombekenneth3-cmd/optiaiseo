@@ -5,6 +5,7 @@ import { parse } from 'node-html-parser';
 import { validateRobotsAndSitemap } from '../../onpage/validator';
 import { runCrawlerAgent } from '../../crawler/agent';
 import { runSecurityAudit } from '../../audit/security';
+import { inspectIndexability } from '../indexability-evidence';
 
 export const TechnicalModule: AuditModule = {
     id: 'technical-seo',
@@ -27,7 +28,7 @@ export const TechnicalModule: AuditModule = {
         const root = parse(html);
 
         // Run Crawler Agent + PageSpeed API + CrUX in parallel for maximum efficiency
-        const [crawlerRes, psiData, psiDesktopData, cruxData] = await Promise.all([
+        const [crawlerRes, psiData, psiDesktopData, cruxData, indexabilityEvidence] = await Promise.all([
             runCrawlerAgent(context.url, context.html).catch(() => ({
                 isJavaScriptHeavy: false,
                 frameworkDetected: 'Unknown',
@@ -106,6 +107,7 @@ export const TechnicalModule: AuditModule = {
                     return null;
                 }
             })(),
+            inspectIndexability(context.url).catch(() => null),
         ]);
 
 
@@ -128,17 +130,21 @@ export const TechnicalModule: AuditModule = {
         });
 
         // 2. Indexability (noindex meta)
-        const noindexTag = root.querySelector('meta[name="robots"][content*="noindex"]');
+        const noindexTag = root.querySelector('meta[name="robots" i][content*="noindex" i]');
+        const indexabilityBlocked = !!noindexTag || !!indexabilityEvidence?.blockedByHeader || !!(indexabilityEvidence && indexabilityEvidence.status >= 400);
         items.push({
             id: 'indexability',
             label: 'Website Indexability',
-            status: noindexTag ? 'Fail' : 'Pass',
-            finding: noindexTag
-                ? 'Page has a noindex meta tag — search engines are blocked from including it in results.'
-                : 'No noindex tags found. Page is indexable.',
-            recommendation: noindexTag ? { text: 'Remove noindex from the robots meta to make this page indexable.', priority: 'High' } : undefined,
+            status: indexabilityBlocked ? 'Fail' : indexabilityEvidence ? 'Pass' : 'Warning',
+            finding: noindexTag ? 'Page has a noindex meta tag — search engines are blocked from including it in results.'
+                : indexabilityEvidence?.blockedByHeader ? 'HTTP X-Robots-Tag contains noindex — search engines are blocked from including this URL.'
+                : indexabilityEvidence && indexabilityEvidence.status >= 400 ? `The final URL returns HTTP ${indexabilityEvidence.status}, so it is not indexable.`
+                : indexabilityEvidence ? 'No HTML or HTTP noindex directive found; final URL returned a crawlable response.'
+                : 'Indexability headers could not be verified; do not treat this as a pass.',
+            recommendation: indexabilityBlocked ? { text: 'Remove the noindex directive or resolve the failing HTTP response, then verify the final URL in Search Console.', priority: 'High' } : undefined,
             roiImpact: 100,
             aiVisibilityImpact: 100,
+            details: indexabilityEvidence ? { finalUrl: indexabilityEvidence.finalUrl, httpStatus: indexabilityEvidence.status, redirects: indexabilityEvidence.redirects, xRobotsTag: indexabilityEvidence.xRobotsTag || "none" } : { evidence: "unavailable" },
         });
 
         // 3. SSL / HTTPS
@@ -178,11 +184,18 @@ export const TechnicalModule: AuditModule = {
         items.push({
             id: 'robots-txt',
             label: 'Robots.txt',
-            status: sitemapResult.robotsTxtExists ? 'Pass' : 'Fail',
-            finding: sitemapResult.robotsTxtExists ? 'robots.txt found.' : 'robots.txt is missing — crawlers have no guidance on what to crawl.',
-            recommendation: !sitemapResult.robotsTxtExists ? { text: 'Create robots.txt at the domain root. Point it to your XML sitemap.', priority: 'Medium' } : undefined,
+            status: !sitemapResult.robotsTxtExists || sitemapResult.robotsParsed?.disallowsRoot || sitemapResult.robotsParsed?.blocksGooglebot ? 'Fail' : 'Pass',
+            finding: !sitemapResult.robotsTxtExists
+                ? 'robots.txt is missing — crawlers have no guidance on what to crawl.'
+                : sitemapResult.robotsParsed?.disallowsRoot || sitemapResult.robotsParsed?.blocksGooglebot
+                    ? 'robots.txt exists but blocks Googlebot or all crawling; this is an indexability failure.'
+                    : 'robots.txt found and does not block Googlebot at the root rule level.',
+            recommendation: !sitemapResult.robotsTxtExists || sitemapResult.robotsParsed?.disallowsRoot || sitemapResult.robotsParsed?.blocksGooglebot
+                ? { text: 'Allow Googlebot to crawl the affected URL, then verify the exact path with a robots tester before deployment.', priority: 'High' }
+                : undefined,
             roiImpact: 80,
             aiVisibilityImpact: 95,
+            details: { googlebotBlocked: !!sitemapResult.robotsParsed?.blocksGooglebot, disallowsRoot: !!sitemapResult.robotsParsed?.disallowsRoot },
         });
 
         items.push({

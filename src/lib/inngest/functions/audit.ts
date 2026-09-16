@@ -394,6 +394,31 @@ export const auditPostFixJob = inngest.createFunction(
     }
 );
 
+/** Deployment, not PR creation, starts the observation clock. */
+export const measureDeployedSeoFixJob = inngest.createFunction(
+    { id: "measure-deployed-seo-fix", name: "Measure Deployed SEO Fix", triggers: [{ event: "seo-fix/deployed" }] },
+    async ({ event, step }) => {
+        const { proposalId } = event.data as { proposalId: string };
+        await step.sleep("wait-for-crawlers-and-field-data", "7d");
+        const proposal = await step.run("load-deployed-proposal", async () =>
+            (prisma as any).seoFixProposal.findFirst({ where: { id: proposalId, status: "DEPLOYED" } }),
+        );
+        if (!proposal) return { skipped: true };
+        const site = await step.run("load-proposal-site", async () => prisma.site.findUnique({ where: { id: proposal.siteId }, select: { domain: true, userId: true } }));
+        if (!site) throw new Error("Site not found");
+        const report = await step.run("recrawl-deployment", async () => {
+            const engine = getFullAuditEngine();
+            const url = site.domain.startsWith("http") ? site.domain : `https://${site.domain}`;
+            return engine.runAudit(url, { userId: site.userId, siteId: proposal.siteId });
+        });
+        await step.run("record-measurement", async () => (prisma as any).seoFixProposal.update({
+            where: { id: proposalId },
+            data: { status: report.indexingBlocked ? "DEPLOYED_REGRESSION" : "MEASURED", measuredAt: new Date() },
+        }));
+        return { proposalId, indexingBlocked: report.indexingBlocked, score: report.overallScore };
+    },
+);
+
 
 export const sendWeeklyDigestJob = inngest.createFunction(
     {

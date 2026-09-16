@@ -20,6 +20,14 @@ export async function measureFixImpact(logId: string, siteId: string): Promise<v
     const log = await prisma.selfHealingLog.findUnique({ where: { id: logId } });
     if (!log) return;
 
+    // This function is intentionally callable only after a deployment webhook
+    // or equivalent trusted integration records the live deployment. PR creation
+    // is not evidence of a change reaching users or crawlers.
+    const metadata = (log.metadata ?? {}) as { deployedAt?: unknown };
+    if (typeof metadata.deployedAt !== "string") {
+        throw new Error("Cannot measure SEO impact before a verified deployment.");
+    }
+
     const baselineAudit = await prisma.audit.findFirst({
         where: { siteId, runTimestamp: { lt: log.createdAt } },
         orderBy: { runTimestamp: "desc" },

@@ -4,7 +4,9 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { createAutoFixPR } from "@/lib/github";
+import { createAutoFixPR, getRepositoryFile } from "@/lib/github";
+import { createHash } from "crypto";
+import { applyUnifiedDiff } from "@/lib/audit-fix/unified-diff";
 import {
     sanitizeMetadataContent,
     sanitizeObject,
@@ -56,6 +58,7 @@ export type FixResult =
         content: string;
         language: string;
         issueLabel: string;
+        proposalId: string;
     }
     | { success: true; mode: "manual"; guide: ManualFixGuide }
     | { success: false; error: string };
@@ -232,6 +235,19 @@ ${JSON.stringify(sanitizeObject(issue), null, 2)}`;
 
         if (githubConnected) {
             // --- GitHub / review mode ---
+            const account = await prisma.account.findFirst({
+                where: { userId: session.user.id, provider: "github" }, select: { access_token: true },
+            });
+            if (!account?.access_token) return { success: false, error: "GitHub account not connected." };
+            const targetText = await callGeminiForFix(`Return only JSON {"path":"..."}. Select exactly one allowed file for this SEO issue. Allowed files:\n${allowedFilesSection}\nIssue:\n${JSON.stringify(sanitizeObject(issue))}`, 15_000);
+            const target = targetText ? parseFixJson<{ path: string }>(targetText) : null;
+            if (!target?.path || validateFix(target.path, "valid placeholder content for path validation", frameworkCtx)) {
+                return { success: false, error: "Could not safely determine a permitted target file for this fix." };
+            }
+            const baseline = await getRepositoryFile(site.githubRepoUrl!, target.path, account.access_token);
+            if (!baseline.exists || !baseline.sha || baseline.content === undefined || baseline.content.length > 100_000) {
+                return { success: false, error: "Automated patches require an existing target file smaller than 100KB. Use the manual guide for this change." };
+            }
             const prompt = `${frameworkHints}
 
 You are an SEO specialist for a ${frameworkCtx.name} web application at ${domain}.
@@ -252,12 +268,15 @@ ${sharedConstraints}
 - Missing GSC / analytics verification meta tags
 
 ## CRITICAL OUTPUT RULES
-- "path" MUST exactly match one of the allowed file paths above
-- "content" MUST be complete, valid, immediately-deployable code — not a partial snippet
+- The target path is exactly: ${target.path}
+- Return a minimal unified diff against the pinned source below. Never return a complete file.
 - Do NOT include explanations, prose, or markdown
-- If you cannot generate a valid fix, return: { "path": "", "content": "" }
+- If you cannot generate a valid fix, return: { "patch": "" }
 
-Return ONLY a valid JSON object with exactly two keys: "path" and "content".`;
+## PINNED SOURCE (${target.path})
+${baseline.content}
+
+Return ONLY a valid JSON object with exactly one key: "patch".`;
 
             const text = await callGeminiForFix(prompt);
             if (!text) {
@@ -270,8 +289,8 @@ Return ONLY a valid JSON object with exactly two keys: "path" and "content".`;
                 };
             }
 
-            const parsed = parseFixJson<{ path: string; content: string }>(text);
-            if (!parsed?.path || !parsed?.content) {
+            const parsed = parseFixJson<{ patch: string }>(text);
+            if (!parsed?.patch) {
                 const fallback = getStaticFallback(issue);
                 if (fallback) return { success: true, mode: "manual", guide: fallback };
                 return {
@@ -280,22 +299,21 @@ Return ONLY a valid JSON object with exactly two keys: "path" and "content".`;
                 };
             }
 
-            const validationError = validateFix(
-                parsed.path,
-                parsed.content,
-                frameworkCtx,
-            );
+            let resolvedContent: string;
+            try { resolvedContent = applyUnifiedDiff(baseline.content, parsed.patch); }
+            catch { return { success: false, error: "AI returned a malformed or stale patch. Please regenerate the fix." }; }
+            const validationError = validateFix(target.path, resolvedContent, frameworkCtx);
             if (validationError) {
                 logger.warn("[AutoFix] Validation rejected AI output", {
                     validationError,
-                    path: parsed.path,
+                    path: target.path,
                 });
                 const fallback = getStaticFallback(issue);
                 if (fallback) return { success: true, mode: "manual", guide: fallback };
                 return { success: false, error: validationError };
             }
 
-            const confidence = scoreFix(parsed.content, issueId);
+            const confidence = scoreFix(resolvedContent, issueId);
             if (confidence < CONFIDENCE_THRESHOLD) {
                 logger.warn("[AutoFix] Low-confidence AI output rejected", {
                     confidence,
@@ -312,24 +330,33 @@ Return ONLY a valid JSON object with exactly two keys: "path" and "content".`;
 
             const description =
                 issue.title ?? issue.description ?? `Fix: ${issue.category ?? "SEO"}`;
-            const safeContent = sanitizeMetadataContent(parsed.content);
-            const language = parsed.path.endsWith(".ts") || parsed.path.endsWith(".tsx")
+            const safeContent = sanitizeMetadataContent(resolvedContent);
+            const language = target.path.endsWith(".ts") || target.path.endsWith(".tsx")
                 ? "tsx"
-                : parsed.path.endsWith(".js") || parsed.path.endsWith(".jsx")
+                : target.path.endsWith(".js") || target.path.endsWith(".jsx")
                     ? "jsx"
-                    : parsed.path.endsWith(".xml")
+                    : target.path.endsWith(".xml")
                         ? "xml"
-                        : parsed.path.endsWith(".txt")
+                        : target.path.endsWith(".txt")
                             ? "text"
                             : "code";
 
+            const contentHash = createHash("sha256").update(safeContent).digest("hex");
+            const proposal = await (prisma as any).seoFixProposal.create({
+                data: {
+                    siteId: site.id, userId: session.user.id, filePath: target.path,
+                    content: safeContent, contentHash, baseSha: baseline.sha ?? null,
+                    issueLabel: description, expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+                },
+            });
             return {
                 success: true,
                 mode: "review",
-                filePath: parsed.path,
+                filePath: target.path,
                 content: safeContent,
                 language,
                 issueLabel: description,
+                proposalId: proposal.id,
             };
         } else {
             // --- Manual mode ---
@@ -404,17 +431,13 @@ Return ONLY a valid JSON object with keys: "steps", "codeSnippet" (optional), "f
 
 export async function pushAuditFixPR(
     siteId: string,
-    filePath: string,
-    content: string,
-    issueLabel: string,
+    proposalId: string,
 ): Promise<{ success: true; prUrl: string } | { success: false; error: string }> {
     // --- Input validation ---
     if (!uuidSchema.safeParse(siteId).success) {
         return { success: false, error: "Invalid site ID." };
     }
-    if (!filePath || filePath.includes("..")) {
-        return { success: false, error: "Invalid file path." };
-    }
+    if (!uuidSchema.safeParse(proposalId).success) return { success: false, error: "Invalid fix proposal." };
 
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return { success: false, error: "Unauthorized" };
@@ -429,6 +452,13 @@ export async function pushAuditFixPR(
         return { success: false, error: "No GitHub repo connected." };
     }
 
+    const proposal = await (prisma as any).seoFixProposal.findFirst({
+        where: { id: proposalId, siteId, userId: session.user.id, status: "PENDING_REVIEW", expiresAt: { gt: new Date() } },
+    });
+    if (!proposal) return { success: false, error: "This fix proposal is missing, expired, or has already been dispatched." };
+    const expectedHash = createHash("sha256").update(proposal.content).digest("hex");
+    if (expectedHash !== proposal.contentHash) return { success: false, error: "Fix proposal integrity check failed. Regenerate the fix." };
+
     const account = await prisma.account.findFirst({
         where: { userId: session.user.id, provider: "github" },
         select: { access_token: true },
@@ -441,17 +471,22 @@ export async function pushAuditFixPR(
         };
     }
 
-    const safeContent = sanitizeMetadataContent(content);
     const prResult = await createAutoFixPR(
         site.githubRepoUrl,
-        [{ path: filePath, content: safeContent, description: issueLabel }],
+        [{ path: proposal.filePath, content: proposal.content, description: proposal.issueLabel }],
         site.domain,
         account.access_token,
         session.user.email ?? undefined,
+        proposal.id,
+        site.id,
+        proposal.baseSha,
     );
 
     if (!prResult.success) {
         return { success: false, error: prResult.error ?? "GitHub PR creation failed." };
     }
+    await (prisma as any).seoFixProposal.update({
+        where: { id: proposal.id }, data: { status: "DISPATCHED", dispatchedAt: new Date(), prUrl: prResult.prUrl },
+    });
     return { success: true, prUrl: prResult.prUrl! };
 }

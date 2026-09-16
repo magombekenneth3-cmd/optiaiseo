@@ -744,12 +744,41 @@ model SelfHealingLog {
   impactScore Int?
   status      String   @default("COMPLETED")
   metadata    Json?
+  fingerprint String?
+  dedupeBucket String?
   createdAt   DateTime @default(now())
   site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId])
   @@index([createdAt])
   @@index([siteId, status, createdAt])
+  @@unique([siteId, fingerprint, dedupeBucket])
+}
+
+/// Immutable, server-side authorization record for one reviewable SEO change.
+/// The browser receives only the identifier; GitHub dispatch re-checks every
+/// binding below so edited client payloads cannot change a repository file.
+model SeoFixProposal {
+  id          String   @id @default(cuid())
+  siteId      String
+  userId      String
+  filePath    String
+  content     String   @db.Text
+  contentHash String
+  baseSha     String?
+  issueLabel  String
+  status      String   @default("PENDING_REVIEW")
+  expiresAt   DateTime
+  dispatchedAt DateTime?
+  prUrl       String?
+  deploymentUrl String?
+  deployedAt  DateTime?
+  measuredAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([siteId, userId, status])
+  @@index([expiresAt])
 }
 
 model CompetitorAlertLog {
