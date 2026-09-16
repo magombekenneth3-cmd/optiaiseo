@@ -92,8 +92,8 @@ export function MobileBottomNav({
             {/* Full mobile sidebar sheet (existing) */}
             {moreOpen && (
                 <div className="fixed inset-0 z-50 md:hidden">
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMoreOpen(false)} />
-                    <div className="absolute bottom-0 inset-x-0 bg-sidebar rounded-t-2xl border-t border-border max-h-[90vh] flex flex-col"
+                    <button aria-label="Close navigation menu" className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMoreOpen(false)} />
+                    <div role="dialog" aria-modal="true" aria-label="Navigation menu" className="absolute bottom-0 inset-x-0 bg-sidebar rounded-t-2xl border-t border-border max-h-[90vh] flex flex-col"
                         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
                     >
                         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">

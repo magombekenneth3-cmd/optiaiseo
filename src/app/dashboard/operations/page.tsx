@@ -20,6 +20,7 @@ import {
     Zap,
 } from "lucide-react";
 import { PipelineHealthPanel, type PipelineHealth } from "./PipelineHealthPanel";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -227,7 +228,7 @@ export default function OperationsPage() {
             const res = await fetch(`/api/operations/${selectedId}/rollback`, { method: "POST" });
             if (!res.ok) {
                 const errData = await res.json();
-                alert(errData.error || "Rollback failed");
+                toast.error(errData.error || "Rollback failed");
                 return;
             }
             // Refresh

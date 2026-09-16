@@ -54,17 +54,9 @@ const OVERVIEW_ITEMS = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true, contextSiteId: false },
 ];
 
-const QUICKSTART_ITEMS = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true, contextSiteId: false },
-    { name: "Opportunities", href: "/dashboard/recommendations", icon: Lightbulb, exact: false, contextSiteId: false },
-    { name: "AI Visibility", href: "/dashboard/aeo", icon: MonitorSmartphone, exact: true, contextSiteId: true },
-];
-
 const OBSERVE_ITEMS = [
     { name: "SEO Audits", href: "/dashboard/audits", icon: ClipboardList, exact: false, contextSiteId: true },
     { name: "AI Visibility", href: "/dashboard/aeo", icon: MonitorSmartphone, exact: true, contextSiteId: true },
-    { name: "Keywords", href: "/dashboard/keywords", icon: TrendingUp, exact: false, contextSiteId: true },
-    { name: "Competitors", href: "/dashboard/competitors", icon: Crosshair, exact: false, contextSiteId: true },
 ];
 
 const ACT_ITEMS = [
@@ -75,9 +67,6 @@ const ACT_ITEMS = [
 
 const PROVE_ITEMS = [
     { name: "Operations", href: "/dashboard/operations", icon: Activity, exact: false, contextSiteId: true },
-    { name: "Auto Indexer", href: "/dashboard/indexing", icon: Zap, exact: false, contextSiteId: false },
-    { name: "Auto-Heal Log", href: "/dashboard/healing", icon: Shield, exact: false, contextSiteId: true },
-    { name: "Citation History", href: "/dashboard/aeo/proofs", icon: History, exact: false, contextSiteId: true },
 ];
 
 const ACCOUNT_ITEMS = [
@@ -90,6 +79,11 @@ const ACCOUNT_ITEMS = [
 const MORE_NAV_ITEMS = [
     { name: "My Sites", href: "/dashboard/sites", icon: Globe, exact: false, contextSiteId: false },
     { name: "Talk to Aria", href: "/dashboard/voice", icon: Mic, exact: false, contextSiteId: false },
+    { name: "Keywords", href: "/dashboard/keywords", icon: TrendingUp, exact: false, contextSiteId: true },
+    { name: "Competitors", href: "/dashboard/competitors", icon: Crosshair, exact: false, contextSiteId: true },
+    { name: "Auto Indexer", href: "/dashboard/indexing", icon: Zap, exact: false, contextSiteId: false },
+    { name: "Auto-Heal Log", href: "/dashboard/healing", icon: Shield, exact: false, contextSiteId: true },
+    { name: "Citation History", href: "/dashboard/aeo/proofs", icon: History, exact: false, contextSiteId: true },
 ];
 
 const SECONDARY_ITEMS = [
@@ -396,18 +390,6 @@ function SidebarNavInner({
             {!isCollapsed && sites.length > 0 && (
                 <SitePickerDropdown sites={sites} activeSiteId={siteId} />
             )}
-
-            {!isCollapsed && <NavSectionLabel>Quick start</NavSectionLabel>}
-            <div className={isCollapsed ? "flex flex-col items-center" : ""}>
-                {QUICKSTART_ITEMS.map((item) => {
-                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
-                    const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
-                    const missingContext = item.contextSiteId && !siteId;
-                    return (
-                        <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed={isCollapsed} />
-                    );
-                })}
-            </div>
 
             {!isCollapsed && <NavSectionLabel>Overview</NavSectionLabel>}
             <div className={isCollapsed ? "flex flex-col items-center" : ""}>

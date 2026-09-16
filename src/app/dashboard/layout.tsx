@@ -152,7 +152,7 @@ export default async function DashboardLayout({
         {/* Page Content */}
         <main
           id="main-content"
-          className="flex-1 p-4 md:p-8 main-content"
+          className="flex-1 p-4 pb-24 md:p-8 main-content"
         >
           {children}
         </main>

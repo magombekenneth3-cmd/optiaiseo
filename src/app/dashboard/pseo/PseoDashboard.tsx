@@ -6,6 +6,7 @@ import {
     CheckCircle2, Clock, AlertCircle, X, Upload, Eye,
     LayoutTemplate, Loader2, Globe,
 } from "lucide-react";
+import { toast } from "sonner";
 
 interface Site { id: string; domain: string; }
 
@@ -102,7 +103,7 @@ export default function PseoDashboardClient({ sites }: { sites: Site[] }) {
         try {
             const r = await fetch(`/api/pseo/templates/${templateId}/generate`, { method: "POST" });
             const d = await r.json();
-            if (!r.ok) { alert(d.error ?? "Generation failed"); return; }
+            if (!r.ok) { toast.error(d.error ?? "Generation failed"); return; }
             await loadTemplates();
             if (selectedTemplate?.id === templateId) await loadDetail(templateId);
         } finally { setGenerating(false); }

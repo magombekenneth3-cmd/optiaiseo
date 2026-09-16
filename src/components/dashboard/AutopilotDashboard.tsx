@@ -17,6 +17,7 @@ import {
 import { PipelineFlow, type PipelineState } from "./autopilot/PipelineFlow";
 import { ProposalCard, type ProposalSummary } from "./autopilot/ProposalCard";
 import { ProposalDetail } from "./autopilot/ProposalDetail";
+import { toast } from "sonner";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -212,7 +213,7 @@ export function AutopilotDashboard() {
       const res = await fetch(`/api/proposals/${selectedId}/approve`, { method: "POST" });
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || "Approval failed");
+        toast.error(data.error || "Approval failed");
         return;
       }
       await loadDetail(selectedId);
@@ -235,7 +236,7 @@ export function AutopilotDashboard() {
       });
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || "Rejection failed");
+        toast.error(data.error || "Rejection failed");
         return;
       }
       await loadDetail(selectedId);
