@@ -1,4 +1,5 @@
 export type Tier = "FREE" | "STARTER" | "PRO" | "AGENCY"
+import { PUBLIC_PLAN_SUMMARIES } from "@/lib/marketing/plan-summary"
 
 export const PLANS = {
     FREE: {
@@ -7,10 +8,10 @@ export const PLANS = {
         priceId: null as string | null,
         price: 0,
         limits: {
-            sites: 1,
-            auditsPerMonth: 5,
-            blogsPerMonth: 3,
-            aeoAuditsPerMonth: 3,
+            sites: PUBLIC_PLAN_SUMMARIES.FREE.limits.sites,
+            auditsPerMonth: PUBLIC_PLAN_SUMMARIES.FREE.limits.audits,
+            blogsPerMonth: PUBLIC_PLAN_SUMMARIES.FREE.limits.blogs,
+            aeoAuditsPerMonth: PUBLIC_PLAN_SUMMARIES.FREE.limits.aeoChecks,
             keywordsTracked: 10,
             competitorsPerSite: 0,
         },
@@ -27,7 +28,7 @@ export const PLANS = {
             clientPortal: false,
             developerApi: false,
         },
-        monthlyCredits: 50,
+        monthlyCredits: PUBLIC_PLAN_SUMMARIES.FREE.monthlyCredits,
     },
 
     STARTER: {
@@ -37,10 +38,10 @@ export const PLANS = {
         annualPriceId: process.env.STRIPE_STARTER_ANNUAL_PRICE_ID ?? null,
         price: { monthly: 19, annual: 15 },
         limits: {
-            sites: 3,
-            auditsPerMonth: 15,
-            blogsPerMonth: 30,
-            aeoAuditsPerMonth: 10,
+            sites: PUBLIC_PLAN_SUMMARIES.STARTER.limits.sites,
+            auditsPerMonth: PUBLIC_PLAN_SUMMARIES.STARTER.limits.audits,
+            blogsPerMonth: PUBLIC_PLAN_SUMMARIES.STARTER.limits.blogs,
+            aeoAuditsPerMonth: PUBLIC_PLAN_SUMMARIES.STARTER.limits.aeoChecks,
             keywordsTracked: 100,
             competitorsPerSite: 2,
         },
@@ -57,7 +58,7 @@ export const PLANS = {
             clientPortal: false,
             developerApi: false,
         },
-        monthlyCredits: 150,
+        monthlyCredits: PUBLIC_PLAN_SUMMARIES.STARTER.monthlyCredits,
     },
 
     PRO: {
@@ -67,10 +68,10 @@ export const PLANS = {
         annualPriceId: process.env.STRIPE_PRO_ANNUAL_PRICE_ID ?? null,
         price: { monthly: 49, annual: 39 },
         limits: {
-            sites: 10,
-            auditsPerMonth: 50,
-            blogsPerMonth: 300,
-            aeoAuditsPerMonth: 50,
+            sites: PUBLIC_PLAN_SUMMARIES.PRO.limits.sites,
+            auditsPerMonth: PUBLIC_PLAN_SUMMARIES.PRO.limits.audits,
+            blogsPerMonth: PUBLIC_PLAN_SUMMARIES.PRO.limits.blogs,
+            aeoAuditsPerMonth: PUBLIC_PLAN_SUMMARIES.PRO.limits.aeoChecks,
             keywordsTracked: 1000,
             competitorsPerSite: 10,
         },
@@ -87,7 +88,7 @@ export const PLANS = {
             clientPortal: false,
             developerApi: true,
         },
-        monthlyCredits: 500,
+        monthlyCredits: PUBLIC_PLAN_SUMMARIES.PRO.monthlyCredits,
     },
 
     AGENCY: {
@@ -117,7 +118,7 @@ export const PLANS = {
             clientPortal: true,
             developerApi: true,
         },
-        monthlyCredits: 2000,
+        monthlyCredits: PUBLIC_PLAN_SUMMARIES.AGENCY.monthlyCredits,
     },
 } as const
 

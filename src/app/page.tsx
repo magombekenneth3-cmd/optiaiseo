@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { getServerSession } from "next-auth";
 import HomeClient from "@/components/home/HomeClient";
 import { getPublicStats } from "@/app/actions/stats";
+import { authOptions } from "@/lib/auth";
 
 // Stats are cached via unstable_cache (1h TTL) in src/app/actions/stats.ts
 
@@ -8,7 +11,7 @@ const SITE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online"
 ).replace(/\/$/, "");
 
-const PAGE_TITLE = "OptiAISEO — AI SEO Platform That Fixes Itself | Free Trial";
+const PAGE_TITLE = "OptiAISEO — AI SEO Platform That Fixes Itself | Start Free";
 const PAGE_DESC =
   "The AI SEO platform that tracks your brand in ChatGPT, Claude & Perplexity — and auto-fixes issues while you sleep. Start free today.";
 
@@ -18,7 +21,6 @@ const IDS = {
   webpage: `${SITE_URL}/#webpage`,
   software: `${SITE_URL}/#software`,
   service: `${SITE_URL}/#service`,
-  video: `${SITE_URL}/#video`,
   faq: `${SITE_URL}/#faq`,
 } as const;
 
@@ -26,10 +28,10 @@ const IDS = {
  * Keep this pointed at a real brand logo.
  *
  * Do NOT use favicon.ico as the Organization logo.
- * If /logo.png does not exist yet, either add it or remove
+ * If /logo.svg does not exist yet, either add it or remove
  * the logo properties until a real logo asset exists.
  */
-const LOGO_URL = `${SITE_URL}/logo.png`;
+const LOGO_URL = `${SITE_URL}/logo.svg`;
 
 export const metadata: Metadata = {
   title: PAGE_TITLE,
@@ -305,16 +307,6 @@ const webPageSchema = {
   publisher: {
     "@id": IDS.organization,
   },
-  speakable: {
-    "@type": "SpeakableSpecification",
-    cssSelector: [
-      "#aiseo-definition",
-      "#faq-heading",
-      "#why-seo-important",
-      "#how-google-works",
-      "#seo-results-timeline",
-    ],
-  },
   breadcrumb: {
     "@type": "BreadcrumbList",
     "@id": `${SITE_URL}/#breadcrumb`,
@@ -326,27 +318,6 @@ const webPageSchema = {
         item: SITE_URL,
       },
     ],
-  },
-};
-
-/**
- * Single VideoObject
- *
- * This video is defined once and referenced from the graph.
- */
-const videoSchema = {
-  "@type": "VideoObject",
-  "@id": IDS.video,
-  name: "What is SEO? Search Engine Optimization Explained",
-  description:
-    "A visual explainer covering the fundamentals of SEO, how search engines work, why rankings matter, and how to optimize a website for search.",
-  thumbnailUrl:
-    "https://img.youtube.com/vi/MYE6T_gd7H0/hqdefault.jpg",
-  uploadDate: "2024-01-01",
-  contentUrl: "https://www.youtube.com/watch?v=MYE6T_gd7H0",
-  embedUrl: "https://www.youtube.com/embed/MYE6T_gd7H0",
-  publisher: {
-    "@id": IDS.organization,
   },
 };
 
@@ -444,8 +415,6 @@ const faqSchema = {
  *
  * Organization
  *      ↓ publisher
- * VideoObject
- *
  * WebSite
  *      ↓
  * FAQPage
@@ -458,12 +427,14 @@ const homePageJsonLd = {
     webPageSchema,
     softwareSchema,
     serviceSchema,
-    videoSchema,
     faqSchema,
   ],
 };
 
 export default async function Home() {
+  const session = await getServerSession(authOptions);
+  if (session?.user) redirect("/dashboard");
+
   const stats = await getPublicStats().catch(() => ({
     siteCount: 0,
     weeklySignups: 0,
@@ -473,7 +444,6 @@ export default async function Home() {
 
   return (
     <>
-      <script src="https://optiaiseo.online/embed.js" data-user="cmov472ab00078gofley7fmwp" defer></script>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{

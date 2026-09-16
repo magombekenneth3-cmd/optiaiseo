@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useSession } from "next-auth/react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { PUBLIC_PLAN_SUMMARIES } from "@/lib/marketing/plan-summary";
 import {
   Activity,
   ArrowRight,
@@ -49,16 +49,16 @@ interface HomeClientProps {
 
 const PLANS = [
   {
-    name: "Free",
-    price: { monthly: "$0", annual: "$0" },
+    name: PUBLIC_PLAN_SUMMARIES.FREE.name,
+    price: PUBLIC_PLAN_SUMMARIES.FREE.price,
     desc: "Connect your site and see how visible your brand is in AI search.",
     features: [
-      "1 website",
-      "5 audits per month",
-      "Basic AI visibility check",
-      "3 AI blog posts per month",
+      `${PUBLIC_PLAN_SUMMARIES.FREE.limits.sites} website`,
+      `${PUBLIC_PLAN_SUMMARIES.FREE.limits.audits} audits per month`,
+      `${PUBLIC_PLAN_SUMMARIES.FREE.limits.aeoChecks} AI visibility checks per month`,
+      `${PUBLIC_PLAN_SUMMARIES.FREE.limits.blogs} AI blog posts per month`,
       "Google Search Console integration",
-      "50 credits / month",
+      `${PUBLIC_PLAN_SUMMARIES.FREE.monthlyCredits} credits / month`,
     ],
     cta: "Start free",
     ctaHref: "/signup",
@@ -66,56 +66,56 @@ const PLANS = [
     badge: null,
   },
   {
-    name: "Starter",
-    price: { monthly: "$19", annual: "$15" },
+    name: PUBLIC_PLAN_SUMMARIES.STARTER.name,
+    price: PUBLIC_PLAN_SUMMARIES.STARTER.price,
     desc: "For creators and small sites building consistent search visibility.",
     features: [
-      "3 websites",
-      "15 audits / month",
-      "150 credits / month",
-      "30 AI blog posts / month",
+      `${PUBLIC_PLAN_SUMMARIES.STARTER.limits.sites} websites`,
+      `${PUBLIC_PLAN_SUMMARIES.STARTER.limits.audits} audits / month`,
+      `${PUBLIC_PLAN_SUMMARIES.STARTER.monthlyCredits} credits / month`,
+      `${PUBLIC_PLAN_SUMMARIES.STARTER.limits.blogs} AI blog posts / month`,
       "On-page optimisation",
       "Rank tracking",
       "Competitor tracking",
     ],
-    cta: "Start Starter trial",
+    cta: "Choose Starter",
     ctaHref: "/signup?plan=starter",
     highlight: false,
     badge: "New",
   },
   {
-    name: "Pro",
-    price: { monthly: "$49", annual: "$39" },
+    name: PUBLIC_PLAN_SUMMARIES.PRO.name,
+    price: PUBLIC_PLAN_SUMMARIES.PRO.price,
     desc: "For growing teams that want AI visibility, automation, and measurable outcomes.",
     features: [
-      "10 websites",
-      "500 credits / month",
-      "30 audits / month",
-      "Unlimited AI blog posts",
+      `${PUBLIC_PLAN_SUMMARIES.PRO.limits.sites} websites`,
+      `${PUBLIC_PLAN_SUMMARIES.PRO.monthlyCredits} credits / month`,
+      `${PUBLIC_PLAN_SUMMARIES.PRO.limits.audits} audits / month`,
+      `${PUBLIC_PLAN_SUMMARIES.PRO.limits.blogs} AI blog posts / month`,
       "GitHub auto-fix PRs",
       "AI visibility across 4 engines",
       "Competitor gap analysis",
       "Aria voice agent",
     ],
-    cta: "Start Pro trial",
+    cta: "Choose Pro",
     ctaHref: "/signup?plan=pro",
     highlight: true,
     badge: "Most popular",
   },
   {
-    name: "Agency",
-    price: { monthly: "$149", annual: "$119" },
+    name: PUBLIC_PLAN_SUMMARIES.AGENCY.name,
+    price: PUBLIC_PLAN_SUMMARIES.AGENCY.price,
     desc: "For agencies managing multiple clients and websites at scale.",
     features: [
       "Unlimited websites",
-      "2,000 credits / month",
-      "300 audits / month",
+      `${PUBLIC_PLAN_SUMMARIES.AGENCY.monthlyCredits.toLocaleString()} credits / month`,
+      "Unlimited audits",
       "Unlimited AI blog posts",
       "All Pro features",
       "White-label PDF exports",
       "Priority support",
     ],
-    cta: "Start Agency trial",
+    cta: "Choose Agency",
     ctaHref: "/signup?plan=agency",
     highlight: false,
     badge: "Agencies",
@@ -417,7 +417,6 @@ function ResultPreview() {
 }
 
 export default function HomeClient({ faqItems, stats }: HomeClientProps) {
-  const { data: session, status } = useSession();
   const router = useRouter();
 
   const [isScrolled, setIsScrolled] = useState(false);
@@ -427,15 +426,11 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [billingAnnual, setBillingAnnual] = useState(false);
   const [website, setWebsite] = useState("");
+  const [websiteError, setWebsiteError] = useState("");
 
   const solutionsRef = useRef<HTMLDivElement>(null);
   const resourcesRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (status === "authenticated" && session?.user) {
-      router.replace("/dashboard");
-    }
-  }, [status, session, router]);
+  const mobileNavRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onScroll = () => setIsScrolled(window.scrollY > 16);
@@ -449,6 +444,35 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
     return () => {
       document.body.style.overflow = "";
     };
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    if (!mobileNavOpen || !mobileNavRef.current) return;
+
+    const focusableSelector = 'a[href], button:not([disabled]), input:not([disabled])';
+    const getFocusable = () => Array.from(
+      mobileNavRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? [],
+    );
+    const focusable = getFocusable();
+    focusable[0]?.focus();
+
+    const trapFocus = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const items = getFocusable();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", trapFocus);
+    return () => document.removeEventListener("keydown", trapFocus);
   }, [mobileNavOpen]);
 
   useEffect(() => {
@@ -484,13 +508,28 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
   const getPrice = (plan: (typeof PLANS)[number]) =>
     billingAnnual ? plan.price.annual : plan.price.monthly;
 
-  const visibilityHref = website.trim()
-    ? `/free/gso-checker?url=${encodeURIComponent(website.trim())}`
-    : "/free/gso-checker";
+  const handleVisibilitySubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = website.trim();
+    if (!value) {
+      setWebsiteError("Enter your website URL to check its AI visibility.");
+      return;
+    }
+
+    const normalized = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const parsed = new URL(normalized);
+      if (!parsed.hostname.includes(".")) throw new Error("Invalid hostname");
+      setWebsiteError("");
+      router.push(`/free/gso-checker?url=${encodeURIComponent(parsed.href)}`);
+    } catch {
+      setWebsiteError("Enter a valid website address, such as example.com.");
+    }
+  };
 
   const metricItems = [
     {
-      value: stats.siteCount > 0 ? `${stats.siteCount.toLocaleString()}+` : "100+",
+      value: stats.siteCount > 0 ? `${stats.siteCount.toLocaleString()}+` : "—",
       label: "Sites connected",
       icon: Globe2,
     },
@@ -500,17 +539,17 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
           ? `${Math.round(stats.auditCount / 1000)}k+`
           : stats.auditCount > 0
             ? `${stats.auditCount.toLocaleString()}+`
-            : "1,000+",
+            : "—",
       label: "Audits completed",
       icon: ScanSearch,
     },
     {
-      value: stats.blogCount > 0 ? `${stats.blogCount.toLocaleString()}+` : "500+",
+      value: stats.blogCount > 0 ? `${stats.blogCount.toLocaleString()}+` : "—",
       label: "Pages & posts created",
       icon: FileText,
     },
     {
-      value: stats.weeklySignups > 0 ? `${stats.weeklySignups.toLocaleString()}+` : "Growing",
+      value: stats.weeklySignups > 0 ? `${stats.weeklySignups.toLocaleString()}+` : "—",
       label: "New users this week",
       icon: TrendingUp,
     },
@@ -537,13 +576,15 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
                 onClick={() => setSolutionsOpen((open) => !open)}
                 className="inline-flex items-center gap-1.5 transition-colors hover:text-white"
                 aria-expanded={solutionsOpen}
+                aria-haspopup="menu"
+                aria-controls="solutions-menu"
               >
                 Solutions
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${solutionsOpen ? "rotate-180" : ""}`} />
               </button>
 
               {solutionsOpen && (
-                <div className="absolute left-0 top-full mt-3 w-56 rounded-xl border border-white/10 bg-[#0d171b] p-2 shadow-2xl">
+                <div id="solutions-menu" role="menu" className="absolute left-0 top-full mt-3 w-56 rounded-xl border border-white/10 bg-[#0d171b] p-2 shadow-2xl">
                   {[
                     ["/for-agencies", "For Agencies"],
                     ["/for-saas", "For SaaS Companies"],
@@ -554,6 +595,7 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
                       key={href}
                       href={href}
                       onClick={() => setSolutionsOpen(false)}
+                      role="menuitem"
                       className="block rounded-lg px-3 py-2.5 text-sm text-white/60 transition-colors hover:bg-white/5 hover:text-white"
                     >
                       {label}
@@ -581,13 +623,15 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
                 onClick={() => setResourcesOpen((open) => !open)}
                 className="inline-flex items-center gap-1.5 transition-colors hover:text-white"
                 aria-expanded={resourcesOpen}
+                aria-haspopup="menu"
+                aria-controls="resources-menu"
               >
                 Resources
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${resourcesOpen ? "rotate-180" : ""}`} />
               </button>
 
               {resourcesOpen && (
-                <div className="absolute left-0 top-full mt-3 w-56 rounded-xl border border-white/10 bg-[#0d171b] p-2 shadow-2xl">
+                <div id="resources-menu" role="menu" className="absolute left-0 top-full mt-3 w-56 rounded-xl border border-white/10 bg-[#0d171b] p-2 shadow-2xl">
                   {[
                     ["/blog", "SEO & AI Search Blog"],
                     ["/case-studies", "Case Studies"],
@@ -599,6 +643,7 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
                       key={href}
                       href={href}
                       onClick={() => setResourcesOpen(false)}
+                      role="menuitem"
                       className="block rounded-lg px-3 py-2.5 text-sm text-white/60 transition-colors hover:bg-white/5 hover:text-white"
                     >
                       {label}
@@ -652,9 +697,15 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
             className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm lg:hidden"
             onClick={() => setMobileNavOpen(false)}
           />
-          <div className="fixed inset-y-0 right-0 z-[60] flex w-[86%] max-w-sm flex-col border-l border-white/10 bg-[#081115] p-5 text-white shadow-2xl lg:hidden">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mobile-navigation-title"
+            ref={mobileNavRef}
+            className="fixed inset-y-0 right-0 z-[60] flex w-[86%] max-w-sm flex-col border-l border-white/10 bg-[#081115] p-5 text-white shadow-2xl lg:hidden"
+          >
             <div className="flex items-center justify-between border-b border-white/10 pb-5">
-              <BrandMark />
+              <div id="mobile-navigation-title"><BrandMark /></div>
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(false)}
@@ -933,6 +984,15 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
                   </div>
                 ))}
               </div>
+
+              <div className="mt-8 flex flex-wrap gap-x-5 gap-y-3 text-sm font-semibold">
+                <Link href="/case-studies" className="inline-flex items-center gap-1.5 text-emerald-700 hover:text-emerald-800">
+                  Read customer case studies <ArrowRight className="h-4 w-4" />
+                </Link>
+                <Link href="/methodology" className="inline-flex items-center gap-1.5 text-zinc-700 hover:text-zinc-950">
+                  See the measurement methodology <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
             </div>
           </div>
         </section>
@@ -1094,7 +1154,7 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
           <div className="mx-auto max-w-7xl px-5 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-600">Pricing</div>
-              <h2 className="mt-3 text-4xl font-black tracking-[-0.045em] sm:text-5xl">
+              <h2 id="faq-heading" className="mt-3 text-4xl font-black tracking-[-0.045em] sm:text-5xl">
                 Simple, transparent pricing.
               </h2>
               <p className="mt-4 text-base text-zinc-600">Start free. Upgrade when you need more automation.</p>
@@ -1256,23 +1316,39 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
                 Enter your website and get a free AI search visibility report.
               </p>
 
-              <div className="mt-6 flex max-w-xl flex-col gap-3 rounded-2xl bg-white p-2 sm:flex-row">
+              <form
+                className="mt-6 max-w-xl"
+                onSubmit={handleVisibilitySubmit}
+                noValidate
+              >
+              <div className="flex flex-col gap-3 rounded-2xl bg-white p-2 sm:flex-row">
                 <input
                   type="url"
                   value={website}
-                  onChange={(event) => setWebsite(event.target.value)}
+                  onChange={(event) => {
+                    setWebsite(event.target.value);
+                    if (websiteError) setWebsiteError("");
+                  }}
                   placeholder="https://yourwebsite.com"
                   className="min-h-11 flex-1 rounded-xl px-4 text-sm text-zinc-900 outline-none placeholder:text-zinc-400"
                   aria-label="Website URL"
+                  aria-invalid={Boolean(websiteError)}
+                  aria-describedby={websiteError ? "website-url-error" : undefined}
                 />
-                <Link
-                  href={visibilityHref}
+                <button
+                  type="submit"
                   className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-300 px-5 text-sm font-black text-black transition hover:bg-emerald-200"
                 >
                   Check my visibility
                   <ArrowRight className="h-4 w-4" />
-                </Link>
+                </button>
               </div>
+              {websiteError && (
+                <p id="website-url-error" role="alert" className="mt-2 text-xs font-medium text-rose-200">
+                  {websiteError}
+                </p>
+              )}
+              </form>
 
               <div className="mt-3 text-[11px] text-white/35">Free · No credit card required</div>
             </div>
