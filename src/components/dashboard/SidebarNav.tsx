@@ -54,6 +54,12 @@ const OVERVIEW_ITEMS = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true, contextSiteId: false },
 ];
 
+const QUICKSTART_ITEMS = [
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true, contextSiteId: false },
+    { name: "Opportunities", href: "/dashboard/recommendations", icon: Lightbulb, exact: false, contextSiteId: false },
+    { name: "AI Visibility", href: "/dashboard/aeo", icon: MonitorSmartphone, exact: true, contextSiteId: true },
+];
+
 const OBSERVE_ITEMS = [
     { name: "SEO Audits", href: "/dashboard/audits", icon: ClipboardList, exact: false, contextSiteId: true },
     { name: "AI Visibility", href: "/dashboard/aeo", icon: MonitorSmartphone, exact: true, contextSiteId: true },
@@ -391,6 +397,18 @@ function SidebarNavInner({
                 <SitePickerDropdown sites={sites} activeSiteId={siteId} />
             )}
 
+            {!isCollapsed && <NavSectionLabel>Quick start</NavSectionLabel>}
+            <div className={isCollapsed ? "flex flex-col items-center" : ""}>
+                {QUICKSTART_ITEMS.map((item) => {
+                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
+                    const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
+                    const missingContext = item.contextSiteId && !siteId;
+                    return (
+                        <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed={isCollapsed} />
+                    );
+                })}
+            </div>
+
             {!isCollapsed && <NavSectionLabel>Overview</NavSectionLabel>}
             <div className={isCollapsed ? "flex flex-col items-center" : ""}>
                 {OVERVIEW_ITEMS.map((item) => {
@@ -402,7 +420,7 @@ function SidebarNavInner({
                 })}
             </div>
 
-            {!isCollapsed && <NavSectionLabel>Observe</NavSectionLabel>}
+            {!isCollapsed && <NavSectionLabel>Diagnose</NavSectionLabel>}
             <div className={isCollapsed ? "flex flex-col items-center" : ""}>
                 {OBSERVE_ITEMS.map((item) => {
                     const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
@@ -416,7 +434,7 @@ function SidebarNavInner({
                 })}
             </div>
 
-            {!isCollapsed && <NavSectionLabel>Act</NavSectionLabel>}
+            {!isCollapsed && <NavSectionLabel>Improve</NavSectionLabel>}
             <div className={isCollapsed ? "flex flex-col items-center" : ""}>
                 {ACT_ITEMS.map((item) => {
                     const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;

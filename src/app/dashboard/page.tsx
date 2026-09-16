@@ -249,6 +249,10 @@ export default async function DashboardPage() {
   const prevAuditDateStr = audits.length > 1
     ? "vs " + new Date(audits[1].runTimestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" })
     : "vs last";
+  const recommendationConfidence = hasAudits ? (hasGscToken ? 89 : 76) : 61;
+  const recommendationTrustText = hasGscToken
+    ? "Signals are combined from your latest audit, GSC data, and recent ranking movement."
+    : "The priority is based on your most recent audit and current health signals. GSC data will increase confidence.";
 
   function formatCompact(n: number): string {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -269,7 +273,7 @@ export default async function DashboardPage() {
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
 
-  const priorityActions: { id: string; impact: "critical" | "high" | "medium" | "low"; title: string; subtitle: string; href: string; ctaLabel: string }[] = [];
+  const priorityActions: { id: string; impact: "critical" | "high" | "medium" | "low"; title: string; subtitle: string; reason?: string; confidence?: string; href: string; ctaLabel: string }[] = [];
 
   if (topAudit) {
     type IssueItem = { status: string; label?: string; title?: string; id?: string };
@@ -278,11 +282,14 @@ export default async function DashboardPage() {
     const cats: IssueCategory[] = Array.isArray(rawList) ? rawList : [];
     const failItems = cats.flatMap((c) => c.items ?? []).filter((i) => i.status === "Fail");
     for (const item of failItems.slice(0, 3)) {
+      const title = item.label ?? item.title ?? "SEO Issue";
       priorityActions.push({
         id: item.id ?? item.label ?? item.title ?? "issue",
         impact: "high",
-        title: item.label ?? item.title ?? "SEO Issue",
-        subtitle: "Detected in latest audit",
+        title,
+        subtitle: "Detected in the latest audit.",
+        reason: "This issue is likely blocking ranking improvements or content quality signals in the current report.",
+        confidence: "High confidence",
         href: topAudit ? `/dashboard/audits/${topAudit.id}` : "/dashboard/audits",
         ctaLabel: "Review fix",
       });
@@ -294,7 +301,9 @@ export default async function DashboardPage() {
       id: "aeo-weak",
       impact: "high",
       title: "Weak AI search visibility",
-      subtitle: `AEO score is ${aeoScore}/100 — content may not surface in generative search`,
+      subtitle: `AEO score is ${aeoScore}/100.`,
+      reason: "AI answer engines are under-citing your brand, which can limit visibility even when your technical SEO is otherwise healthy.",
+      confidence: "Strong signal",
       href: "/dashboard/aeo",
       ctaLabel: "Optimize",
     });
@@ -366,9 +375,149 @@ export default async function DashboardPage() {
         statusHeadline={statusHeadline}
       />
 
+      {/* ── Primary action focus ──────────────────────────────────────── */}
+      {!isNewUser && priorityActions[0] && (
+        <section className="rounded-3xl border border-brand/20 bg-brand/5 p-5 sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand">Recommended next step</p>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground">{priorityActions[0].title}</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                {priorityActions[0].reason ?? priorityActions[0].subtitle}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Link
+                href={priorityActions[0].href}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-600"
+              >
+                {priorityActions[0].ctaLabel}
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+
+              <Link
+                href="/dashboard/recommendations"
+                className="inline-flex items-center justify-center rounded-xl border border-border bg-background/60 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                View opportunities
+              </Link>
+
+              <Link
+                href="/dashboard/aeo"
+                className="inline-flex items-center justify-center rounded-xl border border-border bg-background/60 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                Check AI visibility
+              </Link>
+            </div>
+          </div>
+
+          {priorityActions.length > 1 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {priorityActions.slice(1, 3).map((action) => (
+                <Link
+                  key={action.id}
+                  href={action.href}
+                  className="rounded-full border border-border/80 bg-background/50 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground"
+                >
+                  {action.title}
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {!isNewUser && (
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-3" aria-label="Core workflow">
+          {[
+            { step: "1", title: "Diagnose", description: "Review the highest-priority issue", href: "/dashboard/recommendations" },
+            { step: "2", title: "Fix", description: "Launch the recommended action", href: priorityActions[0]?.href ?? "/dashboard/recommendations" },
+            { step: "3", title: "Prove", description: "Measure ranking and visibility lift", href: "/dashboard/aeo" },
+          ].map((item) => (
+            <Link
+              key={item.step}
+              href={item.href}
+              className="rounded-2xl border border-border bg-card p-4 transition-colors hover:border-brand/30 hover:bg-card/80"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-brand/10 text-[11px] font-bold text-brand">
+                  {item.step}
+                </span>
+                <ArrowRight className="w-4 h-4 text-muted-foreground" />
+              </div>
+              <p className="mt-3 text-sm font-semibold text-foreground">{item.title}</p>
+              <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{item.description}</p>
+            </Link>
+          ))}
+        </section>
+      )}
+
       {/* ── Onboarding ─────────────────────────────────────────────────── */}
       {!onboardingDone && <OnboardingProgress steps={onboardingSteps} />}
       {isNewUser && <OnboardingInline />}
+
+      {!isNewUser && (
+        <section className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-3">
+          <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand">Decision confidence</p>
+                <h2 className="mt-1 text-2xl font-bold tracking-tight text-foreground">{recommendationConfidence}%</h2>
+              </div>
+              <div className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300">
+                High signal
+              </div>
+            </div>
+            <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{recommendationTrustText}</p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">Why this is prioritized</p>
+            <p className="mt-2 text-base font-semibold text-foreground leading-snug">{topIssueLabel ?? "No critical issue detected"}</p>
+            <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+              {priorityActions[0]?.reason ?? "This is the highest-value blocker based on the latest health and ranking signals."}
+            </p>
+          </div>
+        </section>
+      )}
+
+      {!isNewUser && (
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-3" aria-label="Priority overview">
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70 mb-2">Site health</p>
+            <div className="flex items-end gap-2">
+              <span className="text-3xl font-bold tracking-tight text-foreground tabular-nums">{latestScore ?? avgSeoScore ?? 0}</span>
+              <span className="text-xs text-muted-foreground">/100</span>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {scoreDelta !== null && scoreDelta !== 0
+                ? `${scoreDelta > 0 ? "Up" : "Down"} ${Math.abs(scoreDelta)} points versus the previous audit.`
+                : "Stable performance compared with the most recent audit."}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70 mb-2">Top issue</p>
+            <p className="text-base font-semibold text-foreground leading-snug">
+              {topIssueLabel ?? "No critical issue detected"}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {topAudit ? "Review the latest audit to resolve the most valuable blocker." : "Run your first audit to reveal the biggest opportunity."}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand mb-2">Next best action</p>
+            <p className="text-base font-semibold text-foreground leading-snug">
+              {priorityActions[0]?.title ?? "Keep your growth engine moving"}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {priorityActions[0]?.subtitle ?? "A fresh audit and an AI visibility check will keep your momentum strong."}
+            </p>
+          </div>
+        </section>
+      )}
 
       {/* ── Score Drop Alert ───────────────────────────────────────────── */}
       {!isNewUser && scoreDelta !== null && scoreDelta <= -8 && (

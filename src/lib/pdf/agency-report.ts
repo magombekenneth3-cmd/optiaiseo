@@ -1,5 +1,7 @@
-import { esc, baseStyles, scoreColor, WhiteLabelConfig } from "./shared";
+import { esc, baseStyles, scoreColor, svgHorizontalBarChart, WhiteLabelConfig } from "./shared";
 import { renderHtmlToPdf } from "./renderer";
+import type { AeoEngineMetric } from "./report-types";
+import { hasDisplayableScore, unavailableLabel } from "./report-types";
 
 export interface AgencyReportData {
     clientSiteName: string;
@@ -11,6 +13,8 @@ export interface AgencyReportData {
     topKeywords: Array<{ keyword: string; position: number; citations: number }>;
     whiteLabel: WhiteLabelConfig;
     theme?: "DARK" | "LIGHT";
+    /** Per-engine AEO breakdown — uses the same shared type as ExecutiveDigestData */
+    aeoEngineBreakdown?: AeoEngineMetric[];
 }
 
 export function buildAgencyWhiteLabelReportHtml(data: AgencyReportData): string {
@@ -34,6 +38,37 @@ export function buildAgencyWhiteLabelReportHtml(data: AgencyReportData): string 
     `
         )
         .join("");
+
+    // ── AEO Engine Breakdown (optional) ────────────────────────────
+    let engineBreakdownHtml = "";
+    if (data.aeoEngineBreakdown && data.aeoEngineBreakdown.length > 0) {
+        const displayable = data.aeoEngineBreakdown.filter(m => hasDisplayableScore(m));
+        const unavailable = data.aeoEngineBreakdown.filter(m => !hasDisplayableScore(m));
+
+        const barData = displayable.map(m => ({
+            label: m.engine,
+            value: m.score ?? 0,
+        }));
+
+        const unavailableRows = unavailable.map(m =>
+            `<div style="display:flex;justify-content:space-between;padding:6px 0;
+                         border-bottom:1px solid rgba(255,255,255,0.035)">
+                <span style="font-size:11px;font-weight:600;color:rgba(228,228,240,0.5)">${esc(m.engine)}</span>
+                <span style="font-size:11px;color:rgba(180,180,210,0.35);font-style:italic">${unavailableLabel(m.status)}</span>
+            </div>`
+        ).join("");
+
+        engineBreakdownHtml = `
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title-accent" style="background: ${primary};"></div>
+        <div class="section-title">AEO Citation Rate by AI Engine</div>
+        <div class="section-title-line"></div>
+      </div>
+      ${barData.length > 0 ? svgHorizontalBarChart(barData) : ""}
+      ${unavailableRows ? `<div style="margin-top:12px">${unavailableRows}</div>` : ""}
+    </div>`;
+    }
 
     return `
 <!DOCTYPE html>
@@ -97,6 +132,8 @@ export function buildAgencyWhiteLabelReportHtml(data: AgencyReportData): string 
         </tbody>
       </table>
     </div>
+
+    ${engineBreakdownHtml}
 
     <div class="footer">
       <div>Report generated for <strong style="color: #ffffff;">${esc(data.clientSiteName)}</strong></div>

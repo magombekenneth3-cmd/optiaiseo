@@ -55,9 +55,15 @@ function scoreBg(value: number | boolean): string {
 }
 
 const STEPS = [
-    { id: "domain",   label: "Add domain",   icon: Globe },
-    { id: "check",    label: "Quick check",  icon: BarChart2 },
-    { id: "done",     label: "Ready",        icon: CheckCircle },
+    { id: "domain",   label: "Connect site",   icon: Globe },
+    { id: "check",    label: "Check health",   icon: BarChart2 },
+    { id: "done",     label: "Fix & grow",    icon: CheckCircle },
+];
+
+const ACTIVATION_STEPS = [
+    { title: "Connect your site", detail: "Add your domain to unlock dashboards and audits." },
+    { title: "Run a quick health check", detail: "See the biggest SEO and AI visibility gaps." },
+    { title: "Fix the top issue", detail: "Use Aria or a full audit to make progress quickly." },
 ];
 
 export function OnboardingInline({ onComplete }: Props) {
@@ -151,7 +157,7 @@ export function OnboardingInline({ onComplete }: Props) {
     return (
         <div className="card-surface p-6 max-w-xl">
             {/* Step pills */}
-            <div className="flex items-center gap-2 mb-6">
+            <div className="flex items-center gap-2 mb-6 flex-wrap">
                 {STEPS.map((s, i) => {
                     const Icon   = s.icon;
                     const done   = i < step;
@@ -173,6 +179,22 @@ export function OnboardingInline({ onComplete }: Props) {
                     );
                 })}
             </div>
+
+            {step === 0 && (
+                <div className="grid gap-2 mb-5">
+                    {ACTIVATION_STEPS.map((item, index) => (
+                        <div key={item.title} className="flex items-start gap-3 rounded-xl border border-border bg-background/60 px-3 py-2.5">
+                            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/10 text-[11px] font-bold text-emerald-400">
+                                {index + 1}
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-foreground">{item.title}</p>
+                                <p className="text-xs text-muted-foreground">{item.detail}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* ── Step 0: Add domain ─────────────────────────────────────────── */}
             {step === 0 && (
@@ -270,6 +292,11 @@ export function OnboardingInline({ onComplete }: Props) {
                                 </div>
                             )}
 
+                            <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand mb-1">Next step</p>
+                                <p className="text-sm font-medium text-foreground">You are two actions away from a meaningful fix.</p>
+                            </div>
+
                             {/* CTAs */}
                             <div className="flex gap-2">
                                 <button
@@ -324,11 +351,30 @@ export function OnboardingInline({ onComplete }: Props) {
 
             {/* ── Step 2: Done ───────────────────────────────────────────────── */}
             {step === 2 && (
-                <div className="flex items-center gap-3">
-                    <CheckCircle className="w-8 h-8 text-emerald-400 shrink-0" />
-                    <div>
-                        <h3 className="text-base font-semibold">You&apos;re all set</h3>
-                        <p className="text-sm text-muted-foreground">Explore audits, keywords, and AI content from the sidebar.</p>
+                <div className="space-y-4">
+                    <div className="flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                        <CheckCircle className="w-8 h-8 text-emerald-400 shrink-0" />
+                        <div>
+                            <h3 className="text-base font-semibold">You&apos;re ready to move</h3>
+                            <p className="text-sm text-muted-foreground">Your site is connected and your first health check is complete.</p>
+                        </div>
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-2">
+                        <button
+                            onClick={handleRunAudit}
+                            className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-600"
+                        >
+                            <Zap className="w-4 h-4" />
+                            Run full audit
+                        </button>
+                        <button
+                            onClick={handleAskAria}
+                            className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-brand/30"
+                        >
+                            <MessageCircle className="w-4 h-4 text-brand" />
+                            Ask Aria
+                        </button>
                     </div>
                 </div>
             )}

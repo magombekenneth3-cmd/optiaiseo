@@ -516,6 +516,48 @@ function SummaryBanner({ summary }: { summary: RecommendationResult["summary"] }
   );
 }
 
+function TopOpportunityBanner({ rec, onReview }: { rec: Recommendation | null; onReview: (rec: Recommendation) => void }) {
+  if (!rec) return null;
+
+  const nextStep = rec.executionPlan?.[0]?.action ?? "Review the page and fix the highest-impact gap first.";
+
+  return (
+    <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4 sm:p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-brand/20 bg-background/80 text-brand shrink-0">
+            <Target className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand">Top opportunity</p>
+            <p className="mt-1 text-base font-semibold text-foreground truncate">{rec.title}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{rec.impact}</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">Best next step:</span> {nextStep}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <button
+            onClick={() => onReview(rec)}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-600"
+          >
+            Review fix
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          <a
+            href={`/dashboard/recommendations/${rec.opportunityId ?? rec.id}`}
+            className="inline-flex items-center justify-center rounded-xl border border-border bg-background/60 px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            Open detail
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Main export
 // ────────────────────────────────────────────────────────────────────────────
@@ -538,7 +580,14 @@ export function RecommendationsDashboard({
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [executedIds, setExecutedIds] = useState<Set<string>>(new Set());
 
-  const filtered = recommendations.filter((rec) => {
+  const visibleRecommendations = recommendations.filter(
+    (rec) => !(rec.opportunityId && dismissedIds.has(rec.opportunityId))
+  );
+  const topOpportunity = visibleRecommendations
+    .slice()
+    .sort((a, b) => PRIORITY_META[a.priority].order - PRIORITY_META[b.priority].order)[0] ?? null;
+
+  const filtered = visibleRecommendations.filter((rec) => {
     // Hide client-side dismissed/executed items
     if (rec.opportunityId && dismissedIds.has(rec.opportunityId)) return false;
 
@@ -608,6 +657,8 @@ export function RecommendationsDashboard({
 
       {/* GSC disconnected warning */}
       {!gscConnected && <GscDisconnectedBanner domain={domain} />}
+
+      <TopOpportunityBanner rec={topOpportunity} onReview={setReviewRec} />
 
       {/* Summary badges */}
       {(summary.criticalCount > 0 ||

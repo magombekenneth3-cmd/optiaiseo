@@ -17,7 +17,7 @@
     "agent:dev": "npx esbuild livekit-agent.ts --bundle --platform=node --packages=external --outfile=livekit-agent.js && node livekit-agent.js dev",
     "agent:watch": "node livekit-agent.js dev",
     "agent:start": "npm run agent:build && node livekit-agent.js start",
-    "build": "node scripts/generate-og-image.js || true && next build",
+    "build": "node scripts/generate-og-image.js || true && NODE_OPTIONS='--max-old-space-size=6144' SENTRY_DISABLE_SOURCE_MAP_UPLOAD=1 next build",
     "start:next": "next start",
     "start": "node server.js",
     "start:custom": "NODE_ENV=production tsx server.ts",

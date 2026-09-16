@@ -125,6 +125,114 @@ export function scoreBar(score: number, width = 120, height = 4): string {
 }
 
 
+// ─── Horizontal bar chart ───────────────────────────────────────────────────
+// Used for AEO per-engine breakdowns and SEO category scores.
+// Each bar has an optional label, value, and max (defaults to 100).
+
+export interface BarChartItem {
+    label: string;
+    value: number;
+    maxValue?: number;
+}
+
+export interface BarChartOptions {
+    width?: number;
+    barHeight?: number;
+    gap?: number;
+    primaryColor?: string;
+    labelWidth?: number;
+}
+
+export function svgHorizontalBarChart(
+    data: BarChartItem[],
+    options?: BarChartOptions,
+): string {
+    const width = options?.width ?? 420;
+    const barHeight = options?.barHeight ?? 18;
+    const gap = options?.gap ?? 10;
+    const labelWidth = options?.labelWidth ?? 100;
+    const barAreaWidth = width - labelWidth - 60; // 60px for value label
+    const totalHeight = data.length * (barHeight + gap) - gap + 4;
+
+    const bars = data.map((item, i) => {
+        const max = item.maxValue ?? 100;
+        const pct = Math.min(1, Math.max(0, item.value / max));
+        const barW = Math.round(pct * barAreaWidth);
+        const y = i * (barHeight + gap);
+        const col = options?.primaryColor ?? scoreColor(item.value);
+
+        return `
+    <text x="0" y="${y + barHeight * 0.72}" font-size="11" fill="rgba(228,228,240,0.75)"
+      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,Helvetica,Arial,sans-serif"
+      font-weight="600">${esc(item.label)}</text>
+    <rect x="${labelWidth}" y="${y + 2}" width="${barAreaWidth}" height="${barHeight - 4}"
+      rx="${(barHeight - 4) / 2}" fill="rgba(255,255,255,0.06)"/>
+    <rect x="${labelWidth}" y="${y + 2}" width="${barW}" height="${barHeight - 4}"
+      rx="${(barHeight - 4) / 2}" fill="${col}"/>
+    <text x="${labelWidth + barAreaWidth + 8}" y="${y + barHeight * 0.72}"
+      font-size="11" fill="${col}" font-weight="700"
+      font-family="'Courier New',Consolas,'Liberation Mono',monospace">${item.value}%</text>`;
+    }).join("");
+
+    return `<svg width="${width}" height="${totalHeight}" viewBox="0 0 ${width} ${totalHeight}" xmlns="http://www.w3.org/2000/svg">${bars}
+</svg>`;
+}
+
+
+// ─── Sparkline ──────────────────────────────────────────────────────────────
+// Mini trend line for 30-day metrics. Renders as an SVG polyline with an
+// optional area fill beneath.
+
+export interface SparklineOptions {
+    width?: number;
+    height?: number;
+    color?: string;
+    showArea?: boolean;
+}
+
+export function svgSparkline(
+    dataPoints: number[],
+    options?: SparklineOptions,
+): string {
+    const w = options?.width ?? 120;
+    const h = options?.height ?? 32;
+    const color = options?.color ?? "#a78bfa";
+    const showArea = options?.showArea ?? true;
+
+    if (dataPoints.length < 2) {
+        // Not enough data — render a flat line
+        return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+  <line x1="0" y1="${h / 2}" x2="${w}" y2="${h / 2}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+</svg>`;
+    }
+
+    const padding = 2;
+    const plotW = w - padding * 2;
+    const plotH = h - padding * 2;
+    const min = Math.min(...dataPoints);
+    const max = Math.max(...dataPoints);
+    const range = max - min || 1;
+
+    const points = dataPoints.map((v, i) => {
+        const x = padding + (i / (dataPoints.length - 1)) * plotW;
+        const y = padding + plotH - ((v - min) / range) * plotH;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+
+    const polyline = points.join(" ");
+    const areaPath = showArea
+        ? `<polygon points="${points.join(" ")} ${(padding + plotW).toFixed(1)},${(padding + plotH).toFixed(1)} ${padding.toFixed(1)},${(padding + plotH).toFixed(1)}"
+      fill="${color}" opacity="0.1"/>`
+        : "";
+
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+  ${areaPath}
+  <polyline points="${polyline}" fill="none" stroke="${color}" stroke-width="1.5"
+    stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+}
+
+
 export function baseStyles(primary: string): string {
     return `
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

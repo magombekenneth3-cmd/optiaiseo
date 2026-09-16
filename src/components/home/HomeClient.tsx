@@ -757,7 +757,40 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
                 </Link>
               </div>
 
-              <div className="mt-4 text-xs text-white/35">Free · No credit card required</div>
+              <div className="mt-5 flex flex-wrap items-center gap-2">
+                {[
+                  "SEO + AI visibility",
+                  "Auto-fix PRs",
+                  "3-minute setup",
+                ].map((item) => (
+                  <span
+                    key={item}
+                    className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/65"
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+
+              <div className="mt-6 grid max-w-xl gap-3 sm:grid-cols-3">
+                {[
+                  { title: "Connect fast", text: "Your site in under 3 minutes" },
+                  { title: "Find hidden gaps", text: "AI citation opportunities" },
+                  { title: "Measure lift", text: "See before vs after results" },
+                ].map((item) => (
+                  <div
+                    key={item.title}
+                    className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
+                  >
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300">
+                      {item.title}
+                    </div>
+                    <div className="mt-1 text-xs text-white/60">{item.text}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 text-xs text-white/35">Free · No credit card required · 2-minute setup</div>
             </div>
 
             <VisibilityDashboard />

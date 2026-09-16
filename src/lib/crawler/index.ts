@@ -265,6 +265,90 @@ const followRedirects = async (
     return { finalUrl: current, chain, finalStatus: 0 }
 }
 
+// ---------------------------------------------------------------------------
+// CrawlFrontier — controllable BFS work queue
+// ---------------------------------------------------------------------------
+
+export interface FrontierItem {
+    url: string;
+    depth: number;
+    from: string;
+}
+
+/**
+ * Controllable BFS frontier for the crawler.
+ * Separates URL discovery/dequeuing from page processing, enabling chunked
+ * execution and load testing without duplicating visit tracking logic.
+ */
+export class CrawlFrontier {
+    private queue: FrontierItem[] = [];
+    private readonly visited = new Set<string>();
+    private readonly maxDepth: number;
+    private readonly maxPages: number;
+
+    constructor(seedUrl: string, maxDepth: number, maxPages: number) {
+        this.maxDepth = maxDepth;
+        this.maxPages = maxPages;
+        this.queue.push({ url: seedUrl, depth: 0, from: "root" });
+    }
+
+    /** Take up to N unvisited URLs from the frontier. */
+    take(n: number): FrontierItem[] {
+        const result: FrontierItem[] = [];
+        while (result.length < n && this.queue.length > 0 && this.visited.size < this.maxPages) {
+            const item = this.queue.shift()!;
+            if (this.visited.has(item.url)) continue;
+            result.push(item);
+        }
+        return result;
+    }
+
+    /** Add discovered URLs back to the frontier (respects maxDepth). */
+    add(items: FrontierItem[]): void {
+        for (const item of items) {
+            if (item.depth > this.maxDepth) continue;
+            if (this.visited.has(item.url)) continue;
+            // Avoid duplicates in the queue
+            if (this.queue.some(q => q.url === item.url)) continue;
+            this.queue.push(item);
+        }
+    }
+
+    /** Mark a URL as visited (won't be dequeued again). */
+    markVisited(url: string): void {
+        this.visited.add(url);
+    }
+
+    /** Whether there are unvisited URLs remaining. */
+    hasWork(): boolean {
+        return this.queue.length > 0 && this.visited.size < this.maxPages;
+    }
+
+    /** Number of unvisited URLs in the queue. */
+    get size(): number {
+        return this.queue.length;
+    }
+
+    /** Number of URLs already visited. */
+    get visitedCount(): number {
+        return this.visited.size;
+    }
+
+    /** Check if a URL has already been visited. */
+    isVisited(url: string): boolean {
+        return this.visited.has(url);
+    }
+
+    /** Max pages budget. */
+    get budget(): number {
+        return this.maxPages;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Main crawl function
+// ---------------------------------------------------------------------------
+
 export const crawlSite = async (
     domain: string,
     options?: CrawlOptions
@@ -281,11 +365,10 @@ export const crawlSite = async (
     const maxDepth = options?.maxDepth ?? DEFAULT_MAX_DEPTH
     const jsRenderingMode = options?.jsRendering ?? 'auto'
 
-    const visited = new Set<string>()
+    const frontier = new CrawlFrontier(origin, maxDepth, maxPages)
     const clickDepthMap: Record<string, number> = {}
     const inboundCounts = new Map<string, number>()
     const outboundCounts = new Map<string, number>()
-    const queue: { url: string; depth: number; from: string }[] = [{ url: origin, depth: 0, from: "root" }]
     const issues: CrawlIssue[] = []
     const brokenLinks: CrawlResult["brokenLinks"] = []
     const redirectChains: CrawlResult["redirectChains"] = []
@@ -339,13 +422,12 @@ export const crawlSite = async (
     }
     // jsRenderingMode === 'never' → usePlaywright stays false
 
-    while (queue.length > 0 && visited.size < maxPages) {
-        const item = queue.shift()
-        if (!item) break
-        const { url, depth, from } = item
+    while (frontier.hasWork()) {
+        const items = frontier.take(1)
+        if (items.length === 0) break
+        const { url, depth, from } = items[0]
 
-        if (visited.has(url)) continue
-        visited.add(url)
+        frontier.markVisited(url)
         clickDepthMap[url] = depth
 
         if (depth > 3) {
@@ -376,8 +458,8 @@ export const crawlSite = async (
                 })
             }
 
-            if (finalUrl !== url && !visited.has(finalUrl)) {
-                visited.add(finalUrl)
+            if (finalUrl !== url && !frontier.isVisited(finalUrl)) {
+                frontier.markVisited(finalUrl)
                 clickDepthMap[finalUrl] = depth
             }
 
@@ -401,7 +483,7 @@ export const crawlSite = async (
 
             const html = pageResult.html
 
-            const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+            const titleMatch = html.match(/<title[^>]?>([\s\S]*?)<\/title>/i)
             const pageTitle = titleMatch ? titleMatch[1].trim() : null
             if (pageTitle) {
                 const existing = titleMap.get(pageTitle) ?? []
@@ -436,8 +518,8 @@ export const crawlSite = async (
                 const currentInbound = inboundCounts.get(href) ?? 0
                 inboundCounts.set(href, currentInbound + 1)
 
-                if (depth < maxDepth && !visited.has(href)) {
-                    queue.push({ url: href, depth: depth + 1, from: url })
+                if (!frontier.isVisited(href)) {
+                    frontier.add([{ url: href, depth: depth + 1, from: url }])
                 }
             }
 
@@ -497,7 +579,8 @@ export const crawlSite = async (
     const deepPages: string[] = []
     const linkGraph: CrawlResult["linkGraph"] = []
 
-    for (const url of visited) {
+    // Iterate over all visited URLs via clickDepthMap (which mirrors frontier.visited)
+    for (const url of Object.keys(clickDepthMap)) {
         const depth = clickDepthMap[url] ?? 0
         const inboundCount = inboundCounts.get(url) ?? 0
         const outboundCount = outboundCounts.get(url) ?? 0
@@ -521,7 +604,7 @@ export const crawlSite = async (
 
     return {
         domain,
-        pagesScanned: visited.size,
+        pagesScanned: frontier.visitedCount,
         issues,
         brokenLinks,
         redirectChains,

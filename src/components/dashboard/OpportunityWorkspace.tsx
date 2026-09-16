@@ -529,6 +529,12 @@ export function OpportunityWorkspace({
 
   const isAnalyzing = analysisState?.status === "PENDING" || analysisState?.status === "SCRAPING" || analysisState?.status === "PLANNING";
   const hasCompletedAnalysis = analysisState?.status === "COMPLETED" && analysisState?.gapReport;
+  const topSignal = [...decision.whyNow.signals].sort((a, b) => {
+    const order = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+    return order[b.severity] - order[a.severity];
+  })[0];
+  const nextAction = decision.executionPlan[0]?.action || "Review the page against the top-ranking competitors and prioritize the highest-traffic gap.";
+  const topPriority = analysisState?.topPriority || "Improve the core page structure and intent alignment before expanding content.";
 
   // ── Trend summary ───────────────────────────────────────────────────────
 
@@ -607,6 +613,84 @@ export function OpportunityWorkspace({
           </div>
         </div>
       </div>
+
+      <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4 sm:p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand">Recommended fix</p>
+            <h2 className="mt-2 text-xl font-bold text-foreground">{decision.executionPlan[0]?.action || topPriority}</h2>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground leading-relaxed">
+              Do this first to unlock the strongest lift from this opportunity and improve alignment with the keyword intent before expanding the page further.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-left">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300">Expected outcome</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">
+              {decision.executionPlan[0]?.expectedOutcome || "Higher CTR, tighter intent match, and stronger ranking momentum."}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="card-surface p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Top signal</p>
+          <p className="mt-2 text-sm font-semibold text-foreground">{topSignal?.signal ? topSignal.signal.replace(/_/g, " ") : "Intent alignment"}</p>
+          <p className="mt-2 text-[12px] text-muted-foreground leading-relaxed">{topSignal?.evidence || "The page is underperforming against the strongest buyer-intent queries in your category."}</p>
+        </div>
+
+        <div className="card-surface p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Expected impact</p>
+          <p className="mt-2 text-2xl font-bold text-emerald-400">{decision.impact.trafficPotential.expected.toLocaleString()}</p>
+          <p className="mt-2 text-[12px] text-muted-foreground">additional clicks/month with {decision.impact.trafficPotential.confidence}% confidence.</p>
+        </div>
+
+        <div className="card-surface p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Next best move</p>
+          <p className="mt-2 text-sm font-semibold text-foreground">{topPriority}</p>
+          <p className="mt-2 text-[12px] text-muted-foreground leading-relaxed">{nextAction}</p>
+        </div>
+      </div>
+
+      <section className="card-surface p-5">
+        <div className="flex items-center justify-between gap-3 flex-wrap pb-4 border-b border-border/40">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Action path</p>
+            <h2 className="mt-1 text-lg font-semibold text-foreground">What to fix first</h2>
+          </div>
+          <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+            <Sparkles className="w-3 h-3" />
+            Best ROI path
+          </span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 lg:grid-cols-[1.5fr_0.9fr] gap-4">
+          <div className="space-y-3">
+            {decision.executionPlan.slice(0, 3).map((step, index) => (
+              <div key={index} className="flex items-start gap-3 rounded-xl border border-border/30 bg-accent/20 p-3">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/10 text-[11px] font-bold text-emerald-300 border border-emerald-500/20 shrink-0">
+                  {step.step}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">{step.action}</p>
+                  <p className="mt-1 text-[12px] text-muted-foreground leading-relaxed">{step.expectedOutcome}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-xl border border-border/30 bg-accent/10 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Why this matters now</p>
+            <p className="mt-2 text-sm text-foreground leading-relaxed">{topSignal?.evidence || "The strongest opportunity is the gap between your current page and the top intent-matched competitors."}</p>
+
+            <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-300">Expected outcome</p>
+              <p className="mt-2 text-sm font-semibold text-foreground">{decision.executionPlan[0]?.expectedOutcome || "Higher CTR, better alignment, and more qualified growth from the target keyword."}</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* ─── Section 1: Performance Trend ────────────────────────────────── */}
       <Section title="30-Day Performance Trend" icon={BarChart3}>
