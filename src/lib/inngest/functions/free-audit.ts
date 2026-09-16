@@ -20,6 +20,18 @@ export const runFreeAuditJob = inngest.createFunction(
         name: 'Run Free SEO Audit',
         concurrency: { limit: CONCURRENCY.auditFree, key: 'global-free-audit' },
         throttle: { limit: 30, period: '1m', key: 'global-free-audit-throttle' },
+        onFailure: async ({ event }) => {
+            const data = event.data?.event?.data as { auditId?: string } | undefined;
+            if (!data?.auditId) return;
+            await prisma.freeAudit.update({
+                where: { id: data.auditId },
+                data: {
+                    status: 'FAILED',
+                    currentStep: 'Audit failed',
+                    errorMsg: 'The site could not be audited. Verify that it is publicly reachable and try again.',
+                },
+            }).catch(() => null);
+        },
     
         triggers: [{ event: 'free-audit/run' }],
     },
@@ -66,5 +78,3 @@ export const runFreeAuditJob = inngest.createFunction(
         return { auditId, domain };
     }
 );
-
-

@@ -2,7 +2,7 @@ import { logger } from "@/lib/logger";
 import { fetchGSCKeywordsByDateRange, normaliseSiteUrl } from "@/lib/gsc";
 import { getUserGscToken } from "@/lib/gsc/token";
 import { prisma } from "@/lib/prisma";
-import { HealingAction } from "./engine";
+import { HealingAction, filterDuplicateHealingActions } from "./engine";
 import { callGemini } from "@/lib/gemini/client";
 
  
@@ -141,7 +141,9 @@ export async function generateGscHealingPlan(siteId: string, anomalies: any[]): 
         }
 
         actions.push({
-            type: (site.githubRepoUrl && process.env.GITHUB_TOKEN) ? "PR" : "CONTENT",
+            // GSC data cannot prove a repository path or framework. Generate a
+            // reviewable content proposal, never an autonomous source-code PR.
+            type: "CONTENT",
             description: `GSC Drop Detected: ${anomaly.dropPercentage}% drop for '${anomaly.keyword}' on ${anomaly.url}. Automatically adjusting intent targeting.`,
             targetId: anomaly.keyword,
             fix: fixContent,
@@ -149,5 +151,5 @@ export async function generateGscHealingPlan(siteId: string, anomalies: any[]): 
         });
     }
 
-    return actions;
+    return filterDuplicateHealingActions(siteId, actions);
 }

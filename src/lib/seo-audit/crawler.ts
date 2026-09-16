@@ -25,9 +25,10 @@ import { prisma } from "@/lib/prisma";
 import { fetchGSCKeywords, normaliseSiteUrl } from "@/lib/gsc";
 import { getUserGscToken } from "@/lib/gsc/token";
 import { redis } from "@/lib/redis";
+import { isSafeUrl } from "@/lib/security/safe-url";
+import { fetchHtml } from "@/lib/seo-audit/utils/fetch-html";
 
 const DEFAULT_LIMIT = 50;
-const FETCH_TIMEOUT_MS = 10_000;
 const MAX_SITEMAP_URLS = 500;
 
 
@@ -265,16 +266,9 @@ async function fromGsc(
 
 
 async function safeGet(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      headers: { "User-Agent": "AiSEO-Audit-Bot/1.0" },
-    });
-    if (!res.ok) return null;
-    return await res.text();
-  } catch {
-    return null;
-  }
+  // fetchHtml is the canonical outbound-audit transport: it checks public DNS
+  // resolution and validates every redirect hop before fetching.
+  return fetchHtml(url).catch(() => null);
 }
 
 /** Normalise a URL — ensure absolute, strip fragments/trailing slashes. */
@@ -318,7 +312,12 @@ async function fromSitemap(origin: string): Promise<string[]> {
     const isSitemapIndex = xml.includes("<sitemapindex") || xml.includes("<sitemap>");
     if (isSitemapIndex) {
       const childUrls: string[] = [];
-      const childSitemaps = entries.filter((u) => u.endsWith(".xml")).slice(0, 5);
+      // Sitemap indexes are attacker-controlled input. Only fetch same-origin,
+      // individually safe child sitemap URLs; filtering later is too late.
+      const childSitemaps = entries
+        .filter((u) => u.endsWith(".xml"))
+        .filter((u) => isSafeUrl(u).ok && new URL(u).origin === origin)
+        .slice(0, 5);
       await Promise.all(
         childSitemaps.map(async (childUrl) => {
           const childXml = await safeGet(childUrl);
@@ -453,7 +452,7 @@ export async function discoverPages(
     // robots.txt → Sitemap directive fallback
     if (external.length === 0) {
       const robotsSitemapUrl = await sitemapFromRobots(origin);
-      if (robotsSitemapUrl) {
+      if (robotsSitemapUrl && isSafeUrl(robotsSitemapUrl).ok && new URL(robotsSitemapUrl).origin === origin) {
         const xml = await safeGet(robotsSitemapUrl);
         if (xml) external = parseSitemapXml(xml);
       }

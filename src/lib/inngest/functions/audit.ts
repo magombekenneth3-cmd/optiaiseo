@@ -12,7 +12,7 @@ import { detectGsovDrop, generateHealingPlan } from "@/lib/self-healing/engine";
 import { executeHealingWithConfidenceGate } from "@/lib/self-healing/confidence";
 import { detectGscAnomalies, generateGscHealingPlan } from "@/lib/self-healing/gsc";
 import { writeMetricSnapshot } from "@/lib/metrics/metric-snapshot";
-import { redis } from "@/lib/redis";
+import { releaseAuditLease } from "@/lib/audit-lock";
 import { fireWhiteLabelWebhook } from "@/lib/webhooks/white-label";
 
 function resolveFixStatus(
@@ -46,8 +46,19 @@ export const processManualAuditJob = inngest.createFunction(
         onFailure: async ({ error, event }) => {
             const data = event.data?.event?.data as Record<string, unknown> | undefined;
             const lockKey = data?.lockKey as string | undefined;
-            if (lockKey) {
-                await redis.del(lockKey).catch(() => null);
+            const auditId = data?.auditId as string | undefined;
+            if (auditId) {
+                // A retry-exhausted parent must be terminal; otherwise the UI and
+                // reconciler see a permanently-running audit.
+                await prisma.audit.updateMany({
+                    where: { id: auditId, fixStatus: { notIn: ["COMPLETED", "FAILED", "PARTIAL"] } },
+                    data: { fixStatus: "FAILED" },
+                }).catch(() => null);
+            }
+            if (lockKey && auditId) {
+                // Never blindly DEL a lease: this worker may be stale and a newer
+                // audit may already own the same key.
+                await releaseAuditLease(lockKey, auditId).catch(() => null);
                 logger.warn("[ManualAudit] Released audit lock after terminal failure", { lockKey });
             }
             logger.error("[ManualAudit] Failed after all retries", { error: error.message });
@@ -69,7 +80,6 @@ export const processManualAuditJob = inngest.createFunction(
             const url = domain.startsWith("http") ? domain : `https://${domain}`;
             return engine.runAudit(url, { userId, siteId });
         });
-        const isPaid = ["STARTER", "PRO", "AGENCY"].includes((tier ?? "").toUpperCase());
         const fanOut = auditMode !== "homepage";
 
         await step.run("save-homepage-audit", async () => {
@@ -77,14 +87,13 @@ export const processManualAuditJob = inngest.createFunction(
             auditResult.categories.forEach((cat: { id: string; score: number }) => {
                 categoryScores[cat.id] = cat.score;
             });
-            categoryScores["seo"] = auditResult.overallScore;
 
             await prisma.audit.update({
                 where: { id: auditId },
                 data: {
                     categoryScores,
                     issueList: auditResult as any,
-                    fixStatus: fanOut && isPaid ? "IN_PROGRESS" : "COMPLETED",
+                    fixStatus: fanOut ? "IN_PROGRESS" : "COMPLETED",
                 },
             });
 
@@ -98,9 +107,12 @@ export const processManualAuditJob = inngest.createFunction(
                 inp: null,
             }).catch(() => {});
         });
-        if (lockKey) {
+        // A full-site audit retains its lease through page fan-out. The final
+        // page worker (or coordinator failure handler) releases it with the
+        // audit ID token once the parent has a terminal state.
+        if (lockKey && !fanOut) {
             await step.run("release-audit-lock", async () => {
-                await redis.del(lockKey).catch(() => null);
+                await releaseAuditLease(lockKey, auditId).catch(() => null);
             });
         }
 

@@ -23,7 +23,7 @@ function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export async function fetchHtml(url: string): Promise<string> {
+export async function fetchHtml(url: string, redirectDepth = 0): Promise<string> {
     // SSRF guard — reject private/internal targets before any network call
     try {
         const { hostname } = new URL(url);
@@ -96,7 +96,20 @@ export async function fetchHtml(url: string): Promise<string> {
                 // Always fetch live HTML — no Next.js data-cache for audit requests
                 cache: 'no-store',
                 signal: AbortSignal.timeout(10000), // 10-second timeout to fail fast
+                // Redirects must be validated as independent audit targets. A
+                // public URL may otherwise redirect this worker to a private
+                // address after the initial DNS check has passed.
+                redirect: 'manual',
             });
+
+            if (response.status >= 300 && response.status < 400) {
+                if (redirectDepth >= 5) {
+                    throw new Error('Too many redirects while fetching audit target');
+                }
+                const location = response.headers.get('location');
+                if (!location) throw new Error(`HTTP ${response.status} redirect with no Location header`);
+                return fetchHtml(new URL(location, url).href, redirectDepth + 1);
+            }
 
             if (response.ok) {
                 return await response.text();

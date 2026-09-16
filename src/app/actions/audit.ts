@@ -117,6 +117,20 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
       return { success: false, error: "Site not found or you do not have access to it." };
     }
 
+    // Redis is a fast mutual-exclusion mechanism, but its lease can expire
+    // while a large page fan-out is waiting in the queue. The persisted audit
+    // state is the durable second fence that prevents overlapping site runs.
+    const activeAudit = await prisma.audit.findFirst({
+      where: { siteId: site.id, fixStatus: { in: ["PENDING", "IN_PROGRESS"] } },
+      select: { id: true },
+    });
+    if (activeAudit) {
+      return {
+        success: false,
+        error: "An audit is already running for this site. Please wait for it to finish.",
+      };
+    }
+
     const effectiveTier = await getEffectiveTier(user.id);
     const rateCheck = await checkAuditLimit(user.id, effectiveTier);
     if (!rateCheck.allowed) {

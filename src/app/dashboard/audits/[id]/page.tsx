@@ -109,9 +109,17 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ id
     const issues = toNormalisedIssues(parseAuditResult(typedAudit.issueList));
     const diffData = typedAudit.site?.id ? await computeAuditDiff(typedAudit.id, typedAudit.site.id) : null;
 
-    const scoreValues = Object.values(scores);
-    const overallScore = scoreValues.length
-        ? Math.round(scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length) : 0;
+    // issueList is the canonical report and carries the engine-calculated
+    // overall score. Fall back to category averaging only for legacy records.
+    const parsedReport = parseAuditResult(typedAudit.issueList);
+    const storedOverallScore = typeof (typedAudit.issueList as { overallScore?: unknown } | null)?.overallScore === "number"
+        ? (typedAudit.issueList as { overallScore: number }).overallScore
+        : null;
+    const scoreValues = Object.entries(scores)
+        .filter(([key]) => key !== "seo")
+        .map(([, value]) => value);
+    const overallScore = storedOverallScore ?? (scoreValues.length
+        ? Math.round(scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length) : 0);
 
     const criticalCount = issues.filter(i => i.severity === "critical").length;
     const runDate = new Date(typedAudit.runTimestamp ?? typedAudit.createdAt ?? Date.now());

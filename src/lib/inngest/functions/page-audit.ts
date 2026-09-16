@@ -5,6 +5,7 @@ import { CONCURRENCY } from "../concurrency";
 import { getAuditEngine } from "@/lib/seo-audit";
 import { discoverPages } from "@/lib/seo-audit/crawler";
 import { logger } from "@/lib/logger";
+import { releaseAuditLease, renewAuditLease } from "@/lib/audit-lock";
 
 /** Terminal states — once reached, the audit must not be overwritten. */
 const TERMINAL_STATES = ["COMPLETED", "FAILED", "PARTIAL"] as const;
@@ -16,6 +17,12 @@ const PAGE_LIMIT: Record<string, number> = {
   PRO: 250,
   AGENCY: 500,
 };
+
+async function releaseParentLease(auditId: string, siteId: string): Promise<void> {
+  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } });
+  if (!site) return;
+  await releaseAuditLease(`audit-lock:${site.userId}:${siteId}`, auditId);
+}
 
 async function getTierPageLimit(siteId: string): Promise<number> {
   const site = await prisma.site.findUnique({
@@ -54,6 +61,8 @@ export const runPageAuditJob = inngest.createFunction(
                 data: { fixStatus: "FAILED" },
             });
             if (count > 0) {
+                const siteId = data?.siteId as string | undefined;
+                if (siteId) await releaseParentLease(auditId, siteId).catch(() => null);
                 logger.info("[PageAudit] Parent audit finalized as FAILED after coordinator failure", { auditId });
             }
         }
@@ -103,6 +112,7 @@ export const runPageAuditJob = inngest.createFunction(
         where: { id: auditId },
         data: { fixStatus: "COMPLETED" },
       });
+      await releaseParentLease(auditId, siteId).catch(() => null);
       return { skipped: true, reason: "Homepage-only audit requested" };
     }
 
@@ -114,6 +124,7 @@ export const runPageAuditJob = inngest.createFunction(
         where: { id: auditId },
         data: { fixStatus: "COMPLETED", totalPages: 0 },
       });
+      await releaseParentLease(auditId, siteId).catch(() => null);
       return { skipped: true, reason: "No sub-pages discovered" };
     }
 
@@ -179,6 +190,13 @@ export const processPageAuditJob = inngest.createFunction(
 
     try {
       const result = await step.run("run-page-audit", async () => {
+        // Each child refreshes the parent's token-bound lease before work. This
+        // keeps long fan-outs exclusive without allowing a stale child to renew
+        // a later audit's lease.
+        const userId = await getUserIdForSite(siteId);
+        if (!userId || !await renewAuditLease(`audit-lock:${userId}:${siteId}`, auditId)) {
+          throw new NonRetriableError("Audit lease was lost before page execution");
+        }
         const engine = getAuditEngine("page");
 
         const site = await prisma.site.findUnique({
@@ -273,6 +291,7 @@ export const processPageAuditJob = inngest.createFunction(
         });
 
         if (count > 0) {
+          await releaseParentLease(auditId, siteId).catch(() => null);
           logger.info("[PageAudit] All pages processed — audit finalized", {
             auditId,
             finalStatus,

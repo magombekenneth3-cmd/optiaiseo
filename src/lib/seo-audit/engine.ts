@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import { AuditModule, AuditModuleContext, FullAuditReport, NormalizedRecommendation, ModulePerfEntry, AeoScoreBreakdown } from './types';
+import { AuditModule, AuditModuleContext, FullAuditReport, NormalizedRecommendation, ModulePerfEntry, AeoScoreBreakdown, AuditCategoryResult } from './types';
 import { fetchHtml } from './utils/fetch-html';
 
 export const SCORING_WEIGHTS = {
@@ -71,18 +71,28 @@ export class AuditEngine {
         // Run all modules in parallel, with a 90s hard timeout to prevent infinite hangs
         const MODULE_TIMEOUT_MS = 90_000;
         const PER_MODULE_TIMEOUT_MS = 45_000;
-        const timeoutGuard = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Audit timed out after ${MODULE_TIMEOUT_MS / 1000}s — the site may be slow or blocking crawlers.`)), MODULE_TIMEOUT_MS)
-        );
+        let hardTimeoutId: ReturnType<typeof setTimeout> | undefined;
+        const timeoutGuard = new Promise<never>((_, reject) => {
+            hardTimeoutId = setTimeout(
+                () => reject(new Error(`Audit timed out after ${MODULE_TIMEOUT_MS / 1000}s — the site may be slow or blocking crawlers.`)),
+                MODULE_TIMEOUT_MS,
+            );
+        });
 
-        const categoryResults = await Promise.race([
-            Promise.all(
-                this.modules.map(async (module) => {
+        let categoryResults: Array<AuditCategoryResult & { crashed?: boolean; _durationMs?: number }>;
+        try {
+            categoryResults = await Promise.race([
+                Promise.all(
+                    this.modules.map(async (module) => {
                     const t0 = performance.now();
+                    let moduleTimeoutId: ReturnType<typeof setTimeout> | undefined;
                     try {
-                        const moduleTimeout = new Promise<never>((_, reject) =>
-                            setTimeout(() => reject(new Error(`Module ${module.id} timed out after ${PER_MODULE_TIMEOUT_MS / 1000}s`)), PER_MODULE_TIMEOUT_MS)
-                        );
+                        const moduleTimeout = new Promise<never>((_, reject) => {
+                            moduleTimeoutId = setTimeout(
+                                () => reject(new Error(`Module ${module.id} timed out after ${PER_MODULE_TIMEOUT_MS / 1000}s`)),
+                                PER_MODULE_TIMEOUT_MS,
+                            );
+                        });
                         const result = await Promise.race([module.run(context), moduleTimeout]);
                         const durationMs = Math.round(performance.now() - t0);
                         logger.debug(`[ModulePerf] ${module.id} ${durationMs}ms score=${result.score}`);
@@ -101,11 +111,16 @@ export class AuditEngine {
                             crashed: true,
                             _durationMs: durationMs,
                         };
+                    } finally {
+                        if (moduleTimeoutId) clearTimeout(moduleTimeoutId);
                     }
-                })
-            ),
-            timeoutGuard,
-        ]);
+                    })
+                ),
+                timeoutGuard,
+            ]);
+        } finally {
+            if (hardTimeoutId) clearTimeout(hardTimeoutId);
+        }
 
         const allRecommendations: NormalizedRecommendation[] = [];
 
@@ -140,7 +155,9 @@ export class AuditEngine {
         );
         const overallScore = scoredCategories.length > 0
             ? Math.round(scoredCategories.reduce((sum, c) => sum + c.score, 0) / scoredCategories.length)
-            : 100; // all modules ran cleanly and found zero issues → perfect score
+            // No module produced a usable result. This is an unavailable score,
+            // not a perfect audit; callers can surface the module failures.
+            : 0;
 
 
         // God Level Impact Sorting: Weighted blend of ROI and AI Visibility

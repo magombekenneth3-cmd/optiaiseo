@@ -34,7 +34,12 @@ export async function scoreHealingActions(
     let score = 0;
     const reasons: string[] = [];
 
-    if (action.type === "ALERT") {
+    if (action.type === "PR") {
+      // A PR remains reviewable and reversible. It can be auto-created only
+      // after the generator and deterministic QA have produced a concrete fix.
+      score = clamp(score + 60);
+      reasons.push("+60 validated draft PR — reversible through GitHub review");
+    } else if (action.type === "ALERT") {
       score = clamp(score + 20);
       reasons.push("+20 ALERT only — no code changes");
     } else if (action.type === "CONTENT" || action.type === "SCHEMA") {
@@ -59,11 +64,6 @@ export async function scoreHealingActions(
     if (successfulLogs >= 3) {
       score = clamp(score + 10);
       reasons.push(`+10 site has ${successfulLogs} successful heals (track record)`);
-    }
-
-    if (action.type === "PR") {
-      score = clamp(score - 20);
-      reasons.push("-20 PR type — high blast radius (GitHub push)");
     }
 
     if (action.fix && /TODO|\[NEEDS SOURCE\]|\[ADD/i.test(action.fix)) {
