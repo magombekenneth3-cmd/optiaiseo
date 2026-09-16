@@ -16,12 +16,16 @@ interface Props {
 
 export function OnboardingProgress({ steps }: Props) {
   const [dismissed, setDismissed] = useState(false);
+
+  if (!steps.length) return null;
+
   const done = steps.filter((s) => s.done).length;
   const allDone = done === steps.length;
 
-  if (dismissed || (allDone && done > 0)) return null;
+  if (dismissed || allDone) return null;
 
-  const nextStep = steps.find((step) => !step.done) ?? steps[0];
+  const nextIndex = steps.findIndex((step) => !step.done);
+  const nextStep = steps[nextIndex] ?? steps[steps.length - 1];
   const pct = Math.round((done / steps.length) * 100);
 
   return (
@@ -33,6 +37,7 @@ export function OnboardingProgress({ steps }: Props) {
       }}
     >
       <button
+        type="button"
         onClick={() => setDismissed(true)}
         className="absolute right-3 top-3 text-muted-foreground transition-colors hover:text-foreground"
         aria-label="Dismiss onboarding checklist"
@@ -58,14 +63,13 @@ export function OnboardingProgress({ steps }: Props) {
 
       <div className="grid gap-4 md:grid-cols-[1.4fr_0.7fr] md:items-center">
         <div className="space-y-2.5">
-          {steps.map((step, i) => {
-            const isNext = !step.done && steps.slice(0, i).every((s) => s.done);
-            const isActive = step.id === nextStep.id;
+          {steps.map((step, index) => {
+            const isActive = index === nextIndex;
 
             return (
               <div key={step.id} className="flex items-center gap-3">
                 <div
-                  className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border transition-colors"
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors"
                   style={{
                     background: step.done ? "var(--brand)" : isActive ? "rgba(16, 185, 129, 0.08)" : "transparent",
                     borderColor: step.done ? "transparent" : isActive ? "var(--brand)" : "var(--border)",
@@ -76,7 +80,7 @@ export function OnboardingProgress({ steps }: Props) {
 
                 {step.done ? (
                   <span className="text-sm text-muted-foreground line-through">{step.label}</span>
-                ) : isNext ? (
+                ) : isActive ? (
                   <Link
                     href={step.href}
                     className="text-sm font-medium transition-colors hover:underline"
