@@ -7,6 +7,24 @@ import { MarketingNav } from "@/components/marketing/MarketingNav";
 
 // Types
 
+interface ToolEntry {
+  name: string;
+  description: string;
+  price: string;
+  badge?: string;
+  href: string;
+  why: string;
+  verdict: string;
+  score: number;
+  pros: string[];
+  cons: string[];
+}
+
+interface FaqItem {
+  q: string;
+  a: string;
+}
+
 interface Keyword {
   slug: string;
   keyword: string;
@@ -14,16 +32,13 @@ interface Keyword {
   intent: string;
   region: string;
   regionCode: string;
+  intro: string;
+  marketContext: string;
+  tools: ToolEntry[];
+  faq: FaqItem[];
+  comparisonCriteria: string[];
+  verdict: string;
 }
-
-interface Tool {
-  name: string;
-  description: string;
-  price: string;
-  badge?: string;
-  href: string;
-}
-
 
 export async function generateStaticParams() {
   return (KEYWORDS as Keyword[]).map((k) => ({ slug: k.slug }));
@@ -40,7 +55,7 @@ export async function generateMetadata({
   const page = (KEYWORDS as Keyword[]).find((k) => k.slug === slug);
   if (!page) return { title: "Not Found" };
 
-  const description = buildDescription(page);
+  const description = `Discover the best ${page.keyword} in 2026. Honest comparison of pricing, features, and ROI.${page.region && page.region !== "Global" ? ` Optimised for ${page.region}.` : ""} Updated monthly.`;
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online";
 
   return {
@@ -63,94 +78,7 @@ export async function generateMetadata({
   };
 }
 
-
-const ALL_TOOLS: Tool[] = [
-  // Free
-  { name: "Google Search Console", description: "Official free tool for monitoring search performance, indexing issues, and keyword data.", price: "Free forever", badge: "Official", href: "https://search.google.com/search-console" },
-  { name: "Google Analytics 4", description: "Free web analytics platform. Track organic traffic, conversions, and user behaviour.", price: "Free forever", badge: "Official", href: "https://analytics.google.com" },
-  { name: "Ubersuggest Free", description: "Neil Patel's tool provides 3 free daily searches for keywords, backlinks, and site audits.", price: "Free (3/day)", href: "https://app.neilpatel.com/en/ubersuggest" },
-  { name: "AnswerThePublic", description: "Visualises the questions and queries people search around any keyword. Great for content ideation.", price: "Free (limited)", href: "https://answerthepublic.com" },
-  { name: "Ahrefs Webmaster Tools", description: "Free version of Ahrefs for your own site. Crawl issues, backlinks, and keyword data.", price: "Free for site owners", badge: "Top Pick", href: "https://ahrefs.com/webmaster-tools" },
-  { name: "Screaming Frog (Free)", description: "Crawl up to 500 URLs free. Find broken links, duplicate titles, and redirect chains.", price: "Free up to 500 URLs", href: "https://www.screamingfrog.co.uk/seo-spider" },
-  { name: "Keyword Surfer Extension", description: "Chrome extension showing monthly search volumes directly in Google results.", price: "Free", href: "https://surferseo.com/keyword-surfer-extension" },
-  { name: "SEOquake Extension", description: "Free Chrome extension. Shows SEO metrics (DA, backlinks, index status) on any SERP.", price: "Free", href: "https://www.seoquake.com" },
-
-  // Cheap / Affordable
-  { name: "SE Ranking", description: "Full-suite SEO platform with rank tracking, site audit, backlink monitor, and keyword research. Most affordable professional option.", price: "From $4/mo", badge: "Best Value", href: "https://seranking.com" },
-  { name: "Mangools (KWFinder)", description: "Beginner-friendly keyword research, SERP analysis, and rank tracking. Clean UI and accurate data.", price: "From $29/mo", href: "https://mangools.com" },
-  { name: "Ubersuggest Pro", description: "Paid tier unlocks unlimited searches, competitor tracking, and content ideas. Excellent value.", price: "From $12/mo", href: "https://app.neilpatel.com" },
-  { name: "Serpstat", description: "All-in-one SEO platform covering keywords, backlinks, site audits, and PPC research.", price: "From $59/mo", href: "https://serpstat.com" },
-  { name: "Morningscore", description: "Gamified SEO tool with rank tracking, site health scoring, and actionable missions.", price: "From $49/mo", href: "https://morningscore.io" },
-  { name: "DinoRANK", description: "Budget-friendly rank tracker with semantic SEO features. Popular in Spanish-speaking markets.", price: "From €19/mo", href: "https://dinorank.com" },
-
-  // Best / Pro
-  { name: "OptiAISEO", description: "AI-native SEO platform combining AEO, GEO, technical audits, and content strategy in one dashboard.", price: "From $29/mo", badge: "AI-First", href: "https://optiaiseo.online" },
-  { name: "Semrush", description: "Industry-leading SEO suite. 55+ tools covering keyword research, site audit, content, and competitive intelligence.", price: "From $139/mo", href: "https://www.semrush.com" },
-  { name: "Ahrefs", description: "Best backlink database in the industry. Excellent for keyword research and competitor gap analysis.", price: "From $129/mo", href: "https://ahrefs.com" },
-  { name: "Moz Pro", description: "Trusted SEO platform with DA/PA scoring, keyword research, and link building tools.", price: "From $99/mo", href: "https://moz.com/pro" },
-  { name: "Surfer SEO", description: "On-page content optimiser that benchmarks your content against top-ranking pages in real time.", price: "From $89/mo", href: "https://surferseo.com" },
-  { name: "Clearscope", description: "Premium content optimisation platform used by enterprise SEO teams. Excellent for scaling content.", price: "From $189/mo", href: "https://www.clearscope.io" },
-
-  // AI
-  { name: "OptiAISEO", description: "Purpose-built for AI search: AEO audits, GEO tracking, citation monitoring, and AI-generated fix recommendations.", price: "From $29/mo", badge: "AI-First", href: "https://optiaiseo.online" },
-  { name: "MarketMuse", description: "AI content strategy platform. Automates content briefs, gap analysis, and topical authority scoring.", price: "From $149/mo", href: "https://www.marketmuse.com" },
-  { name: "Frase.io", description: "AI content brief and optimisation tool. Generates SERP-driven outlines in minutes.", price: "From $45/mo", href: "https://www.frase.io" },
-  { name: "NeuronWriter", description: "NLP-powered content editor with semantic optimisation and competitor analysis.", price: "From $23/mo", badge: "Best Value AI", href: "https://neuronwriter.com" },
-  { name: "Perplexity Pages", description: "Leverage Perplexity AI to create citation-rich content that appears in AI-generated answers.", price: "From $20/mo", href: "https://www.perplexity.ai" },
-];
-
 // Helpers
-
-function getTools(intent: string): Tool[] {
-  const map: Record<string, string[]> = {
-    free: ["Google Search Console", "Google Analytics 4", "Ubersuggest Free", "AnswerThePublic", "Ahrefs Webmaster Tools", "Screaming Frog (Free)", "Keyword Surfer Extension", "SEOquake Extension"],
-    cheap: ["SE Ranking", "Mangools (KWFinder)", "Ubersuggest Pro", "Serpstat", "Morningscore", "OptiAISEO"],
-    best: ["OptiAISEO", "Semrush", "Ahrefs", "Moz Pro", "Surfer SEO", "SE Ranking"],
-    alternative: ["OptiAISEO", "SE Ranking", "Mangools (KWFinder)", "Serpstat", "Ubersuggest Pro", "Morningscore"],
-    ai: ["OptiAISEO", "MarketMuse", "Frase.io", "NeuronWriter", "Perplexity Pages", "Surfer SEO"],
-  };
-  const names = map[intent] ?? map["best"];
-  return names
-    .map((name) => ALL_TOOLS.find((t) => t.name === name))
-    .filter((t): t is Tool => t !== undefined);
-}
-
-function buildIntro(page: Keyword): string {
-  const intros: Record<string, string[]> = {
-    free: [
-      `Finding quality ${page.keyword} doesn't have to cost a penny. We've tested dozens of tools so you don't have to.`,
-      `If you're in ${page.region || "the market"} and working with a tight budget, these ${page.keyword} deliver real value at zero cost.`,
-      `We evaluated every major ${page.keyword} available in 2026. Here are the ones actually worth your time.`,
-    ],
-    cheap: [
-      `You don't need to spend hundreds to rank well. These ${page.keyword} deliver enterprise-level insights at a fraction of the price.`,
-      `If you're operating in ${page.region || "a budget-conscious market"}, these affordable options give you the features that matter most.`,
-      `After testing 30+ tools, we found that the best ${page.keyword} don't cost a fortune. Here's what we recommend.`,
-    ],
-    best: [
-      `Choosing the right ${page.keyword} is one of the most important decisions for your online growth strategy.`,
-      `We benchmarked the top ${page.keyword} across accuracy, usability, and ROI so you can make the right call.`,
-      `Whether you're a solo founder or running an agency${page.region ? ` in ${page.region}` : ""}, these tools will help you move faster.`,
-    ],
-    alternative: [
-      `Looking for a ${page.keyword}? You're not alone. Thousands of teams switch every month — and the options have never been better.`,
-      `The best ${page.keyword} doesn't just cost less — it needs to match your workflow, team size, and reporting requirements.`,
-      `We compared 20+ alternatives so you don't have to spend weeks testing tools that won't fit your needs.`,
-    ],
-    ai: [
-      `AI is reshaping search. The best ${page.keyword} now helps you rank not just in Google, but in ChatGPT, Perplexity, and Google AI Overviews.`,
-      `We tested every major ${page.keyword} to see which ones actually improve AI search visibility — not just keyword rankings.`,
-      `The teams winning in 2026 are using ${page.keyword} to dominate generative search. Here's what's working.`,
-    ],
-  };
-  const options = intros[page.intent] ?? intros["best"];
-  return options[Math.abs(page.slug.length) % options.length];
-}
-
-function buildDescription(page: Keyword): string {
-  const regionSuffix = page.region && page.region !== "Global" ? ` Optimised for ${page.region}.` : "";
-  return `Discover the best ${page.keyword} in 2026. Honest comparison of pricing, features, and ROI.${regionSuffix} Updated monthly.`;
-}
 
 function getRelated(current: Keyword, count = 6): Keyword[] {
   return (KEYWORDS as Keyword[])
@@ -168,14 +96,13 @@ function getRelated(current: Keyword, count = 6): Keyword[] {
 }
 
 function buildSchema(page: Keyword, siteUrl: string) {
-  const tools = getTools(page.intent);
   return {
     "@context": "https://schema.org",
     "@graph": [
       {
         "@type": "Article",
         headline: page.title,
-        description: buildDescription(page),
+        description: `Discover the best ${page.keyword} in 2026.`,
         url: `${siteUrl}/tools/${page.slug}`,
         datePublished: "2026-01-01",
         dateModified: new Date().toISOString().split("T")[0],
@@ -188,16 +115,27 @@ function buildSchema(page: Keyword, siteUrl: string) {
       {
         "@type": "ItemList",
         name: page.title,
-        numberOfItems: tools.length,
-        itemListElement: tools.map((tool, i) => ({
+        numberOfItems: page.tools.length,
+        itemListElement: page.tools.map((tool, i) => ({
           "@type": "ListItem",
           position: i + 1,
           item: {
             "@type": "SoftwareApplication",
             name: tool.name,
-            description: tool.description,
+            description: tool.why,
             offers: { "@type": "Offer", price: tool.price },
             url: tool.href,
+          },
+        })),
+      },
+      {
+        "@type": "FAQPage",
+        mainEntity: page.faq.map((item) => ({
+          "@type": "Question",
+          name: item.q,
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: item.a,
           },
         })),
       },
@@ -224,10 +162,8 @@ export default async function ToolsPage({
   const page = (KEYWORDS as Keyword[]).find((k) => k.slug === slug);
   if (!page) notFound();
 
-  const tools = getTools(page.intent);
   const related = getRelated(page);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online";
-  const intro = buildIntro(page);
 
   const intentLabel: Record<string, string> = {
     free: "Free Tools",
@@ -271,49 +207,170 @@ export default async function ToolsPage({
           <h1 className="text-3xl sm:text-4xl font-extrabold leading-tight tracking-tight mb-4">
             {page.title}
           </h1>
-          <p className="text-muted-foreground text-lg leading-relaxed">{intro}</p>
+          <p className="text-muted-foreground text-lg leading-relaxed">{page.intro}</p>
         </header>
 
-        {/* Tool list */}
-        <section aria-label="Tool list" className="space-y-4 mb-12">
-          <h2 className="text-xl font-bold text-foreground">
-            Top {tools.length} {intentLabel[page.intent] ?? "Picks"} for {page.keyword}
+        {/* Market Context */}
+        <section className="mb-10 p-5 rounded-2xl border border-border bg-card">
+          <h2 className="text-sm font-bold text-foreground mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+            Market Context
           </h2>
-          <ol className="space-y-4">
-            {tools.map((tool, i) => (
+          <p className="text-sm text-muted-foreground leading-relaxed">{page.marketContext}</p>
+        </section>
+
+        {/* Tool list */}
+        <section aria-label="Tool list" className="space-y-5 mb-12">
+          <h2 className="text-xl font-bold text-foreground">
+            Top {page.tools.length} {intentLabel[page.intent] ?? "Picks"} for {page.keyword}
+          </h2>
+          <ol className="space-y-5">
+            {page.tools.map((tool, i) => (
               <li
-                key={tool.name}
-                className="relative flex gap-4 p-5 rounded-2xl border border-border bg-card hover:border-violet-500/30 transition-colors group"
+                key={`${tool.name}-${i}`}
+                className="relative p-5 rounded-2xl border border-border bg-card hover:border-violet-500/30 transition-colors group"
               >
-                <span className="flex-shrink-0 w-8 h-8 rounded-full bg-violet-500/10 text-violet-400 font-black text-sm flex items-center justify-center">
-                  {i + 1}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <h3 className="font-bold text-foreground text-base">{tool.name}</h3>
-                    {tool.badge && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        {tool.badge}
+                {/* Header row */}
+                <div className="flex items-start gap-4 mb-3">
+                  <span className="flex-shrink-0 w-8 h-8 rounded-full bg-violet-500/10 text-violet-400 font-black text-sm flex items-center justify-center">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <h3 className="font-bold text-foreground text-base">{tool.name}</h3>
+                      {tool.badge && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          {tool.badge}
+                        </span>
+                      )}
+                      <span className="ml-auto text-sm font-semibold text-muted-foreground">
+                        {tool.price}
                       </span>
-                    )}
-                    <span className="ml-auto text-sm font-semibold text-muted-foreground">
-                      {tool.price}
-                    </span>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{tool.description}</p>
-                  <a
-                    href={tool.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 mt-3 text-xs font-semibold text-violet-400 hover:text-violet-300 transition-colors"
-                    aria-label={`Visit ${tool.name}`}
-                  >
-                    Visit {tool.name} →
-                  </a>
                 </div>
+
+                {/* Why this tool — unique per page */}
+                <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+                  {tool.why}
+                </p>
+
+                {/* Pros / Cons */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 mb-1.5">Pros</div>
+                    <ul className="space-y-1">
+                      {tool.pros.map((pro) => (
+                        <li key={pro} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                          <span className="text-emerald-400 mt-0.5 shrink-0">✓</span>
+                          {pro}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-rose-400 mb-1.5">Cons</div>
+                    <ul className="space-y-1">
+                      {tool.cons.map((con) => (
+                        <li key={con} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                          <span className="text-rose-400 mt-0.5 shrink-0">✗</span>
+                          {con}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Verdict */}
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-violet-500/5 border border-violet-500/10">
+                  <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-violet-500/10 text-violet-400 font-black text-sm shrink-0">
+                    {tool.score}
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{tool.verdict}</p>
+                </div>
+
+                {/* Visit link */}
+                <a
+                  href={tool.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 mt-3 text-xs font-semibold text-violet-400 hover:text-violet-300 transition-colors"
+                  aria-label={`Visit ${tool.name}`}
+                >
+                  Visit {tool.name} →
+                </a>
               </li>
             ))}
           </ol>
+        </section>
+
+        {/* Comparison Table */}
+        <section className="mb-12">
+          <h2 className="text-lg font-bold text-foreground mb-4">Quick Comparison</h2>
+          <div className="overflow-x-auto rounded-2xl border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-card">
+                  <th className="text-left p-3 font-bold text-foreground">Tool</th>
+                  <th className="text-left p-3 font-bold text-foreground">Price</th>
+                  <th className="text-center p-3 font-bold text-foreground">Score</th>
+                  {page.comparisonCriteria.slice(0, 2).map((c) => (
+                    <th key={c} className="text-left p-3 font-bold text-foreground hidden sm:table-cell">{c}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {page.tools.map((tool, i) => (
+                  <tr key={`${tool.name}-row-${i}`} className={`border-b border-border/50 ${i === 0 ? "bg-violet-500/5" : ""}`}>
+                    <td className="p-3 font-semibold text-foreground">{tool.name}</td>
+                    <td className="p-3 text-muted-foreground">{tool.price}</td>
+                    <td className="p-3 text-center">
+                      <span className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-black ${
+                        tool.score >= 9 ? "bg-emerald-500/10 text-emerald-400" :
+                        tool.score >= 7 ? "bg-blue-500/10 text-blue-400" :
+                        "bg-zinc-500/10 text-zinc-400"
+                      }`}>
+                        {tool.score}
+                      </span>
+                    </td>
+                    {page.comparisonCriteria.slice(0, 2).map((c) => (
+                      <td key={c} className="p-3 text-muted-foreground hidden sm:table-cell">
+                        <span className={`inline-flex items-center gap-1 text-xs ${
+                          tool.score >= 8 ? "text-emerald-400" : tool.score >= 6 ? "text-blue-400" : "text-zinc-400"
+                        }`}>
+                          {tool.score >= 8 ? "●●●" : tool.score >= 6 ? "●●○" : "●○○"}
+                        </span>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* Page Verdict */}
+        <section className="mb-12 p-6 rounded-2xl bg-gradient-to-br from-violet-500/10 to-indigo-500/10 border border-violet-500/20">
+          <h2 className="text-lg font-bold text-foreground mb-2">Our Verdict</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">{page.verdict}</p>
+        </section>
+
+        {/* FAQ */}
+        <section className="mb-12">
+          <h2 className="text-lg font-bold text-foreground mb-4">Frequently Asked Questions</h2>
+          <div className="space-y-3">
+            {page.faq.map((item, i) => (
+              <details key={`faq-${i}`} className="group rounded-2xl border border-border bg-card overflow-hidden">
+                <summary className="flex items-center justify-between gap-4 p-4 cursor-pointer text-sm font-bold text-foreground select-none">
+                  <span>{item.q}</span>
+                  <span className="text-muted-foreground transition-transform group-open:rotate-180 shrink-0">▾</span>
+                </summary>
+                <div className="px-4 pb-4 text-sm text-muted-foreground leading-relaxed">
+                  {item.a}
+                </div>
+              </details>
+            ))}
+          </div>
         </section>
 
         {/* CTA */}
