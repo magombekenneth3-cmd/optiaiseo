@@ -62,9 +62,20 @@ CREATE INDEX IF NOT EXISTS "ActionPerformance_siteId_idx" ON "ActionPerformance"
 CREATE INDEX IF NOT EXISTS "LearnedSignal_siteId_status_idx" ON "LearnedSignal"("siteId", "status");
 CREATE INDEX IF NOT EXISTS "LearnedSignal_siteId_actionType_idx" ON "LearnedSignal"("siteId", "actionType");
 
--- AddForeignKey
-ALTER TABLE "ActionPerformance" ADD CONSTRAINT "ActionPerformance_siteId_fkey" FOREIGN KEY ("siteId") REFERENCES "Site"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "LearnedSignal" ADD CONSTRAINT "LearnedSignal_siteId_fkey" FOREIGN KEY ("siteId") REFERENCES "Site"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- AddForeignKey (idempotent)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ActionPerformance_siteId_fkey') THEN
+    ALTER TABLE "ActionPerformance" ADD CONSTRAINT "ActionPerformance_siteId_fkey"
+      FOREIGN KEY ("siteId") REFERENCES "Site"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'LearnedSignal_siteId_fkey') THEN
+    ALTER TABLE "LearnedSignal" ADD CONSTRAINT "LearnedSignal_siteId_fkey"
+      FOREIGN KEY ("siteId") REFERENCES "Site"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- Part B: Partial unique index fix (original D.6 Gate 7 fix)

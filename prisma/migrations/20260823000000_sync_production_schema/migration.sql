@@ -32,6 +32,35 @@ ALTER TABLE "KeywordSerpAnalysis"
   ALTER COLUMN "toxicCount"    SET NOT NULL,
   ALTER COLUMN "toxicCount"    SET DEFAULT 0;
 
+-- CreateTable SerpGapAnalysis
+CREATE TABLE IF NOT EXISTS "SerpGapAnalysis" (
+    "id"                     TEXT NOT NULL,
+    "siteId"                 TEXT NOT NULL,
+    "userId"                 TEXT NOT NULL,
+    "keyword"                TEXT NOT NULL,
+    "clientUrl"              TEXT NOT NULL,
+    "clientPosition"         INTEGER NOT NULL,
+    "status"                 TEXT NOT NULL DEFAULT 'PENDING',
+    "gapReport"              JSONB,
+    "implementationPlan"     JSONB,
+    "serpFormat"             TEXT,
+    "serpHasAiOverview"      BOOLEAN NOT NULL DEFAULT false,
+    "serpHasFeaturedSnippet" BOOLEAN NOT NULL DEFAULT false,
+    "gapCount"               INTEGER,
+    "criticalGapCount"       INTEGER,
+    "competitorAvgWordCount" INTEGER,
+    "estimatedPositionGain"  TEXT,
+    "executiveSummary"       TEXT,
+    "topPriority"            TEXT,
+    "taskCount"              INTEGER,
+    "automatedTaskCount"     INTEGER,
+    "errorMessage"           TEXT,
+    "autoQueued"             BOOLEAN NOT NULL DEFAULT false,
+    "createdAt"              TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "completedAt"            TIMESTAMP(3),
+    CONSTRAINT "SerpGapAnalysis_pkey" PRIMARY KEY ("id")
+);
+
 -- AlterTable SerpGapAnalysis
 ALTER TABLE "SerpGapAnalysis" ADD COLUMN IF NOT EXISTS "autoQueued" BOOLEAN NOT NULL DEFAULT false;
 
@@ -41,7 +70,7 @@ ALTER TABLE "Site"
   ADD COLUMN IF NOT EXISTS "socialRepurposeSchedule" TEXT    NOT NULL DEFAULT 'weekly';
 
 -- AlterTable TrendingTopic
-ALTER TABLE "TrendingTopic" ALTER COLUMN "expiresAt" SET DEFAULT now() + interval '30 days';
+ALTER TABLE "TrendingTopic" ADD COLUMN IF NOT EXISTS "expiresAt" TIMESTAMP(3) NOT NULL DEFAULT (now() + interval '30 days');
 
 -- CreateTable InternalLink
 CREATE TABLE IF NOT EXISTS "InternalLink" (

@@ -3,7 +3,8 @@
 
 ALTER TABLE "BacklinkDetail"
   ADD COLUMN IF NOT EXISTS "sourceUrl" TEXT NOT NULL DEFAULT '',
-  ADD COLUMN IF NOT EXISTS "linkKey" TEXT;
+  ADD COLUMN IF NOT EXISTS "linkKey" TEXT,
+  ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'active';
 
 -- Legacy records do not retain a source URL. Give them a stable unique key so
 -- the migration is lossless; the next complete sync will replace them with
@@ -18,6 +19,9 @@ ALTER TABLE "BacklinkDetail"
 ALTER TABLE "BacklinkDetail"
   DROP CONSTRAINT IF EXISTS "BacklinkDetail_siteId_srcDomain_anchorText_key";
 DROP INDEX IF EXISTS "BacklinkDetail_siteId_srcDomain_anchorText_key";
+
+ALTER TABLE "BacklinkDetail"
+  DROP CONSTRAINT IF EXISTS "BacklinkDetail_siteId_linkKey_key";
 
 ALTER TABLE "BacklinkDetail"
   ADD CONSTRAINT "BacklinkDetail_siteId_linkKey_key" UNIQUE ("siteId", "linkKey");
@@ -52,7 +56,7 @@ CREATE INDEX IF NOT EXISTS "BacklinkAlert_siteId_type_detectedAt_idx"
 -- BacklinkDetail stores link-level observations and may be bounded. Keep a
 -- separate domain inventory so a limited details page can never manufacture
 -- gained/lost alerts.
-CREATE TABLE "BacklinkReferringDomain" (
+CREATE TABLE IF NOT EXISTS "BacklinkReferringDomain" (
   "id" TEXT NOT NULL,
   "siteId" TEXT NOT NULL,
   "domain" TEXT NOT NULL,
@@ -65,20 +69,24 @@ CREATE TABLE "BacklinkReferringDomain" (
   CONSTRAINT "BacklinkReferringDomain_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "BacklinkReferringDomain_siteId_domain_key"
+CREATE UNIQUE INDEX IF NOT EXISTS "BacklinkReferringDomain_siteId_domain_key"
   ON "BacklinkReferringDomain" ("siteId", "domain");
-CREATE INDEX "BacklinkReferringDomain_siteId_status_idx"
+CREATE INDEX IF NOT EXISTS "BacklinkReferringDomain_siteId_status_idx"
   ON "BacklinkReferringDomain" ("siteId", "status");
-CREATE INDEX "BacklinkReferringDomain_siteId_lastSeen_idx"
+CREATE INDEX IF NOT EXISTS "BacklinkReferringDomain_siteId_lastSeen_idx"
   ON "BacklinkReferringDomain" ("siteId", "lastSeen");
 
-ALTER TABLE "BacklinkReferringDomain"
-  ADD CONSTRAINT "BacklinkReferringDomain_siteId_fkey"
-  FOREIGN KEY ("siteId") REFERENCES "Site"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'BacklinkReferringDomain_siteId_fkey') THEN
+    ALTER TABLE "BacklinkReferringDomain"
+      ADD CONSTRAINT "BacklinkReferringDomain_siteId_fkey"
+      FOREIGN KEY ("siteId") REFERENCES "Site"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
 
 -- A complete empty scan is meaningful: it is a baseline, not an unscanned
 -- site. Keep that state separately from the per-domain inventory.
-CREATE TABLE "BacklinkInventory" (
+CREATE TABLE IF NOT EXISTS "BacklinkInventory" (
   "id" TEXT NOT NULL,
   "siteId" TEXT NOT NULL,
   "initializedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -87,9 +95,13 @@ CREATE TABLE "BacklinkInventory" (
   CONSTRAINT "BacklinkInventory_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "BacklinkInventory_siteId_key"
+CREATE UNIQUE INDEX IF NOT EXISTS "BacklinkInventory_siteId_key"
   ON "BacklinkInventory" ("siteId");
 
-ALTER TABLE "BacklinkInventory"
-  ADD CONSTRAINT "BacklinkInventory_siteId_fkey"
-  FOREIGN KEY ("siteId") REFERENCES "Site"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'BacklinkInventory_siteId_fkey') THEN
+    ALTER TABLE "BacklinkInventory"
+      ADD CONSTRAINT "BacklinkInventory_siteId_fkey"
+      FOREIGN KEY ("siteId") REFERENCES "Site"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
