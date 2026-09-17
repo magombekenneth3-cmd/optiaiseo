@@ -175,7 +175,7 @@ export async function resolveFrameworkContext(site: {
 export function buildFrameworkContext(
     techStack: string | null | undefined,
 ): FrameworkContext {
-    return FRAMEWORK_MAP[techStack ?? "nextjs"] ?? FRAMEWORK_MAP["other"];
+    return FRAMEWORK_MAP[techStack ?? "other"] ?? FRAMEWORK_MAP["other"];
 }
 
 export function buildFrameworkPromptHints(frameworkCtx: FrameworkContext): string {

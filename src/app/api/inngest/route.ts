@@ -15,6 +15,7 @@ import {
     processAeoSiteJob,
     aeoScoreDropAlert,
     auditPostFixJob,
+    expireSeoFixProposalsJob,
     publishBlogToCmsJob,
     analyseCompetitorPageJob,
     drSnapshotJob,
@@ -129,6 +130,7 @@ export const { GET, POST, PUT } = serve({
 
         runWeeklyAuditJob,
         auditPostFixJob,
+        expireSeoFixProposalsJob,
         weeklyAutoReauditJob,       // weekly re-audit cron (Mon 06:00 UTC)
         cronWeeklyAudit,            // weekly audit fan-out cron (Mon 02:00 UTC)
 

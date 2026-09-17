@@ -9,7 +9,10 @@ import {
   Sparkles,
   Settings2,
   ArrowRight,
+  RotateCcw,
+  AlertTriangle,
 } from "lucide-react";
+import { getProposalDisplayScore } from "@/lib/proposals/score";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -43,16 +46,25 @@ export interface ProposalSummary {
 // ── Status Config ───────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string; icon: typeof Clock }> = {
-  DRAFT:          { color: "text-blue-400",     bg: "bg-blue-500/10",     border: "status-border-draft",     icon: Clock },
-  READY:          { color: "text-violet-400",   bg: "bg-violet-500/10",   border: "status-border-ready",     icon: Shield },
-  APPROVED:       { color: "text-emerald-400",  bg: "bg-emerald-500/10",  border: "status-border-approved",  icon: CheckCircle2 },
-  EXECUTING:      { color: "text-cyan-400",     bg: "bg-cyan-500/10",     border: "status-border-executing", icon: Loader2 },
-  COMPLETED:      { color: "text-emerald-400",  bg: "bg-emerald-500/10",  border: "status-border-completed", icon: CheckCircle2 },
-  VERIFIED:       { color: "text-emerald-400",  bg: "bg-emerald-500/10",  border: "status-border-completed", icon: CheckCircle2 },
-  FAILED:         { color: "text-rose-400",     bg: "bg-rose-500/10",     border: "status-border-failed",    icon: XCircle },
-  REJECTED:       { color: "text-rose-400",     bg: "bg-rose-500/10",     border: "status-border-rejected",  icon: XCircle },
-  EXPIRED:        { color: "text-zinc-400",     bg: "bg-zinc-500/10",     border: "status-border-failed",    icon: Clock },
-  CANCELLED:      { color: "text-zinc-400",     bg: "bg-zinc-500/10",     border: "status-border-failed",    icon: XCircle },
+  DRAFT:            { color: "text-blue-400",    bg: "bg-blue-500/10",    border: "status-border-draft",     icon: Clock },
+  READY:            { color: "text-violet-400",  bg: "bg-violet-500/10",  border: "status-border-ready",     icon: Shield },
+  APPROVED:         { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "status-border-approved",  icon: CheckCircle2 },
+  EXECUTING:        { color: "text-cyan-400",    bg: "bg-cyan-500/10",    border: "status-border-executing", icon: Loader2 },
+  EXECUTED:         { color: "text-cyan-300",    bg: "bg-cyan-500/10",    border: "status-border-executing", icon: CheckCircle2 },
+  VERIFYING:        { color: "text-violet-300",  bg: "bg-violet-500/10",  border: "status-border-ready",     icon: Loader2 },
+  VERIFIED:         { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "status-border-completed", icon: CheckCircle2 },
+  FAILED:           { color: "text-rose-400",    bg: "bg-rose-500/10",    border: "status-border-failed",    icon: XCircle },
+  REJECTED:         { color: "text-rose-400",    bg: "bg-rose-500/10",    border: "status-border-rejected",  icon: XCircle },
+  EXPIRED:          { color: "text-zinc-400",    bg: "bg-zinc-500/10",    border: "status-border-failed",    icon: Clock },
+  ROLLED_BACK:      { color: "text-orange-400",  bg: "bg-orange-500/10",  border: "status-border-failed",    icon: RotateCcw },
+  ROLLBACK_PARTIAL: { color: "text-amber-400",   bg: "bg-amber-500/10",   border: "status-border-failed",    icon: AlertTriangle },
+};
+
+const UNKNOWN_STATUS_CONFIG = {
+  color: "text-muted-foreground",
+  bg: "bg-muted/40",
+  border: "border-border",
+  icon: Clock,
 };
 
 const SAFETY_LABELS: Record<number, { label: string; color: string }> = {
@@ -92,10 +104,12 @@ export function ProposalCard({
   isSelected: boolean;
   onClick: () => void;
 }) {
-  const statusCfg = STATUS_CONFIG[proposal.status] ?? STATUS_CONFIG.DRAFT;
+  const statusCfg = STATUS_CONFIG[proposal.status] ?? UNKNOWN_STATUS_CONFIG;
   const StatusIcon = statusCfg.icon;
-  const safetyInfo = SAFETY_LABELS[proposal.safetyTier ?? 1] ?? SAFETY_LABELS[1];
-  const score = proposal.decision?.score ?? proposal.confidence ?? 0;
+  const safetyInfo = proposal.safetyTier != null
+    ? SAFETY_LABELS[proposal.safetyTier]
+    : undefined;
+  const score = getProposalDisplayScore(proposal.decision?.score, proposal.confidence);
 
   return (
     <button
@@ -141,9 +155,9 @@ export function ProposalCard({
             </span>
 
             {/* Safety tier badge */}
-            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${safetyInfo.color}`}>
+            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${safetyInfo?.color ?? "text-muted-foreground bg-muted/40 border-border"}`}>
               <Shield className="w-2.5 h-2.5" />
-              T{proposal.safetyTier ?? 1}
+              {proposal.safetyTier != null ? `T${proposal.safetyTier}` : "Tier unknown"}
             </span>
 
             {/* AI Enhanced / Deterministic — small provenance badge */}
@@ -170,12 +184,12 @@ export function ProposalCard({
       <div className="mt-2">
         <div className="flex items-center justify-between mb-1">
           <span className="text-[10px] text-muted-foreground/50">Score</span>
-          <span className="text-[10px] font-bold text-foreground">{score}/100</span>
+          <span className="text-[10px] font-bold text-foreground">{Math.round(score)}/100</span>
         </div>
         <div className="score-bar">
           <div
             className="score-bar-fill"
-            style={{ width: `${Math.min(score, 100)}%` }}
+            style={{ width: `${score}%` }}
           />
         </div>
       </div>

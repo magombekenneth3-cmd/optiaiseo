@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import { normalizeOpportunityScore } from "@/lib/proposals/score";
 
 export async function GET(
   req: NextRequest,
@@ -46,7 +47,10 @@ export async function GET(
               take: 10,
             },
             scoreRecords: {
-              orderBy: { createdAt: "desc" },
+              // OpportunityScoreRecord is timestamped by scoredAt, not createdAt.
+              // Keeping this typed field name prevents proposal details from failing
+              // at query validation time.
+              orderBy: { scoredAt: "desc" },
               take: 1,
               select: {
                 id: true,
@@ -56,6 +60,7 @@ export async function GET(
                 urgencyScore: true,
                 decision: true,
                 scoringVersion: true,
+                scoredAt: true,
               },
             },
           },
@@ -80,7 +85,10 @@ export async function GET(
 
     // Verify site ownership
     const site = await prisma.site.findFirst({
-      where: { id: proposal.siteId, userId },
+      where: {
+        id: proposal.siteId,
+        OR: [{ userId }, { viewerId: userId }],
+      },
       select: { id: true },
     });
     if (!site) {
@@ -107,6 +115,12 @@ export async function GET(
       metadata: undefined,
       llm: safeMetadata,
       isAiEnhanced: safeMetadata?.outcome === "ENHANCED",
+      decision: proposal.decision
+        ? {
+            ...proposal.decision,
+            score: normalizeOpportunityScore(proposal.decision.score),
+          }
+        : null,
       // Score breakdown from decision
       scoreBreakdown: proposal.decision?.scoreRecords?.[0] ?? null,
       // Evidence from decision source findings

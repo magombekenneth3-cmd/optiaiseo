@@ -87,7 +87,9 @@ export function validateFix(
         frameworkCtx.allowedFiles.length > 0 &&
         !frameworkCtx.allowedFiles.some((f) => {
             const allowedPath = f.split(" ")[0];
-            return path.includes(allowedPath) || allowedPath.includes(path);
+            // Strict match: exact equality or path ends with /allowedPath.
+            // Never use bidirectional includes() — it lets "app" match "app/api/auth/route.ts".
+            return path === allowedPath || path.endsWith(`/${allowedPath}`);
         })
     ) {
         return `AI generated an invalid file path: "${path}". Not in the allowed list for ${frameworkCtx.name}.`;

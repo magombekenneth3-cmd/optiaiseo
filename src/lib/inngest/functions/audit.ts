@@ -394,6 +394,22 @@ export const auditPostFixJob = inngest.createFunction(
     }
 );
 
+/** Marks short-lived GitHub fix reviews as expired instead of leaving stale rows. */
+export const expireSeoFixProposalsJob = inngest.createFunction(
+    {
+        id: "expire-seo-fix-proposals",
+        name: "Expire SEO Fix Proposals",
+        triggers: [{ cron: "*/5 * * * *" }],
+    },
+    async ({ step }) => step.run("expire-pending-seo-fix-proposals", async () => {
+        const result = await (prisma as any).seoFixProposal.updateMany({
+            where: { status: "PENDING_REVIEW", expiresAt: { lte: new Date() } },
+            data: { status: "EXPIRED" },
+        });
+        return { expired: result.count };
+    }),
+);
+
 /** Deployment, not PR creation, starts the observation clock. */
 export const measureDeployedSeoFixJob = inngest.createFunction(
     { id: "measure-deployed-seo-fix", name: "Measure Deployed SEO Fix", triggers: [{ event: "seo-fix/deployed" }] },

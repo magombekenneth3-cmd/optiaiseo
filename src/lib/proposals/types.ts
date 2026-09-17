@@ -102,19 +102,22 @@ export const TERMINAL_OPPORTUNITY_STATUSES: OpportunityStatus[] = [
 
 // ── Proposal Lifecycle ──────────────────────────────────────────────────────
 
-export type ProposalStatus =
-  | "DRAFT"
-  | "READY"
-  | "APPROVED"
-  | "REJECTED"
-  | "EXECUTING"
-  | "EXECUTED"
-  | "VERIFYING"
-  | "VERIFIED"
-  | "ROLLED_BACK"
-  | "ROLLBACK_PARTIAL"  // DB restored but ≥1 external effect compensation failed
-  | "FAILED"
-  | "EXPIRED";
+export const PROPOSAL_STATUSES = [
+  "DRAFT",
+  "READY",
+  "APPROVED",
+  "REJECTED",
+  "EXECUTING",
+  "EXECUTED",
+  "VERIFYING",
+  "VERIFIED",
+  "ROLLED_BACK",
+  "ROLLBACK_PARTIAL", // DB restored but ≥1 external effect compensation failed
+  "FAILED",
+  "EXPIRED",
+] as const;
+
+export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 
 export const PROPOSAL_TRANSITIONS: Record<
   ProposalStatus,

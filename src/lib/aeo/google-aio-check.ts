@@ -34,9 +34,13 @@ export async function checkGoogleAIOverview(
 ): Promise<AioEligibilityResult> {
 
     const html = pageHtml ?? '';
+    // A-2: Extract first <p> from raw HTML BEFORE stripping tags — the old code
+    // stripped all tags then searched for <p> in the stripped text (always failed).
+    const firstPMatch = html.match(/<p[^>]*>([^<]{40,})<\/p>/i);
+    const firstParagraph = firstPMatch
+        ? firstPMatch[1].replace(/<[^>]+>/g, ' ').trim()
+        : html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').slice(0, 500);
     const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
-    const firstParagraphMatch = text.match(/(?<=<p[^>]*>)[^<]{40,}/i);
-    const firstParagraph = firstParagraphMatch ? firstParagraphMatch[0] : text.slice(0, 500);
 
     // JSON-LD schema signals
     const jsonLdBlocks = [...html.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)];

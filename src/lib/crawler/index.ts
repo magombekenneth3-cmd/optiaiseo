@@ -83,7 +83,7 @@ export function detectSpaSignatures(html: string): SpaDetectionResult {
     // React SPA (CRA, Vite-React, etc.) — thin body with root mount point
     if (
         (html.includes('data-reactroot') || html.includes('id="root"')) &&
-        !html.includes('data-reactroot') // id="root" alone isn't conclusive — also check body
+        !html.includes('data-server-rendered') // exclude SSR'd Vue/Nuxt pages with id="root"
     ) {
         const bodyText = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ');
         const wordCount = bodyText.split(/\s+/).filter(w => w.length > 2).length;
@@ -483,7 +483,10 @@ export const crawlSite = async (
 
             const html = pageResult.html
 
-            const titleMatch = html.match(/<title[^>]?>([\s\S]*?)<\/title>/i)
+            // C-13: Skip non-HTML responses (PDFs, images, JSON) that would produce garbage
+            if (!html.includes('<') && !html.includes('<!')) continue
+
+            const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
             const pageTitle = titleMatch ? titleMatch[1].trim() : null
             if (pageTitle) {
                 const existing = titleMap.get(pageTitle) ?? []
@@ -502,9 +505,13 @@ export const crawlSite = async (
             for (const match of linkMatches) {
                 let href = match[1]
                 if (href.startsWith("/")) href = `${origin}${href}`
-                if (!href.startsWith("http")) continue
+                // C-11: Resolve relative URLs (e.g. "about.html") against the current page
+                if (!href.startsWith("http")) {
+                    try { href = new URL(href, url).toString(); } catch { continue; }
+                }
 
-                if (!isSafeUrl(href)) continue
+                // C-2: isSafeUrl returns { ok: boolean }, not boolean — must check .ok
+                if (!isSafeUrl(href).ok) continue
 
                 if (!href.startsWith(origin)) {
                     if (!visitedExternal.has(href)) {
@@ -539,7 +546,7 @@ export const crawlSite = async (
     for (let i = 0; i < externalLinksToCheck.length; i += CHUNK_SIZE) {
         const chunk = externalLinksToCheck.slice(i, i + CHUNK_SIZE)
         await Promise.allSettled(chunk.map(async ({ url: extUrl, from: extFrom }) => {
-            if (!isSafeUrl(extUrl)) return
+            if (!isSafeUrl(extUrl).ok) return
 
             try {
                 let res = await fetch(extUrl, {

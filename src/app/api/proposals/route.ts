@@ -3,6 +3,18 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import { PROPOSAL_STATUSES } from "@/lib/proposals/types";
+import { normalizeOpportunityScore } from "@/lib/proposals/score";
+
+function parseBoundedInteger(
+  value: string | null,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,9 +28,9 @@ export async function GET(req: NextRequest) {
     const siteId = searchParams.get("siteId");
     const status = searchParams.get("status");
     const sort = searchParams.get("sort") ?? "createdAt";
-    const order = searchParams.get("order") ?? "desc";
-    const limit = Math.min(parseInt(searchParams.get("limit") ?? "50"), 100);
-    const offset = parseInt(searchParams.get("offset") ?? "0");
+    const order = searchParams.get("order") === "asc" ? "asc" : "desc";
+    const limit = parseBoundedInteger(searchParams.get("limit"), 50, 1, 100);
+    const offset = parseBoundedInteger(searchParams.get("offset"), 0, 0, Number.MAX_SAFE_INTEGER);
 
     if (!siteId) {
       return NextResponse.json({ error: "siteId is required" }, { status: 400 });
@@ -26,7 +38,10 @@ export async function GET(req: NextRequest) {
 
     // Verify site ownership
     const site = await prisma.site.findFirst({
-      where: { id: siteId, userId },
+      where: {
+        id: siteId,
+        OR: [{ userId }, { viewerId: userId }],
+      },
       select: { id: true },
     });
     if (!site) {
@@ -34,7 +49,12 @@ export async function GET(req: NextRequest) {
     }
 
     const where: any = { siteId };
-    if (status && status !== "ALL") where.status = status;
+    if (status && status !== "ALL") {
+      if (!PROPOSAL_STATUSES.includes(status as (typeof PROPOSAL_STATUSES)[number])) {
+        return NextResponse.json({ error: "Invalid proposal status" }, { status: 400 });
+      }
+      where.status = status;
+    }
 
     // Sort options
     const SORT_MAP: Record<string, any> = {
@@ -97,6 +117,12 @@ export async function GET(req: NextRequest) {
       const llmMeta = p.metadata?.llm ?? null;
       return {
         ...p,
+        decision: p.decision
+          ? {
+              ...p.decision,
+              score: normalizeOpportunityScore(p.decision.score),
+            }
+          : null,
         llmOutcome: llmMeta?.outcome ?? "SKIPPED",
         llmConfidence: llmMeta?.confidence ?? null,
         isAiEnhanced: llmMeta?.outcome === "ENHANCED",

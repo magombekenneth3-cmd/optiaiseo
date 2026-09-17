@@ -10,6 +10,7 @@ import { applyUnifiedDiff } from "@/lib/audit-fix/unified-diff";
 import {
     sanitizeMetadataContent,
     sanitizeObject,
+    validateFixOutput,
 } from "@/lib/seo/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
@@ -313,6 +314,20 @@ Return ONLY a valid JSON object with exactly one key: "patch".`;
                 return { success: false, error: validationError };
             }
 
+            // S-5: Catch placeholder values, broken JSON-LD, overlong meta tags,
+            // and invalid Next.js metadata fields that validateFix() doesn't check.
+            const contentQA = validateFixOutput(resolvedContent, { id: issueId, label: issue.title ?? issueId });
+            if (!contentQA.valid) {
+                logger.warn("[AutoFix] Content QA rejected AI output", {
+                    reason: contentQA.reason,
+                    details: contentQA.details,
+                    path: target.path,
+                });
+                const fallback = getStaticFallback(issue);
+                if (fallback) return { success: true, mode: "manual", guide: fallback };
+                return { success: false, error: contentQA.details ?? "Fix failed quality validation." };
+            }
+
             const confidence = scoreFix(resolvedContent, issueId);
             if (confidence < CONFIDENCE_THRESHOLD) {
                 logger.warn("[AutoFix] Low-confidence AI output rejected", {
@@ -455,7 +470,18 @@ export async function pushAuditFixPR(
     const proposal = await (prisma as any).seoFixProposal.findFirst({
         where: { id: proposalId, siteId, userId: session.user.id, status: "PENDING_REVIEW", expiresAt: { gt: new Date() } },
     });
-    if (!proposal) return { success: false, error: "This fix proposal is missing, expired, or has already been dispatched." };
+    if (!proposal) {
+        const stale = await (prisma as any).seoFixProposal.findFirst({
+            where: { id: proposalId, siteId, userId: session.user.id },
+            select: { status: true, expiresAt: true },
+        });
+        if (stale?.status === "PENDING_REVIEW" && stale.expiresAt <= new Date()) {
+            await (prisma as any).seoFixProposal.update({ where: { id: proposalId }, data: { status: "EXPIRED" } });
+        }
+        return { success: false, error: stale?.status === "EXPIRED" || (stale?.expiresAt && stale.expiresAt <= new Date())
+            ? "This fix proposal expired after 30 minutes. Regenerate it to review the latest repository version."
+            : "This fix proposal is missing or has already been dispatched." };
+    }
     const expectedHash = createHash("sha256").update(proposal.content).digest("hex");
     if (expectedHash !== proposal.contentHash) return { success: false, error: "Fix proposal integrity check failed. Regenerate the fix." };
 

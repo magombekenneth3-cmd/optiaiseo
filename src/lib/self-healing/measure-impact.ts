@@ -16,6 +16,12 @@ function avgScore(categoryScores: unknown): number {
     return scores.reduce((a, b) => a + b, 0) / scores.length;
 }
 
+const estimatedHoursSaved = (actionTaken: string): number => {
+    if (actionTaken === "DEPLOYED_GITHUB_PR") return 2;
+    if (actionTaken === "GENERATED_MANUAL_FIX") return 1;
+    return 0;
+};
+
 export async function measureFixImpact(logId: string, siteId: string): Promise<void> {
     const log = await prisma.selfHealingLog.findUnique({ where: { id: logId } });
     if (!log) return;
@@ -53,7 +59,10 @@ export async function getSelfHealingStats(siteId: string) {
     return {
         totalFixed: logs.filter((l) => l.status === "COMPLETED").length,
         avgImpact: avg(logs.map((l) => l.impactScore ?? 0)),
-        timeSavedHours: Math.round(logs.length * 0.5 * 10) / 10,
+        // This is an estimate, not observed duration. Alerts do not claim time
+        // savings, while prepared fixes reflect a conservative manual effort.
+        timeSavedHours: logs.reduce((total, log) => total + estimatedHoursSaved(log.actionTaken), 0),
+        timeSavedIsEstimate: true,
         recentLogs: logs.slice(0, 10).map((l) => ({
             id: l.id,
             description: l.description,

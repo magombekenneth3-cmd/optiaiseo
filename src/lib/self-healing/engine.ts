@@ -48,6 +48,15 @@ function healingBucket(): string {
     return new Date().toISOString().slice(0, 13); // one idempotency window per hour
 }
 
+function median(values: number[]): number {
+    if (values.length === 0) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const midpoint = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+        ? (sorted[midpoint - 1] + sorted[midpoint]) / 2
+        : sorted[midpoint];
+}
+
 /** A repeated monitor run must not create a new model call/PR for the same fix. */
 export async function filterDuplicateHealingActions(siteId: string, actions: HealingAction[]): Promise<HealingAction[]> {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -67,13 +76,18 @@ export async function detectGsovDrop(
     const reports = await prisma.aeoReport.findMany({
         where: { siteId },
         orderBy: { createdAt: "desc" },
-        take: 2,
+        // The current reading is compared with a stable recent baseline rather
+        // than one potentially noisy prior observation.
+        take: 6,
     });
 
     if (reports.length < 2) return { dropped: false, currentGsov: 0, prevGsov: 0 };
 
     const current = reports[0].generativeShareOfVoice ?? 0;
-    const prev    = reports[1].generativeShareOfVoice ?? 0;
+    const baselineValues = reports.slice(1)
+        .map((report) => report.generativeShareOfVoice)
+        .filter((value): value is number => typeof value === "number");
+    const prev = median(baselineValues);
 
     if (prev === 0) return { dropped: false, currentGsov: current, prevGsov: prev };
 

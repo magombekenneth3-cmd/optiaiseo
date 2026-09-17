@@ -32,12 +32,20 @@ export interface AeoCheck {
 import { callGemini as geminiCall } from "@/lib/gemini/client";
 async function callGemini(prompt: string) {
     const t0 = Date.now();
-    try {
-        const text = await geminiCall(prompt, { maxOutputTokens: 8192, temperature: 0.1 });
-        return { text, model: "gemini-2.5-flash", durationMs: Date.now() - t0 };
-    } catch {
-        return null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+            const text = await geminiCall(prompt, { maxOutputTokens: 8192, temperature: 0.1 });
+            return { text, model: "gemini-2.5-flash", durationMs: Date.now() - t0 };
+        } catch (error: unknown) {
+            if (attempt === 1) {
+                logger.warn("[AEO Fix Engine] Gemini generation failed after retry", { error: (error as Error)?.message || String(error) });
+                return null;
+            }
+            logger.warn("[AEO Fix Engine] Gemini generation failed; retrying once", { error: (error as Error)?.message || String(error) });
+            await delay(2000);
+        }
     }
+    return null;
 }
 /**
  * Validates a generated fix without spending an extra AI call.
@@ -307,6 +315,15 @@ export async function generateAllFixesInternal(
 
             const batchResults = await Promise.allSettled(
                 batch.map(async (check) => {
+                    // Keep batch generation consistent with the single-fix path:
+                    // speakable selectors must be derived from the scanned DOM,
+                    // never guessed by a language model.
+                    if (check.id === "schema-speakable" || check.label.toLowerCase().includes("speakable")) {
+                        const speakable = await generateSpeakableFix(check, domain, content, framework);
+                        return speakable.success
+                            ? { id: check.id, fix: speakable.fix, language: speakable.language, filePath: speakable.filePath }
+                            : null;
+                    }
                     const filePath = resolveFilePath(check.id, framework, frameworkResult.monorepoRoot);
                     const ctx: PromptContext = {
                         issueId: check.id,

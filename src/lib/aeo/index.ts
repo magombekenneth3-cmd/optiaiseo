@@ -33,7 +33,7 @@ export interface AeoResult {
     schemaGaps?: string[]
     citationScore: number
     multiEngineScore?: {
-        perplexity: number
+        perplexity?: number
         chatgpt: number
         googleAio: number
         claude?: number
@@ -188,7 +188,7 @@ const generateRelevantQuestions = async (
         `What is ${coreServices} and why does it matter?`,
         `How to get started with ${coreServices}`,
         `What are the benefits of ${coreServices}?`,
-        `Best tools for ${coreServices} in 2024`,
+        `Best tools for ${coreServices} in ${new Date().getFullYear()}`,
         `${domain} ${coreServices} pricing and plans`,
         `Is ${domain} worth it for ${coreServices}?`,
         `Top ${coreServices} platforms compared`,
@@ -458,8 +458,10 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
     const extraHtmlPages = extraPageUrls.length > 0
         ? await Promise.all(extraPageUrls.map(u => fetchPage(u)))
         : []
-    // Combine homepage + extra pages into one big text for content checks
-    const allPagesHtml = [html, ...extraHtmlPages.filter((h): h is string => h !== null)].join(' ')
+    // Preserve document boundaries: content checks may inspect surrounding HTML,
+    // and a plain-space join can create false regex matches across two pages.
+    const pageHtmls = [html, ...extraHtmlPages.filter((h): h is string => h !== null)]
+    const allPagesHtml = pageHtmls.join('\n<!-- AEO_PAGE_BOUNDARY -->\n')
 
     if (reportId) {
         await prisma.aeoReport.update({
@@ -468,14 +470,19 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
         }).catch(() => {});
     }
 
-    const foundSchemaTypes = extractSchemaTypes(html)
+    // Schema can legitimately live on an FAQ, about, service, or blog page.
+    // Union types from every fetched page so a homepage-only scan does not
+    // recommend schema that is already present elsewhere on the site.
+    const foundSchemaTypes = [...new Set(pageHtmls.flatMap(extractSchemaTypes))]
     schemaTypes.push(...foundSchemaTypes)
 
     // Detect missing schemas based on content heuristic.
     // detectSchemaGaps() returns SchemaGap[] ({id, label}) — map to label strings
     // here so AeoResult.schemaGaps remains string[] and all consumers stay intact.
     // The structured ids are used internally by fix-engine.ts for routing.
-    const schemaGaps: string[] = detectSchemaGaps(html, url).map(g => g.label)
+    const schemaGaps: string[] = [...new Map(
+        pageHtmls.flatMap((pageHtml) => detectSchemaGaps(pageHtml, url)).map((gap) => [gap.id, gap]),
+    ).values()].map((gap) => gap.label)
 
 
     const hasFaq = foundSchemaTypes.some(t => t.toLowerCase().includes("faq") || t.toLowerCase().includes("question"))
@@ -517,7 +524,8 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
             : "Add Article or BlogPosting schema to your content pages with author, datePublished, and headline.",
     })
 
-    const hasSpeakable = html.toLowerCase().includes('"speakable"') || html.toLowerCase().includes("speakable")
+    // A-12: Only match the actual JSON-LD schema type, not the English word "speakable" in prose.
+    const hasSpeakable = /"@type"\s*:\s*"SpeakableSpecification"/i.test(html)
     checks.push({
         id: "schema_speakable",
         category: "schema",
@@ -554,8 +562,13 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
     ]);
 
 
-    const hasAuthor = html.toLowerCase().includes("author") &&
-        (html.includes('"author"') || html.toLowerCase().includes("written by") || html.toLowerCase().includes("by "))
+    // A-16: Check for schema-level author or byline-specific patterns, not just "by " which matches
+    // "powered by", "built by Vercel", etc.
+    const hasAuthor = /"@type"\s*:\s*"Person"/i.test(html)
+        || /class="[^"]*author[^"]*"/i.test(html)
+        || /rel="author"/i.test(html)
+        || /written by\s+[A-Z]/i.test(html)
+        || /\bbyline\b/i.test(html)
     checks.push({
         id: "eeat_author",
         category: "eeat",
@@ -609,7 +622,9 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
 
 
     const hasFaqContent = /(<h[1-6][^>]*>)?\s*(frequently asked|faq|common question)/i.test(allPagesHtml)
-        || /<details|<summary/i.test(allPagesHtml)
+        // A bare disclosure element is often navigation or a cookie notice.
+        // Treat it as FAQ only when its early content resembles a question.
+        || /<details\b[^>]*>[\s\S]{0,240}(?:<summary[^>]*>\s*[^<]{0,160}\?|frequently asked|faq|common question)/i.test(allPagesHtml)
     checks.push({
         id: "content_faq_section",
         category: "content",
@@ -637,7 +652,8 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
             : "Add 'What is X?' sections to key pages. AI answer engines pull definitions directly from clear, concise paragraphs.",
     })
 
-    const hasTableOfContents = allPagesHtml.includes("table-of-contents") || allPagesHtml.includes("toc") || /#[a-z-]+-[a-z]/i.test(allPagesHtml)
+    // A-4: Use word boundaries and specific selectors to avoid false positives from "stock", "protocol", CSS colors.
+    const hasTableOfContents = allPagesHtml.includes("table-of-contents") || /\bid=["']toc["']/i.test(allPagesHtml) || /class="[^"]*\btoc\b[^"]*"/i.test(allPagesHtml)
     checks.push({
         id: "content_toc",
         category: "content",
@@ -800,10 +816,12 @@ ${cleanText}
             .replace(/\s+/g, " ")
             .slice(0, 600);
 
+        const normalizedOpening = firstParagraph.toLowerCase();
         const hasEntityDefinition = coreServices
             .split(",")
             .map((s: string) => s.trim().toLowerCase())
-            .some((service: string) => firstParagraph.toLowerCase().includes(service.split(" ")[0]));
+            .filter(Boolean)
+            .some((service: string) => normalizedOpening.includes(service));
 
         checks.push({
             id: "entity-definition",
@@ -1028,7 +1046,8 @@ ${cleanText}
 
     // 3. Content freshness: AI-cited content is 25.7% fresher than regular
     //    organic results. ChatGPT and Perplexity list citations newest-to-oldest.
-    const hasDateSignals = /\b(updated|last updated|revised|published|\b20(2[3-9]|[3-9]\d)\b)\b/i.test(html)
+    // A-14: Match any 4-digit year (20xx) — the purpose is to detect date signals, not enforce recency.
+    const hasDateSignals = /\b(updated|last updated|revised|published|\b20\d{2}\b)\b/i.test(html)
         || /<time[^>]*datetime/i.test(html)
         || /datePublished|dateModified/i.test(html)
     checks.push({
@@ -1047,9 +1066,26 @@ ${cleanText}
 
     // 4. AI bot access diversity: 5.9% of sites block OpenAI's GPTBot in
     //    robots.txt. Also check for Perplexity and Anthropic bots.
-    const blocksGptBot = robotsHtml?.toLowerCase().includes("gptbot") ?? false
-    const blocksPerplexityBot = robotsHtml?.toLowerCase().includes("perplexitybot") ?? false
-    const blocksAnthropicBot = robotsHtml?.toLowerCase().includes("anthropic") ?? false
+    // A-3: Only flag as blocked when the bot's user-agent section contains "Disallow: /".
+    // A site with "User-agent: GPTBot / Allow: /" should NOT be flagged.
+    const isBlockedInRobots = (robots: string, botName: string): boolean => {
+        const lines = robots.split('\n');
+        let inSection = false;
+        for (const line of lines) {
+            const trimmed = line.trim().toLowerCase();
+            if (trimmed.startsWith('user-agent:')) {
+                inSection = trimmed.includes(botName.toLowerCase());
+            }
+            if (inSection && /^disallow:\s*\/\s*$/i.test(trimmed)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    const robotsTxt = robotsHtml ?? '';
+    const blocksGptBot = isBlockedInRobots(robotsTxt, 'gptbot')
+    const blocksPerplexityBot = isBlockedInRobots(robotsTxt, 'perplexitybot')
+    const blocksAnthropicBot = isBlockedInRobots(robotsTxt, 'anthropic')
     const allAiBotsAllowed = !blocksGptBot && !blocksPerplexityBot && !blocksAnthropicBot
     checks.push({
         id: "geo_ai_bot_access",
@@ -1307,7 +1343,8 @@ ${cleanText}
         }
 
         const aioKeyword = coreServices ? `${domain.split('.')[0]} ${coreServices}` : domain.split('.')[0]
-        googleAioResult = await checkGoogleAIOverview(domain, aioKeyword)
+        // A-15: Pass homepage HTML so on-page eligibility signals are actually computed.
+        googleAioResult = await checkGoogleAIOverview(domain, aioKeyword, html)
 
         if (reportId) {
             await prisma.aeoReport.update({
@@ -1317,8 +1354,11 @@ ${cleanText}
         }
     }
 
+    const perplexityResult = multiModelResults.results.find(r => r.model === "Perplexity");
+    const perplexityAvailable = perplexityResult?.providerStatus === "SUCCESS" || perplexityResult?.providerStatus === "NO_RESULT";
     const multiEngineScore = {
-        perplexity: Math.max(0, citationScore),
+        // Do not represent an unavailable provider as a customer score of zero.
+        perplexity: perplexityAvailable ? Math.max(0, citationScore) : undefined,
         chatgpt: multiModelResults.results.find(r => r.model === "ChatGPT")?.confidence ?? 0,
         googleAio: googleAioResult.score,
         claude: multiModelResults.results.find(r => r.model === "Claude")?.confidence ?? 0,

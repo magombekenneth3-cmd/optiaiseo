@@ -4,7 +4,8 @@
  * Tests the self-healing lifecycle and its isolation from the safety infrastructure.
  *
  * INVARIANTS UNDER TEST:
- * - GSoV drop detection uses absolute threshold (≥10 if prev≥20) or relative (≥15%)
+ * - GSoV drop detection uses a stable median baseline, then applies an absolute
+ *   threshold (≥10 if baseline≥20) or relative threshold (≥15%)
  * - Low confidence actions are DROPPED, medium are QUEUED, high are AUTO_APPLIED
  * - Non-AUTOPILOT mode prevents execution
  * - Self-healing does NOT create BudgetReservation, ExecutionTrace, or interact with CircuitBreaker
@@ -70,6 +71,21 @@ describe("Group I: Self-Healing Lifecycle", () => {
     expect(result.dropped).toBe(false);
     expect(result.currentGsov).toBe(48);
     expect(result.prevGsov).toBe(50);
+  });
+
+  it("I2b: a one-off spike does not create a false regression", async () => {
+    const { detectGsovDrop } = await import("@/lib/self-healing/engine");
+
+    createAeoReport({ siteId: SITE_ID, generativeShareOfVoice: 40, createdAt: new Date() });
+    createAeoReport({ siteId: SITE_ID, generativeShareOfVoice: 80, createdAt: new Date(Date.now() - 1_000) });
+    createAeoReport({ siteId: SITE_ID, generativeShareOfVoice: 42, createdAt: new Date(Date.now() - 2_000) });
+    createAeoReport({ siteId: SITE_ID, generativeShareOfVoice: 40, createdAt: new Date(Date.now() - 3_000) });
+    createAeoReport({ siteId: SITE_ID, generativeShareOfVoice: 38, createdAt: new Date(Date.now() - 4_000) });
+
+    const result = await detectGsovDrop(SITE_ID);
+
+    expect(result.dropped).toBe(false);
+    expect(result.prevGsov).toBe(41);
   });
 
   it("I3: Low confidence score (<40) → action DROPPED, logged with DROPPED status", async () => {

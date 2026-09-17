@@ -47,14 +47,14 @@ export default async function AutopilotPage({
         { viewerId: session.user.id },
       ],
     },
-    select: { id: true, domain: true },
+    select: { id: true, domain: true, userId: true },
   });
 
   if (!site) redirect("/dashboard");
 
   return (
     <div className="p-2 sm:p-4 lg:p-6 flex flex-col gap-6">
-      <AutopilotDashboard />
+      <AutopilotDashboard canManage={site.userId === session.user.id} />
     </div>
   );
 }
