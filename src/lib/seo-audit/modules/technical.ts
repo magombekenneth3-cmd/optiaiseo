@@ -5,7 +5,7 @@ import { parse } from 'node-html-parser';
 import { validateRobotsAndSitemap, type SitemapValidationResult } from '../../onpage/validator';
 import { runCrawlerAgent } from '../../crawler/agent';
 import { runSecurityAudit } from '../../audit/security';
-import { inspectIndexability } from '../indexability-evidence';
+import { inspectIndexability, type IndexabilityEvidence } from '../indexability-evidence';
 
 export const TechnicalModule: AuditModule = {
     id: 'technical-seo',
@@ -107,7 +107,7 @@ export const TechnicalModule: AuditModule = {
                     return null;
                 }
             })(),
-            inspectIndexability(context.url).catch(() => null),
+            inspectIndexability(context.url).catch((err: unknown) => ({ _error: (err as Error)?.message ?? "unknown" })),
         ]);
 
 
@@ -129,22 +129,33 @@ export const TechnicalModule: AuditModule = {
             details: { framework: crawlerRes.frameworkDetected, hydrationMs: crawlerRes.hydrationTimeMs, risks: crawlerRes.crawlerRisks.length },
         });
 
-        // 2. Indexability (noindex meta)
+        // 2. Indexability (noindex meta + HTTP headers)
+        // F-4: Surface the failure reason when inspectIndexability throws
+        const indexabilityError = indexabilityEvidence && '_error' in indexabilityEvidence
+            ? (indexabilityEvidence as { _error: string })._error
+            : null;
+        const validEvidence: IndexabilityEvidence | null = indexabilityError ? null : (indexabilityEvidence as IndexabilityEvidence | null);
         const noindexTag = root.querySelector('meta[name="robots" i][content*="noindex" i]');
-        const indexabilityBlocked = !!noindexTag || !!indexabilityEvidence?.blockedByHeader || !!(indexabilityEvidence && indexabilityEvidence.status >= 400);
+        const indexabilityBlocked = !!noindexTag || !!validEvidence?.blockedByHeader || !!(validEvidence && validEvidence.status >= 400);
         items.push({
             id: 'indexability',
             label: 'Website Indexability',
-            status: indexabilityBlocked ? 'Fail' : indexabilityEvidence ? 'Pass' : 'Warning',
+            status: indexabilityBlocked ? 'Fail' : validEvidence ? 'Pass' : 'Warning',
             finding: noindexTag ? 'Page has a noindex meta tag — search engines are blocked from including it in results.'
-                : indexabilityEvidence?.blockedByHeader ? 'HTTP X-Robots-Tag contains noindex — search engines are blocked from including this URL.'
-                : indexabilityEvidence && indexabilityEvidence.status >= 400 ? `The final URL returns HTTP ${indexabilityEvidence.status}, so it is not indexable.`
-                : indexabilityEvidence ? 'No HTML or HTTP noindex directive found; final URL returned a crawlable response.'
-                : 'Indexability headers could not be verified; do not treat this as a pass.',
-            recommendation: indexabilityBlocked ? { text: 'Remove the noindex directive or resolve the failing HTTP response, then verify the final URL in Search Console.', priority: 'High' } : undefined,
+                : validEvidence?.blockedByHeader ? 'HTTP X-Robots-Tag contains noindex — search engines are blocked from including this URL.'
+                : validEvidence && validEvidence.status >= 400 ? `The final URL returns HTTP ${validEvidence.status}, so it is not indexable.`
+                : validEvidence ? 'No HTML or HTTP noindex directive found; final URL returned a crawlable response.'
+                : indexabilityError
+                    ? `Indexability check failed: ${indexabilityError}. This may indicate a redirect loop, DNS failure, or the site blocking crawlers.`
+                    : 'Indexability headers could not be verified; do not treat this as a pass.',
+            recommendation: indexabilityBlocked
+                ? { text: 'Remove the noindex directive or resolve the failing HTTP response, then verify the final URL in Search Console.', priority: 'High' }
+                : indexabilityError
+                    ? { text: 'The indexability probe could not reach the page — check that the URL does not redirect excessively, that DNS resolves correctly, and that no WAF is blocking bot requests.', priority: 'High' }
+                    : undefined,
             roiImpact: 100,
             aiVisibilityImpact: 100,
-            details: indexabilityEvidence ? { finalUrl: indexabilityEvidence.finalUrl, httpStatus: indexabilityEvidence.status, redirects: indexabilityEvidence.redirects, xRobotsTag: indexabilityEvidence.xRobotsTag || "none" } : { evidence: "unavailable" },
+            details: validEvidence ? { finalUrl: validEvidence.finalUrl, httpStatus: validEvidence.status, redirects: validEvidence.redirects, xRobotsTag: validEvidence.xRobotsTag || "none" } : { evidence: "unavailable", ...(indexabilityError ? { error: indexabilityError } : {}) },
         });
 
         // 3. SSL / HTTPS

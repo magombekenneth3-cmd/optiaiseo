@@ -1,4 +1,5 @@
 import { isSafeUrl } from "@/lib/security/safe-url";
+import { CRAWLER_USER_AGENT } from "@/lib/constants/crawler";
 
 export interface IndexabilityEvidence {
   finalUrl: string;
@@ -14,7 +15,7 @@ export async function inspectIndexability(url: string): Promise<IndexabilityEvid
   for (let redirects = 0; redirects <= 5; redirects++) {
     const safe = isSafeUrl(current);
     if (!safe.ok || !safe.url) throw new Error(`Unsafe indexability URL: ${safe.error ?? current}`);
-    const response = await fetch(safe.url, { redirect: "manual", signal: AbortSignal.timeout(10_000), headers: { "User-Agent": "SEO-Bot/1.0" } });
+    const response = await fetch(safe.url, { redirect: "manual", signal: AbortSignal.timeout(10_000), headers: { "User-Agent": CRAWLER_USER_AGENT } });
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get("location");
       if (!location) throw new Error("Redirect response has no Location header.");

@@ -27,19 +27,19 @@ for (const sig of ["exit", "SIGTERM", "SIGINT"] as const) {
     });
 }
 
-export async function getBrowser(): Promise<Browser> {
+export async function getBrowser(): Promise<Browser | null> {
     const browserlessUrl = process.env.BROWSERLESS_URL;
 
     // In production Docker the nextjs system user has HOME=/nonexistent, so
     // Playwright cannot find/download its browser cache and throws a confusing
     // "/nonexistent/.cache/ms-playwright/..." error.
-    // Require BROWSERLESS_URL in production so callers get a clear actionable error.
+    // F-7: Return null instead of throwing so callers can degrade gracefully.
     if (!browserlessUrl && process.env.NODE_ENV === "production") {
-        throw new Error(
-            "[Crawler] BROWSERLESS_URL is not set. " +
-            "Add it in Railway → Variables (e.g. wss://your-browserless.up.railway.app). " +
-            "Without it, JS-rendered crawling is disabled in production."
+        logger.warn(
+            "[Crawler] BROWSERLESS_URL is not set — JS-rendered crawling disabled. " +
+            "Add it in Railway → Variables (e.g. wss://your-browserless.up.railway.app)."
         );
+        return null;
     }
 
     const pw = await import("playwright");
@@ -111,6 +111,11 @@ export async function fetchRenderedHtml(url: string, timeoutMs: number = 15000):
 
     try {
         browser = await getBrowser();
+        if (!browser) {
+            // F-7: Browserless unavailable — return empty result so crawler agent
+            // can still report framework detection from raw HTML
+            return { html: "", jsRenderTimeMs: 0, networkResources: 0, consoleErrors: 0 };
+        }
         page = await browser.newPage();
 
         let networkResources = 0;

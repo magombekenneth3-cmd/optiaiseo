@@ -68,66 +68,119 @@ const computeLayerScore = (checks: AeoCheck[], categories: AeoCheck["category"][
     return Math.round((earned / total) * 100)
 }
 
+import { CRAWLER_USER_AGENT, MAX_REDIRECT_HOPS, MAX_FETCH_RETRIES, RETRY_BASE_DELAY_MS } from "@/lib/constants/crawler";
+
+/**
+ * Fetches a page's HTML with full SSRF protection, multi-hop redirect following,
+ * retry with exponential backoff, and X-Robots-Tag noindex detection.
+ *
+ * Returns `null` only when the page genuinely cannot be reached after retries.
+ */
 const fetchPage = async (url: string): Promise<string | null> => {
-    // SSRF guard — this function receives user-supplied URLs from the AEO
-    // check flow. Validate before making any network request.
     const safeCheck = isSafeUrl(url);
     if (!safeCheck.ok || !safeCheck.url) {
         logger.warn("[AEO] fetchPage blocked unsafe URL", { url, reason: safeCheck.error });
         return null;
     }
 
-    try {
-        const res = await fetch(safeCheck.url.href, {
-            headers: { "User-Agent": "AEOBot/1.0 (Answer Engine Optimization Checker)" },
-            signal: AbortSignal.timeout(12000),
-            redirect: "manual",
-        });
+    let lastError: unknown;
 
-        // Validate redirect destination before following
-        if (res.status >= 300 && res.status < 400) {
-            const location = res.headers.get("location");
-            if (!location) return null;
-            const redirectCheck = isSafeUrl(location);
-            if (!redirectCheck.ok || !redirectCheck.url) {
-                logger.warn("[AEO] fetchPage blocked unsafe redirect", { url, location });
+    for (let attempt = 0; attempt <= MAX_FETCH_RETRIES; attempt++) {
+        try {
+            // Follow up to MAX_REDIRECT_HOPS redirects with SSRF validation at each hop
+            let current = safeCheck.url.href;
+            for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
+                const hopCheck = hop === 0 ? safeCheck : isSafeUrl(current);
+                if (!hopCheck.ok || !hopCheck.url) {
+                    logger.warn("[AEO] fetchPage blocked unsafe redirect", { url, redirect: current });
+                    return null;
+                }
+
+                const res = await fetch(hopCheck.url.href, {
+                    headers: { "User-Agent": CRAWLER_USER_AGENT },
+                    signal: AbortSignal.timeout(12_000),
+                    redirect: "manual",
+                });
+
+                // Follow redirects
+                if (res.status >= 300 && res.status < 400) {
+                    const location = res.headers.get("location");
+                    if (!location) {
+                        logger.warn("[AEO] fetchPage: redirect with no Location header", { url: current, status: res.status });
+                        return null;
+                    }
+                    current = new URL(location, hopCheck.url.href).href;
+                    continue;
+                }
+
+                // Retryable server errors (cold-start 503, bad gateway 502, rate-limit 429)
+                if ([429, 502, 503, 504].includes(res.status)) {
+                    lastError = new Error(`HTTP ${res.status}`);
+                    break; // break inner loop to trigger retry
+                }
+
+                if (!res.ok) return null;
+
+                // F-6: Check X-Robots-Tag for noindex before consuming the body
+                const xRobots = res.headers.get("x-robots-tag") ?? "";
+                if (/(?:^|[,\s])noindex(?:$|[,\s])/i.test(xRobots)) {
+                    logger.info("[AEO] fetchPage: page has X-Robots-Tag noindex", { url: current });
+                    // Still return the HTML so the audit can report the noindex finding
+                    // rather than silently dropping the page
+                }
+
+                return await res.text();
+            }
+
+            // If we get here from the redirect loop, we exhausted hops
+            if (!lastError) {
+                logger.warn("[AEO] fetchPage: redirect chain exceeded max hops", { url, hops: MAX_REDIRECT_HOPS });
                 return null;
             }
-            const redirectRes = await fetch(redirectCheck.url.href, {
-                headers: { "User-Agent": "AEOBot/1.0 (Answer Engine Optimization Checker)" },
-                signal: AbortSignal.timeout(12000),
-                redirect: "manual",
-            });
-            if (!redirectRes.ok) return null;
-            return await redirectRes.text();
+        } catch (err) {
+            lastError = err;
         }
 
-        if (!res.ok) return null;
-        return await res.text();
-    } catch {
-        return null;
+        // Retry with exponential backoff
+        if (attempt < MAX_FETCH_RETRIES) {
+            const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+            logger.warn(`[AEO] fetchPage retry ${attempt + 1}/${MAX_FETCH_RETRIES} for ${url} in ${delay}ms`, {
+                error: (lastError as Error)?.message,
+            });
+            await new Promise(r => setTimeout(r, delay));
+        }
     }
+
+    logger.error(`[AEO] fetchPage: all ${MAX_FETCH_RETRIES + 1} attempts failed for ${url}`, {
+        error: (lastError as Error)?.message,
+    });
+    return null;
 };
 
 /**
- * Discovers site pages via sitemap.xml and returns HTML for up to MAX_AUDIT_PAGES pages.
+ * Discovers site pages via sitemap.xml and returns URLs for up to MAX_AUDIT_PAGES pages.
+ * Handles both `<urlset>` sitemaps and `<sitemapindex>` index files.
  * Falls back to just the homepage if the sitemap is missing or empty.
  */
 const MAX_AUDIT_PAGES = 20
 
 const discoverPagesFromSitemap = async (origin: string): Promise<string[]> => {
     const pages: string[] = [origin]
-    try {
-        const sitemapXml = await fetchPage(`${origin}/sitemap.xml`)
-        if (!sitemapXml || !sitemapXml.includes('<urlset')) return pages
+    const seen = new Set<string>([origin])
 
+    const extractLocs = (xml: string): string[] => {
+        const locs: string[] = []
         const locRegex = /<loc>\s*([^<]+)\s*<\/loc>/gi
         let match: RegExpExecArray | null
-        const seen = new Set<string>([origin])
+        while ((match = locRegex.exec(xml)) !== null) {
+            locs.push(match[1].trim())
+        }
+        return locs
+    }
 
-        while ((match = locRegex.exec(sitemapXml)) !== null && pages.length < MAX_AUDIT_PAGES) {
-            const rawUrl = match[1].trim()
-            // Only include same-origin, non-asset URLs
+    const addPageUrls = (urls: string[]) => {
+        for (const rawUrl of urls) {
+            if (pages.length >= MAX_AUDIT_PAGES) break
             if (
                 rawUrl.startsWith(origin) &&
                 !seen.has(rawUrl) &&
@@ -136,6 +189,26 @@ const discoverPagesFromSitemap = async (origin: string): Promise<string[]> => {
                 seen.add(rawUrl)
                 pages.push(rawUrl)
             }
+        }
+    }
+
+    try {
+        const sitemapXml = await fetchPage(`${origin}/sitemap.xml`)
+        if (!sitemapXml) return pages
+
+        // F-3: Handle sitemap index files (<sitemapindex> → child <sitemap> → <loc>)
+        if (sitemapXml.includes('<sitemapindex')) {
+            const childSitemapUrls = extractLocs(sitemapXml)
+            // Fetch up to 3 child sitemaps in parallel to stay within time budget
+            const childFetches = childSitemapUrls.slice(0, 3).map(u => fetchPage(u))
+            const childResults = await Promise.all(childFetches)
+            for (const childXml of childResults) {
+                if (childXml && childXml.includes('<urlset')) {
+                    addPageUrls(extractLocs(childXml))
+                }
+            }
+        } else if (sitemapXml.includes('<urlset')) {
+            addPageUrls(extractLocs(sitemapXml))
         }
     } catch {
         // Sitemap unavailable — just use the homepage
