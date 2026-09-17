@@ -33,6 +33,13 @@ function getCalendarMonthWindow(): { monthKey: string; resetAt: Date } {
     return { monthKey, resetAt };
 }
 
+function getUtcDayWindow(): { dayKey: string; resetAt: Date } {
+    const now = new Date();
+    const dayKey = now.toISOString().slice(0, 10);
+    const resetAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+    return { dayKey, resetAt };
+}
+
 // ─── In-memory fallback (local dev only) ─────────────────────────────────────
 
 const _mem = new Map<string, { count: number; resetAt: number }>();
@@ -136,8 +143,8 @@ export const checkKgFeedLimit = (userId: string, tier: string): Promise<RateLimi
 };
 
 export const checkCompetitorRefreshLimit = (userId: string): Promise<RateLimitResult> => {
-    const { monthKey, resetAt } = getCalendarMonthWindow();
-    return checkRateLimit(`competitor-refresh:${userId}:${monthKey}`, 10, resetAt);
+    const { dayKey, resetAt } = getUtcDayWindow();
+    return checkRateLimit(`competitor-refresh:${userId}:${dayKey}`, 10, resetAt);
 };
 
 export const checkAeoVerifyLimit = (userId: string): Promise<RateLimitResult> => {
