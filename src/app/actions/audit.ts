@@ -50,9 +50,13 @@ type DeleteAuditResult =
 export async function getUserAudits(
   cursor?: string,
   pageSize = 20,
+  siteId?: string,
 ): Promise<GetUserAuditsResult> {
   if (cursor !== undefined && !idSchema.safeParse(cursor).success) {
     return { success: false, error: "Invalid cursor.", audits: [], nextCursor: null };
+  }
+  if (siteId !== undefined && !idSchema.safeParse(siteId).success) {
+    return { success: false, error: "Invalid site ID.", audits: [], nextCursor: null };
   }
 
   try {
@@ -62,7 +66,7 @@ export async function getUserAudits(
     const { user } = auth;
 
     const audits = await prisma.audit.findMany({
-      where: { site: { userId: user.id } },
+      where: { site: { userId: user.id }, ...(siteId ? { siteId } : {}) },
       select: {
         id: true,
         runTimestamp: true,

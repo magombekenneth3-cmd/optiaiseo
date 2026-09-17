@@ -91,7 +91,7 @@ function AuditModeSelector({
 
             {isFree && (
                 <div className="mt-1 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs text-amber-400/80">
-                    Upgrade to Pro for up to 25 pages, Agency for 50
+                    Upgrade for deeper crawl coverage — Pro includes up to 250 pages, Agency up to 500.
                 </div>
             )}
         </div>
@@ -270,7 +270,7 @@ export function AuditButton({
                     onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                     disabled={isPending}
                     aria-expanded={isDropdownOpen}
-                    aria-haspopup="menu"
+                    aria-haspopup="dialog"
                     className="inline-flex items-center gap-2 bg-primary hover:bg-emerald-400 text-primary-foreground px-5 py-2.5 rounded-xl font-medium transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.35)] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
                     aria-label="Run a manual SEO audit"
                 >
@@ -304,7 +304,7 @@ export function AuditButton({
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 disabled={isPending || !sites || sites.length === 0}
                 aria-expanded={isDropdownOpen}
-                aria-haspopup="menu"
+                aria-haspopup="dialog"
                 className="inline-flex items-center gap-2 bg-primary hover:bg-emerald-400 text-primary-foreground px-5 py-2.5 rounded-xl font-medium transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.35)] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
                 aria-label="Run a manual SEO audit"
             >

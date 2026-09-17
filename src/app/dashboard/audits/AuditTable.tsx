@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { getUserAudits } from "@/app/actions/audit";
 import { extractAuditMetrics } from "@/lib/audit/helpers";
 import Link from "next/link";
-import { Loader2, ArrowRight } from "lucide-react";
+import { Loader2, ArrowRight, Search, SlidersHorizontal } from "lucide-react";
 import { DeleteAuditButton } from "./DeleteAuditButton";
 
 
@@ -17,6 +17,9 @@ type AuditRow = {
   lcp: number | null;
   cls: number | null;
   inp: number | null;
+  totalPages: number;
+  completedPages: number;
+  failedPages: number;
   site: { id: string; domain: string };
 };
 
@@ -67,13 +70,13 @@ function StatusBadge({ status }: { status: string }) {
     IN_PROGRESS: {
       cls: "bg-amber-500/10 text-amber-400 border-amber-500/20",
       dot: "bg-amber-400",
-      label: "In progress",
+      label: "Scanning",
       pulse: true,
     },
     PENDING: {
       cls: "bg-blue-500/10 text-blue-400 border-blue-500/20",
       dot: "bg-blue-400",
-      label: "Pending",
+      label: "Queued",
       pulse: true,
     },
     FAILED: {
@@ -143,18 +146,28 @@ function EmptyState() {
 export function AuditTable({
   initialAudits,
   initialCursor,
+  siteId,
 }: {
   initialAudits: AuditRow[];
   initialCursor: string | null;
+  siteId?: string;
 }) {
   const [audits, setAudits] = useState<AuditRow[]>(initialAudits);
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [isPending, startTransition] = useTransition();
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("ALL");
+
+  const filteredAudits = useMemo(() => audits.filter((audit) => {
+    const matchesQuery = audit.site.domain.toLowerCase().includes(query.trim().toLowerCase());
+    const matchesStatus = status === "ALL" || audit.fixStatus === status;
+    return matchesQuery && matchesStatus;
+  }), [audits, query, status]);
 
   const loadMore = () => {
     if (!cursor) return;
     startTransition(async () => {
-      const result = await getUserAudits(cursor, 20);
+      const result = await getUserAudits(cursor, 20, siteId);
       if (result.success && result.audits.length > 0) {
         setAudits((prev) => [...prev, ...(result.audits as AuditRow[])]);
         setCursor(result.nextCursor);
@@ -166,19 +179,29 @@ export function AuditTable({
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <label className="relative block sm:w-72">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search a domain" className="h-10 w-full rounded-xl border border-border bg-card pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/10" />
+        </label>
+        <label className="inline-flex h-10 items-center gap-2 self-start rounded-xl border border-border bg-card px-3 text-xs font-medium text-muted-foreground sm:self-auto">
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          <span className="sr-only">Filter by status</span>
+          <select value={status} onChange={(event) => setStatus(event.target.value)} className="cursor-pointer bg-transparent text-xs font-medium text-foreground outline-none">
+            <option value="ALL">All statuses</option><option value="COMPLETED">Completed</option><option value="IN_PROGRESS">Scanning</option><option value="PENDING">Queued</option><option value="PARTIAL">Partial</option><option value="FAILED">Failed</option>
+          </select>
+        </label>
+      </div>
       <div className="card-surface overflow-hidden">
 
         {/* ── Mobile card list ── */}
         <div className="md:hidden divide-y divide-border">
-          {audits.map((audit) => {
+          {filteredAudits.map((audit) => {
             const { seoScore, issueCount } = extractAuditMetrics({
               categoryScores: audit.categoryScores as Record<string, unknown> | null,
               issueList: audit.issueList,
             });
-            const isProcessing =
-              audit.fixStatus === "IN_PROGRESS" ||
-              audit.fixStatus === "PENDING" ||
-              (audit.fixStatus === "COMPLETED" && issueCount === 0);
+            const isProcessing = audit.fixStatus === "IN_PROGRESS" || audit.fixStatus === "PENDING";
 
             return (
               <div key={audit.id} className="flex items-center gap-3 px-4 py-3.5 min-w-0">
@@ -200,7 +223,7 @@ export function AuditTable({
                   <p className="text-sm font-semibold truncate">{audit.site?.domain ?? "Unknown"}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {isProcessing
-                      ? "Scanning…"
+                      ? audit.totalPages > 0 ? `${audit.completedPages + audit.failedPages}/${audit.totalPages} pages processed` : "Discovering pages…"
                       : `${issueCount} issue${issueCount !== 1 ? "s" : ""} · ${new Date(audit.runTimestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`}
                   </p>
                 </div>
@@ -232,18 +255,15 @@ export function AuditTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
-              {audits.map((audit, idx) => {
+              {filteredAudits.map((audit, idx) => {
                 const { seoScore, issueCount } = extractAuditMetrics({
                   categoryScores: audit.categoryScores as Record<string, unknown> | null,
                   issueList: audit.issueList,
                 });
-                const isProcessing =
-                  audit.fixStatus === "IN_PROGRESS" ||
-                  audit.fixStatus === "PENDING" ||
-                  (audit.fixStatus === "COMPLETED" && issueCount === 0);
+                const isProcessing = audit.fixStatus === "IN_PROGRESS" || audit.fixStatus === "PENDING";
 
                 // Delta vs previous audit for same site
-                const prevAudit = audits.slice(idx + 1).find((a) => a.site?.id === audit.site?.id);
+                const prevAudit = filteredAudits.slice(idx + 1).find((a) => a.site?.id === audit.site?.id);
                 let delta: number | null = null;
                 if (!isProcessing && prevAudit && prevAudit.fixStatus === "COMPLETED") {
                   const prev = extractAuditMetrics({
@@ -313,6 +333,7 @@ export function AuditTable({
                         month: "short",
                         year: "numeric",
                       })}
+                      {isProcessing && audit.totalPages > 0 && <div className="mt-1 text-[10px] text-blue-300">{audit.completedPages + audit.failedPages}/{audit.totalPages} pages</div>}
                     </td>
 
                     {/* Actions */}
@@ -341,6 +362,9 @@ export function AuditTable({
             </tbody>
           </table>
         </div>
+        {filteredAudits.length === 0 && (
+          <div className="px-6 py-14 text-center"><p className="font-semibold">No audits match these filters</p><button onClick={() => { setQuery(""); setStatus("ALL"); }} className="mt-2 text-sm font-medium text-emerald-400 hover:text-emerald-300">Clear filters</button></div>
+        )}
       </div>
 
       {/* Load more */}
