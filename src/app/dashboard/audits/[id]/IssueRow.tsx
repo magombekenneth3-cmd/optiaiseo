@@ -328,6 +328,10 @@ export function IssueRow({
         async () => {
             if (fixState.status !== "review") return;
             const { payload } = fixState;
+            if (!payload.proposalId) {
+                setFixState({ status: "error", message: "Missing proposal ID for this fix." });
+                return;
+            }
             setFixState({ status: "pushing" });
             try {
                 const result = await pushAuditFixPR(siteId, payload.proposalId);
