@@ -221,8 +221,9 @@ describe("Integration Status queries dedicated google-ga4 Account", () => {
 describe("Settings UI uses google-ga4 provider for connect", () => {
     const panel = readSrc("app/dashboard/settings/IntegrationsPanel.tsx");
 
-    it("GA4 card has connectAction pointing to google-ga4 provider", () => {
-        expect(panel).toContain("/api/auth/signin/google-ga4");
+    it("GA4 card starts google-ga4 through the client-side NextAuth API", () => {
+        expect(panel).toContain('signIn("google-ga4"');
+        expect(panel).not.toContain("/api/auth/signin/google-ga4");
     });
 
     it("GA4 card has onDisconnect calling disconnect-ga4 route", () => {

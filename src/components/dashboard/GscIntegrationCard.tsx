@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Search, ShieldCheck, CheckCircle2, AlertCircle, Loader2, ExternalLink } from "lucide-react";
+import { OAuthConnectButton } from "@/components/auth/OAuthConnectButton";
 
 interface Props {
     isConnected: boolean;
@@ -68,14 +69,14 @@ export function GscIntegrationCard({ isConnected }: Props) {
                     </button>
                 </div>
             ) : (
-                // eslint-disable-next-line @next/next/no-html-link-for-pages
-                <a
-                    href="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard%2Fsettings%3Ftab%3Dintegrations"
+                <OAuthConnectButton
+                    provider="google-gsc"
+                    callbackUrl="/dashboard/settings?tab=integrations"
                     className="inline-flex items-center gap-2 px-4 py-2 text-[12px] font-semibold rounded-lg bg-[#238636] text-white hover:bg-[#2ea043] transition-colors"
                 >
                     <ExternalLink className="w-3.5 h-3.5" />
                     Connect with Google
-                </a>
+                </OAuthConnectButton>
             )}
 
             {error && (

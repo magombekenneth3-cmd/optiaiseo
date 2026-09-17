@@ -10,6 +10,7 @@ import { Activity, ArrowUpRight, FileSearch, Sparkles } from "lucide-react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { OAuthConnectButton } from "@/components/auth/OAuthConnectButton";
 
 export const metadata: Metadata = {
   title: "Audit Reports | OptiAISEO",
@@ -144,13 +145,13 @@ export default async function AuditsPage({
           <div className="flex-1 text-sm text-blue-300">
             <span className="font-semibold text-blue-200">Connect Google Search Console</span> to unlock keyword-level audit insights — CTR drops, position changes, and exact queries losing traffic.
           </div>
-          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- NextAuth OAuth endpoint requires full redirect */}
-          <a
-            href="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard%2Faudits"
+          <OAuthConnectButton
+            provider="google-gsc"
+            callbackUrl="/dashboard/audits"
             className="shrink-0 text-xs font-semibold text-blue-300 border border-blue-500/30 px-3 py-1.5 rounded-lg hover:bg-blue-500/10 transition-colors whitespace-nowrap"
           >
             Connect GSC
-          </a>
+          </OAuthConnectButton>
         </div>
       )}
 

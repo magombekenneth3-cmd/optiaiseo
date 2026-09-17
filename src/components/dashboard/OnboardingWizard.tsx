@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 interface OnboardingWizardProps {
@@ -126,7 +127,7 @@ export function OnboardingWizard({ show, userName, hasSites = false }: Onboardin
                         <button
                             onClick={async () => {
                                 await dismiss();
-                                router.push("/api/auth/signin/google-gsc");
+                                await signIn("google-gsc", { callbackUrl: "/dashboard" });
                             }}
                             className="w-full py-3 rounded-xl bg-foreground text-background font-semibold text-sm hover:opacity-90 transition-opacity mb-3"
                         >

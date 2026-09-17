@@ -186,7 +186,7 @@ gcloud run services update aiseo-frontend \
 | `LIVEKIT_URL`                               | LiveKit WebSocket URL (`wss://...`)       | ✅          |
 | `LIVEKIT_API_KEY`                           | LiveKit API Key                           | ✅          |
 | `LIVEKIT_API_SECRET`                        | LiveKit API Secret                        | ✅          |
-| `GOOGLE_ID` & `GOOGLE_SECRET`               | Google OAuth (for login + Search Console) | Recommended |
+| `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET` | Google OAuth (for login + Search Console) | Recommended |
 | `GITHUB_ID` & `GITHUB_SECRET`               | GitHub OAuth (for Auto-Fix PRs)           | Recommended |
 | `OPENAI_API_KEY`                            | AEO visibility check on ChatGPT           | Optional    |
 | `ANTHROPIC_API_KEY`                         | AEO visibility on Claude                  | Optional    |
@@ -195,6 +195,17 @@ gcloud run services update aiseo-frontend \
 | `UPSTASH_REDIS_REST_URL`                    | Rate limiting & caching                   | Optional    |
 | `RESEND_API_KEY`                            | Email digest alerts                       | Optional    |
 | `INNGEST_EVENT_KEY` & `INNGEST_SIGNING_KEY` | Background job queuing                    | Optional    |
+
+For Google Search Console, add this exact OAuth redirect URI in Google Cloud for
+each environment:
+
+```
+https://your-domain/api/auth/callback/google-gsc
+```
+
+For local development, use `http://localhost:3000/api/auth/callback/google-gsc`.
+The app uses a dedicated `google-gsc` provider because it requests Search Console
+scopes; registering only `/api/auth/callback/google` is not sufficient.
 | `SERPAPI_KEY` or `SERPER_API_KEY`           | SERP rank tracking                        | Optional    |
 
 ---

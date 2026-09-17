@@ -32,6 +32,7 @@ import type {
   RecommendationEffort,
   RecommendationResult,
 } from "@/lib/recommendations/engine";
+import { OAuthConnectButton } from "@/components/auth/OAuthConnectButton";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Display metadata
@@ -435,6 +436,15 @@ function RecommendationCard({
             <XCircle className="w-3 h-3" />
           </button>
         </div>
+      ) : rec.cta && rec.id === "setup-gsc" ? (
+        <OAuthConnectButton
+          provider="google-gsc"
+          callbackUrl="/dashboard"
+          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-primary hover:text-emerald-400 transition-colors"
+        >
+          {rec.cta.label}
+          <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+        </OAuthConnectButton>
       ) : rec.cta ? (
         <a
           href={rec.cta.href}
@@ -472,12 +482,13 @@ function GscDisconnectedBanner({ domain }: { domain: string }) {
           actual keywords, CTR gaps, and ranking opportunities.
         </p>
       </div>
-      <a
-        href="/dashboard/settings"
+      <OAuthConnectButton
+        provider="google-gsc"
+        callbackUrl="/dashboard/recommendations"
         className="shrink-0 text-[12px] font-semibold text-amber-400 hover:text-amber-300 transition-colors"
       >
         Connect →
-      </a>
+      </OAuthConnectButton>
     </div>
   );
 }
@@ -553,6 +564,14 @@ function TopOpportunityBanner({ rec, onReview }: { rec: Recommendation | null; o
             >
               Open detail
             </a>
+          ) : rec.cta && rec.id === "setup-gsc" ? (
+            <OAuthConnectButton
+              provider="google-gsc"
+              callbackUrl="/dashboard"
+              className="inline-flex items-center justify-center rounded-xl border border-border bg-background/60 px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              {rec.cta.label}
+            </OAuthConnectButton>
           ) : rec.cta ? (
             <a
               href={rec.cta.href}

@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { Search, Zap, ShieldCheck, ArrowRight } from "lucide-react";
+import { OAuthConnectButton } from "@/components/auth/OAuthConnectButton";
 
 interface Props {
     siteDomain?: string;
@@ -35,13 +35,14 @@ export function GscConnectCard({ siteDomain }: Props) {
             </div>
 
             <div className="shrink-0 relative z-10 w-full md:w-auto">
-                <Link
-                    href="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard%2Fkeywords"
+                <OAuthConnectButton
+                    provider="google-gsc"
+                    callbackUrl="/dashboard/keywords"
                     className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-brand hover:bg-brand/90 text-brand-foreground text-xs font-bold transition-all shadow-lg shadow-brand/25 active:scale-95"
                 >
                     Connect Search Console
                     <ArrowRight className="w-4 h-4" />
-                </Link>
+                </OAuthConnectButton>
             </div>
         </div>
     );

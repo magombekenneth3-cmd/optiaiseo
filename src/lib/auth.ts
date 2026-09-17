@@ -36,17 +36,22 @@ export function jwtCacheKey(email: string): string {
     return `jwt:${email.toLowerCase().trim()}`;
 }
 
-async function hydrateTokenFromDb(token: JWT, email: string): Promise<JWT> {
+async function hydrateTokenFromDb(token: JWT, email: string, forceFresh = false): Promise<JWT> {
     email = email.toLowerCase().trim();
 
     const cacheKey = jwtCacheKey(email);
-    try {
-        const hit = await redis.get<string>(cacheKey);
-        if (hit) {
-            return { ...token, ...JSON.parse(hit) };
+    // OAuth callbacks and explicit session updates can change integration flags.
+    // Never reuse a cached JWT snapshot for those paths, or a newly connected
+    // GSC account may continue to look disconnected until the cache expires.
+    if (!forceFresh) {
+        try {
+            const hit = await redis.get<string>(cacheKey);
+            if (hit) {
+                return { ...token, ...JSON.parse(hit) };
+            }
+        } catch {
+            // Redis unavailable — fall through to DB
         }
-    } catch {
-        // Redis unavailable — fall through to DB
     }
 
     const dbUser = await prisma.user.findUnique({
@@ -371,7 +376,7 @@ export const authOptions: NextAuthOptions = {
             if (user) {
                 if (!user.email) return token;
                 try {
-                    token = await hydrateTokenFromDb(token, user.email);
+                    token = await hydrateTokenFromDb(token, user.email, true);
                 } catch (err: unknown) {
                     logger.error("[NextAuth JWT] DB lookup failed during signIn:", {
                         error: err instanceof Error ? (err.stack ?? err.message) : String(err),
@@ -398,7 +403,7 @@ export const authOptions: NextAuthOptions = {
                 }
                 if (token.email) {
                     try {
-                        token = await hydrateTokenFromDb(token, token.email as string);
+                        token = await hydrateTokenFromDb(token, token.email as string, true);
                         if (process.env.NODE_ENV === "development") {
                             logger.debug(`[NextAuth JWT] Successfully updated token to Tier: ${token.subscriptionTier}`);
                         }

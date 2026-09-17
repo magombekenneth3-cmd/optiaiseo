@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { OAuthConnectButton } from "@/components/auth/OAuthConnectButton";
 import {
     Link2,
     FileText,
@@ -46,7 +47,8 @@ export function NextBestActionCard({
             impact: "High impact",
             effort: "Low effort",
             cta: "Connect GSC",
-            href: "/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard",
+            href: "/dashboard",
+            oauthProvider: "google-gsc" as const,
         },
         {
             condition: !hasKeywords,
@@ -56,6 +58,7 @@ export function NextBestActionCard({
             effort: "Low effort",
             cta: "Add keywords",
             href: "/dashboard/keywords",
+            oauthProvider: undefined,
         },
         {
             condition: !hasBlogs,
@@ -65,6 +68,7 @@ export function NextBestActionCard({
             effort: "Low effort",
             cta: "Generate post",
             href: "/dashboard/blogs",
+            oauthProvider: undefined,
         },
         {
             condition: !hasAeo,
@@ -74,6 +78,7 @@ export function NextBestActionCard({
             effort: "Low effort",
             cta: "Run AEO check",
             href: "/dashboard/aeo",
+            oauthProvider: undefined,
         },
         {
             condition: !hasTeam,
@@ -83,6 +88,7 @@ export function NextBestActionCard({
             effort: "Low effort",
             cta: "Invite team",
             href: "/dashboard/team",
+            oauthProvider: undefined,
         },
     ];
 
@@ -125,12 +131,22 @@ export function NextBestActionCard({
                 <span className="hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] font-semibold text-blue-400 bg-blue-500/10 border border-blue-500/20">
                     {active.effort}
                 </span>
-                <Link
-                    href={active.href}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold text-foreground hover:bg-accent transition-colors whitespace-nowrap"
-                >
-                    {active.cta} <ChevronRight className="w-3 h-3" />
-                </Link>
+                {active.oauthProvider ? (
+                    <OAuthConnectButton
+                        provider={active.oauthProvider}
+                        callbackUrl="/dashboard"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold text-foreground hover:bg-accent transition-colors whitespace-nowrap"
+                    >
+                        {active.cta} <ChevronRight className="w-3 h-3" />
+                    </OAuthConnectButton>
+                ) : (
+                    <Link
+                        href={active.href}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold text-foreground hover:bg-accent transition-colors whitespace-nowrap"
+                    >
+                        {active.cta} <ChevronRight className="w-3 h-3" />
+                    </Link>
+                )}
             </div>
         </div>
     );

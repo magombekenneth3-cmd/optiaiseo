@@ -21,6 +21,7 @@ import { MetricTrendChart } from "@/components/dashboard/MetricTrendChart";
 import { getMetricTrend } from "@/lib/metrics/metric-snapshot";
 import { ScoreDropAlert } from "@/components/dashboard/ScoreDropAlert";
 import { NextBestActionCard } from "@/components/dashboard/NextBestActionCard";
+import { OAuthConnectButton } from "@/components/auth/OAuthConnectButton";
 import {
   WinCelebrationToast,
   ReAuditNudge,
@@ -546,7 +547,9 @@ export default async function DashboardPage() {
                   <p className="stat-label">Organic Clicks</p>
                   <p className="empty-state-hint">
                     No Search Console data.{" "}
-                    <Link href="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard">Connect GSC</Link>
+                    <OAuthConnectButton provider="google-gsc" callbackUrl="/dashboard" className="hover:underline">
+                      Connect GSC
+                    </OAuthConnectButton>
                   </p>
                 </>
               )}

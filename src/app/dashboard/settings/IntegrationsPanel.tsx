@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { signIn } from "next-auth/react";
 import { IntegrationStatusCard } from "@/components/dashboard/IntegrationStatusCard";
 import type { IntegrationStatus } from "@/app/api/integrations/status/route";
 import { Ga4ConnectForm } from "@/components/dashboard/Ga4ConnectForm";
@@ -129,7 +130,9 @@ export function IntegrationsPanel({
                         accountLabel={gsc?.accountLabel}
                         lastSyncAt={gsc?.lastSyncAt}
                         configErrors={gsc?.configErrors ?? []}
-                        connectAction="/api/auth/signin/google-gsc?callbackUrl=%2Fdashboard%2Fsettings%3Ftab%3Dintegrations"
+                        connectAction={() => {
+                            void signIn("google-gsc", { callbackUrl: "/dashboard/settings?tab=integrations" });
+                        }}
                         onDisconnect={async () => {
                             const res = await fetch("/api/settings/disconnect-gsc", { method: "POST" });
                             if (!res.ok) throw new Error("Failed to disconnect");
@@ -145,7 +148,9 @@ export function IntegrationsPanel({
                         accountLabel={ga4?.accountLabel}
                         lastSyncAt={ga4?.lastSyncAt}
                         configErrors={ga4?.configErrors ?? []}
-                        connectAction="/api/auth/signin/google-ga4?callbackUrl=%2Fdashboard%2Fsettings%3Ftab%3Dintegrations"
+                        connectAction={() => {
+                            void signIn("google-ga4", { callbackUrl: "/dashboard/settings?tab=integrations" });
+                        }}
                         onDisconnect={async () => {
                             const res = await fetch("/api/settings/disconnect-ga4", { method: "POST" });
                             if (!res.ok) throw new Error("Failed to disconnect");
@@ -164,7 +169,9 @@ export function IntegrationsPanel({
                         accountLabel={github?.accountLabel}
                         lastSyncAt={github?.lastSyncAt}
                         configErrors={github?.configErrors ?? []}
-                        connectAction="/api/auth/signin/github?callbackUrl=%2Fdashboard%2Fsettings%3Ftab%3Dintegrations"
+                        connectAction={() => {
+                            void signIn("github", { callbackUrl: "/dashboard/settings?tab=integrations" });
+                        }}
                         onDisconnect={async () => {
                             const res = await fetch("/api/settings/disconnect-github", { method: "POST" });
                             if (!res.ok) throw new Error("Failed to disconnect");

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { toast } from "sonner";
 import { createSite } from "@/app/actions/site";
 import {
@@ -301,7 +302,7 @@ function GscStep({ siteId, alreadyCited, upgradePlan, upgradeBilling }: { siteId
 
     const handleConnect = () => {
         const callbackUrl = buildDashboardUrl();
-        router.push(`/api/auth/signin/google-gsc?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+        void signIn("google-gsc", { callbackUrl });
     };
 
     const handleSkip = () => {
