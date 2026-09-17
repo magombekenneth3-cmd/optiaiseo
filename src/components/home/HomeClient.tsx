@@ -636,6 +636,9 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
                     ["/blog", "SEO & AI Search Blog"],
                     ["/case-studies", "Case Studies"],
                     ["/methodology", "AEO Methodology"],
+                    ["/guide", "SEO Guides"],
+                    ["/aeo-guide", "AEO Guides"],
+                    ["/tools", "Tool Guides"],
                     ["/leaderboard", "AI SEO Leaderboard"],
                     ["/vs", "Comparisons"],
                   ].map(([href, label]) => (
@@ -723,6 +726,8 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
                 ["#features", "Features"],
                 ["#pricing", "Pricing"],
                 ["/aria", "Aria AI Copilot"],
+                ["/tools", "Tool Guides"],
+                ["/aeo-guide", "AEO Guides"],
                 ["/for-agencies", "For Agencies"],
                 ["/for-saas", "For SaaS Companies"],
                 ["/blog", "Resources"],
@@ -1408,6 +1413,9 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
               <div className="text-[10px] font-black uppercase tracking-[0.14em] text-white/35">Resources</div>
               <div className="mt-4 flex flex-col gap-2 text-xs text-white/50">
                 <Link href="/blog" className="hover:text-white">Blog</Link>
+                <Link href="/tools" className="hover:text-white">Tool Guides</Link>
+                <Link href="/aeo-guide" className="hover:text-white">AEO Guides</Link>
+                <Link href="/guide" className="hover:text-white">SEO Guides</Link>
                 <Link href="/leaderboard" className="hover:text-white">AI SEO Leaderboard</Link>
                 <Link href="/vs" className="hover:text-white">Comparisons</Link>
                 <Link href="/free/gso-checker" className="hover:text-white">Free AI Checker</Link>
