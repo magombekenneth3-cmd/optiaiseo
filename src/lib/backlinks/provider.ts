@@ -1,10 +1,3 @@
-/**
- * Pure parsers for DataForSEO Backlinks API payloads.
- *
- * Keeping the provider contract here makes it much harder for UI/storage code
- * to accidentally depend on fields from a different Backlinks endpoint.
- */
-
 import type { BacklinkDetail } from "@/types/backlinks";
 
 export type UnknownRecord = Record<string, unknown>;

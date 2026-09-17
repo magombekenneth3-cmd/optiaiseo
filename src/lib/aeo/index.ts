@@ -149,7 +149,7 @@ const extractSchemaTypes = (html: string): string[] => {
     let match
     while ((match = jsonLdRegex.exec(html)) !== null) {
         try {
-             
+
             const data = JSON.parse(match[1])
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const getTypes = (obj: any): void => {
@@ -183,40 +183,40 @@ const generateRelevantQuestions = async (
     pageContent: string | null
 ): Promise<string[]> => {
     return cachedQuestions(domain, coreServices, async () => {
-    const fallback = coreServices ? [
-        `How does ${domain} help with ${coreServices}?`,
-        `What is ${coreServices} and why does it matter?`,
-        `How to get started with ${coreServices}`,
-        `What are the benefits of ${coreServices}?`,
-        `Best tools for ${coreServices} in ${new Date().getFullYear()}`,
-        `${domain} ${coreServices} pricing and plans`,
-        `Is ${domain} worth it for ${coreServices}?`,
-        `Top ${coreServices} platforms compared`,
-        `Why is my ${coreServices} not working?`,
-        `Common ${coreServices} mistakes to avoid`,
-        `${domain} vs competitors for ${coreServices}`,
-        `Alternatives to ${domain} for ${coreServices}`,
-        `${domain} ${coreServices} features`,
-        `How to use ${domain} for ${coreServices}`,
-    ] : [
-        `What does ${domain} do?`,
-        `Tell me about ${domain}`,
-        `What services does ${domain} offer?`,
-        `Is ${domain} reliable?`,
-    ];
+        const fallback = coreServices ? [
+            `How does ${domain} help with ${coreServices}?`,
+            `What is ${coreServices} and why does it matter?`,
+            `How to get started with ${coreServices}`,
+            `What are the benefits of ${coreServices}?`,
+            `Best tools for ${coreServices} in ${new Date().getFullYear()}`,
+            `${domain} ${coreServices} pricing and plans`,
+            `Is ${domain} worth it for ${coreServices}?`,
+            `Top ${coreServices} platforms compared`,
+            `Why is my ${coreServices} not working?`,
+            `Common ${coreServices} mistakes to avoid`,
+            `${domain} vs competitors for ${coreServices}`,
+            `Alternatives to ${domain} for ${coreServices}`,
+            `${domain} ${coreServices} features`,
+            `How to use ${domain} for ${coreServices}`,
+        ] : [
+            `What does ${domain} do?`,
+            `Tell me about ${domain}`,
+            `What services does ${domain} offer?`,
+            `Is ${domain} reliable?`,
+        ];
 
-    if (!process.env.GEMINI_API_KEY || !pageContent) return fallback;
+        if (!process.env.GEMINI_API_KEY || !pageContent) return fallback;
 
-    try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const cleanText = pageContent
-            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/\s+/g, ' ')
-            .substring(0, 6000);
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const cleanText = pageContent
+                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .substring(0, 6000);
 
-        const prompt = `You are a senior AEO (Answer Engine Optimization) researcher auditing how well a website answers real user queries in AI engines (Perplexity, ChatGPT, Google AI Overviews).
+            const prompt = `You are a senior AEO (Answer Engine Optimization) researcher auditing how well a website answers real user queries in AI engines (Perplexity, ChatGPT, Google AI Overviews).
 
 Your task: Generate exactly 20 highly specific questions a real user would ask an AI assistant to find this website.
 
@@ -245,24 +245,24 @@ Website content to base questions on:
 ${cleanText}
 ---`;
 
-        const response = await ai.models.generateContent({
-            model: AI_MODELS.GEMINI_PRO,
-            contents: prompt,
-            config: { responseMimeType: "application/json", temperature: 0.2 }
-        });
+            const response = await ai.models.generateContent({
+                model: AI_MODELS.GEMINI_PRO,
+                contents: prompt,
+                config: { responseMimeType: "application/json", temperature: 0.2 }
+            });
 
-        const text = response.text?.trim() ?? '';
-        const jsonText = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
-        const parsed = JSON.parse(jsonText);
-        if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
-            logger.debug(`[AEO] Generated ${parsed.length} site-specific questions for ${domain}`);
-            return parsed.slice(0, 20);
+            const text = response.text?.trim() ?? '';
+            const jsonText = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+            const parsed = JSON.parse(jsonText);
+            if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
+                logger.debug(`[AEO] Generated ${parsed.length} site-specific questions for ${domain}`);
+                return parsed.slice(0, 20);
+            }
+            return fallback;
+        } catch (err: unknown) {
+            logger.warn('[AEO] Gemini question generation failed, using fallback questions:', { error: (err as Error)?.message || String(err) });
+            return fallback;
         }
-        return fallback;
-    } catch (err: unknown) {
-        logger.warn('[AEO] Gemini question generation failed, using fallback questions:', { error: (err as Error)?.message || String(err) });
-        return fallback;
-    }
     });
 };
 
@@ -431,7 +431,7 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
         await prisma.aeoReport.update({
             where: { id: reportId },
             data: { checks: { status: "Fetching site pages", currentStep: 1 } }
-        }).catch(() => {});
+        }).catch(() => { });
     }
 
     const rawBrand = extractBrandIdentity(domain, brandNameOverride).displayName
@@ -467,7 +467,7 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
         await prisma.aeoReport.update({
             where: { id: reportId },
             data: { checks: { status: "Schema gap detection", currentStep: 2 } }
-        }).catch(() => {});
+        }).catch(() => { });
     }
 
     // Schema can legitimately live on an FAQ, about, service, or blog page.
@@ -1238,13 +1238,13 @@ ${cleanText}
                     hasDirectAnswer && `direct answer paragraph (${firstPWords} words)`,
                     hasFaqSchema && 'FAQPage schema',
                     hasSpeakable && 'speakable markup',
-                  ].filter(Boolean).join(', ')}`
+                ].filter(Boolean).join(', ')}`
                 : `Weak AI Overview eligibility (${aioScore}/4 signals): ${[
                     !isQuestionH1 && 'H1 is not question-formatted',
                     !hasDirectAnswer && (firstPWords > 150 ? `intro paragraph too long (${firstPWords} words, target ≤150)` : 'no concise direct-answer paragraph found'),
                     !hasFaqSchema && 'no FAQPage schema',
                     !hasSpeakable && 'no speakable markup',
-                  ].filter(Boolean).join('; ')}`,
+                ].filter(Boolean).join('; ')}`,
             recommendation: aioScore >= 2
                 ? "Good AI Overview eligibility signals — maintain the direct-answer structure and FAQ schema"
                 : [
@@ -1252,7 +1252,7 @@ ${cleanText}
                     !hasDirectAnswer ? '• Add a 40–100 word direct-answer paragraph immediately after the H1. This is the exact text AI Overviews extract. No preamble, no "In this article" — just the answer.' : '',
                     !hasFaqSchema ? '• Add FAQPage JSON-LD schema with 5–8 Q&A pairs targeting related questions. FAQ schema is the #1 structural signal for AI Overview inclusion.' : '',
                     !hasSpeakable ? '• Add speakable schema to mark which paragraphs are suitable for audio/voice extraction — a growing signal for Google Assistant and AI Overview audio summaries.' : '',
-                  ].filter(Boolean).join('\n'),
+                ].filter(Boolean).join('\n'),
         })
     }
 
@@ -1280,7 +1280,7 @@ ${cleanText}
                     ? "Strong AI citation presence — continue producing authoritative content"
                     : citationScore >= 33
                         ? "Moderate citation presence — improve schema markup and E-E-A-T signals to increase citations"
-                         
+
                         : "Low citation presence — focus on FAQ schema, author attribution, and Organization markup to get picked up",
             })
         }
@@ -1296,7 +1296,7 @@ ${cleanText}
             await prisma.aeoReport.update({
                 where: { id: reportId },
                 data: { checks: { status: "Checking Gemini citations", currentStep: 3 } }
-            }).catch(() => {});
+            }).catch(() => { });
         }
         multiModelResults = await auditMultiModelMentions(domain, coreServices, brandNameOverride);
 
@@ -1304,7 +1304,7 @@ ${cleanText}
             await prisma.aeoReport.update({
                 where: { id: reportId },
                 data: { checks: { status: "Checking Perplexity citations", currentStep: 4 } }
-            }).catch(() => {});
+            }).catch(() => { });
         }
 
         const aioKeyword = coreServices ? `${domain.split('.')[0]} ${coreServices}` : domain.split('.')[0]
@@ -1315,7 +1315,7 @@ ${cleanText}
             await prisma.aeoReport.update({
                 where: { id: reportId },
                 data: { checks: { status: "Checking ChatGPT mentions", currentStep: 5 } }
-            }).catch(() => {});
+            }).catch(() => { });
         }
     }
 
@@ -1462,7 +1462,7 @@ ${cleanText}
             await prisma.aeoReport.update({
                 where: { id: reportId },
                 data: { checks: { status: "Semantic vector analysis", currentStep: 6 } }
-            }).catch(() => {});
+            }).catch(() => { });
         }
         try {
             const userContent = html
@@ -1508,7 +1508,7 @@ ${cleanText}
         await prisma.aeoReport.update({
             where: { id: reportId },
             data: { checks: { status: "Building report", currentStep: 7 } }
-        }).catch(() => {});
+        }).catch(() => { });
     }
 
     const result: AeoResult = {
@@ -1523,15 +1523,16 @@ ${cleanText}
         generativeShareOfVoice,
         citationLikelihood,
         multiModelResults: multiModelResults.results,
-        // A-1: Derive from multiModelResults (single source of truth) instead of the deleted fan-out.
-        modelCitationResults: { models: multiModelResults.results.map(r => ({
-            modelName: r.model,
-            queriesRun: 1,
-            citationCount: r.mentioned ? 1 : 0,
-            citationRate: r.confidence ?? 0,
-            topCitedQueries: [],
-            missedQueries: [],
-        })) },
+        modelCitationResults: {
+            models: multiModelResults.results.map(r => ({
+                modelName: r.model,
+                queriesRun: 1,
+                citationCount: r.mentioned ? 1 : 0,
+                citationRate: r.confidence ?? 0,
+                topCitedQueries: [],
+                missedQueries: [],
+            }))
+        },
         factCheckResults: factVerification.checks,
         topRecommendations,
         scannedAt: new Date(),
