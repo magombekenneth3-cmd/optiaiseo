@@ -30,6 +30,7 @@ const NAV_LINKS: NavLink[] = [
     ],
   },
   { href: "/free/seo-checker", label: "Free Tools" },
+  { href: "/tools", label: "Tool Guides" },
   { href: "/vs", label: "Compare" },
   { href: "/pricing", label: "Pricing" },
   { href: "/guide", label: "Guides" },
