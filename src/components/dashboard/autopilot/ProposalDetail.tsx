@@ -106,8 +106,8 @@ export function ProposalDetail({
 }: {
   proposal: ProposalFull | null;
   onClose: () => void;
-  onApprove: () => void;
-  onReject: () => void;
+  onApprove?: () => void;
+  onReject?: () => void;
   approving: boolean;
   rejecting: boolean;
 }) {
@@ -127,7 +127,7 @@ export function ProposalDetail({
   const safetyInfo = SAFETY_CONFIG[proposal.safetyTier ?? 1] ?? SAFETY_CONFIG[1];
   const score = proposal.scoreBreakdown;
   const changes = Array.isArray(proposal.proposedChanges) ? proposal.proposedChanges : [];
-  const canAuthorize = proposal.status === "DRAFT" || proposal.status === "READY";
+  const canAuthorize = (proposal.status === "DRAFT" || proposal.status === "READY") && onApprove && onReject;
 
   return (
     <div className="flex flex-col gap-5 fade-in-up">

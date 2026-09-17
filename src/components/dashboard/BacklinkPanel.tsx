@@ -321,12 +321,12 @@ export function BacklinkPanel({ siteId, competitorDomains }: {
                                         <tr key={i} className="hover:bg-card transition-colors">
                                             <td className="px-5 py-3 max-w-[220px] truncate">
                                                 <a
-                                                    href={d.sourceUrl}
+                                                    href={d.sourceUrl || `https://${d.sourceDomain}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="text-blue-400 hover:underline flex items-center gap-1"
                                                 >
-                                                    {d.sourceUrl.replace(/^https?:\/\//, "").substring(0, 40)}
+                                                    {(d.sourceUrl || d.sourceDomain).replace(/^https?:\/\//, "").substring(0, 40)}
                                                     <ExternalLink className="w-3 h-3 shrink-0" />
                                                 </a>
                                             </td>
@@ -340,10 +340,11 @@ export function BacklinkPanel({ siteId, competitorDomains }: {
                                             </td>
                                             <td className="px-5 py-3 text-center">
                                                 <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                                    d.anchorText ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                                    d.isDoFollow
+                                                        ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
                                                         : "bg-muted text-muted-foreground border-border"
                                                 }`}>
-                                                    dofollow
+                                                    {d.isDoFollow ? "dofollow" : "nofollow"}
                                                 </span>
                                             </td>
                                             <td className="px-5 py-3 text-center">
@@ -352,8 +353,8 @@ export function BacklinkPanel({ siteId, competitorDomains }: {
                                                         Toxic
                                                     </span>
                                                 ) : (
-                                                    <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                                                        Clean
+                                                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${d.status === "lost" ? "bg-red-500/10 text-red-400 border-red-500/20" : d.status === "broken" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"}`}>
+                                                        {d.status}
                                                     </span>
                                                 )}
                                             </td>

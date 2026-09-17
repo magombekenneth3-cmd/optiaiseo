@@ -93,7 +93,7 @@ function StatCard({
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
-export function AutopilotDashboard() {
+export function AutopilotDashboard({ canManage = false }: { canManage?: boolean } = {}) {
   const searchParams = useSearchParams();
   const siteId = searchParams.get("siteId");
 
@@ -117,11 +117,12 @@ export function AutopilotDashboard() {
   const [approving, setApproving] = useState(false);
   const [rejecting, setRejecting] = useState(false);
 
-  // Pipeline state
+  // Pipeline state — tracks the currently selected proposal's lifecycle
   const [pipelineState, setPipelineState] = useState<PipelineState>({
+    proposalId: null,
+    status: null,
     activeStageId: null,
     completedStages: [],
-    selectedStageId: null,
   });
 
   // ── Fetch proposals ────────────────────────────────────────────────────
@@ -171,6 +172,8 @@ export function AutopilotDashboard() {
 
       setPipelineState((prev) => ({
         ...prev,
+        proposalId: null,
+        status: null,
         activeStageId,
         completedStages,
       }));
@@ -251,12 +254,7 @@ export function AutopilotDashboard() {
     fetchProposals();
   }
 
-  function handlePipelineStageClick(stageId: string) {
-    setPipelineState((prev) => ({
-      ...prev,
-      selectedStageId: prev.selectedStageId === stageId ? null : stageId,
-    }));
-  }
+  // Pipeline stage click is now handled internally by PipelineFlow
 
   // ── No site ────────────────────────────────────────────────────────────
 
@@ -312,7 +310,7 @@ export function AutopilotDashboard() {
       </div>
 
       {/* ── Pipeline Flow ───────────────────────────────────────────────── */}
-      <PipelineFlow state={pipelineState} onStageClick={handlePipelineStageClick} />
+      <PipelineFlow state={pipelineState} />
 
       {/* ── Filter + Sort Bar ───────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3">
@@ -444,8 +442,8 @@ export function AutopilotDashboard() {
               <ProposalDetail
                 proposal={detail}
                 onClose={() => setSelectedId(null)}
-                onApprove={handleApprove}
-                onReject={handleReject}
+                onApprove={canManage ? handleApprove : undefined}
+                onReject={canManage ? handleReject : undefined}
                 approving={approving}
                 rejecting={rejecting}
               />

@@ -171,7 +171,10 @@ export async function generateHealingPlan(siteId: string, currentGsov: number, p
 }
 
 export async function executeHealing(siteId: string, actions: HealingAction[]) {
-    const site = await prisma.site.findUnique({ where: { id: siteId } });
+    const site = await prisma.site.findUnique({
+        where: { id: siteId },
+        include: { user: { select: { email: true } } },
+    });
     if (!site || site.operatingMode !== "AUTOPILOT") return;
 
     const scoredActions = await scoreHealingActions(siteId, actions);

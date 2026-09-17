@@ -551,14 +551,23 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
             : "Add Organization schema with name, url, logo, sameAs (social profiles), and description. Critical for brand recognition by AI engines.",
     })
 
-    // Fetch all ancillary pages in parallel to cut audit time from ~15s → ~5s
-    const [aboutHtml, contactHtml, privacyHtml, privacyPolicyHtml, robotsHtml, sitemapHtml] = await Promise.all([
+    // A-5: Fetch ALL ancillary pages in a single parallel batch (was two sequential batches).
+    const [
+        aboutHtml, contactHtml, privacyHtml, privacyPolicyHtml,
+        robotsHtml, sitemapHtml,
+        pricingHtml, compareHtml, blogHtmlRaw, resourcesHtml, llmsTxtGeoHtml,
+    ] = await Promise.all([
         fetchPage(`${url}/about`),
         fetchPage(`${url}/contact`),
         fetchPage(`${url}/privacy`),
         fetchPage(`${url}/privacy-policy`),
         fetchPage(`${url}/robots.txt`),
         fetchPage(`${url}/sitemap.xml`),
+        fetchPage(`${url}/pricing`),
+        fetchPage(`${url}/compare`),
+        fetchPage(`${url}/blog`),
+        fetchPage(`${url}/resources`),
+        fetchPage(`${url}/llms.txt`),
     ]);
 
 
@@ -916,13 +925,8 @@ ${cleanText}
     })
 
 
-    const [pricingHtml, compareHtml, blogHtmlRaw, resourcesHtml, llmsTxtGeoHtml] = await Promise.all([
-        fetchPage(`${url}/pricing`),
-        fetchPage(`${url}/compare`),
-        fetchPage(`${url}/blog`),
-        fetchPage(`${url}/resources`),
-        fetchPage(`${url}/llms.txt`),
-    ]);
+    // A-5: pricingHtml, compareHtml, blogHtmlRaw, resourcesHtml, llmsTxtGeoHtml
+    // are now fetched in the single batch above (L553).
     const blogHtml = blogHtmlRaw ?? resourcesHtml;
 
     const hasPricing = (pricingHtml !== null && pricingHtml.length > 300) ||
@@ -1253,53 +1257,14 @@ ${cleanText}
     }
 
 
-    // Pass actual page HTML so Gemini can generate questions RELEVANT to this site's content.
-    // This makes the citation check test meaningful questions, not generic brand queries.
+    // A-1: Removed the redundant runModelAudit fan-out. It duplicated
+    // auditMultiModelMentions() with weak prompts and 60 extra API calls.
+    // modelCitationResults is now derived from multiModelResults below.
     let citationScore = 0;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let fanOutResults: any[] = [];
 
     if (!lite) {
         const { score: _cScore, contexts: _citationContexts } = await checkPerplexityCitation(domain, coreServices, html)
         citationScore = _cScore;
-
-        // Multi-Model Fan-out for the new model comparison bar
-        const questions = await generateRelevantQuestions(domain, coreServices, html);
-        const { callGpt4o, callPerplexity } = await import("./llm-callers");
-        const { callGemini } = await import("@/lib/gemini");
-
-        const runModelAudit = async (modelName: string, queries: string[], targetDomain: string, llmCaller: (p: string) => Promise<string>) => {
-            let citations = 0;
-            for (const q of queries) {
-                const prompt = `Act as an AI answering: ${q}. Mention brands if relevant.`;
-                try {
-                    const response = await llmCaller(prompt);
-                    if (response.toLowerCase().includes(targetDomain.toLowerCase())) citations++;
-                } catch {
-                    // Ignore errors for individual queries
-                }
-            }
-            return {
-                modelName,
-                queriesRun: queries.length,
-                citationCount: citations,
-                citationRate: queries.length ? Math.round((citations / queries.length) * 100) : 0,
-                topCitedQueries: [],
-                missedQueries: []
-            };
-        };
-
-         
-        try {
-            fanOutResults = await Promise.all([
-                runModelAudit("gemini", questions, domain, callGemini),
-                runModelAudit("gpt-4o", questions, domain, callGpt4o),
-                runModelAudit("perplexity", questions, domain, callPerplexity),
-            ]);
-         
-        } catch (error: unknown) {
-            logger.error("[AEO Fan-out] Failed:", { error: (error as Error)?.message || String(error) });
-        }
 
         if (citationScore >= 0) {
             checks.push({
@@ -1558,7 +1523,15 @@ ${cleanText}
         generativeShareOfVoice,
         citationLikelihood,
         multiModelResults: multiModelResults.results,
-        modelCitationResults: { models: fanOutResults },
+        // A-1: Derive from multiModelResults (single source of truth) instead of the deleted fan-out.
+        modelCitationResults: { models: multiModelResults.results.map(r => ({
+            modelName: r.model,
+            queriesRun: 1,
+            citationCount: r.mentioned ? 1 : 0,
+            citationRate: r.confidence ?? 0,
+            topCitedQueries: [],
+            missedQueries: [],
+        })) },
         factCheckResults: factVerification.checks,
         topRecommendations,
         scannedAt: new Date(),

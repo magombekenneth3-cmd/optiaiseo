@@ -71,7 +71,6 @@ import {
     competitorAlertsSiteJob,
     indexingSiteJob,
     weeklyAutoReauditJob,
-    backlinksSiteJob,
     purgeExpiredTrendingTopicsJob,
 } from "@/lib/inngest/functions/cron-workers";
 
@@ -146,8 +145,7 @@ export const { GET, POST, PUT } = serve({
         trackedRankCheckerCronJob,  // daily cron trigger (06:00 UTC)
         cronDailyRankTracker,       // fan-out cron (04:00 UTC)
 
-        backlinkCheckSite,          // event: backlinks.check.site + Mon 03:00 UTC cron
-        backlinksSiteJob,           // fan-out child: backlinks.check.site — must be registered
+        backlinkCheckSite,          // sole consumer for backlinks.check.site
         cronWeeklyBacklinks,        // weekly backlinks fan-out cron (Mon 03:00 UTC)
         backlinkOutreachFollowupJob, // daily 09:00 UTC — auto-advance stale outreach cards
 

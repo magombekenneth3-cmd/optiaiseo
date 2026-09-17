@@ -37,6 +37,7 @@ function drColor(dr: number | null): string {
 
 function toxicLabel(reason: string | null): string {
     switch (reason) {
+        case "provider_spam_score": return "Provider spam score";
         case "exact_match_anchor": return "Exact-match anchor";
         case "low_dr_spam": return "Low-DR spam";
         case "toxic_keyword": return "Toxic keyword";
@@ -44,14 +45,8 @@ function toxicLabel(reason: string | null): string {
     }
 }
 
-function spamScore(b: StoredBacklink): number {
-    if (!b.isToxic) return 0;
-    switch (b.toxicReason) {
-        case "toxic_keyword":       return 85;
-        case "exact_match_anchor":  return 65;
-        case "low_dr_spam":         return 45;
-        default: return 30;
-    }
+function spamScore(b: StoredBacklink): number | null {
+    return b.spamScore;
 }
 
 function spamBadgeCls(score: number) {
@@ -183,9 +178,22 @@ export default function BacklinksClient({
         if (!effectiveSiteId) return;
         setLoadingLive(true); setError(null);
         try {
-            const refresh = bust ? "&refresh=true" : "";
+            if (bust) {
+                const syncRes = await fetch(`/api/backlinks?siteId=${effectiveSiteId}&mode=sync`);
+                const payload = await syncRes.json();
+                if (!syncRes.ok) {
+                    setError(payload.error ?? "Failed to refresh backlink data");
+                    return;
+                }
+                setSummary(payload.summary ?? null);
+                setAlerts(payload.alerts ?? []);
+                setQuality(payload.quality ?? null);
+                setStored(payload.stored ?? []);
+                return;
+            }
+
             const [sumRes, alertRes, qualRes] = await Promise.all([
-                fetch(`/api/backlinks?siteId=${effectiveSiteId}&mode=summary${refresh}`),
+                fetch(`/api/backlinks?siteId=${effectiveSiteId}&mode=summary`),
                 fetch(`/api/backlinks?siteId=${effectiveSiteId}&mode=alerts`),
                 fetch(`/api/backlinks?siteId=${effectiveSiteId}&mode=quality`),
             ]);
@@ -250,7 +258,7 @@ export default function BacklinksClient({
             let av: number, bv: number;
             if (sortCol === "dr") { av = a.domainRating ?? -1; bv = b.domainRating ?? -1; }
             else if (sortCol === "lastSeen") { av = new Date(a.lastSeen).getTime(); bv = new Date(b.lastSeen).getTime(); }
-            else if (sortCol === "spamScore") { av = spamScore(a); bv = spamScore(b); }
+            else if (sortCol === "spamScore") { av = spamScore(a) ?? -1; bv = spamScore(b) ?? -1; }
             else { av = new Date(a.firstSeen).getTime(); bv = new Date(b.firstSeen).getTime(); }
             return sortDir === "desc" ? bv - av : av - bv;
         });
@@ -308,7 +316,7 @@ export default function BacklinksClient({
                             <span className="text-[#6e7681] font-normal ml-2 text-[18px]">— Link Intelligence</span>
                         </h1>
                         <p className="text-[13px] text-[#8b949e] mt-1 flex flex-wrap items-center gap-1.5">
-                            <span>{stored.length} referring domains</span>
+                            <span>{stored.length} observed links</span>
                             {quality && quality.toxic > 0 && (
                                 <><span className="text-[#30363d]">·</span>
                                 <span className="text-[#f85149] font-semibold">{quality.toxic} toxic</span></>
@@ -385,8 +393,8 @@ export default function BacklinksClient({
                         {[
                             { label: "Domain Rating", value: summary.domainRating, sub: drDelta != null ? `${drDelta > 0 ? "+" : ""}${drDelta} this period` : undefined, color: drColor(summary.domainRating) },
                             { label: "Referring Domains", value: fmt(summary.referringDomains), sub: `avg DR ${avgRefDR ?? summary.avgReferringDR ?? "—"}` },
-                            { label: "Total Backlinks", value: fmt(summary.totalBacklinks), sub: `${summary.doFollowRatio}% DoFollow` },
-                            { label: "DoFollow %", value: `${summary.doFollowRatio}%`, color: "#2ea043" },
+                            { label: "Total Backlinks", value: fmt(summary.totalBacklinks), sub: summary.doFollowRatio == null ? "Link mix not synced" : `${summary.doFollowRatio}% DoFollow` },
+                            { label: "DoFollow %", value: summary.doFollowRatio == null ? "—" : `${summary.doFollowRatio}%`, color: "#2ea043" },
                         ].map(m => (
                             <div key={m.label} className="flex flex-col items-center justify-center px-4 py-5 gap-1">
                                 <span className="text-[28px] font-black tabular-nums text-[#e6edf3] leading-none" style={m.color ? { color: m.color } : undefined}>{m.value}</span>
@@ -480,8 +488,8 @@ export default function BacklinksClient({
                                     {a.type === "gained" ? "Gained" : "Lost"}
                                 </span>
                                 <span className="text-[10px] text-[#6e7681] shrink-0 tabular-nums">{new Date(a.detectedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-                                {(a as any).url && (
-                                    <a href={(a as any).url} target="_blank" rel="noopener noreferrer" className="text-[#388bfd] hover:text-[#58a6ff]"><ExternalLink size={11} /></a>
+                                {a.url && (
+                                    <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-[#388bfd] hover:text-[#58a6ff]"><ExternalLink size={11} /></a>
                                 )}
                             </div>
                         ))}
@@ -592,7 +600,7 @@ export default function BacklinksClient({
                 <div className="flex items-center justify-between px-5 py-4 border-b border-[#21262d] flex-wrap gap-3">
                     <div>
                         <h2 className="text-sm font-semibold text-[#e6edf3] m-0">Referring Domains</h2>
-                        <p className="text-[11px] text-[#6e7681] mt-0.5 m-0">{stored.length} domains tracked</p>
+                        <p className="text-[11px] text-[#6e7681] mt-0.5 m-0">{stored.length} link observations tracked</p>
                     </div>
                     <div className="flex gap-2 items-center">
                         <div className="relative">
@@ -640,7 +648,7 @@ export default function BacklinksClient({
                             </thead>
                             <tbody>
                                 {filteredStored.slice(0, 100).map((b, idx) => {
-                                    const ss = spamScore(b);
+                                            const ss = spamScore(b);
                                     return (
                                     <tr key={b.id || b.srcDomain + idx} className={`border-b border-[#161b22] hover:bg-[#161b22] transition-colors ${b.isToxic ? "bg-red-500/[0.02]" : ""}`}>
                                         <td className="px-3 py-2.5">
@@ -657,12 +665,15 @@ export default function BacklinksClient({
                                             </span>
                                         </td>
                                         <td className="px-3 py-2.5">
-                                            {b.isToxic ? (
-                                                <div className="flex items-center gap-1.5"><ShieldAlert size={11} className="text-red-400" /><span className="text-[10px] font-semibold text-red-400">{toxicLabel(b.toxicReason)}</span></div>
-                                            ) : <span className="text-[10px] font-semibold px-2 py-0.5 rounded border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">Active</span>}
+                                            <div className="flex items-center gap-1.5">
+                                                {b.isToxic && <><ShieldAlert size={11} className="text-red-400" /><span className="text-[10px] font-semibold text-red-400">{toxicLabel(b.toxicReason)}</span></>}
+                                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${b.status === "lost" ? "bg-red-500/10 text-red-400 border-red-500/20" : b.status === "broken" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"}`}>
+                                                    {b.status}
+                                                </span>
+                                            </div>
                                         </td>
                                         <td className="px-3 py-2.5">
-                                            {ss > 0 ? <span className={`text-[10px] font-bold px-2 py-0.5 rounded border tabular-nums ${spamBadgeCls(ss)}`}>{ss}</span> : <Minus size={11} className="text-[#30363d]" />}
+                                            {ss != null ? <span className={`text-[10px] font-bold px-2 py-0.5 rounded border tabular-nums ${spamBadgeCls(ss)}`}>{ss}</span> : <Minus size={11} className="text-[#30363d]" />}
                                         </td>
                                         <td className="px-3 py-2.5"><span className="text-[11px] text-[#6e7681] tabular-nums">{new Date(b.firstSeen).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })}</span></td>
                                         <td className="px-3 py-2.5"><span className="text-[11px] text-[#6e7681] tabular-nums">{new Date(b.lastSeen).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })}</span></td>

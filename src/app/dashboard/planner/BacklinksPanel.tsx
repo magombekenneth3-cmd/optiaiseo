@@ -511,7 +511,7 @@ export function BacklinksPanel({ siteId, item, onUpdate }: Props) {
         persist(updated, target);
 
         // Lazily fetch DR for the new target
-        fetch(`/api/backlinks?siteId=${siteId}&mode=summary&domain=${target.domain}`)
+        fetch(`/api/backlinks?siteId=${siteId}&mode=target-summary&targetDomain=${encodeURIComponent(target.domain)}`)
             .then(r => r.ok ? r.json() : null)
             .then(data => {
                 if (!data?.summary?.domainRating) return;

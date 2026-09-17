@@ -13,6 +13,8 @@ import { getUserGscToken } from "@/lib/gsc/token";
 import { detectCompetitorsCore } from "@/lib/competitors/detect";
 import { getDomainOverview, getCompetitorTopPages, resolveLocationCode } from "@/lib/keywords/dataforseo";
 import { upsertTrafficSnapshot } from "@/lib/competitors/snapshots";
+import { authorizeBacklinkOperation } from "@/lib/backlinks/access";
+import { isConfigured as isBacklinkProviderConfigured } from "@/lib/backlinks/client";
 
 
 // ─── Ownership helper ─────────────────────────────────────────────────────────
@@ -739,7 +741,13 @@ export async function fetchCompetitorBacklinkGap(siteId: string, competitorId: s
         const session = await getServerSession(authOptions);
         if (!session?.user?.email) return { success: false as const, error: "Unauthorized" };
 
-        const site = await assertSiteOwnership(siteId, session.user.email);
+        const user = await prisma.user.findUnique({
+            where: { email: session.user.email },
+            select: { id: true, subscriptionTier: true },
+        });
+        if (!user) return { success: false as const, error: "Unauthorized" };
+
+        const site = await prisma.site.findFirst({ where: { id: siteId, userId: user.id } });
         if (!site) return { success: false as const, error: "Site not found" };
 
         const comp = await prisma.competitor.findFirst({
@@ -748,7 +756,14 @@ export async function fetchCompetitorBacklinkGap(siteId: string, competitorId: s
         });
         if (!comp) return { success: false as const, error: "Competitor not found" };
 
-        // Rate-limit: 5 gap analyses per day per user
+        const access = await authorizeBacklinkOperation(
+            user.id,
+            user.subscriptionTier,
+            "gap",
+            isBacklinkProviderConfigured(),
+        );
+        if (!access.allowed) return { success: false as const, error: access.error };
+
         const { getCompetitorBacklinkGap } = await import("@/lib/backlinks/index");
         const report = await getCompetitorBacklinkGap(site.domain, comp.domain, 25);
 

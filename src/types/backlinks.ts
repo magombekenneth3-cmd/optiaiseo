@@ -11,7 +11,7 @@ export interface BacklinkSummary {
     drDelta30d: number | null;
     newLastWeek: number;
     lostLastWeek: number;
-    doFollowRatio: number;
+    doFollowRatio: number | null;
     topLinkedPage: string | null;
     topAnchors: { anchor: string; count: number }[];
     brokenBacklinks: number;
@@ -23,16 +23,23 @@ export interface BacklinkSummary {
 
 export interface BacklinkDetail {
     sourceUrl: string;
+    sourceDomain: string;
     targetUrl: string;
     anchorText: string;
     domainRating: number;
     firstSeen: string;
+    lastSeen: string;
+    isDoFollow: boolean;
+    spamScore: number;
     isToxic: boolean;
+    status: "active" | "lost" | "broken";
 }
 
 export interface StoredBacklink {
     id: string;
+    linkKey: string;
     srcDomain: string;
+    sourceUrl: string;
     targetUrl: string | null;
     anchorText: string;
     domainRating: number | null;
@@ -49,7 +56,7 @@ export interface BacklinkAlert {
     id: string;
     type: "gained" | "lost";
     domain: string;
-    sourceUrl: string | null;
+    url: string;
     dr: number | null;
     detectedAt: string;
 }

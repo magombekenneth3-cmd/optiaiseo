@@ -19,8 +19,9 @@ export const BACKLINK_CACHE_TTL = {
 
 export const cacheKeys = {
     summary:          (domain: string) => `bl:summary:${domain}`,
-    details:          (domain: string) => `bl:details:${domain}`,
-    referringDomains: (domain: string) => `bl:rd:${domain}`,
+    // A 50-link preview must never satisfy a 200/1000-link monitor sync.
+    details:          (domain: string, limit: number) => `bl:details:${domain}:${limit}`,
+    referringDomains: (domain: string, limit: number) => `bl:rd:${domain}:${limit}`,
 };
 
 /**
@@ -65,10 +66,13 @@ export async function withBacklinkCache<T>(
  */
 export async function bustBacklinkCache(domain: string): Promise<void> {
     try {
+        // Known preview, worker, and configurable inventory sizes. Each limit
+        // has its own key so a small preview can never poison a full sync.
+        const detailLimits = [50, 100, 200, 1000, 5000, 10_000, 20_000];
         await Promise.all([
             redis.del(cacheKeys.summary(domain)),
-            redis.del(cacheKeys.details(domain)),
-            redis.del(cacheKeys.referringDomains(domain)),
+            ...detailLimits.map((limit) => redis.del(cacheKeys.details(domain, limit))),
+            ...detailLimits.map((limit) => redis.del(cacheKeys.referringDomains(domain, limit))),
         ]);
     } catch (err) {
         logger.warn("[BacklinkCache] Cache bust failed", { domain, err: String(err) });

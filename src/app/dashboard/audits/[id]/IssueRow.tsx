@@ -334,6 +334,10 @@ export function IssueRow({
             }
             setFixState({ status: "pushing" });
             try {
+                if (!payload.proposalId) {
+                    setFixState({ status: "error", message: "Missing proposal ID — please regenerate the fix." });
+                    return;
+                }
                 const result = await pushAuditFixPR(siteId, payload.proposalId);
                 if (!result.success) {
                     setFixState({ status: "error", message: result.error });

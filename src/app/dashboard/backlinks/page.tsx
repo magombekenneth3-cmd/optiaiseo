@@ -9,8 +9,8 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getBacklinkSummary } from "@/lib/backlinks/index";
 import { isConfigured as isDataForSeoConfigured } from "@/lib/backlinks/client";
+import { hasFeature } from "@/lib/stripe/plans";
 import BacklinksClient from "./BacklinksClient";
 
 export const metadata = {
@@ -28,7 +28,7 @@ export default async function BacklinksPage({
 
     const user = await prisma.user.findUnique({
         where: { email: session.user.email! },
-        select: { id: true },
+        select: { id: true, subscriptionTier: true },
     });
     if (!user) redirect("/login");
 
@@ -43,16 +43,20 @@ export default async function BacklinksPage({
 
     const dataForSeoConfigured = isDataForSeoConfigured();
 
-    // Pre-fetch summary + stored concurrently so the client gets instant data
-    const [summary, stored] = await Promise.all([
-        getBacklinkSummary(site.domain, siteId).catch(() => null),
-        prisma.backlinkDetail.findMany({
+    // Never make a paid DataForSEO request during server rendering. The
+    // authenticated API route performs plan/rate checks before the client asks
+    // for a live summary. Historical rows are withheld from non-Pro users too.
+    const canUseBacklinks = hasFeature(user.subscriptionTier, "backlinks");
+    const stored = canUseBacklinks
+        ? await prisma.backlinkDetail.findMany({
             where:   { siteId },
             orderBy: { domainRating: "desc" },
             take:    200,
             select: {
                 id:           true,
+                linkKey:      true,
                 srcDomain:    true,
+                sourceUrl:    true,
                 targetUrl:    true,
                 anchorText:   true,
                 domainRating: true,
@@ -64,12 +68,14 @@ export default async function BacklinksPage({
                 firstSeen:    true,
                 lastSeen:     true,
             },
-        }).catch(() => []),
-    ]);
+        }).catch(() => [])
+        : [];
 
     const storedSerialized = stored.map((b: {
         id: string;
+        linkKey: string;
         srcDomain: string;
+        sourceUrl: string;
         targetUrl: string | null;
         anchorText: string;
         domainRating: number | null;
@@ -91,7 +97,7 @@ export default async function BacklinksPage({
         <BacklinksClient
             siteId={siteId}
             domain={site.domain}
-            initialSummary={summary}
+            initialSummary={null}
             initialStored={storedSerialized}
             dataForSeoConfigured={dataForSeoConfigured}
         />

@@ -1,137 +1,145 @@
 /**
- * Backlink quality analysis — goes beyond count to flag toxic links.
- *
- * Toxic link detection criteria (any one triggers isToxic):
- *   1. Exact-match anchor text > 30% of all anchors for this site
- *   2. domainRating < 10 AND srcDomain appears > 5 times
- *   3. Anchor text contains gambling, pharma, or adult keywords
- *
- * Upsert key: siteId + srcDomain + anchorText  (covers multi-anchor scenarios)
+ * Persists link-level observations and delegates all toxicity decisions to the
+ * pure analyser in analysis.ts.
  */
+
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-import { TOXIC_KEYWORDS } from "./constants";
+import {
+    analyseBacklinkToxicity,
+    type RawBacklink,
+    type ToxicityOptions,
+} from "./analysis";
+import { createBacklinkLinkKey } from "./identity";
 
-interface RawBacklink {
-    srcDomain:    string;
-    anchorText:   string;
-    domainRating?: number;
-    isDoFollow?:  boolean;
-    targetUrl?:   string;   // stored when available
-    firstSeen?:   Date;     // Bug 2: preserve DataForSEO first_seen date
+export type { RawBacklink };
+
+export interface StoreBacklinkOptions extends ToxicityOptions {
+    observedAt?: Date;
 }
 
-/** Runs toxic detection and upserts BacklinkDetail rows for a site */
+function cleanBacklink(backlink: RawBacklink): RawBacklink | null {
+    const srcDomain = backlink.srcDomain.trim().toLowerCase();
+    if (!srcDomain) return null;
+
+    return {
+        ...backlink,
+        srcDomain,
+        sourceUrl: backlink.sourceUrl?.trim() ?? "",
+        targetUrl: backlink.targetUrl?.trim() ?? "",
+        anchorText: backlink.anchorText.trim(),
+    };
+}
+
+/** Runs toxicity detection and stores each observed backlink by stable link key. */
 export async function analyseAndStoreBacklinks(
     siteId: string,
     backlinks: RawBacklink[],
+    options: StoreBacklinkOptions = {},
 ): Promise<{ total: number; toxic: number }> {
-    if (backlinks.length === 0) return { total: 0, toxic: 0 };
-
-    // Count anchor occurrences across all links
-    const anchorCounts = new Map<string, number>();
-    for (const bl of backlinks) {
-        const key = bl.anchorText.toLowerCase().trim();
-        anchorCounts.set(key, (anchorCounts.get(key) ?? 0) + 1);
+    const byKey = new Map<string, RawBacklink>();
+    for (const backlink of backlinks) {
+        const clean = cleanBacklink(backlink);
+        if (!clean) continue;
+        const key = createBacklinkLinkKey({
+            sourceUrl: clean.sourceUrl ?? "",
+            targetUrl: clean.targetUrl ?? "",
+            anchorText: clean.anchorText,
+            srcDomain: clean.srcDomain,
+        });
+        byKey.set(key, clean);
     }
 
-    // Count how many times each srcDomain appears
-    const domainCounts = new Map<string, number>();
-    for (const bl of backlinks) {
-        const key = bl.srcDomain.toLowerCase();
-        domainCounts.set(key, (domainCounts.get(key) ?? 0) + 1);
-    }
+    const uniqueBacklinks = [...byKey.values()];
+    if (uniqueBacklinks.length === 0) return { total: 0, toxic: 0 };
 
-    const total = backlinks.length;
-    let toxic = 0;
+    const toxicity = analyseBacklinkToxicity(uniqueBacklinks, options);
+    const observedAt = options.observedAt ?? new Date();
+    let stored = 0;
 
-    for (const bl of backlinks) {
-        const anchorLower = bl.anchorText.toLowerCase().trim();
-        const domainLower = bl.srcDomain.toLowerCase();
-        const anchorCount = anchorCounts.get(anchorLower) ?? 1;
+    // Keep database pressure bounded for a 1000-link sync without making
+    // multiple concurrent upserts race on the same unique index.
+    const chunkSize = 25;
+    for (let offset = 0; offset < uniqueBacklinks.length; offset += chunkSize) {
+        const backlinksChunk = uniqueBacklinks.slice(offset, offset + chunkSize);
+        const toxicityChunk = toxicity.slice(offset, offset + chunkSize);
 
-        let isToxic = false;
-        let toxicReason: string | undefined;
+        const results = await Promise.allSettled(backlinksChunk.map(async (backlink, index) => {
+            const verdict = toxicityChunk[index]!;
+            const linkKey = createBacklinkLinkKey({
+                sourceUrl: backlink.sourceUrl ?? "",
+                targetUrl: backlink.targetUrl ?? "",
+                anchorText: backlink.anchorText,
+                srcDomain: backlink.srcDomain,
+            });
 
-        // Rule 1: Exact-match anchor > 30% of all anchors
-        // Apply the ratio rule when we have ≥10 links (lowered from 15;
-        // catches smaller spam profiles before they embed deeper).
-        if (total >= 10 && anchorCount / total > 0.30) {
-            isToxic = true;
-            toxicReason = "exact_match_anchor";
-        }
-
-        // Rule 2: Low-DR spam (DR < 10 AND domain appears > 5 times)
-        if (!isToxic && bl.domainRating != null && bl.domainRating < 10) {
-            const domainCount = domainCounts.get(domainLower) ?? 1;
-            if (domainCount > 5) {
-                isToxic = true;
-                toxicReason = "low_dr_spam";
-            }
-        }
-
-        // Rule 3: Toxic keyword in anchor
-        if (!isToxic && TOXIC_KEYWORDS.some(kw => anchorLower.includes(kw))) {
-            isToxic = true;
-            toxicReason = "toxic_keyword";
-        }
-
-        if (isToxic) toxic++;
-
-        try {
             await prisma.backlinkDetail.upsert({
-                where: {
-                    // New compound key: srcDomain + anchorText per site
-                    // Preserves multi-anchor data from the same referring domain
-                    siteId_srcDomain_anchorText: {
-                        siteId,
-                        srcDomain:  bl.srcDomain,
-                        anchorText: bl.anchorText,
-                    },
-                },
+                where: { siteId_linkKey: { siteId, linkKey } },
                 create: {
                     siteId,
-                    srcDomain:    bl.srcDomain,
-                    anchorText:   bl.anchorText,
-                    targetUrl:    bl.targetUrl ?? "",
-                    domainRating: bl.domainRating ?? null,
-                    isDoFollow:   bl.isDoFollow   ?? true,
-                    isToxic,
-                    toxicReason:  toxicReason ?? null,
-                    firstSeen:    bl.firstSeen ?? new Date(),  // Bug 2: real date from DataForSEO
-                    lastSeen:     new Date(),
+                    linkKey,
+                    srcDomain: backlink.srcDomain,
+                    sourceUrl: backlink.sourceUrl ?? "",
+                    targetUrl: backlink.targetUrl ?? "",
+                    anchorText: backlink.anchorText,
+                    domainRating: backlink.domainRating ?? null,
+                    isDoFollow: backlink.isDoFollow ?? false,
+                    spamScore: backlink.spamScore ?? null,
+                    isToxic: verdict.isToxic,
+                    toxicReason: verdict.toxicReason,
+                    status: backlink.status ?? "active",
+                    firstSeen: backlink.firstSeen ?? observedAt,
+                    lastSeen: backlink.lastSeen ?? observedAt,
                 },
                 update: {
-                    domainRating: bl.domainRating ?? undefined,
-                    isToxic,
-                    toxicReason:  toxicReason ?? null,
-                    lastSeen:     new Date(),
+                    srcDomain: backlink.srcDomain,
+                    sourceUrl: backlink.sourceUrl ?? "",
+                    targetUrl: backlink.targetUrl ?? "",
+                    anchorText: backlink.anchorText,
+                    domainRating: backlink.domainRating ?? null,
+                    isDoFollow: backlink.isDoFollow ?? false,
+                    spamScore: backlink.spamScore ?? null,
+                    isToxic: verdict.isToxic,
+                    toxicReason: verdict.toxicReason,
+                    status: backlink.status ?? "active",
+                    lastSeen: backlink.lastSeen ?? observedAt,
                 },
             });
-        } catch (e: unknown) {
-            logger.warn("[BacklinkDetail] upsert failed", {
-                error: (e as Error)?.message,
-                siteId,
-                srcDomain: bl.srcDomain,
-            });
+            return verdict;
+        }));
+
+        for (const result of results) {
+            if (result.status === "fulfilled") {
+                stored++;
+            } else {
+                logger.warn("[BacklinkDetail] Upsert failed", {
+                    siteId,
+                    error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+                });
+            }
         }
     }
 
-    logger.info(
-        `[BacklinkDetail] Processed ${total} backlinks, ${toxic} flagged as toxic for site ${siteId}`,
-    );
-    return { total, toxic };
+    const toxic = toxicity.filter((verdict) => verdict.isToxic).length;
+    logger.info("[BacklinkDetail] Stored backlink observations", {
+        siteId,
+        observed: uniqueBacklinks.length,
+        stored,
+        toxic,
+    });
+    return { total: stored, toxic };
 }
 
-/** Fetch backlink quality summary for dashboard display */
+/** Fetch backlink quality totals for the active observed backlink inventory. */
 export async function getBacklinkQualitySummary(siteId: string) {
+    const active = { siteId, status: "active" };
     const [total, toxic, doFollow, byReason] = await Promise.all([
-        prisma.backlinkDetail.count({ where: { siteId } }),
-        prisma.backlinkDetail.count({ where: { siteId, isToxic: true } }),
-        prisma.backlinkDetail.count({ where: { siteId, isDoFollow: true } }),
+        prisma.backlinkDetail.count({ where: active }),
+        prisma.backlinkDetail.count({ where: { ...active, isToxic: true } }),
+        prisma.backlinkDetail.count({ where: { ...active, isDoFollow: true } }),
         prisma.backlinkDetail.groupBy({
-            by:    ["toxicReason"],
-            where: { siteId, isToxic: true },
+            by: ["toxicReason"],
+            where: { ...active, isToxic: true },
             _count: { id: true },
         }),
     ]);
@@ -140,7 +148,10 @@ export async function getBacklinkQualitySummary(siteId: string) {
         total,
         toxic,
         doFollow,
-        nofollow:     total - doFollow,
-        toxicReasons: byReason.map((r: { toxicReason: string | null; _count: { id: number } }) => ({ reason: r.toxicReason, count: r._count.id })),
+        nofollow: total - doFollow,
+        toxicReasons: byReason.map((row) => ({
+            reason: row.toxicReason,
+            count: row._count.id,
+        })),
     };
 }

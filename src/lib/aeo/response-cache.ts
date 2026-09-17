@@ -123,14 +123,30 @@ export async function cachedEmbedding(
 }
 
 export async function bustDomainCache(domain: string, coreServices?: string | null): Promise<void> {
-    const models = ["Gemini", "Perplexity", "ChatGPT", "Claude", "Grok", "Copilot"];
+    const models = ["Gemini", "Perplexity", "ChatGPT", "Claude", "Grok", "Copilot", "DeepSeek"];
     const keys = [
         ...models.map((m) => mentionKey(m, domain, coreServices)),
         questionsKey(domain, coreServices),
         `aeo:multi:${domain}:${coreServices ?? ""}`,
     ];
+
+    // A-7: Also bust domain-scoped perplexity per-query keys.
+    // These are keyed by query hash + domain, so we need to scan for them.
     try {
-        await Promise.all(keys.map((k) => redis.del(k)));
+        let cursor = 0;
+        do {
+            const res = await (redis as unknown as {
+                scan(cursor: number, options: { match: string; count: number }): Promise<[string, string[]]>;
+            }).scan(cursor, { match: `aeo:perplexity:*:${domain}`, count: 200 });
+            cursor = parseInt(res[0], 10);
+            keys.push(...res[1]);
+        } while (cursor !== 0);
+    } catch {
+        // Non-fatal — exact-match keys above will still be deleted
+    }
+
+    try {
+        if (keys.length > 0) await Promise.all(keys.map((k) => redis.del(k)));
         logger.info("[Cache] Domain cache busted", { domain, keys: keys.length });
     } catch (err: unknown) {
         logger.warn("[Cache] Bust failed", { domain, error: (err as Error)?.message });

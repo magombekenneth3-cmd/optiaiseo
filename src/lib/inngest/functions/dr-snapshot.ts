@@ -1,21 +1,9 @@
 import { inngest } from "../client";
 import { prisma } from "@/lib/prisma";
 import { dataForSeoPost, isConfigured } from "@/lib/backlinks/client";
+import { getDataForSeoFirstResult, parseDataForSeoSummary } from "@/lib/backlinks/provider";
 import { logger } from "@/lib/logger";
 import { CONCURRENCY } from "../concurrency";
-
-interface DomainMetricsResult {
-  tasks?: Array<{
-    result?: Array<{
-      items?: Array<{
-        domain?: string;
-        rank?: number;
-        backlinks?: number;
-        referring_domains?: number;
-      }>;
-    }>;
-  }>;
-}
 
 async function fetchDomainRating(domain: string): Promise<{
   domainRating: number;
@@ -24,17 +12,18 @@ async function fetchDomainRating(domain: string): Promise<{
 } | null> {
   if (!isConfigured()) return null;
   try {
-    const data = await dataForSeoPost<DomainMetricsResult>(
+    const data = await dataForSeoPost<unknown>(
       "/backlinks/summary/live",
-      [{ target: domain, include_subdomains: true }],
+      [{ target: domain, include_subdomains: true, rank_scale: "one_hundred" }],
     );
-    const result = data?.tasks?.[0]?.result?.[0];
-    const item = result?.items?.[0];
-    if (!item) return null;
+    // Summary metrics are returned directly in result[0], not result[0].items.
+    const result = getDataForSeoFirstResult(data);
+    if (!result) return null;
+    const metrics = parseDataForSeoSummary(result);
     return {
-      domainRating: item.rank ?? 0,
-      backlinks: item.backlinks ?? 0,
-      referringDomains: item.referring_domains ?? 0,
+      domainRating: metrics.domainRating,
+      backlinks: metrics.totalBacklinks,
+      referringDomains: metrics.referringDomains,
     };
   } catch (err) {
     logger.warn("[DrSnapshot] fetch failed", { domain, error: String(err) });

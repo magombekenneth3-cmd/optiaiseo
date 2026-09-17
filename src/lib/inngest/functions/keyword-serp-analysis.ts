@@ -8,6 +8,7 @@ import { getBacklinkSummary, getCompetitorBacklinkGap } from "@/lib/backlinks";
 import { getCompetitorAuthorityComparison } from "@/lib/seo/competitor-authority";
 import { GoogleGenAI } from "@google/genai";
 import { AI_MODELS } from "@/lib/constants/ai-models";
+import { hasFeature } from "@/lib/stripe/plans";
 
 interface SerpAnalysisPayload {
     analysisId: string;
@@ -68,12 +69,24 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
         triggers: [{ event: "serp-analysis/requested" as const }],
     },
     async ({ event, step }) => {
-        const { analysisId, siteId, keyword, landingPageUrl, domain } =
+        const { analysisId, siteId, userId, keyword, landingPageUrl, domain } =
             event.data as SerpAnalysisPayload;
 
         if (!analysisId || !siteId || !keyword || !landingPageUrl) {
             throw new NonRetriableError("Missing required fields in serp-analysis/requested payload");
         }
+
+        // SERP analysis is available on more plans than backlink monitoring.
+        // Never let this background convenience call become a hidden route to
+        // metered backlink data for a non-entitled user.
+        const hasBacklinkAccess = await step.run("load-backlink-entitlement", async () => {
+            if (!userId) return false;
+            const site = await prisma.site.findFirst({
+                where: { id: siteId, userId },
+                select: { user: { select: { subscriptionTier: true } } },
+            });
+            return Boolean(site && hasFeature(site.user.subscriptionTier, "backlinks"));
+        });
 
         const serpContext = await step.run("fetch-serp", async () => {
             await prisma.keywordSerpAnalysis.update({
@@ -100,7 +113,9 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
                 const [userPageResult, authorityResult, backlinkResult] = await Promise.all([
                     scrapePageData(landingPageUrl).catch(() => { userPageScrapedOk = false; return { text: "", headings: [], schemaTypes: [], publishedDate: null }; }),
                     getCompetitorAuthorityComparison(siteId).catch(() => null),
-                    getBacklinkSummary(domain, siteId).catch(() => null),
+                    hasBacklinkAccess
+                        ? getBacklinkSummary(domain, siteId).catch(() => null)
+                        : Promise.resolve(null),
                 ]);
 
                 const trackedDrMap = new Map<string, number>(
@@ -272,6 +287,9 @@ ANCHORS: ${JSON.stringify(topAnchors.slice(0, 5))}`;
         });
 
         const { opportunityDoms, rdGapRoot } = await step.run("fetch-link-gap", async () => {
+            if (!hasBacklinkAccess) {
+                return { opportunityDoms: [] as { domain: string; dr: number }[], rdGapRoot: null as number | null };
+            }
             const topSerpDomain = serpResults[0]?.domain;
             if (!topSerpDomain || topSerpDomain === domain.replace(/^www\./, "")) {
                 return { opportunityDoms: [] as { domain: string; dr: number }[], rdGapRoot: null as number | null };

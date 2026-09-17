@@ -64,7 +64,7 @@ export function GsiMetrics({ result }: { result: AeoResult }) {
                                         cx="40" cy="40" r="35" fill="none"
                                         stroke="currentColor" strokeWidth="6" strokeLinecap="round"
                                         className={engine.color}
-                                        strokeDasharray={`${(engine.score / 100) * 219} 219`}
+                                        strokeDasharray={`${((engine.score ?? 0) / 100) * 219} 219`}
                                         style={{ transition: "stroke-dasharray 1s ease 0.5s" }}
                                     />
                                 </svg>

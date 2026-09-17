@@ -202,6 +202,8 @@ model Site {
   ahrefsSnapshots         AhrefsSnapshot[]
   audits                  Audit[]
   backlinkAlerts          BacklinkAlert[]
+  backlinkInventory       BacklinkInventory?
+  backlinkReferringDomains BacklinkReferringDomain[]
   blogs                   Blog[]
   competitors             Competitor[]
   onPageReports           OnPageReport[]
@@ -399,6 +401,9 @@ model MentionCorrectionLog {
 model BacklinkAlert {
   id         String   @id @default(cuid())
   siteId     String
+  /// Idempotency key for one observed domain transition. It permits a domain to
+  /// be gained/lost again in a later observation period without duplicating a retry.
+  eventKey   String
   type       String
   domain     String
   url        String   @default("")
@@ -406,8 +411,9 @@ model BacklinkAlert {
   detectedAt DateTime @default(now())
   site       Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
-  @@unique([siteId, domain, type])
+  @@unique([siteId, eventKey])
   @@index([siteId, detectedAt(sort: Desc)])
+  @@index([siteId, type, detectedAt(sort: Desc)])
 }
 
 model Notification {
@@ -1046,7 +1052,11 @@ model MetricSnapshot {
 model BacklinkDetail {
   id           String   @id @default(cuid())
   siteId       String
+  /// Stable per-link fingerprint. A domain can legitimately contain multiple
+  /// links with the same anchor, so `srcDomain + anchorText` is not unique.
+  linkKey      String
   srcDomain    String
+  sourceUrl    String   @default("")
   anchorText   String
   targetUrl    String   @default("")
   domainRating Float?
@@ -1059,10 +1069,42 @@ model BacklinkDetail {
   status       String   @default("active")
   site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
-  @@unique([siteId, srcDomain, anchorText])
+  @@unique([siteId, linkKey])
   @@index([siteId])
   @@index([siteId, isToxic])
   @@index([siteId, firstSeen])
+  @@index([siteId, status])
+}
+
+/// Domain-level inventory used solely for accurate gained/lost detection.
+/// BacklinkDetail is intentionally link-level and may be a bounded sample.
+model BacklinkReferringDomain {
+  id           String   @id @default(cuid())
+  siteId       String
+  domain       String
+  domainRating Float?
+  backlinks    Int      @default(0)
+  spamScore    Float?
+  firstSeen    DateTime?
+  lastSeen     DateTime @default(now())
+  status       String   @default("active")
+  site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, domain])
+  @@index([siteId, status])
+  @@index([siteId, lastSeen])
+}
+
+/// Tracks whether a site has had at least one complete referring-domain scan.
+/// This keeps an empty baseline distinct from a site that has never been
+/// scanned, so the first newly observed domain can correctly generate an alert.
+model BacklinkInventory {
+  id              String   @id @default(cuid())
+  siteId          String   @unique
+  initializedAt   DateTime @default(now())
+  lastCompletedAt DateTime @default(now())
+  totalDomains    Int      @default(0)
+  site            Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 
 model HealingOutcome {

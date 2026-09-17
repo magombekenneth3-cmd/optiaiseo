@@ -8,31 +8,63 @@ import {
     getBacklinkDetails,
     getCompetitorBacklinkGap,
 } from "@/lib/backlinks";
-import { getBacklinkQualitySummary } from "@/lib/backlinks/quality-analysis";
+import {
+    analyseAndStoreBacklinks,
+    getBacklinkQualitySummary,
+} from "@/lib/backlinks/quality-analysis";
+import { authorizeBacklinkOperation, type BacklinkOperation } from "@/lib/backlinks/access";
+import { isConfigured } from "@/lib/backlinks/client";
 
 // ─── Auth guard helper ────────────────────────────────────────────────────────
-async function assertSiteOwner(siteId: string): Promise<string> {
+interface OwnedBacklinkSite {
+    domain: string;
+    targetKeyword: string | null;
+    userId: string;
+    subscriptionTier: string;
+}
+
+async function assertSiteOwner(siteId: string): Promise<OwnedBacklinkSite> {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) throw new Error("Unauthenticated");
     const user = await prisma.user.findUnique({
         where: { email: session.user.email },
-        select: { id: true },
+        select: { id: true, subscriptionTier: true },
     });
     if (!user) throw new Error("User not found");
     const site = await prisma.site.findFirst({
         where: { id: siteId, userId: user.id },
-        select: { id: true, domain: true },
+        select: { id: true, domain: true, targetKeyword: true },
     });
     if (!site) throw new Error("Site not found or not owned by user");
-    return site.domain;
+    return {
+        domain: site.domain,
+        targetKeyword: site.targetKeyword,
+        userId: user.id,
+        subscriptionTier: user.subscriptionTier,
+    };
+}
+
+async function assertLiveBacklinkAccess(
+    siteId: string,
+    operation: BacklinkOperation,
+): Promise<OwnedBacklinkSite> {
+    const site = await assertSiteOwner(siteId);
+    const access = await authorizeBacklinkOperation(
+        site.userId,
+        site.subscriptionTier,
+        operation,
+        isConfigured(),
+    );
+    if (!access.allowed) throw new Error(access.error);
+    return site;
 }
 
 // ─── Summary + quality in one call ───────────────────────────────────────────
 export async function getBacklinkOverview(siteId: string) {
     try {
-        const domain = await assertSiteOwner(siteId);
+        const site = await assertLiveBacklinkAccess(siteId, "summary");
         const [summary, quality, alerts] = await Promise.allSettled([
-            getBacklinkSummary(domain, siteId),
+            getBacklinkSummary(site.domain, siteId),
             getBacklinkQualitySummary(siteId),
             prisma.backlinkAlert.findMany({
                 where: { siteId },
@@ -44,7 +76,7 @@ export async function getBacklinkOverview(siteId: string) {
 
         return {
             success: true as const,
-            domain,
+            domain: site.domain,
             summary:  summary.status  === "fulfilled" ? summary.value   : null,
             quality:  quality.status  === "fulfilled" ? quality.value    : null,
             alerts:   alerts.status   === "fulfilled" ? alerts.value     : [],
@@ -57,8 +89,25 @@ export async function getBacklinkOverview(siteId: string) {
 // ─── Recent backlink list ─────────────────────────────────────────────────────
 export async function getBacklinkList(siteId: string, limit = 50) {
     try {
-        const domain = await assertSiteOwner(siteId);
-        const details = await getBacklinkDetails(domain, limit);
+        const site = await assertLiveBacklinkAccess(siteId, "details");
+        const safeLimit = Math.max(1, Math.min(1000, Math.floor(limit)));
+        const details = await getBacklinkDetails(site.domain, safeLimit);
+        await analyseAndStoreBacklinks(
+            siteId,
+            details.map((detail) => ({
+                srcDomain: detail.sourceDomain,
+                sourceUrl: detail.sourceUrl,
+                targetUrl: detail.targetUrl,
+                anchorText: detail.anchorText,
+                domainRating: detail.domainRating,
+                isDoFollow: detail.isDoFollow,
+                spamScore: detail.spamScore,
+                firstSeen: detail.firstSeen ? new Date(detail.firstSeen) : undefined,
+                lastSeen: detail.lastSeen ? new Date(detail.lastSeen) : undefined,
+                status: detail.status,
+            })),
+            { targetKeyword: site.targetKeyword },
+        );
         return { success: true as const, details };
     } catch (err) {
         return { success: false as const, error: (err as Error).message, details: [] };
@@ -68,8 +117,8 @@ export async function getBacklinkList(siteId: string, limit = 50) {
 // ─── Competitor gap report ────────────────────────────────────────────────────
 export async function getBacklinkGap(siteId: string, competitorDomain: string) {
     try {
-        const domain = await assertSiteOwner(siteId);
-        const report = await getCompetitorBacklinkGap(domain, competitorDomain);
+        const site = await assertLiveBacklinkAccess(siteId, "gap");
+        const report = await getCompetitorBacklinkGap(site.domain, competitorDomain);
         return { success: true as const, report };
     } catch (err) {
         return { success: false as const, error: (err as Error).message };

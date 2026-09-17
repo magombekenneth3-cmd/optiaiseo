@@ -2,7 +2,7 @@ import { logger } from "@/lib/logger";
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem } from '../types';
 import { parse } from 'node-html-parser';
 
-import { validateRobotsAndSitemap } from '../../onpage/validator';
+import { validateRobotsAndSitemap, type SitemapValidationResult } from '../../onpage/validator';
 import { runCrawlerAgent } from '../../crawler/agent';
 import { runSecurityAudit } from '../../audit/security';
 import { inspectIndexability } from '../indexability-evidence';
@@ -180,7 +180,7 @@ export const TechnicalModule: AuditModule = {
         }
 
         // 4. Robots.txt & XML Sitemap
-        const sitemapResult = await validateRobotsAndSitemap(context.url).catch(() => ({ robotsTxtExists: false, sitemapExists: false }));
+        const sitemapResult = await validateRobotsAndSitemap(context.url).catch((): SitemapValidationResult => ({ robotsTxtExists: false, sitemapReferenced: false, sitemapExists: false, details: [] }));
         items.push({
             id: 'robots-txt',
             label: 'Robots.txt',

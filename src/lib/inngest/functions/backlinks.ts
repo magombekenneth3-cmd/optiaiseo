@@ -1,154 +1,152 @@
 /**
- * Inngest function: backlinks-check-site
+ * Canonical scheduled backlink worker.
  *
- * Triggered by the "backlinks.check.site" event (fired by the cron scheduler).
- * Fetches live backlink details from DataForSEO, persists them, runs quality
- * analysis, and detects gained/lost alerts — all as durable, retryable steps.
- *
- * Concurrency key on `siteId` ensures the same site is never processed twice
- * simultaneously. retries: 2 gives two attempts before Inngest marks the event
- * as failed — DataForSEO is reliable but you don't want infinite loops eating credits.
+ * `cronWeeklyBacklinks` is the sole scheduler; this function only consumes a
+ * site event. Keeping fan-out and execution separate prevents duplicate API
+ * requests, alert writes, and email deliveries.
  */
 
 import { inngest } from "@/lib/inngest/client";
-import { getBacklinkDetails } from "@/lib/backlinks/index";
-import { analyseAndStoreBacklinks } from "@/lib/backlinks/quality-analysis";
-import { detectBacklinkAlerts } from "@/lib/backlinks/alerts";
+import { isConfigured } from "@/lib/backlinks/client";
+import { syncBacklinkProfile } from "@/lib/backlinks/sync";
 import { logger } from "@/lib/logger";
 import { fireWhiteLabelWebhook } from "@/lib/webhooks/white-label";
 
+const BACKLINK_TIERS = new Set(["PRO", "AGENCY"]);
+
 export const backlinkCheckSite = inngest.createFunction(
     {
-        id:          "backlinks-check-site",
-        name:        "Backlinks: check site",
+        id: "backlinks-check-site",
+        name: "Backlinks: check site",
         concurrency: { limit: 5, key: "event.data.siteId" },
-        retries:     2,
-        triggers: [
-            { event: "backlinks.check.site" },
-            { cron: "0 3 * * 1" },   // every Monday 3am UTC — matches vercel.json schedule
-        ],
+        retries: 2,
+        triggers: [{ event: "backlinks.check.site" }],
     },
     async ({ event, step }) => {
-        // When fired by cron, event.data is CronEventData (no siteId) — fan out to all eligible sites.
-        // When fired by event, event.data has { siteId, domain } — process that single site.
-        const eventData = event.data as Record<string, unknown>;
-        if (!eventData?.siteId) {
+        const siteId = typeof (event.data as Record<string, unknown>)?.siteId === "string"
+            ? (event.data as { siteId: string }).siteId
+            : "";
+        if (!siteId) return { skipped: true, reason: "missing_site_id" };
+
+        // Never trust a domain or user ID attached to an event. Loading the
+        // current record prevents a stale/manual event from spending provider
+        // credits for a deleted, downgraded, or different site.
+        const site = await step.run("load-eligible-site", async () => {
             const { prisma } = await import("@/lib/prisma");
-            const sites = await step.run("fetch-sites", () =>
-                prisma.site.findMany({
-                    where:  { user: { subscriptionTier: { in: ["PRO", "AGENCY"] } } },
-                    select: { id: true, domain: true },
-                })
-            ) as { id: string; domain: string }[];
-            await inngest.send(
-                sites.map(s => ({ name: "backlinks.check.site" as const, data: { siteId: s.id, domain: s.domain } }))
-            );
-            return { fanned: sites.length };
-        }
-
-        const { siteId, domain } = eventData as { siteId: string; domain: string };
-
-        // Step 1 — fetch live backlink records from DataForSEO (cached 6h)
-        const details = await step.run("fetch-details", () =>
-            getBacklinkDetails(domain, 200)
-        );
-
-        if (details.length === 0) {
-            logger.info("[Inngest/Backlinks] No details returned — skipping", { siteId, domain });
-            return { skipped: true, reason: "no_data" };
-        }
-
-        // Step 2 — persist and run quality analysis
-        await step.run("store-and-analyse", () =>
-            analyseAndStoreBacklinks(
-                siteId,
-                details.map((d: import("@/types/backlinks").BacklinkDetail) => ({
-                    srcDomain:    (() => { try { return new URL(d.sourceUrl).hostname; } catch { return d.sourceUrl; } })(),
-                    anchorText:   d.anchorText,
-                    domainRating: d.domainRating,
-                    isDoFollow:   true,
-                    targetUrl:    d.targetUrl,
-                    firstSeen:    d.firstSeen ? new Date(d.firstSeen) : undefined,  // Bug 2 fix
-                }))
-            )
-        );
-
-        // Step 3 — detect gained/lost alerts by diffing against stored data
-        const { gained, lost } = await step.run("detect-alerts", () =>
-            detectBacklinkAlerts(siteId, domain)
-        );
-
-        if (gained > 0 || lost > 0) {
-            await step.run("fire-webhook", async () => {
-                const { prisma } = await import("@/lib/prisma");
-                const site = await prisma.site.findUnique({
-                    where: { id: siteId },
-                    select: { userId: true },
-                });
-                if (!site) return;
-                await fireWhiteLabelWebhook(site.userId, {
-                    event: "backlinks.alerts_detected",
-                    siteId,
-                    domain,
-                    timestamp: new Date().toISOString(),
-                    data: { gained, lost },
-                });
+            return prisma.site.findUnique({
+                where: { id: siteId },
+                select: {
+                    id: true,
+                    domain: true,
+                    targetKeyword: true,
+                    userId: true,
+                    user: {
+                        select: {
+                            email: true,
+                            name: true,
+                            preferences: true,
+                            subscriptionTier: true,
+                        },
+                    },
+                },
             });
+        });
 
-            await step.run("deliver-alerts", async () => {
-                const { prisma } = await import("@/lib/prisma");
-                const site = await prisma.site.findUnique({
-                    where: { id: siteId },
-                    select: { userId: true, domain: true, user: { select: { email: true, name: true } } },
-                });
-                if (!site?.user?.email) return;
+        if (!site || !BACKLINK_TIERS.has(site.user.subscriptionTier)) {
+            return { skipped: true, reason: "site_not_backlink_eligible" };
+        }
+        if (!isConfigured()) return { skipped: true, reason: "provider_not_configured" };
 
-                const alerts = await prisma.backlinkAlert.findMany({
-                    where: { siteId, detectedAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
-                    select: { type: true, domain: true, dr: true },
-                    orderBy: { dr: "desc" },
-                    take: 20,
-                });
+        const sync = await step.run("sync-backlink-profile", () =>
+            syncBacklinkProfile(site.id, site.domain, {
+                targetKeyword: site.targetKeyword,
+            }),
+        );
 
-                const gainedList = alerts.filter((a: { type: string; domain: string; dr: number | null }) => a.type === "gained").map((a: { type: string; domain: string; dr: number | null }) => ({ domain: a.domain, dr: a.dr }));
-                const lostList = alerts.filter((a: { type: string; domain: string; dr: number | null }) => a.type === "lost").map((a: { type: string; domain: string; dr: number | null }) => ({ domain: a.domain, dr: a.dr }));
+        if (sync.alerts.gained === 0 && sync.alerts.lost === 0) {
+            logger.info("[Inngest/Backlinks] Site sync completed without new transitions", {
+                siteId: site.id,
+                domain: site.domain,
+                baseline: sync.alerts.baseline,
+                partial: sync.alerts.partial,
+            });
+            return {
+                siteId: site.id,
+                domain: site.domain,
+                gained: 0,
+                lost: 0,
+                baseline: sync.alerts.baseline,
+                partial: sync.alerts.partial,
+            };
+        }
 
+        await step.run("fire-webhook", () =>
+            fireWhiteLabelWebhook(site.userId, {
+                event: "backlinks.alerts_detected",
+                siteId: site.id,
+                domain: site.domain,
+                timestamp: new Date().toISOString(),
+                data: {
+                    gained: sync.alerts.gained,
+                    lost: sync.alerts.lost,
+                    gainedDomains: sync.alerts.gainedDomains,
+                    lostDomains: sync.alerts.lostDomains,
+                },
+            }),
+        );
+
+        await step.run("deliver-alerts", async () => {
+            const preferences = site.user.preferences as Record<string, unknown> | null;
+            if (preferences?.backlinkAlerts === false) return;
+
+            if (site.user.email) {
                 const { sendBacklinkAlertEmail } = await import("@/lib/email/backlink-alert");
                 await sendBacklinkAlertEmail(site.user.email, {
                     userName: site.user.name ?? site.user.email.split("@")[0],
                     domain: site.domain,
-                    gained: gainedList,
-                    lost: lostList,
-                    siteId,
+                    gained: sync.alerts.gainedDomains,
+                    lost: sync.alerts.lostDomains,
+                    siteId: site.id,
                 });
+            }
 
-                const title = gainedList.length > 0 && lostList.length > 0
-                    ? `+${gainedList.length} new, −${lostList.length} lost backlinks`
-                    : gainedList.length > 0
-                        ? `+${gainedList.length} new backlink${gainedList.length !== 1 ? "s" : ""} detected`
-                        : `${lostList.length} backlink${lostList.length !== 1 ? "s" : ""} lost`;
+            const { prisma } = await import("@/lib/prisma");
+            const title = sync.alerts.gained > 0 && sync.alerts.lost > 0
+                ? `+${sync.alerts.gained} new, −${sync.alerts.lost} lost referring domains`
+                : sync.alerts.gained > 0
+                    ? `+${sync.alerts.gained} new referring domain${sync.alerts.gained === 1 ? "" : "s"}`
+                    : `${sync.alerts.lost} referring domain${sync.alerts.lost === 1 ? "" : "s"} lost`;
+            const topDomain = sync.alerts.gainedDomains[0]?.domain
+                ?? sync.alerts.lostDomains[0]?.domain
+                ?? "";
 
-                const topDomain = gainedList[0]?.domain ?? lostList[0]?.domain ?? "";
-
-                await prisma.notification.create({
-                    data: {
-                        userId: site.userId,
-                        type: "backlink_change",
-                        title,
-                        body: topDomain
-                            ? `${topDomain}${gainedList.length + lostList.length > 1 ? ` and ${gainedList.length + lostList.length - 1} more` : ""}`
-                            : `Backlink changes detected for ${site.domain}`,
-                        href: `/dashboard/backlinks?siteId=${siteId}`,
-                        metadata: { gained: gainedList.length, lost: lostList.length },
-                    },
-                });
+            await prisma.notification.create({
+                data: {
+                    userId: site.userId,
+                    type: "backlink_change",
+                    title,
+                    body: topDomain
+                        ? `${topDomain}${sync.alerts.gained + sync.alerts.lost > 1 ? ` and ${sync.alerts.gained + sync.alerts.lost - 1} more` : ""}`
+                        : `Backlink changes detected for ${site.domain}`,
+                    href: `/dashboard/backlinks?siteId=${site.id}`,
+                    metadata: { gained: sync.alerts.gained, lost: sync.alerts.lost },
+                },
             });
-        }
-
-        logger.info("[Inngest/Backlinks] Site check complete", {
-            siteId, domain, gained, lost,
         });
 
-        return { siteId, domain, gained, lost };
-    }
+        logger.info("[Inngest/Backlinks] Site sync complete", {
+            siteId: site.id,
+            domain: site.domain,
+            gained: sync.alerts.gained,
+            lost: sync.alerts.lost,
+        });
+        return {
+            siteId: site.id,
+            domain: site.domain,
+            gained: sync.alerts.gained,
+            lost: sync.alerts.lost,
+            baseline: false,
+            partial: false,
+        };
+    },
 );
