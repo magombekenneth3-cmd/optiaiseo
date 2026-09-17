@@ -148,7 +148,7 @@ export class InMemoryStore<T extends Row = Row> {
       id,
       createdAt: args.data.createdAt ?? now,
       updatedAt: args.data.updatedAt ?? now,
-    } as T;
+    } as unknown as T;
     this.checkUniqueConstraints(row);
     this.rows.set(id, row);
     this.setUniqueIndexes(row);
