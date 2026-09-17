@@ -1330,18 +1330,16 @@ ${cleanText}
             : undefined,
     }
 
-    // Gap 3 (Option B): include Grok in the average only when XAI_API_KEY is configured.
-    // This prevents a silent score drop for existing users who don't have the key.
-    const gsoVEngines = [
-        multiEngineScore.perplexity,
-        multiEngineScore.chatgpt,
-        multiEngineScore.googleAio,
-        multiEngineScore.claude,
-        multiModelResults.overallScore,
-        ...(process.env.XAI_API_KEY ? [multiEngineScore.grok ?? 0] : []),
-    ];
+    // GSoV is an observed model-visibility metric. Do not mix in Google AIO
+    // eligibility (a prediction) or `overallScore` (an aggregate of these same
+    // model results), and never count an unavailable provider as a zero.
+    const gsoVEngines = multiModelResults.results
+        .filter(result => result.providerStatus === "SUCCESS" || result.providerStatus === "NO_RESULT")
+        .map(result => result.mentioned ? result.confidence : 0);
     const generativeShareOfVoice = Math.round(
-        gsoVEngines.reduce((a, b) => a + b, 0) / gsoVEngines.length
+        gsoVEngines.length > 0
+            ? gsoVEngines.reduce((a, b) => a + b, 0) / gsoVEngines.length
+            : 0
     )
 
 
@@ -1362,7 +1360,7 @@ ${cleanText}
             label: "Generative Share of Voice",
             passed: generativeShareOfVoice > 40,
             impact: "high",
-            detail: `Your brand has a ${generativeShareOfVoice}% average visibility across Perplexity, ChatGPT, and Google AI Overviews.`,
+            detail: `Your brand has a ${generativeShareOfVoice}% average visibility across ${gsoVEngines.length} observed AI engine${gsoVEngines.length === 1 ? "" : "s"}.`,
             recommendation: generativeShareOfVoice > 60
                 ? "Strong GSoV — your site is a primary source for major AI engines."
                 : "Low GSoV — improve your technical AI-readiness and entity density to be cited more often."

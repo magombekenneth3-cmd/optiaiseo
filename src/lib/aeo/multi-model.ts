@@ -115,7 +115,7 @@ export async function checkGeminiMention(
     brandNameOverride?: string | null,
 ): Promise<MentionResult> {
     if (!process.env.GEMINI_API_KEY) {
-        return { model: "Gemini", mentioned: false, confidence: 0, details: "Gemini API key missing" };
+        return { model: "Gemini", mentioned: false, confidence: 0, details: "Gemini API key missing", providerStatus: "NO_API_KEY" };
     }
 
     try {
@@ -202,6 +202,7 @@ export async function checkGeminiMention(
             quality,
             positionInResponse: quality?.positionInResponse !== -1 ? quality?.positionInResponse : undefined,
             sentiment: quality?.sentiment,
+            providerStatus: "SUCCESS",
         };
     } catch (error: unknown) {
         logger.error("[Multi-Model] Gemini mention check failed:", {
@@ -212,6 +213,7 @@ export async function checkGeminiMention(
             mentioned: false,
             confidence: 0,
             details: "Check failed due to parsing error or timeout.",
+            providerStatus: "PROVIDER_ERROR",
         };
     }
 }
@@ -222,7 +224,7 @@ export async function checkPerplexityMention(
     brandNameOverride?: string | null,
 ): Promise<MentionResult> {
     if (!process.env.PERPLEXITY_API_KEY) {
-        return { model: "Perplexity", mentioned: false, confidence: 0, details: "Perplexity API key missing" };
+        return { model: "Perplexity", mentioned: false, confidence: 0, details: "Perplexity API key missing", providerStatus: "NO_API_KEY" };
     }
 
     const query = buildAeoQuestion({ domain, coreServices });
@@ -261,18 +263,21 @@ export async function checkPerplexityMention(
                     competitorsCited: result.competitorsCited,
                     citationCount: result.citations.length,
                 },
+                providerStatus: "SUCCESS",
             };
         } catch (error: unknown) {
             logger.error("[Multi-Model] Perplexity citation check failed:", {
                 error: (error as Error)?.message || String(error),
             });
-            return { model: "Perplexity", mentioned: false, confidence: 0, details: "Check failed" };
+            return { model: "Perplexity", mentioned: false, confidence: 0, details: "Check failed", providerStatus: "PROVIDER_ERROR" };
         }
     });
 }
 
 export async function auditMultiModelMentions(domain: string, coreServices?: string | null, brandNameOverride?: string | null) {
-    const multiCacheKey = `aeo:multi:${domain}:${coreServices ?? ""}`;
+    // v2 excludes unavailable providers from the score. Version the key so
+    // cached legacy responses without providerStatus cannot affect new audits.
+    const multiCacheKey = `aeo:multi:v2:${domain}:${coreServices ?? ""}`;
 
     const cached = await redis.get(multiCacheKey).catch(() => null);
     if (cached) {
@@ -322,7 +327,7 @@ export async function auditMultiModelMentions(domain: string, coreServices?: str
         .length;
     logger.debug("[MultiModel] Cache", { domain, cacheHits, liveCalls: 7 - cacheHits });
     const availableResults = results.filter(r =>
-        !r.providerStatus || r.providerStatus === "SUCCESS" || r.providerStatus === "NO_RESULT"
+        r.providerStatus === "SUCCESS" || r.providerStatus === "NO_RESULT"
     );
     const score = availableResults.length > 0
         ? availableResults.reduce((acc, curr) => acc + (curr.mentioned ? curr.confidence : 0), 0) / availableResults.length

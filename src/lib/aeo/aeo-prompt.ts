@@ -13,6 +13,8 @@ export type AeoPromptMode = "keyword" | "services" | "brand";
 
 export interface AeoPromptInput {
     domain: string;
+    /** A complete user query. Unlike `keyword`, it must be sent verbatim. */
+    question?: string | null;
     keyword?: string | null;
     coreServices?: string | null;
 }
@@ -34,6 +36,9 @@ export function resolvePromptMode(input: AeoPromptInput): AeoPromptMode {
  * directly comparable across models.
  */
 export function buildAeoQuestion(input: AeoPromptInput): string {
+    // Query tracking already has a real user question. Do not turn it into a
+    // second "best tools" question: that changes the intent being measured.
+    if (input.question?.trim()) return input.question.trim();
     const mode = resolvePromptMode(input);
 
     switch (mode) {

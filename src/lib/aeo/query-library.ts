@@ -145,8 +145,8 @@ export async function checkQueryAcrossModels(
 
   const [perplexityResult, chatgptResult, claudeResult] = await Promise.allSettled([
     checkPerplexityCitation(query, domain),
-    checkChatGptMention(domain, coreServices),
-    checkClaudeMention(domain, coreServices),
+    checkChatGptMention(domain, coreServices, undefined, query),
+    checkClaudeMention(domain, coreServices, undefined, query),
   ]);
 
   const now = new Date();
@@ -364,5 +364,4 @@ export async function getQueryLibrarySummary(
 
   return { queries: summaries, overallCitationRate, trendVsLastWeek, topCompetitor };
 }
-
 

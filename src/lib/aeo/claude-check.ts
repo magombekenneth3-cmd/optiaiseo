@@ -20,7 +20,8 @@ const MAX_WEB_SEARCH_USES = 1;
 export async function checkClaudeMention(
     domain: string,
     coreServices?: string | null,
-    keyword?: string | null
+    keyword?: string | null,
+    question?: string | null,
 ): Promise<MentionResult> {
     if (!process.env.ANTHROPIC_API_KEY) {
         return {
@@ -32,7 +33,7 @@ export async function checkClaudeMention(
         };
     }
 
-    const question = buildAeoQuestion({ domain, keyword, coreServices });
+    const prompt = buildAeoQuestion({ domain, question, keyword, coreServices });
 
     const startMs = Date.now();
     let httpStatus: number | undefined;
@@ -53,7 +54,7 @@ export async function checkClaudeMention(
                     name: "web_search",
                     max_uses: MAX_WEB_SEARCH_USES,
                 }],
-                messages: [{ role: "user", content: question }],
+                messages: [{ role: "user", content: prompt }],
             }),
             signal: AbortSignal.timeout(TIMEOUTS.AI_CLAUDE_MS),
         });

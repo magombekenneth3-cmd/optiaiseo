@@ -16,7 +16,8 @@ import { buildAeoQuestion } from "./aeo-prompt";
 export async function checkChatGptMention(
     domain: string,
     coreServices?: string | null,
-    keyword?: string | null
+    keyword?: string | null,
+    question?: string | null,
 ): Promise<MentionResult> {
     if (!process.env.OPENAI_API_KEY) {
         return {
@@ -28,7 +29,7 @@ export async function checkChatGptMention(
         };
     }
 
-    const question = buildAeoQuestion({ domain, keyword, coreServices });
+    const prompt = buildAeoQuestion({ domain, question, keyword, coreServices });
 
     const startMs = Date.now();
     let httpStatus: number | undefined;
@@ -43,7 +44,7 @@ export async function checkChatGptMention(
             body: JSON.stringify({
                 model: "gpt-4o",
                 tools: [{ type: "web_search" }],
-                input: question,
+                input: prompt,
             }),
             signal: AbortSignal.timeout(TIMEOUTS.AI_CLAUDE_MS),
         });
