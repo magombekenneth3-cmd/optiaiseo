@@ -186,8 +186,8 @@ function extractFaqsFromSchema(
             parsed["@type"] === "FAQPage"
                 ? parsed
                 : (parsed["@graph"] ?? []).find(
-                      (n: { "@type"?: string }) => n["@type"] === "FAQPage"
-                  );
+                    (n: { "@type"?: string }) => n["@type"] === "FAQPage"
+                );
         if (!faqPage?.mainEntity) return [];
         return (
             faqPage.mainEntity as {
@@ -209,6 +209,107 @@ function truncate(text: string, maxChars = 12000): string {
     if (text.length <= maxChars) return text;
     return text.slice(0, maxChars) + "\n\n[content truncated]";
 }
+
+
+export const EDITORIAL_NORTH_STAR = `EDITORIAL NORTH STAR — apply to every decision:
+
+Do not ask: "How can I make this article longer?"
+
+Ask: "What useful information can I give the reader that they
+cannot easily get from the other pages ranking for this query?"
+
+Every section must contribute toward answering that question.
+
+Before writing any section, verify:
+- Does this section introduce NEW information, evidence, examples, analysis,
+  comparisons, data, or practical recommendations?
+- If not, do not write it.`;
+
+/**
+ * Evidence requirements — rules 6, 7, 8, 20 from the quality policy.
+ * Injected into the section writer and editorial rewrite prompts.
+ */
+export const EVIDENCE_POLICY = `EVIDENCE REQUIREMENTS:
+
+1. STATISTICS: Never write a percentage, dollar amount, multiplier, or user count
+   without naming its source inline. "Estimated" does not rescue an invented figure.
+   If no source exists: remove the number entirely and state the claim qualitatively.
+   BAD:  "An estimated 40% of users abandon within 30 days."
+   GOOD: "Most users abandon early — [SOURCE NEEDED] if you have a real figure."
+
+2. CASE STUDIES: Never create fictional case studies that look real.
+   Never write precise results ("traffic increased 15%", "bounce rate decreased 10%")
+   unless those numbers come from real data with a named source.
+   If using a hypothetical example, explicitly label it: "Hypothetical example:"
+   Never present hypothetical results as actual results.
+
+3. FACT vs OPINION: Clearly distinguish:
+   FACT: Supported by evidence → state the source.
+   ANALYSIS: Our interpretation → "Based on [evidence], we interpret this as..."
+   OPINION: A reasoned judgment → "In our view..." or use an opinion signal.
+   Do not present opinions as facts.
+
+4. NO FAKE EXPERTISE: Do not claim personal experience, testing, customer results,
+   research, interviews, or experiments unless evidence exists.
+   Never write "we tested", "in our experience", "our data shows" without
+   actual first-party data behind it.`;
+
+/**
+ * Case study policy — explicit guard against fabricated case studies.
+ */
+export const CASE_STUDY_POLICY = `CASE STUDY POLICY:
+
+A case study may ONLY be generated when verified data exists.
+
+Required for any case study:
+- Subject/customer identifier or anonymized verified record
+- Timeframe
+- Methodology
+- Source data
+- Measurable outcome
+
+Otherwise: DO NOT CREATE A CASE STUDY.
+
+You may create a clearly labeled "Hypothetical example:" but
+hypothetical examples must NEVER contain fabricated performance results.`;
+
+/**
+ * Fact Preservation Rule — injected into the Claude editorial pass.
+ * The editorial pass may improve language but must NOT change factual substance.
+ */
+export const FACT_PRESERVATION_RULE = `FACT PRESERVATION RULE — CRITICAL:
+
+You may improve:
+- Wording, rhythm, paragraph length, transitions, clarity, headings, redundancy.
+
+You may NOT:
+- Add statistics or numbers that weren't in the original.
+- Add sources or citations that weren't in the original.
+- Invent examples or case studies.
+- Change numbers or data points.
+- Introduce new factual claims.
+- Claim personal experience or testing occurred.
+- Strengthen uncertain claims into definitive claims.
+- Add superlatives ("best", "most powerful", "guaranteed").
+
+If you encounter an unsupported claim in the original, you may:
+- Soften it ("often" → "sometimes", remove precise numbers).
+- Flag it with [VERIFY] for editorial review.
+
+Do NOT strengthen it.`;
+
+/**
+ * Product claims policy — rule 10.
+ */
+export const PRODUCT_CLAIMS_POLICY = `PRODUCT CLAIMS POLICY:
+
+Never make unsupported claims about OptiAISEO.
+
+Do not say: "best", "number one", "most powerful", "the only platform",
+"guaranteed", "will increase rankings" — unless demonstrably supported
+and appropriately qualified.
+
+Prefer specific, verifiable descriptions of what the product actually does.`;
 
 // ─── Shared prompt quality rules (from prompt engineering layer) ──────────────
 //
@@ -333,7 +434,7 @@ async function generateThread(
     const faqLines =
         faqs.length > 0
             ? "\n\nFAQ PAIRS FROM THE ARTICLE (use as tweet material):\n" +
-              faqs.map((f) => `Q: ${f.q}\nA: ${f.a}`).join("\n\n")
+            faqs.map((f) => `Q: ${f.q}\nA: ${f.a}`).join("\n\n")
             : "";
 
     const prompt = `You are a Twitter/X thread writer. Write a thread that gets saved and reshared — and that AI engines will cite as a credible source.
@@ -667,9 +768,9 @@ ${high ? "- HIGH-RISK TOPIC: Every factual claim requires a named source or must
 export function getToneRules(ctx: PromptContext): string {
     const intentMap: Record<string, string> = {
         transactional: "Direct and conversion-focused — help the reader take action now.",
-        commercial:    "Balanced and analytical — help the reader compare options confidently.",
-        local:         "Warm and community-aware — speak to the reader's specific location and context.",
-        navigational:  "Clear and efficient — get the reader to the right place fast.",
+        commercial: "Balanced and analytical — help the reader compare options confidently.",
+        local: "Warm and community-aware — speak to the reader's specific location and context.",
+        navigational: "Clear and efficient — get the reader to the right place fast.",
         informational: "Authoritative and educational — trusted expert explaining to a peer.",
     };
     return `TONE: ${intentMap[ctx.intent] ?? "Authoritative and direct."}
@@ -697,22 +798,39 @@ furthermore / moreover / in conclusion / delve into / leverage / robust / compre
 }
 
 export function getScopeRules(ctx: PromptContext): string {
-    const wordTarget =
-        ctx.intent === "transactional" ? 1500
-        : ctx.intent === "commercial"  ? 2200
-        : ctx.intent === "local"       ? 1800
-        :                                2200; // informational default
     return `SCOPE:
+
+ONE CLEAR PURPOSE: This article must have one primary purpose.
+Do not combine unrelated intents simply to increase article length.
+
 PRIMARY KEYWORD STRATEGY — "${ctx.keyword}":
 - Use naturally in: the title (within first 60 chars), the opening paragraph, and 1-2 H2 headings.
 - Prefer semantic relevance over repetition — use synonyms, related terms, and entity variations throughout.
 - Do NOT force exact-match repetition. Keyword stuffing reduces quality and is detectable.
-- Include semantic variations: related terms, entity names, and LSI phrases that cover the topic comprehensively.
+- Do NOT force the keyword into every heading, every paragraph, image alt text, or conclusions.
+- Never sacrifice readability for keyword placement.
 - Meta description: keyword within first 120 characters, 140–160 characters total, written as compelling ad copy.
 - URL slug: lowercase, hyphens only, keyword-only — no stop words.
-- Minimum word count: ${wordTarget} words.
 - Year reference: ${ctx.year}.
-${ctx.isLocalTopic ? `- LOCAL TOPIC: include city/region name, local regulations, regional pricing, and local platform context in at least one H2.` : ""}`;
+
+ARTICLE LENGTH: Do NOT target a word count. Target completeness.
+- An article should be as long as necessary to satisfy the intent and no longer.
+- A useful 1,200-word article is better than a padded 3,500-word article.
+- Never add paragraphs simply to increase word count.
+- Never repeat the same idea using different wording.
+- Never create sections that provide no new information.
+
+NO PADDING — every section must introduce at least one of:
+- new information
+- evidence
+- example
+- analysis
+- comparison
+- procedure
+- data
+- practical recommendation
+If a section cannot do this, do not write it.
+${ctx.isLocalTopic ? `\nLOCAL TOPIC: include city/region name, local regulations, regional pricing, and local platform context in at least one H2.` : ""}`;
 }
 
 export function getStructureRules(ctx: PromptContext): string {
@@ -721,7 +839,22 @@ export function getStructureRules(ctx: PromptContext): string {
 - 5–8 H2 sections. Derive structure from the topic and SERP data — not from a default template.
 - Answer the primary search intent in the FIRST 30% of the article.
 - TITLE-COUNT RULE: if the title contains a number, the content must contain exactly that many H3 items.
-- Intro: 3 sentences — (1) the most useful/surprising fact about "${ctx.keyword}", (2) your unique angle, (3) what the reader gets. No "Welcome to" or "In this article" openers.
+
+NO GENERIC INTRODUCTIONS — never begin with:
+- "In today’s digital world..."
+- "Businesses are constantly looking for..."
+- "Finding the right tool can significantly boost..."
+- "SEO has become increasingly important..."
+- "Whether you’re a beginner or an expert..."
+Start with the actual problem, answer, finding, comparison, or insight.
+Intro: 3 sentences — (1) the most useful/surprising fact about "${ctx.keyword}", (2) your unique angle, (3) what the reader gets.
+
+HEADINGS must describe the actual information underneath them.
+Avoid generic headings: Introduction, Conclusion, Final Thoughts, Why This Matters, The Future of SEO.
+Prefer specific headings that answer questions.
+
+CONCLUSION: Do not repeat the entire article. Summarize the key takeaway and provide the next useful action.
+
 - FAQs MUST align to real People Also Ask queries for "${ctx.keyword}". Every FAQ answer opens with Yes / No / a number / a named tool or time frame.
 - DO NOT use the pattern: What Is X → Why X Matters → How to X → Common Mistakes → FAQ. This is predictable and AI-detectable.
 - FRESHNESS: at least one section must reference what specifically changed or is different as of ${ctx.year} — not a timeless platitude that was true five years ago.
@@ -738,8 +871,8 @@ export function getAuthorGrounding(author: AuthorProfile, ctx: PromptContext): s
     if (author.realExperience || author.realNumbers || author.localContext) {
         const parts: string[] = ["AUTHOR GROUNDING — weave these naturally into the content:"];
         if (author.realExperience) parts.push(`- Real experience: ${sanitizeGrounding(author.realExperience)}`);
-        if (author.realNumbers)   parts.push(`- Real numbers / results: ${sanitizeGrounding(author.realNumbers)}`);
-        if (author.localContext)  parts.push(`- Local / niche context: ${sanitizeGrounding(author.localContext)}`);
+        if (author.realNumbers) parts.push(`- Real numbers / results: ${sanitizeGrounding(author.realNumbers)}`);
+        if (author.localContext) parts.push(`- Local / niche context: ${sanitizeGrounding(author.localContext)}`);
         return parts.join("\n");
     }
     // No grounding data — still require an E-E-A-T signal
@@ -753,6 +886,8 @@ export function getHumanizePrompt(content: string, ctx: PromptContext): string {
 
 Keyword: "${ctx.keyword}"
 Intent: ${ctx.intent}
+
+${FACT_PRESERVATION_RULE}
 
 EDITORIAL REWRITE RULES:
 
@@ -788,7 +923,11 @@ EDITORIAL REWRITE RULES:
 
 9. FAQ ANSWERS: Every FAQ answer opens with Yes / No / a number / a tool name / a time frame.
 
-10. Return ONLY the rewritten HTML — no markdown fences, no commentary.
+10. NO PROMOTIONAL INFLATION: Do not turn educational content into an advertisement.
+    Mention OptiAISEO only where it naturally solves the problem being discussed.
+    Product mentions must be relevant to the reader's intent.
+
+11. Return ONLY the rewritten HTML — no markdown fences, no commentary.
 
 ARTICLE:
 ${content}`;
@@ -807,4 +946,32 @@ export function getQuickAnswerRule(ctx: PromptContext): string {
 First word must be: Yes / No / a number / a tool name / a time frame.
 Do NOT start with "It depends", "Generally", or "There are many".
 One sentence of context. Then stop.`;
+}
+
+/**
+ * Returns the evidence policy rules as a prompt block.
+ * Injected into the section writer to ground writing in evidence.
+ */
+export function getEvidenceRules(ctx: PromptContext): string {
+    const parts = [EVIDENCE_POLICY];
+
+    if (ctx.riskTier === "high") {
+        parts.push(`\nHIGH-RISK TOPIC: "${ctx.keyword}" is in a high-risk category.
+Every factual claim MUST have a named source or be removed.
+Include a disclaimer that this content is informational only.
+Do NOT present opinions as facts under any circumstances.`);
+    }
+
+    parts.push(CASE_STUDY_POLICY);
+    parts.push(PRODUCT_CLAIMS_POLICY);
+
+    return parts.join("\n\n");
+}
+
+/**
+ * Returns the editorial north star + evidence rules combined.
+ * Used in pipeline stage prompts to set the fundamental quality bar.
+ */
+export function getEditorialPolicy(ctx: PromptContext): string {
+    return `${EDITORIAL_NORTH_STAR}\n\n${getEvidenceRules(ctx)}`;
 }

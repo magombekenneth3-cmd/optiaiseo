@@ -78,8 +78,8 @@ Respond in strict JSON:
 }`;
 
     const fallbackAnalysis = {
-        uniqueContentGaps: [`Implementation edge-cases for ${keyword}`, `2026 performance benchmarks for ${keyword}`],
-        missingDataMetrics: [`42% improvement in speed when optimizing ${keyword}`, `Average 3.2x ROI within 90 days`],
+        uniqueContentGaps: [`Implementation edge-cases for ${keyword} that competitors don't cover`, `Practical workflow comparison for ${keyword} tools`],
+        missingDataMetrics: [`Benchmark comparison across leading ${keyword} approaches`, `Real-world performance observations from practitioners`],
         recommendedQuotes: [`"Most teams fail at ${keyword} because they optimize for volume instead of entity clarity."`],
         originalInsightsBlueprint: [`Why standard approaches to ${keyword} fail in modern LLM search engines.`],
     };

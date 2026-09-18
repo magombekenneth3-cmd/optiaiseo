@@ -447,10 +447,13 @@ export async function buildPost(
     });
 
     const allWarnings = [...validation.warnings, ...rhythmWarnings, ...bannedWarnings, ...metaResult.warnings];
-    const allErrors = [...validation.errors, ...listCountErrors, ...metaResult.errors];
+    const allErrors = [...validation.errors, ...validation.blockingIssues, ...listCountErrors, ...metaResult.errors];
 
     if (allWarnings.length > 0) logger.warn("[Blog Engine] Post-audit warnings", { title, warnings: allWarnings });
     if (allErrors.length > 0) logger.error("[Blog Engine] Post-audit errors — forcing DRAFT", { title, errors: allErrors });
+    if (!validation.passed) logger.warn("[Blog Engine] Composite validation FAILED — blocking issues detected", {
+        title, blockingIssues: validation.blockingIssues,
+    });
 
     return {
         title,

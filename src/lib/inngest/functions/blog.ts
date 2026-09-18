@@ -504,6 +504,7 @@ Be specific and concise. This will be used to write a better article.`,
             validationScore: number;
         };
         let finalPipelineType = pipelineType;
+        let serpContextForGate: SerpContext | null = null;
 
         if (pipelineType === "COMPETITOR_ATTACK" || pipelineType === "COMPETITOR_GAP") {
             // Pre-fetch SERP once as a dedicated step — same pattern as the evergreen pipeline.
@@ -522,6 +523,7 @@ Be specific and concise. This will be used to write a better article.`,
                     return null;
                 }
             });
+            serpContextForGate = competitorSerpContext;
 
         // ── Timeout guard: Railway functions time out at ~5 min. Without an
         // abort boundary the step silently hangs and Inngest never calls onFailure.
@@ -639,6 +641,7 @@ Be specific and concise. This will be used to write a better article.`,
                     return null;
                 }
             });
+            serpContextForGate = precomputedSerpContext;
 
             liveBlogPost = await step.run("generate-evergreen-post", async () => {
                 // Same 4.5-min timeout as competitor path — prevents Railway host
@@ -849,6 +852,21 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         });
 
 
+        // ── Publication Gate (replaces score-based quality gate) ──────────
+        // Import and run the publication gate which checks:
+        // - Fabricated statistics, case studies, experience claims
+        // - Generic AI introductions
+        // - Section duplication / repetition
+        // - Originality vs SERP competitors
+        // - Unsupported product claims
+        // - Structure and SEO/AEO basics
+        //
+        // Decision logic (hard gates, not scores):
+        //   Fabrication detected    → REJECTED
+        //   Evidence issues         → EVIDENCE_REVIEW
+        //   Weak originality / high-risk warnings → NEEDS_REVIEW
+        //   All gates pass          → DRAFT
+
         const qualityScore = factCheck.qualityScore !== null
             ? Math.min(factCheck.qualityScore, liveBlogPost.validationScore)
             : liveBlogPost.validationScore;
@@ -884,7 +902,6 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         // Runs after schema markup is generated so JSON-LD is included in the score.
         // Scores 8 criteria: direct answer, definition block, stats, FAQ, comparison
         // table, E-E-A-T attribution, internal links, structured data.
-        // Blogs below 60/100 are demoted to NEEDS_REVIEW automatically.
         const citationGate = await step.run("citation-template-gate", async () => {
             const htmlWithSchema = schemaMarkup
                 ? liveBlogPost.content + schemaMarkup
@@ -901,42 +918,60 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             topFix: citationGate.citationReady ? null : citationGate.citationTopFix,
         });
 
-        // Quality gate:
-        // validationErrors (hard errors)  → NEEDS_REVIEW
-        // riskTier === "high"             → NEEDS_REVIEW (manual review required for YMYL)
-        // qualityScore < 40              → FAILED
-        // qualityScore 40-64             → NEEDS_REVIEW
-        // qualityScore >= 65, no errors  → DRAFT
+        // ── Publication Gate ──────────────────────────────────────────────
+        const publicationGateResult = await step.run("publication-gate", async () => {
+            const { runPublicationGate } = await import("@/lib/blog/publication-gate");
 
-        const hasHardErrors = liveBlogPost.validationErrors.length > 0;
-        const isHighRisk = riskTier === "high";
+            const hasFirstPartyEvidence = !!(author.realExperience || author.realNumbers);
 
-        let blogStatus: "DRAFT" | "NEEDS_REVIEW" | "FAILED";
-
-        if (qualityScore < 40) {
-            blogStatus = "FAILED";
-            logger.error(`[Blog/Pipeline] Quality score too low (${qualityScore}) — marking FAILED`, { siteId, keyword });
-        } else if (hasHardErrors || isHighRisk || qualityScore < 65) {
-            blogStatus = "NEEDS_REVIEW";
-            if (!citationGate.citationReady) {
-                liveBlogPost.validationWarnings.push(
-                    `Citation readiness score ${citationGate.citationScore}/100 — ${citationGate.citationTopFix ?? "review citation criteria"}`
-                );
-            }
-            logger.warn(`[Blog/Pipeline] Marking NEEDS_REVIEW`, {
-                siteId, keyword, qualityScore, hasHardErrors, isHighRisk,
-                citationScore: citationGate.citationScore,
-                citationReady: citationGate.citationReady,
-                errors: liveBlogPost.validationErrors,
+            return runPublicationGate({
+                content: liveBlogPost.content,
+                title: liveBlogPost.title,
+                metaDescription: liveBlogPost.metaDescription,
+                targetKeywords: liveBlogPost.targetKeywords,
+                evidencePacket: null, // Will be populated once research phase produces structured evidence
+                serpContext: serpContextForGate,
+                researchPacket: null, // Will be populated once research phase produces structured packets
+                riskTier,
+                hasFirstPartyEvidence,
             });
+        });
+
+        // Publication gate determines status — no score override
+        let blogStatus: "DRAFT" | "NEEDS_REVIEW" | "EVIDENCE_REVIEW" | "REJECTED" | "FAILED";
+
+        // Placeholder text is always FAILED (separate from evidence gates)
+        if (PLACEHOLDER_PATTERN.test(liveBlogPost.content)) {
+            blogStatus = "FAILED";
+            logger.error("[Blog/Pipeline] Placeholder text detected — FAILED", { siteId, keyword });
         } else {
-            if (!citationGate.citationReady) {
-                liveBlogPost.validationWarnings.push(
-                    `Citation readiness score ${citationGate.citationScore}/100 — ${citationGate.citationTopFix ?? "review citation criteria"}`
-                );
-            }
-            blogStatus = "DRAFT";
+            blogStatus = publicationGateResult.status;
         }
+
+        // Merge publication gate issues into validation arrays for DB storage
+        if (publicationGateResult.blockingIssues.length > 0) {
+            liveBlogPost.validationErrors.push(...publicationGateResult.blockingIssues);
+        }
+        if (publicationGateResult.warnings.length > 0) {
+            liveBlogPost.validationWarnings.push(...publicationGateResult.warnings);
+        }
+        if (!citationGate.citationReady) {
+            liveBlogPost.validationWarnings.push(
+                `Citation readiness score ${citationGate.citationScore}/100 — ${citationGate.citationTopFix ?? "review citation criteria"}`
+            );
+        }
+
+        logger.info(`[Blog/Pipeline] Publication gate decision: ${blogStatus}`, {
+            siteId, keyword,
+            passed: publicationGateResult.passed,
+            blockingIssues: publicationGateResult.blockingIssues.length,
+            evidenceIssues: publicationGateResult.evidenceIssues.length,
+            originalityIssues: publicationGateResult.originalityIssues.length,
+            fabricationIssues: publicationGateResult.fabricationIssues.length,
+            warnings: publicationGateResult.warnings.length,
+            qualityScore,
+            citationScore: citationGate.citationScore,
+        });
 
         const contentWithFunnel = await step.run("inject-funnel-cta", async () => {
             const funnelIntent = (detectedIntent === "local" ? "informational" : detectedIntent) as FunnelIntent;
@@ -1019,7 +1054,7 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         });
 
         // Only for non-failed blogs with at least one target keyword to track.
-        if (blogStatus !== "FAILED" && liveBlogPost.targetKeywords.length > 0) {
+        if (blogStatus !== "FAILED" && blogStatus !== "REJECTED" && liveBlogPost.targetKeywords.length > 0) {
             await step.sendEvent("trigger-citation-monitor", {
                 name: "blog.published",
                 data: {
@@ -1031,7 +1066,7 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             });
         }
 
-        if (blogStatus !== "FAILED") {
+        if (blogStatus !== "FAILED" && blogStatus !== "REJECTED") {
             await step.sendEvent("trigger-internal-links", {
                 name: "blog.published" as const,
                 data: {
@@ -1044,11 +1079,18 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         }
 
         return {
-            success: blogStatus !== "FAILED",
+            success: blogStatus === "DRAFT",
             qualityScore,
             blogStatus,
-            flaggedForReview: blogStatus === "NEEDS_REVIEW",
+            flaggedForReview: blogStatus === "NEEDS_REVIEW" || blogStatus === "EVIDENCE_REVIEW",
             hardErrors: liveBlogPost.validationErrors,
+            publicationGate: {
+                passed: publicationGateResult.passed,
+                blockingIssues: publicationGateResult.blockingIssues.length,
+                evidenceIssues: publicationGateResult.evidenceIssues.length,
+                originalityIssues: publicationGateResult.originalityIssues.length,
+                fabricationIssues: publicationGateResult.fabricationIssues.length,
+            },
         };
     }
 );

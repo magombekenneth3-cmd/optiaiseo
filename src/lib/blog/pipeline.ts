@@ -20,10 +20,26 @@ import type { PromptContext } from "./prompt-context";
 import type { SerpContext } from "./serp";
 import { classifySerpFormat } from "./serp";
 import type { AuthorProfile } from "./index";
-import { getClaimRules, getToneRules, getScopeRules, getStructureRules } from "./rules";
+import { getClaimRules, getToneRules, getScopeRules, getStructureRules, getEvidenceRules, getEditorialPolicy } from "./rules";
 import type { GroundedSiteContext } from "@/lib/prompt-context/build-site-context";
 import { runInformationGainAlgorithm } from "./information-gain";
 import { injectVisualEvidenceIntoBlog } from "./image-evidence";
+import {
+    ClaimSchema,
+    GeneratedSectionSchema,
+    isValidFaqOpener,
+    OutlinePlanSchema,
+    ResearchBrainSchema,
+    type ResearchPacket,
+    type SectionResearch,
+    type SourceEvidence,
+} from "./contracts";
+import {
+    buildResearchPacket,
+    buildSectionResearchMap,
+    getVerifiedCaseStudyAvailability,
+    renderSourceContext,
+} from "./research-packet";
 
 export interface ResearchBrain {
     intent: string;
@@ -392,6 +408,8 @@ ${getScopeRules(ctx)}
 
 ${getStructureRules(ctx)}
 
+${getEditorialPolicy(ctx)}
+
 Produce an outline as JSON with this exact shape:
 
 {
@@ -684,6 +702,7 @@ ${brain.informationGainDirective || ""}
 
 ${getClaimRules(ctx)}
 ${getToneRules(ctx)}
+${getEvidenceRules(ctx)}
 
 HUMAN WRITING RULES \u2014 this is what separates real writing from AI output:
 - Vary sentence length deliberately. Short punches. Then a longer one that earns its length. Then short again.
