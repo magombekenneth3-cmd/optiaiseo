@@ -135,14 +135,14 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         has: [{ type: "host", value: "www.optiaiseo.online" }],
         destination: "https://optiaiseo.online/:path*",
-        permanent: true,
+        statusCode: 301,
       },
       // /register was never a real page — all referral share links pointed here.
       // Redirect permanently to /signup; Next.js preserves the ?ref= query string.
       {
         source: '/register',
         destination: '/signup',
-        permanent: true,
+        statusCode: 301,
       },
       {
         source: '/:path*',
@@ -153,52 +153,52 @@ const nextConfig: NextConfig = {
           },
         ],
         destination: 'https://optiaiseo.online/:path*',
-        permanent: true,
+        statusCode: 301,
       },
 
       // ── AEO guide consolidation — 301 redirects ─────────────────────────
       // 21 consolidated slugs → their canonical pages.
       // See: aeo_url_classification.md for the full decision matrix.
-      { source: '/aeo-guide/aeo-beginners-guide', destination: '/aeo-guide/what-is-answer-engine-optimization', permanent: true },
-      { source: '/aeo-guide/indirect-aeo-benefits', destination: '/aeo-guide/what-is-answer-engine-optimization', permanent: true },
-      { source: '/aeo-guide/generative-ai-seo-2026', destination: '/aeo-guide/what-is-generative-engine-optimization', permanent: true },
-      { source: '/aeo-guide/how-ai-search-engines-work', destination: '/aeo-guide/what-is-ai-search-engine', permanent: true },
-      { source: '/aeo-guide/rank-in-google-sge', destination: '/aeo-guide/how-to-appear-in-google-ai-overviews', permanent: true },
-      { source: '/aeo-guide/how-to-get-cited-in-chatgpt', destination: '/aeo-guide/how-to-rank-in-chatgpt-search', permanent: true },
-      { source: '/aeo-guide/chatgpt-seo-strategy', destination: '/aeo-guide/how-to-rank-in-chatgpt-search', permanent: true },
-      { source: '/aeo-guide/perplexity-seo-strategy', destination: '/aeo-guide/how-to-rank-in-perplexity-ai', permanent: true },
-      { source: '/aeo-guide/optimize-for-llm-citations', destination: '/aeo-guide/llm-seo-strategy', permanent: true },
-      { source: '/aeo-guide/seo-vs-aeo-vs-geo', destination: '/aeo-guide/answer-engine-optimization-vs-seo', permanent: true },
-      { source: '/aeo-guide/traditional-seo-vs-ai-search', destination: '/aeo-guide/answer-engine-optimization-vs-seo', permanent: true },
-      { source: '/aeo-guide/ai-answers-vs-google-results', destination: '/aeo-guide/featured-snippets-vs-ai-answers', permanent: true },
-      { source: '/aeo-guide/optimize-content-for-ai-search', destination: '/aeo-guide/how-to-optimize-for-answer-engines', permanent: true },
-      { source: '/aeo-guide/ai-search-traffic-strategy', destination: '/aeo-guide/aeo-strategy-2026', permanent: true },
-      { source: '/aeo-guide/answer-engine-ranking-factors', destination: '/aeo-guide/ai-search-ranking-factors', permanent: true },
-      { source: '/aeo-guide/schema-markup-aeo-guide', destination: '/aeo-guide/structured-data-for-ai-search', permanent: true },
-      { source: '/aeo-guide/faq-schema-ai-search', destination: '/aeo-guide/structured-data-for-ai-search', permanent: true },
-      { source: '/aeo-guide/best-ai-seo-tools-aeo', destination: '/aeo-guide/answer-engine-optimization-tools', permanent: true },
-      { source: '/aeo-guide/aeo-tools-free', destination: '/aeo-guide/answer-engine-optimization-tools', permanent: true },
-      { source: '/aeo-guide/aeo-tools-comparison', destination: '/aeo-guide/answer-engine-optimization-tools', permanent: true },
-      { source: '/aeo-guide/ai-share-of-voice', destination: '/aeo-guide/ai-citation-tracking', permanent: true },
+      { source: '/aeo-guide/aeo-beginners-guide', destination: '/aeo-guide/what-is-answer-engine-optimization', statusCode: 301 },
+      { source: '/aeo-guide/indirect-aeo-benefits', destination: '/aeo-guide/what-is-answer-engine-optimization', statusCode: 301 },
+      { source: '/aeo-guide/generative-ai-seo-2026', destination: '/aeo-guide/what-is-generative-engine-optimization', statusCode: 301 },
+      { source: '/aeo-guide/how-ai-search-engines-work', destination: '/aeo-guide/what-is-ai-search-engine', statusCode: 301 },
+      { source: '/aeo-guide/rank-in-google-sge', destination: '/aeo-guide/how-to-appear-in-google-ai-overviews', statusCode: 301 },
+      { source: '/aeo-guide/how-to-get-cited-in-chatgpt', destination: '/aeo-guide/how-to-rank-in-chatgpt-search', statusCode: 301 },
+      { source: '/aeo-guide/chatgpt-seo-strategy', destination: '/aeo-guide/how-to-rank-in-chatgpt-search', statusCode: 301 },
+      { source: '/aeo-guide/perplexity-seo-strategy', destination: '/aeo-guide/how-to-rank-in-perplexity-ai', statusCode: 301 },
+      { source: '/aeo-guide/optimize-for-llm-citations', destination: '/aeo-guide/llm-seo-strategy', statusCode: 301 },
+      { source: '/aeo-guide/seo-vs-aeo-vs-geo', destination: '/aeo-guide/answer-engine-optimization-vs-seo', statusCode: 301 },
+      { source: '/aeo-guide/traditional-seo-vs-ai-search', destination: '/aeo-guide/answer-engine-optimization-vs-seo', statusCode: 301 },
+      { source: '/aeo-guide/ai-answers-vs-google-results', destination: '/aeo-guide/featured-snippets-vs-ai-answers', statusCode: 301 },
+      { source: '/aeo-guide/optimize-content-for-ai-search', destination: '/aeo-guide/how-to-optimize-for-answer-engines', statusCode: 301 },
+      { source: '/aeo-guide/ai-search-traffic-strategy', destination: '/aeo-guide/aeo-strategy-2026', statusCode: 301 },
+      { source: '/aeo-guide/answer-engine-ranking-factors', destination: '/aeo-guide/ai-search-ranking-factors', statusCode: 301 },
+      { source: '/aeo-guide/schema-markup-aeo-guide', destination: '/aeo-guide/structured-data-for-ai-search', statusCode: 301 },
+      { source: '/aeo-guide/faq-schema-ai-search', destination: '/aeo-guide/structured-data-for-ai-search', statusCode: 301 },
+      { source: '/aeo-guide/best-ai-seo-tools-aeo', destination: '/aeo-guide/answer-engine-optimization-tools', statusCode: 301 },
+      { source: '/aeo-guide/aeo-tools-free', destination: '/aeo-guide/answer-engine-optimization-tools', statusCode: 301 },
+      { source: '/aeo-guide/aeo-tools-comparison', destination: '/aeo-guide/answer-engine-optimization-tools', statusCode: 301 },
+      { source: '/aeo-guide/ai-share-of-voice', destination: '/aeo-guide/ai-citation-tracking', statusCode: 301 },
       // Removed page — no appropriate canonical; redirect to hub.
-      { source: '/aeo-guide/aeo-india', destination: '/aeo-guide', permanent: false },
+      { source: '/aeo-guide/aeo-india', destination: '/aeo-guide', statusCode: 302 },
 
       // ── Deleted blog posts — 301 to hub ─────────────────────────────────
       // These were published, indexed by Google, then unpublished/deleted.
       // 301 reclaims residual link equity and clears GSC 404 errors.
-      { source: '/blog/entity-seo-2026', destination: '/blog', permanent: true },
-      { source: '/blog/entity-seo-guide', destination: '/blog', permanent: true },
-      { source: '/blog/gsov-tracking-guide', destination: '/blog', permanent: true },
-      { source: '/blog/topical-authority-guide', destination: '/blog', permanent: true },
-      { source: '/blog/generative-search-occupancy-guide', destination: '/blog', permanent: true },
-      { source: '/blog/ai-citation-guide', destination: '/blog', permanent: true },
-      { source: '/blog/automated-schema-fix-github', destination: '/blog', permanent: true },
-      { source: '/blog/nextjs-seo-guide', destination: '/blog', permanent: true },
+      { source: '/blog/entity-seo-2026', destination: '/blog', statusCode: 301 },
+      { source: '/blog/entity-seo-guide', destination: '/blog', statusCode: 301 },
+      { source: '/blog/gsov-tracking-guide', destination: '/blog', statusCode: 301 },
+      { source: '/blog/topical-authority-guide', destination: '/blog', statusCode: 301 },
+      { source: '/blog/generative-search-occupancy-guide', destination: '/blog', statusCode: 301 },
+      { source: '/blog/ai-citation-guide', destination: '/blog', statusCode: 301 },
+      { source: '/blog/automated-schema-fix-github', destination: '/blog', statusCode: 301 },
+      { source: '/blog/nextjs-seo-guide', destination: '/blog', statusCode: 301 },
 
       // ── Junk URLs that Google crawled ───────────────────────────────────
       // /$ — regex/template leak; /100 — spurious crawl from page content.
-      { source: '/$', destination: '/', permanent: true },
-      { source: '/100', destination: '/', permanent: true },
+      { source: '/$', destination: '/', statusCode: 301 },
+      { source: '/100', destination: '/', statusCode: 301 },
     ];
   },
 };
