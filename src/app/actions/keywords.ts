@@ -36,7 +36,6 @@ import { computeShareOfVoice, type SovEntry } from "@/lib/keywords/share-of-voic
 import { limiters } from "@/lib/rate-limit";
 import { guardErrorToResult } from "@/lib/stripe/guards";
 import { consumeCredits } from "@/lib/credits";
-import { checkBlogLimit } from "@/lib/rate-limit";
 import { normalizeKeywordDateRange, fmtDate, type DateRangeParams } from "@/lib/gsc/gsc-date-range";
 
 type EnrichedKeywordRow = KeywordRow & {
@@ -416,14 +415,7 @@ export async function generateBlogForKeyword(
             };
         }
 
-        const rateCheck = await checkBlogLimit(user.id, user.subscriptionTier);
-        if (!rateCheck.allowed) {
-            return {
-                success: false,
-                error: `You have reached your blog generation limit. Upgrade to Pro for unlimited. Resets on ${rateCheck.resetAt.toLocaleDateString()}.`,
-            };
-        }
-
+        // Credits are the sole gate — no monthly blog count limit.
         logger.debug(`[Keywords] Generating blog for keyword: "${safeKeyword}" (intent: ${intent ?? "unknown"})`);
         const post = await generateBlogFromKeywordGap(safeKeyword, position, impressions, { name: site.domain }, site.domain, intent);
         const { publicationGate } = await evaluateDraftForPublication(post);
