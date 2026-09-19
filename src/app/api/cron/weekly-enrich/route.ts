@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isCronAuthorized } from "@/lib/cron-auth";
 import { fetchTrendingTopics } from "@/lib/trending/fetch-trending";
 import { runDecayCheck } from "@/lib/content/decay-check";
+import { proposeRefreshForDecayedBlogs } from "@/lib/content/decay-to-mutation";
 import { runFullEvictionSweep } from "@/lib/cache/eviction";
 import { logger } from "@/lib/logger";
 
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
 
         let trendingFetched = 0;
         let decayFlagged = 0;
+        let refreshProposed = 0;
 
         const CONCURRENCY = 5;
         for (let i = 0; i < sites.length; i += CONCURRENCY) {
@@ -33,13 +35,20 @@ export async function GET(req: NextRequest) {
                     if (site.niche) {
                         await fetchTrendingTopics(site.niche, site.location ?? "us");
                     }
-                    return runDecayCheck(site.id);
+                    const flagged = await runDecayCheck(site.id);
+                    // Bridge: propose BLOG_REFRESH mutations for all newly flagged blogs
+                    if (flagged > 0) {
+                        const mutations = await proposeRefreshForDecayedBlogs(site.id);
+                        return { flagged, proposed: mutations.proposed.length };
+                    }
+                    return { flagged, proposed: 0 };
                 })
             );
 
             for (const r of results) {
                 if (r.status === "fulfilled") {
-                    decayFlagged += r.value;
+                    decayFlagged += r.value.flagged;
+                    refreshProposed += r.value.proposed;
                 } else {
                     logger.warn("[Cron/WeeklyEnrich] Site batch error:", { reason: String(r.reason) });
                 }
@@ -49,8 +58,8 @@ export async function GET(req: NextRequest) {
 
         const eviction = await runFullEvictionSweep();
 
-        logger.info("[Cron/WeeklyEnrich] Done", { trendingFetched, decayFlagged, eviction });
-        return NextResponse.json({ success: true, trendingFetched, decayFlagged, cacheEvicted: eviction.totalEvicted });
+        logger.info("[Cron/WeeklyEnrich] Done", { trendingFetched, decayFlagged, refreshProposed, eviction });
+        return NextResponse.json({ success: true, trendingFetched, decayFlagged, refreshProposed, cacheEvicted: eviction.totalEvicted });
     } catch (error: unknown) {
         logger.error("[Cron/WeeklyEnrich] Fatal:", { error: (error as Error)?.message || String(error) });
         return NextResponse.json({ error: "Cron job failed" }, { status: 500 });

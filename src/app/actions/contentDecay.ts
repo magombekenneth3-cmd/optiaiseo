@@ -14,6 +14,7 @@ import { getUserGscToken } from "@/lib/gsc/token";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import * as cheerio from "cheerio";
 import { classifySerpFormat, computeContentGaps, formatToPromptHint, getSerpContextForKeyword } from "@/lib/blog/serp";
+import { proposeSingleBlogRefresh } from "@/lib/content/decay-to-mutation";
 
 // Helpers
 
@@ -255,6 +256,20 @@ export async function refreshDecayingContent(
         const site = await prisma.site.findUnique({ where: { id: siteId, userId: user.id } });
         if (!site) return { success: false, error: "Site not found" };
 
+        // Propose a BLOG_REFRESH mutation for auditability — fail-open so it
+        // never blocks the AI generation flow.
+        const blogByUrl = await prisma.blog.findFirst({
+            where: { siteId, sourceUrl: url, status: "PUBLISHED" },
+            select: { id: true },
+        });
+        if (blogByUrl) {
+            proposeSingleBlogRefresh(blogByUrl.id, user.id).catch((err) =>
+                logger.warn("[ContentDecay] Failed to propose BLOG_REFRESH mutation", {
+                    blogId: blogByUrl.id,
+                    error: (err as Error)?.message,
+                })
+            );
+        }
 
         const pageRes = await fetchWithRetry(url, {
             headers: { "User-Agent": "SEOTool-Bot/1.0" },
