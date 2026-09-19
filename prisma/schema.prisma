@@ -545,6 +545,11 @@ model Blog {
   factCheckSuggestions String[]          @default([])
   citationScore        Int?
   citationCriteria     Json?
+  /// Evidence coverage score (0–100) produced by the evidence-extractor pipeline.
+  /// Null for blogs generated before the evidence gate was introduced.
+  evidenceCoverage     Int?
+  /// Descriptions of unsourced claims flagged by the evidence extractor.
+  missingEvidence      String[]          @default([])
   aeoEvents            AeoEvent[]
   repurposedResult     RepurposedResult?
   sourceLinks          InternalLink[]    @relation("SourceLinks")

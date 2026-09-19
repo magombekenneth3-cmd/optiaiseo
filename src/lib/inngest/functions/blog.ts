@@ -1008,6 +1008,9 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 // AI Citation Template gate results
                 citationScore:    citationGate.citationScore,
                 citationCriteria: citationGate.citationCriteria,
+                // Evidence pipeline — feeds the dashboard EvidenceBadge
+                evidenceCoverage: liveBlogPost.evidenceCoverage,
+                missingEvidence:  liveBlogPost.missingEvidence ?? [],
             };
             if (event.data.blogId) {
                 await prisma.blog.update({ where: { id: event.data.blogId }, data: blogData });

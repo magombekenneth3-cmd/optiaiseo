@@ -55,6 +55,10 @@ export interface BlogPostDraft {
     researchPacket: ResearchPacket;
     /** Evidence extracted from this draft before any later editorial mutation. */
     evidencePacket: EvidencePacket;
+    /** 0–100 coverage score — percentage of claims that are sourced. */
+    evidenceCoverage: number;
+    /** Descriptions of unsourced claims (populated from evidencePacket). */
+    missingEvidence: string[];
     /** Inputs needed when the final publication gate re-extracts evidence. */
     riskTier: PromptContext["riskTier"];
     hasFirstPartyEvidence: boolean;
@@ -516,6 +520,16 @@ export async function buildPost(
         validationScore: validation.score,
         researchPacket: authoritativeResearchPacket,
         evidencePacket,
+        // Persist coverage % and unsourced claim list for the dashboard badge.
+        // Coverage = sourced claims / total claims × 100 (0 when no claims yet).
+        evidenceCoverage: evidencePacket.claims.length > 0
+            ? Math.round(
+                  (evidencePacket.claims.filter((c) => c.sourceIds.length > 0).length /
+                      evidencePacket.claims.length) *
+                      100
+              )
+            : 0,
+        missingEvidence: evidencePacket.unsourcedStatistics ?? [],
         riskTier: ctx.riskTier,
         hasFirstPartyEvidence: !!(author.realExperience || author.realNumbers),
     };

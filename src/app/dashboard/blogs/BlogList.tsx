@@ -19,6 +19,7 @@ import {
     MoreHorizontal,
     RefreshCw,
     Search,
+    Shield,
     Sparkles,
     X,
     Zap,
@@ -64,6 +65,10 @@ type Blog = {
     validationErrors?: string[] | null;
     citationScore?: number | null;
     citationCriteria?: unknown;
+    /** 0–100 evidence coverage %, populated by evidence-extractor */
+    evidenceCoverage?: number | null;
+    /** Unsourced claim descriptions (subset of validationErrors) */
+    missingEvidence?: string[] | null;
     hashnodeUrl?: string | null;
     mediumUrl?: string | null;
     wordPressUrl?: string | null;
@@ -288,6 +293,150 @@ function QualityScore({ blog }: { blog: Blog }) {
                 <div className="text-xs font-semibold text-foreground">{label}</div>
                 <div className="text-[11px] text-muted-foreground">SEO score</div>
             </div>
+        </div>
+    );
+}
+
+/**
+ * Evidence Coverage Badge — shows how well the blog's claims are sourced.
+ * Coverage % is read from blog.evidenceCoverage (0–100).
+ * Falls back gracefully for older blogs that predate the evidence pipeline.
+ */
+function EvidenceBadge({ blog }: { blog: Blog }) {
+    const [expanded, setExpanded] = useState(false);
+
+    // Derive coverage from stored field or infer from status
+    const coverage: number | null =
+        blog.evidenceCoverage != null
+            ? Math.max(0, Math.min(100, Number(blog.evidenceCoverage)))
+            : blog.status === "EVIDENCE_REVIEW"
+              ? 35 // evidence gate blocked — coverage was below threshold
+              : null;
+
+    // Unsourced claims — from missingEvidence field or parsed from validationErrors
+    const missing: string[] = (
+        blog.missingEvidence ??
+        (Array.isArray(blog.validationErrors)
+            ? blog.validationErrors.filter((e: string) =>
+                  e.toLowerCase().includes("unsourced") ||
+                  e.toLowerCase().includes("evidence") ||
+                  e.toLowerCase().includes("statistic")
+              )
+            : [])
+    ).slice(0, 5);
+
+    if (coverage === null) {
+        return (
+            <span
+                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/40"
+                title="Evidence coverage not yet computed"
+            >
+                <Shield className="h-3 w-3" />
+                <span className="hidden lg:inline">—</span>
+            </span>
+        );
+    }
+
+    const tier =
+        coverage >= 80 ? "strong" : coverage >= 42 ? "partial" : "weak";
+
+    const tierConfig = {
+        strong: {
+            bar: "bg-emerald-500",
+            text: "text-emerald-400",
+            border: "border-emerald-500/30",
+            bg: "bg-emerald-500/10",
+            label: "Sourced",
+        },
+        partial: {
+            bar: "bg-amber-500",
+            text: "text-amber-400",
+            border: "border-amber-500/30",
+            bg: "bg-amber-500/10",
+            label: "Partial",
+        },
+        weak: {
+            bar: "bg-rose-500",
+            text: "text-rose-400",
+            border: "border-rose-500/30",
+            bg: "bg-rose-500/10",
+            label: "Weak",
+        },
+    }[tier];
+
+    return (
+        <div className="relative">
+            <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                title={`Evidence coverage: ${coverage}%`}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-semibold transition-colors hover:opacity-80 ${tierConfig.border} ${tierConfig.bg} ${tierConfig.text}`}
+            >
+                <Shield className="h-3 w-3 shrink-0" />
+                <span>{coverage}%</span>
+                {/* Mini progress bar */}
+                <span className="hidden lg:flex h-1 w-10 overflow-hidden rounded-full bg-white/10">
+                    <span
+                        className={`h-full rounded-full ${tierConfig.bar} transition-all`}
+                        style={{ width: `${coverage}%` }}
+                    />
+                </span>
+            </button>
+
+            {/* Expanded popover — unsourced claims list */}
+            {expanded && (
+                <div
+                    className="absolute left-0 top-full z-50 mt-1.5 w-72 overflow-hidden rounded-xl border border-border bg-popover shadow-2xl"
+                    onMouseLeave={() => setExpanded(false)}
+                >
+                    <div className={`flex items-center justify-between border-b border-border px-3 py-2 ${tierConfig.bg}`}>
+                        <div className="flex items-center gap-1.5">
+                            <Shield className={`h-3.5 w-3.5 ${tierConfig.text}`} />
+                            <span className={`text-xs font-bold ${tierConfig.text}`}>
+                                Evidence Coverage · {coverage}%
+                            </span>
+                        </div>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${tierConfig.bg} ${tierConfig.border} border ${tierConfig.text}`}>
+                            {tierConfig.label}
+                        </span>
+                    </div>
+
+                    {/* Coverage bar */}
+                    <div className="px-3 pt-3 pb-1">
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+                            <div
+                                className={`h-full rounded-full transition-all ${tierConfig.bar}`}
+                                style={{ width: `${coverage}%` }}
+                            />
+                        </div>
+                    </div>
+
+                    {missing.length > 0 ? (
+                        <div className="px-3 py-2">
+                            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                                Unsourced claims
+                            </p>
+                            <ul className="space-y-1">
+                                {missing.map((claim, i) => (
+                                    <li
+                                        key={i}
+                                        className="flex items-start gap-1.5 text-[11px] leading-4 text-muted-foreground"
+                                    >
+                                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-400" />
+                                        <span className="line-clamp-2">{claim}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ) : (
+                        <p className="px-3 py-2 text-[11px] text-muted-foreground">
+                            {coverage >= 80
+                                ? "All tracked claims are sourced. "
+                                : "No specific unsourced claims recorded."}
+                        </p>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -1338,10 +1487,13 @@ export function BlogList({
                                             <StatusBadge blog={blog} />
                                         </div>
                                         <div className="flex items-center justify-between">
-                                            <span className="max-w-[55%] truncate text-xs text-muted-foreground">
+                                            <span className="max-w-[45%] truncate text-xs text-muted-foreground">
                                                 {blog.targetKeywords?.[0] || "Auto-assigned"}
                                             </span>
-                                            <QualityScore blog={blog} />
+                                            <div className="flex items-center gap-2">
+                                                <EvidenceBadge blog={blog} />
+                                                <QualityScore blog={blog} />
+                                            </div>
                                         </div>
                                         <div className="flex items-center justify-between">
                                             <DistributionLinks
@@ -1392,6 +1544,7 @@ export function BlogList({
                                     <th className="px-4 py-3 font-medium">Title</th>
                                     <th className="px-4 py-3 font-medium">Keyword</th>
                                     <th className="px-4 py-3 font-medium">SEO Score</th>
+                                    <th className="px-4 py-3 font-medium">Evidence</th>
                                     <th className="px-4 py-3 font-medium">Status</th>
                                     <th className="px-4 py-3 font-medium">Published On</th>
                                     <th className="px-4 py-3 font-medium">Updated</th>
@@ -1438,6 +1591,9 @@ export function BlogList({
                                                 </td>
                                                 <td className="px-4 py-3.5">
                                                     <QualityScore blog={blog} />
+                                                </td>
+                                                <td className="px-4 py-3.5">
+                                                    <EvidenceBadge blog={blog} />
                                                 </td>
                                                 <td className="px-4 py-3.5">
                                                     <StatusBadge blog={blog} />
