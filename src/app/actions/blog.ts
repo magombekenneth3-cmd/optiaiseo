@@ -83,22 +83,21 @@ async function maybeSaveAuthorToSite(
 
 async function runRateLimitChecks(
     userId: string,
-    effectiveTier: string
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _effectiveTier: string
 ): Promise<string | null> {
+    // Burst limiter only — prevents rapid-fire spam (e.g. 10 clicks in 1 second).
+    // The monthly blog COUNT limit is removed: credits are the single gate.
+    // If a user has 10 credits, they can generate a blog — no arbitrary cap.
     const burstLimited = await rateLimit("blogGenerate", userId);
     if (burstLimited) {
         const body = await burstLimited.json();
         return body.error ?? "Too many requests. Please wait a moment.";
     }
 
-    const { checkBlogLimit } = await import("@/lib/rate-limit");
-    const rateCheck = await checkBlogLimit(userId, effectiveTier);
-    if (!rateCheck.allowed) {
-        return `You have reached your blog generation limit. Upgrade to Pro for unlimited. Resets on ${rateCheck.resetAt.toLocaleDateString()}.`;
-    }
-
     return null;
 }
+
 
 // ─── Public actions ───────────────────────────────────────────────────────────
 

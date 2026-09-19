@@ -23,7 +23,7 @@ const plans = [
         features: [
             `${PLANS.FREE.limits.auditsPerMonth} Audits per month`,
             "1 Website",
-            `${PLANS.FREE.limits.blogsPerMonth} Blogs per month`,
+            "Blogs limited by credits only",
             `${PLANS.FREE.limits.aeoAuditsPerMonth} AEO checks / month`,
             "Google Search Console",
             "50 credits / month",
@@ -41,7 +41,7 @@ const plans = [
         features: [
             `${PLANS.STARTER.limits.auditsPerMonth} Audits per month`,
             `${PLANS.STARTER.limits.sites} Websites`,
-            `${PLANS.STARTER.limits.blogsPerMonth} Blogs per month`,
+            "Blogs limited by credits only",
             `${PLANS.STARTER.limits.aeoAuditsPerMonth} AEO checks / month`,
             "Rank tracking",
             "Competitor tracking (2/site)",
@@ -60,7 +60,7 @@ const plans = [
         features: [
             `${PLANS.PRO.limits.auditsPerMonth} Audits per month`,
             `${PLANS.PRO.limits.sites} Websites`,
-            `${PLANS.PRO.limits.blogsPerMonth} Blogs per month`,
+            "Blogs limited by credits only",
             `${PLANS.PRO.limits.aeoAuditsPerMonth} AEO checks / month`,
             "Ahrefs + backlink data",
             "GitHub auto-fix PRs",
