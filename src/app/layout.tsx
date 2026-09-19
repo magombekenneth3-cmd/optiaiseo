@@ -127,22 +127,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const fontVars = `${inter.variable} ${montserrat.variable}`;
 
 
-  const websiteSchema = {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    name: "OptiAISEO",
-    url: "https://optiaiseo.online",
-    description: "Free AI SEO audit tool — scan your website for technical issues, get instant fixes, and rank higher on Google.",
-    potentialAction: {
-      "@type": "SearchAction",
-      target: {
-        "@type": "EntryPoint",
-        urlTemplate: "https://optiaiseo.online/free/seo-checker?url={search_term_string}",
-      },
-      "query-input": "required name=search_term_string",
-    },
-  };
-
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
@@ -151,11 +135,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="OptiAISEO" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
-        />
       </head>
       <body className={`antialiased ${fontVars}`} suppressHydrationWarning>
         <ClientLayout fontVars={fontVars}>{children}</ClientLayout>

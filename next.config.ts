@@ -182,6 +182,23 @@ const nextConfig: NextConfig = {
       { source: '/aeo-guide/ai-share-of-voice', destination: '/aeo-guide/ai-citation-tracking', permanent: true },
       // Removed page — no appropriate canonical; redirect to hub.
       { source: '/aeo-guide/aeo-india', destination: '/aeo-guide', permanent: false },
+
+      // ── Deleted blog posts — 301 to hub ─────────────────────────────────
+      // These were published, indexed by Google, then unpublished/deleted.
+      // 301 reclaims residual link equity and clears GSC 404 errors.
+      { source: '/blog/entity-seo-2026', destination: '/blog', permanent: true },
+      { source: '/blog/entity-seo-guide', destination: '/blog', permanent: true },
+      { source: '/blog/gsov-tracking-guide', destination: '/blog', permanent: true },
+      { source: '/blog/topical-authority-guide', destination: '/blog', permanent: true },
+      { source: '/blog/generative-search-occupancy-guide', destination: '/blog', permanent: true },
+      { source: '/blog/ai-citation-guide', destination: '/blog', permanent: true },
+      { source: '/blog/automated-schema-fix-github', destination: '/blog', permanent: true },
+      { source: '/blog/nextjs-seo-guide', destination: '/blog', permanent: true },
+
+      // ── Junk URLs that Google crawled ───────────────────────────────────
+      // /$ — regex/template leak; /100 — spurious crawl from page content.
+      { source: '/$', destination: '/', permanent: true },
+      { source: '/100', destination: '/', permanent: true },
     ];
   },
 };
