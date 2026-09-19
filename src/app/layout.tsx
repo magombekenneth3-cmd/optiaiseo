@@ -52,6 +52,15 @@ export const metadata: Metadata = {
   },
   description: SITE_DESC,
   keywords: [
+    // Brand — front-loaded for entity reinforcement
+    "OptiAISEO",
+    "optiaiseo",
+    "Opti AI SEO",
+    "optiaiseo.online",
+    "AI SEO platform",
+    "AEO tool",
+    "answer engine optimization",
+    "rank in ChatGPT",
     // High-volume, high-intent
     "SEO audit tool",
     "Best seo tool",
@@ -70,12 +79,6 @@ export const metadata: Metadata = {
     "SEO score checker",
     "page speed SEO",
     "schema markup checker",
-    // Brand + differentiator
-    "OptiAISEO",
-    "AI SEO platform",
-    "answer engine optimization",
-    "rank in ChatGPT",
-    "AEO tool",
   ],
   verification: {
     google: "DcH54oZclcEZRL5YAHqs1bLx36I6rGFXeDGXFIjmJjE",
@@ -123,28 +126,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   const fontVars = `${inter.variable} ${montserrat.variable}`;
 
-  const organizationSchema = {
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    name: "OptiAISEO",
-    url: "https://optiaiseo.online",
-    logo: {
-      "@type": "ImageObject",
-      url: "https://optiaiseo.online/logo.svg",
-      width: 200,
-      height: 60,
-    },
-    description: "AI-powered SEO audit and automation platform. Scan your website, fix technical issues, and rank higher on Google.",
-    sameAs: [
-      "https://twitter.com/optiaiseo",
-      "https://www.linkedin.com/company/optiaiseo",
-    ],
-    contactPoint: {
-      "@type": "ContactPoint",
-      contactType: "customer support",
-      url: "https://optiaiseo.online/contact",
-    },
-  };
 
   const websiteSchema = {
     "@context": "https://schema.org",
@@ -170,11 +151,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="OptiAISEO" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-        {/* ── Entity schema: Organization + WebSite ─────────────────────────── */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
-        />
+
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}

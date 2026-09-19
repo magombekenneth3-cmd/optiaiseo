@@ -73,6 +73,15 @@ const organizationSchema = {
   "@type": "Organization",
   "@id": IDS.organization,
   name: "OptiAISEO",
+  alternateName: [
+    "optiaiseo",
+    "OPTIAISEO",
+    "optiAISEO",
+    "Opti AISEO",
+    "Opti AI SEO",
+    "OptiAiSeo",
+    "optiaiseo.online",
+  ],
   url: SITE_URL,
   logo: {
     "@type": "ImageObject",
@@ -89,11 +98,11 @@ const organizationSchema = {
     "Search Engine Optimization",
   ],
   sameAs: [
-    "https://twitter.com/aiseoseo",
-    "https://linkedin.com/company/aiseoseo",
-    "https://youtube.com/@aiseoseo",
-    "https://instagram.com/aiseoseo",
-    "https://facebook.com/aiseoseo",
+    "https://twitter.com/optiaiseo",
+    "https://linkedin.com/company/optiaiseo",
+    "https://youtube.com/@optiaiseo",
+    "https://instagram.com/optiaiseo",
+    "https://facebook.com/optiaiseo",
   ],
   contactPoint: {
     "@type": "ContactPoint",
