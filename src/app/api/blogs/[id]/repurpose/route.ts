@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { repurposeBlog, type RepurposeFormat } from "@/lib/blog/repurpose";
+import { consumeCredits } from "@/lib/credits";
 
 const ALL_FORMATS: RepurposeFormat[] = ["linkedin", "thread", "youtube", "reddit", "podcast"];
 
@@ -57,6 +58,27 @@ export async function POST(
             formats: validFormats,
             domain: blog.site.domain,
         });
+
+        // Charge repurpose_format credits (3 per format) BEFORE the LLM call.
+        // Scales: 1 format = 3 credits, all 5 formats = 15 credits.
+        const creditResult = await consumeCredits(
+            dbUser!.id,
+            "repurpose_format",
+            validFormats.length
+        );
+        if (!creditResult.allowed) {
+            return NextResponse.json(
+                {
+                    error: creditResult.reason === "credits_locked"
+                        ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
+                        : `Insufficient credits. Repurposing ${validFormats.length} format(s) costs ${3 * validFormats.length} credits. You have ${creditResult.remaining}.`,
+                    code: creditResult.reason ?? "insufficient_credits",
+                    creditsRequired: 3 * validFormats.length,
+                    creditsRemaining: creditResult.remaining,
+                },
+                { status: 402 }
+            );
+        }
 
         const result = await repurposeBlog(blog, validFormats);
 

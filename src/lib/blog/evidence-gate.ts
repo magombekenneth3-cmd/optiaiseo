@@ -1,11 +1,3 @@
-/**
- * Evidence Gate — provenance validator for the final article.
- *
- * The extractor supplies an EvidencePacket from the authoritative research
- * snapshot and final content. Missing support is an editorial review issue;
- * only independently proven fabrication is a rejection issue.
- */
-
 import { logger } from "@/lib/logger";
 import type {
     EvidenceAvailability,
@@ -143,9 +135,6 @@ export function runEvidenceGate(input: EvidenceGateInput): EvidenceGateResult {
         blockingIssues.push(...evidencePacket.unsourcedStatistics);
         blockingIssues.push(...evidencePacket.unverifiedCaseStudies);
     }
-
-    // First-party claims are supportable only when actual author evidence was
-    // provided; otherwise they need evidence review, not a fabrication label.
     blockingIssues.push(...fakeExperience.slice(0, 5));
 
     // These are editorial quality findings, not evidence availability claims.

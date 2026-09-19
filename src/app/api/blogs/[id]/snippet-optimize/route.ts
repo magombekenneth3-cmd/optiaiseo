@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { fetchSerp } from "@/lib/serp/serp-features";
 import { GoogleGenAI } from "@google/genai";
 import { AI_MODELS } from "@/lib/constants/ai-models";
+import { consumeCredits } from "@/lib/credits";
 
 type SnippetFormat = "paragraph" | "list" | "table" | "none";
 
@@ -65,6 +66,26 @@ export async function POST(
     const keyword = blog.targetKeywords?.[0];
     if (!keyword)
         return NextResponse.json({ error: "No target keyword" }, { status: 400 });
+
+    // Deduct 2 credits before the SERP + LLM call.
+    const dbUser = await prisma.user.findFirst({
+        where: { email: user!.email },
+        select: { id: true },
+    });
+    if (!dbUser) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+    const creditResult = await consumeCredits(dbUser.id, "snippet_optimize");
+    if (!creditResult.allowed) {
+        return NextResponse.json(
+            {
+                error: creditResult.reason === "credits_locked"
+                    ? "Your credits are locked. Resubscribe or buy a credit pack."
+                    : `Insufficient credits. Snippet optimization costs 2 credits. You have ${creditResult.remaining}.`,
+                code: creditResult.reason ?? "insufficient_credits",
+            },
+            { status: 402 }
+        );
+    }
 
     const serp = await fetchSerp(keyword);
     const answerBox = serp?.answerBox as Record<string, string> | undefined;

@@ -256,8 +256,6 @@ export async function refreshDecayingContent(
         const site = await prisma.site.findUnique({ where: { id: siteId, userId: user.id } });
         if (!site) return { success: false, error: "Site not found" };
 
-        // Propose a BLOG_REFRESH mutation for auditability — fail-open so it
-        // never blocks the AI generation flow.
         const blogByUrl = await prisma.blog.findFirst({
             where: { siteId, sourceUrl: url, status: "PUBLISHED" },
             select: { id: true },
