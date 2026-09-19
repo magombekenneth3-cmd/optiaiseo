@@ -70,7 +70,9 @@ export default async function BlogsPage({
     const reviewCount = content.filter(
         (blog) =>
             blog.status === "REVIEW" ||
-            blog.status === "NEEDS_REVIEW"
+            blog.status === "NEEDS_REVIEW" ||
+            blog.status === "EVIDENCE_REVIEW" ||
+            blog.status === "REJECTED"
     ).length;
 
     const publishedCount = content.filter(
@@ -92,7 +94,7 @@ export default async function BlogsPage({
             blog.validationScore != null &&
             Number(blog.validationScore) < 60;
 
-        return hasValidationErrors || lowScore || blog.status === "FAILED";
+        return hasValidationErrors || lowScore || blog.status === "FAILED" || blog.status === "REJECTED";
     }).length;
 
     const generatingIds = content

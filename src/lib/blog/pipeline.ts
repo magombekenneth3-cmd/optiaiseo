@@ -11,8 +11,6 @@
  * the current section, not 15 rule systems at once.
  */
 
-import { callGemini, callGeminiJson } from "@/lib/gemini/client";
-import type { GeminiCallOptions } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { generateWithFallback, generateWithFallbackJson } from "./ai-client";
 import { logger } from "@/lib/logger";
@@ -25,14 +23,8 @@ import type { GroundedSiteContext } from "@/lib/prompt-context/build-site-contex
 import { runInformationGainAlgorithm } from "./information-gain";
 import { injectVisualEvidenceIntoBlog } from "./image-evidence";
 import {
-    ClaimSchema,
-    GeneratedSectionSchema,
-    isValidFaqOpener,
-    OutlinePlanSchema,
-    ResearchBrainSchema,
     type ResearchPacket,
     type SectionResearch,
-    type SourceEvidence,
 } from "./contracts";
 import {
     buildResearchPacket,
@@ -149,97 +141,6 @@ ${allHeadings.join("\n")}
 
 DEPTH RULE: Any topic competitors cover in 200 words, cover in 400.
 Do not write a section that could be cut without the reader noticing.`;
-}
-
-/** Finds what competitors wrote on the specific subtopic of this section. */
-function getCompetitorSectionContent(
-    sectionHeading: string,
-    serpContext: SerpContext | null
-): string {
-    if (!serpContext) return "";
-
-    const headingWords = sectionHeading.toLowerCase()
-        .split(/\s+/).filter(w => w.length > 3);
-
-    const relevantExcerpts = serpContext.results
-        .filter(r => r.scrapedContent && (r.wordCount ?? 0) > 500)
-        .map((r, i) => {
-            const paragraphs = r.scrapedContent!.split(/\n{2,}/);
-            const relevant = paragraphs.find(p =>
-                headingWords.some(w => p.toLowerCase().includes(w))
-            );
-            return relevant ? `[Competitor ${i + 1}]: ${relevant.slice(0, 600)}` : null;
-        })
-        .filter(Boolean)
-        .slice(0, 3);
-
-    if (relevantExcerpts.length === 0) return "";
-
-    return `WHAT COMPETITORS WRITE ON THIS TOPIC (do not copy — go deeper):
-${relevantExcerpts.join("\n\n")}
-
-DEPTH RULE: Add something none of the above has — a specific named example,
-a real number, a counterpoint, or a failure mode.`;
-}
-
-/** Fetches real facts from Serper for a section. Runs in parallel before writing starts. */
-async function fetchSectionFacts(
-    sectionHeading: string,
-    keyword: string,
-    evidenceType: OutlineSection["evidenceType"],
-): Promise<string> {
-    const apiKey = process.env.SERPER_API_KEY;
-    if (!apiKey) return "";
-
-    const queryMap: Record<OutlineSection["evidenceType"], string> = {
-        data:       `${sectionHeading} statistics data ${new Date().getFullYear()}`,
-        case_study: `${sectionHeading} case study example results`,
-        comparison: `${sectionHeading} comparison ${keyword}`,
-        how_to:     `${sectionHeading} how to steps ${keyword}`,
-        faq:        `${sectionHeading} ${keyword} common questions`,
-        example:    `${sectionHeading} example ${keyword}`,
-        opinion:    `${sectionHeading} ${keyword} expert opinion`,
-    };
-
-    try {
-        const res = await fetch("https://google.serper.dev/search", {
-            method: "POST",
-            headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
-            body: JSON.stringify({ q: queryMap[evidenceType] ?? `${sectionHeading} ${keyword}`, num: 5 }),
-            signal: AbortSignal.timeout(8_000),
-        });
-        if (!res.ok) return "";
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data: any = await res.json();
-        const facts: string[] = [];
-
-        if (data.answerBox?.answer)  facts.push(`[Direct answer] ${data.answerBox.answer}`);
-        if (data.answerBox?.snippet) facts.push(`[Google snippet] ${data.answerBox.snippet}`);
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (data.organic ?? []).slice(0, 4).map((r: any) => r.snippet)
-            .filter((s: string) => s?.length > 60)
-            .forEach((s: string, i: number) => facts.push(`[Source ${i + 1}] ${s}`));
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (data.peopleAlsoAsk ?? []).slice(0, 3).forEach((p: any) => {
-            if (p.snippet) facts.push(`[PAA] Q: ${p.question} → ${p.snippet}`);
-        });
-
-        if (facts.length === 0) return "";
-
-        return `REAL FACTS — use at least 2 of these in the section:
-${facts.join("\n")}
-
-FACT RULES:
-- If a fact contains a number (%, $, days, users), include it verbatim.
-- Attribute naturally: "Research shows...", "According to [source type]..."
-- Do NOT invent statistics not in this list. Write the insight without the number if you don’t have it.
-- "Most teams see significant churn reduction" beats "63% of teams" when 63% is invented.`;
-    } catch {
-        return "";
-    }
 }
 
 // ─── Stage 1: Research Brain ──────────────────────────────────────────────────
@@ -495,24 +396,10 @@ function enforceFaqOpeners(faqMarkdown: string): string {
 
 export async function runSectionWriter(
     outline: OutlinePlan,
-    brain: ResearchBrain,
-    author: AuthorProfile,
+    researchPacket: ResearchPacket,
+    sectionResearch: SectionResearch[],
     ctx: PromptContext,
-    serpContext: SerpContext | null,
 ): Promise<string> {
-    logger.debug("[Pipeline] Pre-fetching section facts", { sections: outline.sections.length });
-    const sectionFacts: string[] = new Array(outline.sections.length).fill("");
-    const FACT_CONCURRENCY = 3;
-    for (let i = 0; i < outline.sections.length; i += FACT_CONCURRENCY) {
-        const batch = outline.sections.slice(i, i + FACT_CONCURRENCY);
-        const results = await Promise.allSettled(
-            batch.map(s => fetchSectionFacts(s.heading, ctx.keyword, s.evidenceType))
-        );
-        results.forEach((r, j) => {
-            sectionFacts[i + j] = r.status === "fulfilled" ? r.value : "";
-        });
-    }
-
     const memory: EditorialMemory = {
         usedEntities: new Set(),
         usedSentenceOpeners: new Set(),
@@ -525,8 +412,18 @@ export async function runSectionWriter(
 
     for (let i = 0; i < outline.sections.length; i++) {
         const section = outline.sections[i];
-        const facts = sectionFacts[i] ?? "";
-        const sectionText = await writeSingleSection(section, outline, brain, author, ctx, memory, serpContext, facts);
+        const research = sectionResearch[i];
+        if (!research) {
+            throw new Error(`[Pipeline] Missing authoritative research for section ${i + 1}.`);
+        }
+        const sectionText = await writeSingleSection(
+            section,
+            outline,
+            researchPacket,
+            research,
+            ctx,
+            memory,
+        );
 
         const stripped = sectionText.replace(/\*?\*?\[EDITOR:[^\]]*\]\*?\*?\s*/g, "").trim();
 
@@ -556,8 +453,16 @@ export async function runSectionWriter(
         logger.info(`[Pipeline] Retrying ${failedIndexes.length} failed sections`);
         for (const idx of failedIndexes) {
             const section = outline.sections[idx];
-            const facts = sectionFacts[idx] ?? "";
-            const retry = await writeSingleSection(section, outline, brain, author, ctx, memory, serpContext, facts);
+            const research = sectionResearch[idx];
+            if (!research) continue;
+            const retry = await writeSingleSection(
+                section,
+                outline,
+                researchPacket,
+                research,
+                ctx,
+                memory,
+            );
             const stripped = retry.replace(/\*?\*?\[EDITOR:[^\]]*\]\*?\*?\s*/g, "").trim();
             if (!stripped.includes("[Section generation failed")) {
                 sections[idx] = section.evidenceType === "faq" ? enforceFaqOpeners(stripped) : stripped;
@@ -592,13 +497,12 @@ export async function runSectionWriter(
 async function writeSingleSection(
     section: OutlineSection,
     outline: OutlinePlan,
-    brain: ResearchBrain,
-    author: AuthorProfile,
+    researchPacket: ResearchPacket,
+    sectionResearch: SectionResearch,
     ctx: PromptContext,
     memory: EditorialMemory,
-    serpContext: SerpContext | null,
-    facts: string,
 ): Promise<string> {
+    const brain = researchPacket.brain;
     const isIntro = section.isIntro ?? false;
     const isFaq = section.evidenceType === "faq";
 
@@ -614,8 +518,8 @@ async function writeSingleSection(
         ? `FEATURED SNIPPET TARGET: The intro paragraph must contain or closely mirror this answer:\n"${outline.quickAnswer}"\nThis is what Google will extract for Position 0.`
         : "";
 
-    const authorNote = author.realExperience
-        ? `AUTHOR VOICE: Weave in naturally \u2014 "${author.realExperience.slice(0, 200)}"`
+    const authorNote = sectionResearch.authorEvidence
+        ? `AUTHOR EVIDENCE: Weave in naturally only when it is relevant — "${sectionResearch.authorEvidence.slice(0, 500)}"`
         : `EXPERIENCE SIGNAL: Include at least one "in practice" observation, a named failure mode,
 or a scenario only someone who has actually done this would describe.
 Generic advice without a grounding moment fails Google's E-E-A-T check.`;
@@ -634,23 +538,29 @@ Do NOT re-introduce as new: ${[...memory.usedEntities].slice(-6).join(", ")}`
         ? `AVOID STARTING SENTENCES WITH: ${[...memory.usedSentenceOpeners].slice(0, 6).join(", ")}`
         : "";
 
-    // Match PAA questions to this section's specific topic
-    const relevantPAA = serpContext?.peopleAlsoAsk
+    // Match PAA questions to this section's specific topic from the same
+    // authoritative packet the publication gate will later inspect.
+    const relevantPAA = researchPacket.serp.paa
         .filter(p => {
             const qWords = p.question.toLowerCase().split(/\s+/);
             const hWords = section.heading.toLowerCase().split(/\s+/);
             return qWords.some(w => hWords.includes(w) && w.length > 3);
         })
-        .slice(0, 2) ?? [];
+        .slice(0, 2);
 
-    const serpNote = serpContext ? `
+    const serpNote = researchPacket.serp.competitors.length > 0 ? `
 SERP SIGNALS \u2014 write to beat what's ranking:
-Featured snippet to beat: ${serpContext.featuredSnippet ?? "none"}
+Competitor coverage for this section: ${sectionResearch.competitorCoverage.join(" | ") || "not available"}
 ${relevantPAA.length > 0 ? `PAA questions to answer in this section:\n${relevantPAA.map(p =>
     `- ${p.question}\n  Current Google answer: ${p.answer ?? "not provided"}`
 ).join("\n")}` : ""}` : "";
 
-    const competitorContext = getCompetitorSectionContent(section.heading, serpContext);
+    const sourceContext = renderSourceContext(sectionResearch.relevantSources);
+    const caseStudyEvidenceNote = section.evidenceType === "case_study"
+        ? getVerifiedCaseStudyAvailability(sectionResearch.relevantSources)
+            ? "Verified case-study evidence is available below. Cite it when using its outcome."
+            : "No verified case-study evidence is available. Use a clearly labelled hypothetical example; do not invent a company, outcome, or metric."
+        : "";
 
     const toneInstructions: Record<OutlineSection["tone"], string> = {
         analytical:    "Break down systematically. Use specific comparisons. State what data shows, not what you feel.",
@@ -685,9 +595,15 @@ Word target: ${section.wordTarget} words (\u00b120%)
 ${section.keyEntities.length > 0 ? `Key entities: ${section.keyEntities.join(", ")}` : ""}
 ${serpNote}
 
-${competitorContext}
+AUTHORITATIVE RESEARCH SNAPSHOT (the only external evidence you may use):
+${sourceContext}
+${sectionResearch.warnings.length > 0 ? `RESEARCH WARNINGS:\n${sectionResearch.warnings.map(warning => `- ${warning}`).join("\n")}` : ""}
+${caseStudyEvidenceNote}
 
-${facts}
+EVIDENCE CITATION RULES:
+- Use a concrete external fact, statistic, or case-study outcome only when it is supported by a source above.
+- Preserve provenance by linking the sentence to that exact source: [Source: source title](source URL).
+- If no supplied source supports a number, write the point qualitatively instead. Never invent a source, metric, or company result.
 
 EDITORIAL MEMORY:
 ${memoryNote}
@@ -902,6 +818,8 @@ export interface PipelineResult {
     markdownContent: string;
     brain: ResearchBrain;
     outline: OutlinePlan;
+    /** One immutable-in-practice snapshot used by writer and publication gate. */
+    researchPacket: ResearchPacket;
 }
 
 /**
@@ -925,8 +843,24 @@ export async function runFullPipeline(params: {
     logger.debug("[Pipeline] Stage 2 — Outline Planner", { keyword });
     const outline = await runOutlinePlanner(keyword, brain, serpContext, ctx, tone);
 
+    // Build exactly one authoritative research packet after the outline tells
+    // us which evidence-intensive sections need source deepening. The writer,
+    // evidence extractor, and publication gate all receive this same object.
+    logger.debug("[Pipeline] Research packet — collecting authoritative sources", {
+        keyword,
+        sections: outline.sections.length,
+    });
+    const researchPacket = await buildResearchPacket({
+        keyword,
+        brain,
+        serpContext,
+        author,
+        sections: outline.sections,
+    });
+    const sectionResearch = await buildSectionResearchMap(outline.sections, researchPacket);
+
     logger.debug("[Pipeline] Stage 3 — Section Writer", { keyword, sections: outline.sections.length });
-    const rawDraft = await runSectionWriter(outline, brain, author, ctx, serpContext);
+    const rawDraft = await runSectionWriter(outline, researchPacket, sectionResearch, ctx);
 
     logger.debug("[Pipeline] Stage 4 — Editorial Rewrite", { keyword, chunks: Math.ceil(rawDraft.length / 18000) });
     const { content: polishedMarkdown, truncated } = await runEditorialRewrite(rawDraft, ctx, groundedCtx);
@@ -942,5 +876,6 @@ export async function runFullPipeline(params: {
         markdownContent: polishedMarkdown,
         brain,
         outline,
+        researchPacket,
     };
 }

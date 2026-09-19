@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { fetchCompetitorKeywordGaps, fetchCompetitorIntelligence, getDynamicCtr, CTR_CURVE } from "@/lib/competitors";
-import { generateBlogFromCompetitorGap } from "@/lib/blog";
+import { evaluateDraftForPublication, generateBlogFromCompetitorGap } from "@/lib/blog";
 import { revalidatePath } from "next/cache";
 import { checkCompetitorRefreshLimit } from "@/lib/rate-limit";
 import { fetchGSCKeywords, normaliseSiteUrl } from "@/lib/gsc";
@@ -353,6 +353,7 @@ export async function generateBlogForCompetitor(
             undefined,      // tone
             siteId          // siteId
         );
+        const { publicationGate } = await evaluateDraftForPublication(liveBlogPost);
 
         const newBlog = await prisma.blog.create({
             data: {
@@ -363,13 +364,22 @@ export async function generateBlogForCompetitor(
                 targetKeywords: liveBlogPost.targetKeywords,
                 content: liveBlogPost.content,
                 metaDescription: liveBlogPost.metaDescription,
-                status: "DRAFT",
+                status: publicationGate.status,
+                validationScore: liveBlogPost.validationScore,
+                validationErrors: [...liveBlogPost.validationErrors, ...publicationGate.blockingIssues],
+                validationWarnings: [...liveBlogPost.validationWarnings, ...publicationGate.warnings],
             },
         });
 
         revalidatePath('/dashboard/blogs');
         revalidatePath('/dashboard/keywords');
-        return { success: true, blogId: newBlog.id };
+        return {
+            success: true,
+            generationSucceeded: true,
+            publicationReady: publicationGate.status === "DRAFT",
+            status: publicationGate.status,
+            blogId: newBlog.id,
+        };
     } catch (error: unknown) {
         logger.error("Failed to generate competitor blog:", { error: (error as Error)?.message || String(error) });
         return { success: false, error: "Failed to generate blog. Check logs." };

@@ -6,7 +6,7 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth/require-user";
 import { extractSiteContext } from "@/lib/blog/context";
-import { getAiClient, buildBlogResponseSchema, GeminiBlogResponse, buildPost } from "@/lib/blog";
+import { getAiClient, buildBlogResponseSchema, GeminiBlogResponse, buildPost, evaluateDraftForPublication } from "@/lib/blog";
 import { buildPromptContext } from "@/lib/blog/prompt-context";
 import { fetchGSCDecayData, normaliseSiteUrl } from "@/lib/gsc";
 import { revalidatePath } from "next/cache";
@@ -368,6 +368,7 @@ Generate the fully modernised, refreshed version of this post now.`;
         parsedResponse.content = `> **2026 Content Refresh:** This guide has been completely updated and structurally modernised for current SEO best practices.\n\n${parsedResponse.content}`;
 
         const draft = await buildPost(parsedResponse, { name: site.domain }, ctx, site.id);
+        const { publicationGate } = await evaluateDraftForPublication(draft);
 
 
         const blog = await prisma.blog.create({
@@ -380,14 +381,23 @@ Generate the fully modernised, refreshed version of this post now.`;
                 targetKeywords: keywords.length > 0 ? keywords : draft.targetKeywords,
                 content: draft.content,
                 metaDescription: draft.metaDescription,
-                status: "DRAFT",
+                status: publicationGate.status,
+                validationScore: draft.validationScore,
+                validationErrors: [...draft.validationErrors, ...publicationGate.blockingIssues],
+                validationWarnings: [...draft.validationWarnings, ...publicationGate.warnings],
             },
         });
 
         revalidatePath("/dashboard/refresh");
         revalidatePath("/dashboard/blogs");
 
-        return { success: true, blog };
+        return {
+            success: true,
+            generationSucceeded: true,
+            publicationReady: publicationGate.status === "DRAFT",
+            status: publicationGate.status,
+            blog,
+        };
     } catch (error: unknown) {
         logger.error("Error refreshing content:", { error: (error as Error)?.message ?? String(error) });
         return { success: false, error: (error as Error).message ?? "Failed to refresh content via AI." };

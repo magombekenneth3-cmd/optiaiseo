@@ -29,6 +29,17 @@ export const ClaimTypeSchema = z.enum([
     "experience",
 ]);
 
+/**
+ * Availability is deliberately separate from pass/fail.  An article can have
+ * evidence that is available but insufficient; it must never be promoted when
+ * the evidence collection or extraction step was unavailable.
+ */
+export const EvidenceAvailabilitySchema = z.enum([
+    "AVAILABLE",
+    "EMPTY",
+    "UNAVAILABLE",
+]);
+
 export const SourceEvidenceSchema = z.object({
     id: z.string().regex(/^[a-z0-9_-]+$/i),
     url: z.string().url(),
@@ -91,6 +102,10 @@ export const AuthorEvidenceSchema = z.object({
 });
 
 export const ResearchPacketSchema = z.object({
+    /** Stable snapshot timestamp for the research used by this generation. */
+    collectedAt: z.string().datetime(),
+    /** Whether the research run produced usable source evidence. */
+    evidenceAvailability: EvidenceAvailabilitySchema,
     keyword: ShortString,
     intent: ShortString,
     brain: ResearchBrainSchema,
@@ -277,20 +292,51 @@ export const ArticleVisualSchema = z.object({
     sectionId: z.string().trim().max(100).optional(),
 });
 
+/** Explicit, auditable claim-to-source provenance produced by the extractor. */
+export const ClaimSourceMappingSchema = z.object({
+    claimId: z.string().regex(/^claim-[a-z0-9_-]+$/i),
+    claim: z.string().trim().min(1).max(1_500),
+    sourceIds: z.array(z.string().regex(/^[a-z0-9_-]+$/i)).max(8),
+    matchMethod: z.enum([
+        "explicit_citation",
+        "source_text_match",
+        "first_party",
+        "unsupported",
+    ]),
+});
+
+export const EvidenceExtractionMetadataSchema = z.object({
+    extractedAt: z.string().datetime(),
+    extractorVersion: z.string().trim().min(1).max(100),
+    researchAvailability: EvidenceAvailabilitySchema,
+    /** Ties this extraction to the exact ResearchPacket used by the writer. */
+    researchCollectedAt: z.string().datetime().nullable(),
+    sourceCitationCount: z.number().int().nonnegative(),
+    claimCount: z.number().int().nonnegative(),
+});
+
 export const EvidencePacketSchema = z.object({
+    availability: EvidenceAvailabilitySchema,
     claims: z.array(ClaimSchema).max(100),
     sources: z.array(SourceEvidenceSchema).max(40),
+    claimSourceMap: z.array(ClaimSourceMappingSchema).max(100),
     examples: z.array(ArticleExampleSchema).max(20),
     caseStudies: z.array(CaseStudySchema).max(10),
     visuals: z.array(ArticleVisualSchema).max(20),
     unsupportedClaims: z.array(z.string()).max(50),
-    fabricatedStatistics: z.array(z.string()).max(50),
-    fabricatedCaseStudies: z.array(z.string()).max(20),
+    /** Statistics without traceable evidence; these require review, not rejection. */
+    unsourcedStatistics: z.array(z.string()).max(50),
+    /** Case-study results without a verified source; these require review. */
+    unverifiedCaseStudies: z.array(z.string()).max(20),
+    /** Claims independently proven false by a trusted verifier. */
+    fabricatedClaims: z.array(z.string()).max(20),
+    extraction: EvidenceExtractionMetadataSchema,
 });
 
 export const PublicationGateResultSchema = z.object({
     passed: z.boolean(),
     status: z.enum(["DRAFT", "NEEDS_REVIEW", "EVIDENCE_REVIEW", "REJECTED"]),
+    evidenceAvailability: EvidenceAvailabilitySchema,
     blockingIssues: z.array(z.string()).max(50),
     warnings: z.array(z.string()).max(50),
     evidenceIssues: z.array(z.string()).max(30),
@@ -305,10 +351,13 @@ export const OriginalValueResultSchema = z.object({
     weakSections: z.array(z.string()).max(20),
     duplicateSections: z.array(z.string()).max(10),
     missingEvidence: z.array(z.string()).max(20),
+    /** Plain-language editorial reasons for a non-passing originality result. */
+    missingValue: z.array(z.string()).max(20),
 });
 
 export type SourceType = z.infer<typeof SourceTypeSchema>;
 export type Claim = z.infer<typeof ClaimSchema>;
+export type EvidenceAvailability = z.infer<typeof EvidenceAvailabilitySchema>;
 export type SourceEvidence = z.infer<typeof SourceEvidenceSchema>;
 export type ResearchBrain = z.infer<typeof ResearchBrainSchema>;
 export type CompetitorResearch = z.infer<typeof CompetitorResearchSchema>;
@@ -330,6 +379,8 @@ export type GeneratedBlog = z.infer<typeof GeneratedBlogSchema>;
 export type ArticleExample = z.infer<typeof ArticleExampleSchema>;
 export type CaseStudy = z.infer<typeof CaseStudySchema>;
 export type ArticleVisual = z.infer<typeof ArticleVisualSchema>;
+export type ClaimSourceMapping = z.infer<typeof ClaimSourceMappingSchema>;
+export type EvidenceExtractionMetadata = z.infer<typeof EvidenceExtractionMetadataSchema>;
 export type EvidencePacket = z.infer<typeof EvidencePacketSchema>;
 export type PublicationGateResult = z.infer<typeof PublicationGateResultSchema>;
 export type OriginalValueResult = z.infer<typeof OriginalValueResultSchema>;

@@ -114,18 +114,13 @@ export const publishBlogToCmsJob = inngest.createFunction(
                     token: site.hashnodeToken!,
                     draft: {
                         title: blog.title,
-                        slug: blog.slug,
                         content: blog.content,
-                        contentMarkdown: blog.content,
                         metaDescription: blog.metaDescription ?? "",
                         targetKeywords: blog.targetKeywords ?? [],
                         excerpt: blog.metaDescription ?? "",
                         heroImage: blog.ogImage
                             ? { url: blog.ogImage, thumb: blog.ogImage, alt: blog.title, photographer: "—", photographerUrl: "", unsplashUrl: "" }
                             : undefined,
-                        validationErrors: [],
-                        validationWarnings: [],
-                        validationScore: 100,
                     },
                 });
 

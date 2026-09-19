@@ -33,6 +33,9 @@ import {
     runCompositeValidation,
 } from "./validators";
 import { runFullPipeline } from "./pipeline";
+import type { EvidencePacket, PublicationGateResult, ResearchPacket } from "./contracts";
+import { buildResearchPacket } from "./research-packet";
+import { extractEvidencePacket } from "./evidence-extractor";
 
 export interface BlogPostDraft {
     title: string;
@@ -48,6 +51,13 @@ export interface BlogPostDraft {
     validationErrors: string[];
     validationWarnings: string[];
     validationScore: number;
+    /** The exact research snapshot used to produce this draft. */
+    researchPacket: ResearchPacket;
+    /** Evidence extracted from this draft before any later editorial mutation. */
+    evidencePacket: EvidencePacket;
+    /** Inputs needed when the final publication gate re-extracts evidence. */
+    riskTier: PromptContext["riskTier"];
+    hasFirstPartyEvidence: boolean;
 }
 
 export interface AuthorProfile {
@@ -395,11 +405,40 @@ export async function humanizePost(content: string, ctx: PromptContext): Promise
     }
 }
 
+/**
+ * Legacy generators that have not performed external research still receive a
+ * concrete packet. Its UNAVAILABLE state makes the publication gate route the
+ * content to evidence review instead of silently promoting it to DRAFT.
+ */
+async function buildUnavailableResearchPacket(
+    keyword: string,
+    author: AuthorProfile,
+): Promise<ResearchPacket> {
+    return buildResearchPacket({
+        keyword,
+        author,
+        serpContext: null,
+        brain: {
+            intent: `No external research was available for "${keyword}".`,
+            searcherMindset: "Unknown because research was unavailable.",
+            contentGaps: [],
+            entities: [],
+            contrarianAngles: [],
+            examplesNeeded: [],
+            faqTargets: [],
+            commonMisconceptions: [],
+            industryMyths: [],
+            whatPeopleAvoidSaying: [],
+        },
+    });
+}
+
 export async function buildPost(
     geminiResponse: GeminiBlogResponse,
     author: AuthorProfile,
     ctx: PromptContext,
-    siteId?: string
+    siteId?: string,
+    researchPacket?: ResearchPacket,
 ): Promise<BlogPostDraft> {
     const { title, slug, content, excerpt, metaDescription, targetKeywords, faqs, sections, suggestedImagePrompt } = geminiResponse;
 
@@ -431,6 +470,12 @@ export async function buildPost(
         assembled = await injectInternalLinks(assembled, siteId, slug, ctx.siteDomain);
     }
 
+    const authoritativeResearchPacket = researchPacket ?? await buildUnavailableResearchPacket(
+        targetKeywords[0] ?? ctx.keyword ?? title,
+        author,
+    );
+    const evidencePacket = extractEvidencePacket(authoritativeResearchPacket, assembled);
+
     const rhythmWarnings = auditRhythm(assembled);
     const bannedWarnings = auditBannedPhrases(assembled).warnings;
     const listCountErrors = validateListCount(title, assembled).errors;
@@ -450,7 +495,7 @@ export async function buildPost(
     const allErrors = [...validation.errors, ...validation.blockingIssues, ...listCountErrors, ...metaResult.errors];
 
     if (allWarnings.length > 0) logger.warn("[Blog Engine] Post-audit warnings", { title, warnings: allWarnings });
-    if (allErrors.length > 0) logger.error("[Blog Engine] Post-audit errors — forcing DRAFT", { title, errors: allErrors });
+    if (allErrors.length > 0) logger.error("[Blog Engine] Post-audit errors — publication gate will require review", { title, errors: allErrors });
     if (!validation.passed) logger.warn("[Blog Engine] Composite validation FAILED — blocking issues detected", {
         title, blockingIssues: validation.blockingIssues,
     });
@@ -469,7 +514,36 @@ export async function buildPost(
         validationErrors: allErrors,
         validationWarnings: allWarnings,
         validationScore: validation.score,
+        researchPacket: authoritativeResearchPacket,
+        evidencePacket,
+        riskTier: ctx.riskTier,
+        hasFirstPartyEvidence: !!(author.realExperience || author.realNumbers),
     };
+}
+
+/**
+ * Evaluate the final draft at the last responsible moment.  Callers that run
+ * a later editorial rewrite must use this helper again, because citations and
+ * claims may have changed after buildPost extracted its initial packet.
+ */
+export async function evaluateDraftForPublication(
+    draft: BlogPostDraft,
+    serpContext: SerpContext | null = null,
+): Promise<{ evidencePacket: EvidencePacket; publicationGate: PublicationGateResult }> {
+    const evidencePacket = extractEvidencePacket(draft.researchPacket, draft.content);
+    const { runPublicationGate } = await import("./publication-gate");
+    const publicationGate = await runPublicationGate({
+        content: draft.content,
+        title: draft.title,
+        metaDescription: draft.metaDescription,
+        targetKeywords: draft.targetKeywords,
+        evidencePacket,
+        serpContext,
+        researchPacket: draft.researchPacket,
+        riskTier: draft.riskTier,
+        hasFirstPartyEvidence: draft.hasFirstPartyEvidence,
+    });
+    return { evidencePacket, publicationGate };
 }
 
 export async function generateTrendingPost(
@@ -522,7 +596,7 @@ export async function generateTrendingPost(
         comparisonTable: [],
     };
 
-    return buildPost(syntheticResponse, author, ctx, siteId);
+    return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket);
 }
 
 export async function generateEvergreenPost(
@@ -580,7 +654,7 @@ export async function generateEvergreenPost(
         comparisonTable: [],
     };
 
-    return buildPost(syntheticResponse, author, ctx, siteId);
+    return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket);
 }
 
 export async function generateBlogFromKeywordGap(
@@ -634,7 +708,7 @@ export async function generateBlogFromKeywordGap(
         comparisonTable: [],
     };
 
-    return buildPost(syntheticResponse, author, ctx, siteId);
+    return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket);
 }
 
 export async function generateBlogFromCompetitorGap(
@@ -686,5 +760,5 @@ export async function generateBlogFromCompetitorGap(
         comparisonTable: [],
     };
 
-    return buildPost(syntheticResponse, author, ctx, siteId);
+    return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket);
 }

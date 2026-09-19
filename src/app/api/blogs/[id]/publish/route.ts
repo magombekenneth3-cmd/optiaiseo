@@ -117,15 +117,10 @@ async function publishToHashnode(
             token,
             draft: {
                 title: blog.title,
-                slug: blog.slug,
                 content: contentMarkdown, // Use turndown output
-                contentMarkdown: contentMarkdown,
                 excerpt: blog.metaDescription || `An expert guide to ${blog.title}`,
                 metaDescription: blog.metaDescription || "",
                 targetKeywords: blog.targetKeywords,
-                validationErrors: [],
-                validationWarnings: [],
-                validationScore: 100,
             }
         });
 

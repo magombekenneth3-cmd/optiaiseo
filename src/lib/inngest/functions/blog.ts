@@ -6,12 +6,13 @@ import {
     generateEvergreenPost,
     generateBlogFromCompetitorGap,
     AuthorProfile,
+    type BlogPostDraft,
 } from "@/lib/blog";
 import { extractSiteContext } from "@/lib/blog/context";
 import { fetchGSCKeywords, findOpportunities, normaliseSiteUrl } from "@/lib/gsc";
 import { callGemini, callGeminiJson } from "@/lib/gemini/client";
 import { getFunnelForIntent, SearchIntent as FunnelIntent } from "@/lib/aeo/funnels";
-import { detectRiskTier, detectIntent, cleanDomainToDisplayName } from "@/lib/blog/prompt-context";
+import { detectIntent, cleanDomainToDisplayName } from "@/lib/blog/prompt-context";
 import { gateCitationScore } from "@/lib/blog/ai-citation-template";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { getSerpContextForKeyword, type SerpContext } from "@/lib/blog/serp";
@@ -382,8 +383,6 @@ export const generateBlogJob = inngest.createFunction(
 
 
         const detectedIntent = detectIntent(keyword ?? "");
-        const riskTier = detectRiskTier(keyword ?? "", site.domain, detectedIntent);
-
         // Runs before generation so the writer knows the competitive landscape.
         // Fires for ALL pipeline types: uses the explicit keyword when provided,
         // falls back to the primary site topic/brand for INDUSTRY & SITE_CONTEXT blogs.
@@ -492,17 +491,7 @@ Be specific and concise. This will be used to write a better article.`,
             return getGroundedContextBlock(siteId);
         });
 
-        let liveBlogPost: {
-            title: string;
-            slug: string;
-            targetKeywords: string[];
-            content: string;
-            metaDescription: string;
-            ogImage?: string;
-            validationErrors: string[];
-            validationWarnings: string[];
-            validationScore: number;
-        };
+        let liveBlogPost: BlogPostDraft & { ogImage?: string };
         let finalPipelineType = pipelineType;
         let serpContextForGate: SerpContext | null = null;
 
@@ -919,23 +908,32 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         });
 
         // ── Publication Gate ──────────────────────────────────────────────
-        const publicationGateResult = await step.run("publication-gate", async () => {
+        const publicationGateStep = await step.run("publication-gate", async () => {
             const { runPublicationGate } = await import("@/lib/blog/publication-gate");
+            const { extractEvidencePacket } = await import("@/lib/blog/evidence-extractor");
 
-            const hasFirstPartyEvidence = !!(author.realExperience || author.realNumbers);
-
-            return runPublicationGate({
+            // Re-extract from the final post-Claude content. The packet carried
+            // by the draft is the single authoritative research snapshot, but
+            // citations can change during an editorial rewrite.
+            const evidencePacket = extractEvidencePacket(
+                liveBlogPost.researchPacket,
+                liveBlogPost.content,
+            );
+            const publicationGate = await runPublicationGate({
                 content: liveBlogPost.content,
                 title: liveBlogPost.title,
                 metaDescription: liveBlogPost.metaDescription,
                 targetKeywords: liveBlogPost.targetKeywords,
-                evidencePacket: null, // Will be populated once research phase produces structured evidence
+                evidencePacket,
                 serpContext: serpContextForGate,
-                researchPacket: null, // Will be populated once research phase produces structured packets
-                riskTier,
-                hasFirstPartyEvidence,
+                researchPacket: liveBlogPost.researchPacket,
+                riskTier: liveBlogPost.riskTier,
+                hasFirstPartyEvidence: liveBlogPost.hasFirstPartyEvidence,
             });
+            return { evidencePacket, publicationGate };
         });
+        liveBlogPost.evidencePacket = publicationGateStep.evidencePacket;
+        const publicationGateResult = publicationGateStep.publicationGate;
 
         // Publication gate determines status — no score override
         let blogStatus: "DRAFT" | "NEEDS_REVIEW" | "EVIDENCE_REVIEW" | "REJECTED" | "FAILED";
@@ -1054,7 +1052,7 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         });
 
         // Only for non-failed blogs with at least one target keyword to track.
-        if (blogStatus !== "FAILED" && blogStatus !== "REJECTED" && liveBlogPost.targetKeywords.length > 0) {
+        if (blogStatus === "DRAFT" && liveBlogPost.targetKeywords.length > 0) {
             await step.sendEvent("trigger-citation-monitor", {
                 name: "blog.published",
                 data: {
@@ -1066,7 +1064,7 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             });
         }
 
-        if (blogStatus !== "FAILED" && blogStatus !== "REJECTED") {
+        if (blogStatus === "DRAFT") {
             await step.sendEvent("trigger-internal-links", {
                 name: "blog.published" as const,
                 data: {
@@ -1079,13 +1077,19 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         }
 
         return {
+            // `success` remains publication readiness for backward-compatible
+            // consumers. Generation completion is deliberately separate.
             success: blogStatus === "DRAFT",
+            generationSucceeded: blogStatus !== "FAILED",
+            publicationReady: blogStatus === "DRAFT",
+            status: blogStatus,
             qualityScore,
             blogStatus,
             flaggedForReview: blogStatus === "NEEDS_REVIEW" || blogStatus === "EVIDENCE_REVIEW",
             hardErrors: liveBlogPost.validationErrors,
             publicationGate: {
                 passed: publicationGateResult.passed,
+                evidenceAvailability: publicationGateResult.evidenceAvailability,
                 blockingIssues: publicationGateResult.blockingIssues.length,
                 evidenceIssues: publicationGateResult.evidenceIssues.length,
                 originalityIssues: publicationGateResult.originalityIssues.length,

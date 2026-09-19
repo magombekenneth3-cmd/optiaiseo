@@ -210,7 +210,10 @@ export async function generateEntityPageForSite(
                 schemaMarkup: sanitizeSchemaMarkup(
                     `<script type="application/ld+json">\n${page.schema}\n</script>`
                 ),
-                status: "DRAFT",
+                // Entity pages do not yet run the authoritative research
+                // pipeline. They must never bypass it into auto-ready DRAFT.
+                status: "EVIDENCE_REVIEW",
+                validationErrors: ["Evidence research was not run for this entity page; human evidence review is required before publication."],
             },
         });
 
@@ -308,7 +311,10 @@ export async function generateEntityPagesBatch(
                         schemaMarkup: sanitizeSchemaMarkup(
                             `<script type="application/ld+json">\n${page.schema}\n</script>`
                         ),
-                        status: "DRAFT",
+                        // Batch-generated entity pages have the same evidence
+                        // constraint as single entity pages.
+                        status: "EVIDENCE_REVIEW",
+                        validationErrors: ["Evidence research was not run for this entity page; human evidence review is required before publication."],
                     },
                 });
             })

@@ -42,6 +42,8 @@ type BlogStatus =
     | "DRAFT"
     | "REVIEW"
     | "NEEDS_REVIEW"
+    | "EVIDENCE_REVIEW"
+    | "REJECTED"
     | "GENERATING"
     | "QUEUED"
     | "PENDING"
@@ -122,7 +124,11 @@ function formatRelativeDate(value?: string | Date) {
 }
 
 function isReviewStatus(status: BlogStatus) {
-    return status === "REVIEW" || status === "NEEDS_REVIEW";
+    return status === "REVIEW" || status === "NEEDS_REVIEW" || status === "EVIDENCE_REVIEW";
+}
+
+function isEditorialRejection(status: BlogStatus) {
+    return status === "REJECTED";
 }
 
 function isGeneratingStatus(status: BlogStatus) {
@@ -163,6 +169,20 @@ function getStatusConfig(blog: Blog) {
             label: "Draft",
             className: "border-amber-500/20 bg-amber-500/10 text-amber-400",
             dot: "bg-amber-400",
+        };
+    }
+    if (blog.status === "EVIDENCE_REVIEW") {
+        return {
+            label: "Evidence review",
+            className: "border-violet-500/20 bg-violet-500/10 text-violet-400",
+            dot: "bg-violet-400",
+        };
+    }
+    if (isEditorialRejection(blog.status)) {
+        return {
+            label: "Rejected",
+            className: "border-red-500/20 bg-red-500/10 text-red-400",
+            dot: "bg-red-400",
         };
     }
     if (isReviewStatus(blog.status)) {
@@ -623,7 +643,7 @@ function ActionMenu({
         return () => document.removeEventListener("mousedown", handlePointerDown);
     }, [open]);
 
-    const canReview = blog.status === "DRAFT" || isReviewStatus(blog.status);
+    const canReview = blog.status === "DRAFT" || isReviewStatus(blog.status) || isEditorialRejection(blog.status);
     const canPublishActions = blog.status === "PUBLISHED";
     const stuck = isStuckBlog(blog);
     const failed = blog.status === "FAILED";
@@ -656,7 +676,9 @@ function ActionMenu({
                             className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-foreground transition-colors hover:bg-muted"
                         >
                             <Eye className="h-3.5 w-3.5 text-primary" />
-                            {isReviewStatus(blog.status) ? "Review & Fix" : "Review & Publish"}
+                            {isReviewStatus(blog.status) || isEditorialRejection(blog.status)
+                                ? "Review & Fix"
+                                : "Review & Publish"}
                         </button>
                     )}
 
@@ -936,7 +958,7 @@ export function BlogList({
         const normalizedSearch = search.trim().toLowerCase();
         const result = [...(blogs ?? [])].filter((blog) => {
             if (statusFilter === "DRAFT" && blog.status !== "DRAFT") return false;
-            if (statusFilter === "REVIEW" && !isReviewStatus(blog.status)) return false;
+            if (statusFilter === "REVIEW" && !isReviewStatus(blog.status) && !isEditorialRejection(blog.status)) return false;
             if (statusFilter === "PUBLISHED" && blog.status !== "PUBLISHED") return false;
             if (statusFilter === "FAILED" && blog.status !== "FAILED") return false;
             if (statusFilter === "GENERATING" && !isGeneratingStatus(blog.status)) return false;
@@ -984,7 +1006,7 @@ export function BlogList({
         return {
             total: all.length,
             draft: all.filter((blog) => blog.status === "DRAFT").length,
-            review: all.filter((blog) => isReviewStatus(blog.status)).length,
+            review: all.filter((blog) => isReviewStatus(blog.status) || isEditorialRejection(blog.status)).length,
             published: all.filter((blog) => blog.status === "PUBLISHED").length,
             generating: all.filter((blog) => isGeneratingStatus(blog.status)).length,
             issues: all.filter((blog) => {
@@ -992,7 +1014,7 @@ export function BlogList({
                     Array.isArray(blog.validationErrors) && blog.validationErrors.length > 0;
                 const lowScore =
                     blog.validationScore != null && Number(blog.validationScore) < 60;
-                return hasErrors || lowScore || blog.status === "FAILED";
+                return hasErrors || lowScore || blog.status === "FAILED" || isEditorialRejection(blog.status);
             }).length,
         };
     }, [blogs]);

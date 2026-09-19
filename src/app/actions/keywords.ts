@@ -31,7 +31,7 @@ import {
 } from "@/lib/gsc";
 import { clusterKeywords, type EnrichedKeyword, type KeywordCluster } from "@/lib/keywords";
 import { getUserGscToken } from "@/lib/gsc/token";
-import { generateBlogFromKeywordGap } from "@/lib/blog";
+import { evaluateDraftForPublication, generateBlogFromKeywordGap } from "@/lib/blog";
 import { computeShareOfVoice, type SovEntry } from "@/lib/keywords/share-of-voice";
 import { limiters } from "@/lib/rate-limit";
 import { guardErrorToResult } from "@/lib/stripe/guards";
@@ -370,7 +370,14 @@ export async function generateBlogForKeyword(
     impressions: number,
     siteId?: string,
     intent?: string
-): Promise<{ success: boolean; blog?: Record<string, unknown>; error?: string }> {
+): Promise<{
+    success: boolean;
+    generationSucceeded?: boolean;
+    publicationReady?: boolean;
+    status?: string;
+    blog?: Record<string, unknown>;
+    error?: string;
+}> {
     try {
         if (!keyword || keyword.length > 200) {
             return { success: false, error: "Invalid keyword." };
@@ -419,6 +426,7 @@ export async function generateBlogForKeyword(
 
         logger.debug(`[Keywords] Generating blog for keyword: "${safeKeyword}" (intent: ${intent ?? "unknown"})`);
         const post = await generateBlogFromKeywordGap(safeKeyword, position, impressions, { name: site.domain }, site.domain, intent);
+        const { publicationGate } = await evaluateDraftForPublication(post);
 
         const blog = await prisma.blog.create({
             data: {
@@ -429,12 +437,21 @@ export async function generateBlogForKeyword(
                 targetKeywords: post.targetKeywords,
                 content: post.content,
                 metaDescription: post.metaDescription,
-                status: "DRAFT",
+                status: publicationGate.status,
+                validationScore: post.validationScore,
+                validationErrors: [...post.validationErrors, ...publicationGate.blockingIssues],
+                validationWarnings: [...post.validationWarnings, ...publicationGate.warnings],
             },
         });
 
         revalidatePath("/dashboard/blogs");
-        return { success: true, blog: blog as Record<string, unknown> };
+        return {
+            success: true,
+            generationSucceeded: true,
+            publicationReady: publicationGate.status === "DRAFT",
+            status: publicationGate.status,
+            blog: blog as Record<string, unknown>,
+        };
     } catch (error: unknown) {
         logger.error("[Keywords] generateBlogForKeyword failed:", { error: (error as Error)?.message || String(error) });
         return { success: false, error: "Failed to generate blog. Check server logs." };

@@ -30,7 +30,7 @@ export interface OriginalValueInput {
     /** The article title */
     title: string;
     /** Research packet from the pipeline */
-    researchPacket: ResearchPacket | null;
+    researchPacket: ResearchPacket;
     /** SERP context with competitor data */
     serpContext: SerpContext | null;
     /** Target keywords */
@@ -107,7 +107,9 @@ async function checkOriginalityVsSerp(
     const fallback: LlmOriginalityResult = {
         uniqueContributions: [],
         paraphrasedSections: [],
-        overallOriginal: true, // Assume original if we can't check
+        // We do not assume originality when external comparison is unavailable.
+        // The deterministic contribution checks below can still establish it.
+        overallOriginal: false,
     };
 
     if (!serpContext || serpContext.results.length === 0) return fallback;
@@ -163,13 +165,11 @@ Respond with JSON only:
  * Runs the original value gate. Returns a pass/fail result with
  * explicit reasons.
  *
- * Pass criteria:
- * - At least 1 unique contribution identified
- * - No more than 50% of sections are pure paraphrases
- * - At least 60% of sections have substance signals
- *
- * If the LLM check is unavailable, the gate uses heuristics only
- * and is more lenient (passes unless sections are clearly empty).
+ * Pass criteria are explicit editorial findings, not ratios or opaque scores:
+ * - The article contains a named unique contribution, original method,
+ *   comparison, or first-party evidence.
+ * - No section is identified as empty of substantive material.
+ * - No section is identified as a competitor paraphrase.
  */
 export async function runOriginalValueGate(
     input: OriginalValueInput
@@ -197,51 +197,63 @@ export async function runOriginalValueGate(
         }
     }
 
-    const substantiveSections = sectionAnalyses.filter(a => countSubstanceSignals(a) > 0).length;
-    const substantiveRatio = sectionAnalyses.length > 0
-        ? substantiveSections / sectionAnalyses.length
-        : 1;
-
     // ── Step 2: LLM originality check (if SERP data available) ───────────
     const llmResult = await checkOriginalityVsSerp(content, serpContext);
 
     // ── Step 3: Combine results ──────────────────────────────────────────
-    const uniqueContributions = llmResult.uniqueContributions;
+    const uniqueContributions = [...llmResult.uniqueContributions];
+    const authorEvidence = input.researchPacket.authorEvidence;
+    if (authorEvidence.experience || authorEvidence.realNumbers) {
+        uniqueContributions.push("Uses documented first-party author evidence.");
+    }
+    for (const analysis of sectionAnalyses) {
+        if (analysis.hasComparison && analysis.hasAnalysis) {
+            uniqueContributions.push(`Original comparison and analysis in "${analysis.heading}".`);
+        } else if (analysis.hasProcedure && analysis.hasPracticalRec) {
+            uniqueContributions.push(`Actionable original method in "${analysis.heading}".`);
+        }
+    }
+    const dedupedContributions = [...new Set(uniqueContributions)].slice(0, 20);
     const duplicateSections = llmResult.paraphrasedSections.map(
         s => `Section appears to paraphrase competitor content: "${s}"`
     );
 
-    // Determine pass/fail
-    const hasUniqueValue = uniqueContributions.length > 0 || llmResult.overallOriginal;
-    const tooManyWeakSections = substantiveRatio < 0.6;
-    const tooManyParaphrases = duplicateSections.length > sectionAnalyses.length * 0.5;
-
-    const passed = hasUniqueValue && !tooManyWeakSections && !tooManyParaphrases;
+    // No numeric cut-offs: each failing finding is directly reviewable.
+    const hasUniqueValue = dedupedContributions.length > 0 || llmResult.overallOriginal;
+    const hasWeakSection = weakSections.length > 0;
+    const hasParaphrasedSection = duplicateSections.length > 0;
+    const passed = hasUniqueValue && !hasWeakSection && !hasParaphrasedSection;
+    const missingValue = [
+        ...(!hasUniqueValue
+            ? ["No original comparison, methodology, or first-party evidence was identified."]
+            : []),
+        ...(hasWeakSection
+            ? ["One or more sections have no evidence, examples, analysis, comparison, procedure, data, or practical recommendation."]
+            : []),
+        ...(hasParaphrasedSection
+            ? ["One or more sections paraphrase competitor content."]
+            : []),
+    ];
 
     if (!passed) {
-        const reasons: string[] = [];
-        if (!hasUniqueValue) reasons.push("no unique contributions identified");
-        if (tooManyWeakSections) reasons.push(`${Math.round((1 - substantiveRatio) * 100)}% of sections lack substance`);
-        if (tooManyParaphrases) reasons.push(`${duplicateSections.length} sections are competitor paraphrases`);
-
         logger.warn("[Original Value Gate] BLOCKED — article lacks original value", {
-            reasons,
-            uniqueContributions: uniqueContributions.length,
+            reasons: missingValue,
+            uniqueContributions: dedupedContributions.length,
             weakSections: weakSections.length,
             totalSections: sectionAnalyses.length,
         });
     } else {
         logger.info("[Original Value Gate] PASSED", {
-            uniqueContributions: uniqueContributions.length,
-            substantiveRatio: Math.round(substantiveRatio * 100) + "%",
+            uniqueContributions: dedupedContributions.length,
         });
     }
 
     return {
         passed,
-        uniqueContributions,
+        uniqueContributions: dedupedContributions,
         weakSections,
         duplicateSections,
         missingEvidence,
+        missingValue,
     };
 }

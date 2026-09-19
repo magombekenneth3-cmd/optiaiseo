@@ -100,15 +100,10 @@ export async function POST(
             token: hashnodeToken,
             draft: {
                 title: blog.title,
-                slug: blog.slug,
                 content: contentMarkdown,
-                contentMarkdown: contentMarkdown,
                 excerpt: blog.metaDescription || `An expert guide to ${blog.title}`,
                 metaDescription: blog.metaDescription || "",
                 targetKeywords: blog.targetKeywords as string[],
-                validationErrors: [],
-                validationWarnings: [],
-                validationScore: 100,
             },
         });
 

@@ -35,6 +35,14 @@ export default function BlogGeneratingPage({
                     router.replace("/dashboard/blogs");
                     return;
                 }
+                if (
+                    data.status === "NEEDS_REVIEW" ||
+                    data.status === "EVIDENCE_REVIEW" ||
+                    data.status === "REJECTED"
+                ) {
+                    router.replace(`/dashboard/blogs?review=${encodeURIComponent(blogId)}`);
+                    return;
+                }
                 if (data.status === "FAILED") {
                     setError(data.failReason ?? "Generation failed");
                     return;

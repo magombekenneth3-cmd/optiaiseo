@@ -105,17 +105,48 @@ function authorEvidence(author: AuthorProfile) {
     });
 }
 
-export function buildResearchPacket(params: {
+/**
+ * Builds the single research snapshot for a generation attempt.
+ *
+ * Source deepening happens before the packet is parsed so the section writer
+ * and publication gate see the exact same source set.  Do not rebuild this
+ * packet later in the pipeline: that would allow the article and its gate to
+ * evaluate different research snapshots.
+ */
+export async function buildResearchPacket(params: {
     keyword: string;
     brain: ResearchBrain;
     serpContext: SerpContext | null;
     author: AuthorProfile;
-}): ResearchPacket {
+    sections?: OutlineSection[];
+}): Promise<ResearchPacket> {
     const retrievedAt = new Date().toISOString();
-    const { keyword, brain, serpContext, author } = params;
-    const sources = (serpContext?.results ?? [])
+    const { keyword, brain, serpContext, author, sections = [] } = params;
+    const serpSources = (serpContext?.results ?? [])
         .map((result, index) => sourceFromSerpResult(result, `serp-${index + 1}`, retrievedAt))
         .filter((source): source is SourceEvidence => source !== null);
+
+    // Research evidence required by data/comparison/case-study sections is
+    // collected before packet construction. This prevents a private set of
+    // writer-only facts from drifting away from gate evidence.
+    const additionalSources: SourceEvidence[] = [];
+    for (let index = 0; index < sections.length; index += 2) {
+        const batch = sections.slice(index, index + 2);
+        const discovered = await Promise.all(batch.map(async (section, offset) => {
+            if (!needsExternalEvidence(section)) return [];
+            const relevant = sourceForSection(section, serpSources);
+            if (relevant.length >= 2) return [];
+            return deepenSources(section, keyword, index + offset, retrievedAt);
+        }));
+        additionalSources.push(...discovered.flat());
+    }
+
+    const dedupedSources = new Map<string, SourceEvidence>();
+    for (const source of [...serpSources, ...additionalSources]) {
+        // The first source wins so a stable SERP source ID remains stable.
+        if (!dedupedSources.has(source.url)) dedupedSources.set(source.url, source);
+    }
+    const sources = [...dedupedSources.values()].slice(0, 40);
     const competitors = (serpContext?.results ?? [])
         .filter(result => isUrl(result.link) && result.title.trim())
         .slice(0, 8)
@@ -128,6 +159,12 @@ export function buildResearchPacket(params: {
         }));
 
     return ResearchPacketSchema.parse({
+        collectedAt: retrievedAt,
+        evidenceAvailability: sources.length > 0
+            ? "AVAILABLE"
+            : serpContext
+                ? "EMPTY"
+                : "UNAVAILABLE",
         keyword,
         intent: brain.intent,
         brain,
@@ -174,9 +211,9 @@ function selectedAuthorEvidence(section: OutlineSection, packet: ResearchPacket)
     return directlyRelevant || narrativeFit ? truncate(candidate.join("\n"), 3_500) : undefined;
 }
 
-function sourceForSection(section: OutlineSection, packet: ResearchPacket): SourceEvidence[] {
+function sourceForSection(section: OutlineSection, sources: SourceEvidence[]): SourceEvidence[] {
     const terms = [...topicTerms(section.heading), ...section.keyEntities.map(entity => entity.toLowerCase())];
-    return packet.sources
+    return sources
         .map(source => ({ source, score: relevance(`${source.title} ${source.claim} ${source.evidence}`, terms) }))
         .filter(item => item.score > 0)
         .sort((a, b) => b.score - a.score || b.source.confidence - a.source.confidence)
@@ -184,7 +221,22 @@ function sourceForSection(section: OutlineSection, packet: ResearchPacket): Sour
         .map(item => item.source);
 }
 
-async function deepenSources(section: OutlineSection, keyword: string): Promise<SourceEvidence[]> {
+function sectionSourceId(section: OutlineSection, index: number): string {
+    const preferred = section.id ?? section.heading;
+    const safe = preferred
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 48) || `section-${index + 1}`;
+    return `section-${index + 1}-${safe}`;
+}
+
+async function deepenSources(
+    section: OutlineSection,
+    keyword: string,
+    sectionIndex: number,
+    retrievedAt: string,
+): Promise<SourceEvidence[]> {
     const apiKey = process.env.SERPER_API_KEY;
     if (!apiKey || !needsExternalEvidence(section)) return [];
     const suffix = section.evidenceType === "data"
@@ -208,7 +260,7 @@ async function deepenSources(section: OutlineSection, keyword: string): Promise<
                 title: result.title ?? "",
                 link: result.link ?? "",
                 snippet: result.snippet ?? "",
-            }, `section-${section.id ?? "research"}-source-${index + 1}`))
+            }, `${sectionSourceId(section, sectionIndex)}-source-${index + 1}`, retrievedAt))
             .filter((source): source is SourceEvidence => source !== null)
             .filter(source => source.confidence >= 0.55)
             .slice(0, MAX_SOURCES_PER_SECTION);
@@ -277,13 +329,7 @@ export async function buildSectionResearchMap(
         if (await isCancelled?.()) throw new Error("Generation cancelled.");
         const batch = sections.slice(index, index + 2);
         const researched = await Promise.all(batch.map(async (section, offset) => {
-            let sources = sourceForSection(section, packet);
-            if (needsExternalEvidence(section) && sources.length < 2) {
-                const extra = await deepenSources(section, packet.keyword);
-                const deduped = new Map(sources.map(source => [source.url, source]));
-                extra.forEach(source => deduped.set(source.url, source));
-                sources = [...deduped.values()].slice(0, MAX_SOURCES_PER_SECTION);
-            }
+            const sources = sourceForSection(section, packet.sources);
             return { index: index + offset, research: assembleSectionResearch(section, packet, sources) };
         }));
         researched.forEach(item => { output[item.index] = item.research; });

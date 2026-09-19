@@ -1,10 +1,21 @@
 import { logger } from "@/lib/logger";
-import { BlogPostDraft } from "./index";
+import type { BlogPostDraft } from "./index";
+
+/**
+ * Hashnode only needs publishable presentation fields. Keeping this narrower
+ * than BlogPostDraft lets us re-syndicate historical posts without fabricating
+ * a ResearchPacket for a generation attempt that happened before evidence
+ * plumbing existed.
+ */
+export type HashnodeDraft = Pick<
+    BlogPostDraft,
+    "title" | "content" | "excerpt" | "metaDescription" | "targetKeywords" | "heroImage"
+>;
 
 export interface HashnodePublishOptions {
     publicationId: string;
     token: string;
-    draft: BlogPostDraft;
+    draft: HashnodeDraft;
 }
 
 export interface HashnodeResult {
