@@ -236,6 +236,12 @@ export const generateBlogJob = inngest.createFunction(
 
             // Always sweep GENERATING → FAILED, even when blogId is unknown.
             // Without this, orphaned GENERATING rows can never be cleared by the UI.
+            const effectiveBlogId = blogId ?? (siteId ? (
+                await prisma.blog
+                    .findFirst({ where: { siteId, status: "GENERATING" }, orderBy: { createdAt: "desc" }, select: { id: true } })
+                    .catch(() => null)
+            )?.id : undefined);
+
             if (blogId) {
                 await prisma.blog
                     .updateMany({ where: { id: blogId }, data: { status: "FAILED" } })
@@ -256,6 +262,19 @@ export const generateBlogJob = inngest.createFunction(
                 }
             } else {
                 logger.error("[Inngest/Blog] onFailure: no blogId or siteId — cannot auto-recover stuck blog. Manual DB sweep needed.");
+            }
+
+            // Persist the failure reason to Redis so the status API can surface it
+            // to the generating page — users see the actual cause, not a generic error.
+            if (effectiveBlogId) {
+                const { redis: failRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
+                if (failRedis) {
+                    const reason = (error?.message ?? "Generation failed unexpectedly.").slice(0, 300);
+                    await Promise.all([
+                        failRedis.set(`blog:fail:${effectiveBlogId}`, reason, { ex: 3600 }),
+                        failRedis.del(`blog:step:${effectiveBlogId}`),
+                    ]).catch(() => null);
+                }
             }
 
             // Refund 10 credits idempotently — unique referenceId prevents double-refunds on retries.
@@ -508,6 +527,15 @@ Be specific and concise. This will be used to write a better article.`,
             const { getGroundedContextBlock } = await import("@/lib/prompt-context/build-site-context");
             return getGroundedContextBlock(siteId);
         });
+
+        // ── Step progress: researching → drafting ──────────────────────────
+        const _blogIdForStep = event.data.blogId as string | undefined;
+        if (_blogIdForStep) {
+            await step.run("mark-step-drafting", async () => {
+                const { redis: stepRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
+                await stepRedis?.set(`blog:step:${_blogIdForStep}`, "drafting", { ex: 7200 }).catch(() => null);
+            });
+        }
 
         let liveBlogPost: BlogPostDraft & { ogImage?: string };
         let finalPipelineType = pipelineType;
@@ -776,6 +804,14 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             return await runFactCheckValidation(liveBlogPost.content);
         });
 
+        // ── Step progress: drafting → fact_check ─────────────────────────
+        if (_blogIdForStep) {
+            await step.run("mark-step-fact-check", async () => {
+                const { redis: stepRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
+                await stepRedis?.set(`blog:step:${_blogIdForStep}`, "fact_check", { ex: 7200 }).catch(() => null);
+            });
+        }
+
         const enrichment = await step.run("semantic-enrichment-check", async () => {
             const primaryKeyword = keyword || liveBlogPost.targetKeywords[0] || liveBlogPost.title;
             return runSemanticEnrichmentCheck(primaryKeyword, liveBlogPost.content);
@@ -907,6 +943,14 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 siteDomain: site.domain,
             });
         });
+
+        // ── Step progress: fact_check → schema ──────────────────────────
+        if (_blogIdForStep) {
+            await step.run("mark-step-schema", async () => {
+                const { redis: stepRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
+                await stepRedis?.set(`blog:step:${_blogIdForStep}`, "schema", { ex: 7200 }).catch(() => null);
+            });
+        }
 
         // Runs after schema markup is generated so JSON-LD is included in the score.
         // Scores 8 criteria: direct answer, definition block, stats, FAQ, comparison

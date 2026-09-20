@@ -30,12 +30,14 @@ export async function GET(req: import("next/server").NextRequest,
         return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const step = await redis
-        .get<string>(`blog:step:${id}`)
-        .catch(() => null);
+    const [step, failReason] = await Promise.all([
+        redis.get<string>(`blog:step:${id}`).catch(() => null),
+        redis.get<string>(`blog:fail:${id}`).catch(() => null),
+    ]);
 
     return NextResponse.json({
         status: blog.status,
         generationStep: step ?? "researching",
+        ...(failReason ? { failReason } : {}),
     });
 }

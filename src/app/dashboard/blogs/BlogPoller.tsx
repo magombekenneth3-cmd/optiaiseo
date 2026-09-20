@@ -41,54 +41,99 @@ export function BlogPoller({ generatingBlogIds }: { generatingBlogIds: string[] 
     const [displayPct, setDisplayPct]   = useState(0);
     const attemptRef                    = useRef(0);
     const prevLengthRef                 = useRef(generatingBlogIds.length);
+    const prevBlogIdsRef                = useRef<string[]>(generatingBlogIds);
     const resetTimerRef                 = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Detect transition from "generating" → "done"
     useEffect(() => {
         const prev = prevLengthRef.current;
         const curr = generatingBlogIds.length;
+        const prevIds = prevBlogIdsRef.current;
         prevLengthRef.current = curr;
+        prevBlogIdsRef.current = generatingBlogIds;
 
         if (prev > 0 && curr === 0) {
             setDisplayPct(100);
             resetTimerRef.current = setTimeout(() => setDisplayPct(0), 600);
 
-            toast.custom(
-                (id) => (
-                    <div
-                        className="flex w-full max-w-sm cursor-pointer items-start gap-3 rounded-2xl border border-emerald-500/30 bg-card px-4 py-3 shadow-2xl"
-                        onClick={() => toast.dismiss(id)}
-                    >
-                        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10">
-                            <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                        </div>
-                        <div className="flex min-w-0 flex-col gap-1">
-                            <p className="text-sm font-bold text-foreground">
-                                Blog{prev > 1 ? "s" : ""} ready to review!
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                                {prev > 1 ? `${prev} posts are` : "Your post is"} ready for editorial review.
-                            </p>
-                            <Link
-                                href="/dashboard/blogs"
-                                onClick={() => toast.dismiss(id)}
-                                className="mt-0.5 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:text-emerald-300"
-                            >
-                                <FileText className="h-3.5 w-3.5" />
-                                Review &amp; publish →
-                            </Link>
-                        </div>
-                    </div>
-                ),
-                { duration: 12000 }
-            );
+            // Check actual status of the completed blog(s) before toasting.
+            // The blog may have transitioned to FAILED, not DRAFT/NEEDS_REVIEW.
+            const checkId = prevIds[0];
+            if (checkId) {
+                fetch(`/api/blogs/${checkId}/status`)
+                    .then(r => r.ok ? r.json() : null)
+                    .then((data: { status?: string; failReason?: string } | null) => {
+                        const isFailed = !data || data.status === "FAILED";
+                        if (isFailed) {
+                            toast.error(
+                                data?.failReason
+                                    ? `Generation failed: ${data.failReason}`
+                                    : "Blog generation failed — credits have been refunded.",
+                                { duration: 10000 }
+                            );
+                        } else {
+                            toast.custom(
+                                (id) => (
+                                    <div
+                                        className="flex w-full max-w-sm cursor-pointer items-start gap-3 rounded-2xl border border-emerald-500/30 bg-card px-4 py-3 shadow-2xl"
+                                        onClick={() => toast.dismiss(id)}
+                                    >
+                                        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10">
+                                            <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                                        </div>
+                                        <div className="flex min-w-0 flex-col gap-1">
+                                            <p className="text-sm font-bold text-foreground">
+                                                Blog{prev > 1 ? "s" : ""} ready to review!
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {prev > 1 ? `${prev} posts are` : "Your post is"} ready for editorial review.
+                                            </p>
+                                            <Link
+                                                href="/dashboard/blogs"
+                                                onClick={() => toast.dismiss(id)}
+                                                className="mt-0.5 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:text-emerald-300"
+                                            >
+                                                <FileText className="h-3.5 w-3.5" />
+                                                Review &amp; publish →
+                                            </Link>
+                                        </div>
+                                    </div>
+                                ),
+                                { duration: 12000 }
+                            );
+                        }
+                    })
+                    .catch(() => {
+                        // Network error: fire the success toast anyway to not leave user hanging
+                        toast.custom(
+                            (id) => (
+                                <div
+                                    className="flex w-full max-w-sm cursor-pointer items-start gap-3 rounded-2xl border border-emerald-500/30 bg-card px-4 py-3 shadow-2xl"
+                                    onClick={() => toast.dismiss(id)}
+                                >
+                                    <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10">
+                                        <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                                    </div>
+                                    <div className="flex min-w-0 flex-col gap-1">
+                                        <p className="text-sm font-bold text-foreground">Blog generation complete</p>
+                                        <Link href="/dashboard/blogs" onClick={() => toast.dismiss(id)}
+                                            className="mt-0.5 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:text-emerald-300">
+                                            <FileText className="h-3.5 w-3.5" />View blogs →
+                                        </Link>
+                                    </div>
+                                </div>
+                            ),
+                            { duration: 8000 }
+                        );
+                    });
+            }
         }
 
         if (curr === 0) {
             attemptRef.current = 0;
             setGaveUp(false);
         }
-    }, [generatingBlogIds.length]);
+    }, [generatingBlogIds.length, generatingBlogIds]);
 
     // Cleanup the 600ms display reset timer on unmount
     useEffect(() => {
