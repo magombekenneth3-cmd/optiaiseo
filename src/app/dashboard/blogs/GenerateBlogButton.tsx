@@ -10,6 +10,8 @@ import { Loader2, Sparkles, ChevronDown, FileText, BarChart3, Check } from "luci
 import { AuthorInput, GenerateBlogModal } from "./BlogStepper";
 import { UpgradeModal } from "@/components/UpgradeModal";
 import { CreditGate } from "@/components/ui/CreditGate";
+import { SerpGateBanner } from "./SerpGateBanner";
+import type { SerpGateDecision } from "@/lib/blog/serp-gate";
 
 type PipelineType = "STANDARD" | "DATA_REPORT";
 
@@ -64,6 +66,12 @@ export function GenerateBlogButton({
     const [selectedPipeline, setSelectedPipeline] = useState<PipelineType>("STANDARD");
     const [pendingPipelineType, setPendingPipelineType] = useState<string | undefined>(undefined);
 
+    // SERP gate state
+    const [serpGateDecision, setSerpGateDecision] = useState<SerpGateDecision | null>(null);
+    const [preflightId, setPreflightId] = useState<string | null>(null);
+    const [pendingAuthor, setPendingAuthor] = useState<AuthorInput | null>(null);
+    const [pendingKeyword, setPendingKeyword] = useState<string>("");
+
     const dropdownRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -114,11 +122,10 @@ export function GenerateBlogButton({
         []
     );
 
-    const handleGenerate = useCallback(
-        async (author: AuthorInput) => {
-            setModalOpen(false);
+    /** Runs the actual generateBlog call after gate has passed. */
+    const executeGenerate = useCallback(
+        async (author: AuthorInput, options?: { preflightId?: string; forceSerpMismatch?: boolean }) => {
             setIsPending(true);
-
             const loadingId = toast.loading(
                 <div className="flex flex-col gap-0.5">
                     <span className="font-semibold">Starting…</span>
@@ -129,10 +136,10 @@ export function GenerateBlogButton({
             );
 
             try {
-                const res = await generateBlog(pendingPipelineType, siteId, author);
+                const res = await generateBlog(pendingPipelineType, siteId, author, options);
                 toast.dismiss(loadingId);
 
-                if (res.success) {
+                if (res && "success" in res && res.success) {
                     router.refresh();
                     toast.success(
                         <div className="flex flex-col gap-0.5">
@@ -144,11 +151,11 @@ export function GenerateBlogButton({
                         { duration: 8000 }
                     );
                 } else {
-                    const code = (res as { success: false; error?: string; code?: string }).code;
-                    if (code === "insufficient_credits" || code === "rate_limit") {
+                    const r = res as { success: false; error?: string; code?: string };
+                    if (r.code === "insufficient_credits" || r.code === "rate_limit") {
                         setShowUpgrade(true);
                     } else {
-                        showActionError(res as { success: false; error?: string; code?: string });
+                        showActionError(r);
                     }
                 }
             } catch (error: unknown) {
@@ -169,11 +176,85 @@ export function GenerateBlogButton({
         [pendingPipelineType, siteId, router]
     );
 
+    const handleGenerate = useCallback(
+        async (author: AuthorInput) => {
+            setModalOpen(false);
+            const keyword = author.keyword?.trim() ?? "";
+
+            if (keyword) {
+                // Run SERP preflight before consuming credits
+                setPendingAuthor(author);
+                setPendingKeyword(keyword);
+                setIsPending(true);
+                try {
+                    const res = await fetch("/api/blogs/serp-gate", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ keyword, siteId }),
+                    });
+                    const data = await res.json() as {
+                        decision: SerpGateDecision;
+                        preflightId: string | null;
+                    };
+                    const decision = data.decision;
+
+                    if (decision.verdict === "BLOCK" || decision.verdict === "WARN") {
+                        setSerpGateDecision(decision);
+                        setPreflightId(data.preflightId);
+                        setIsPending(false);
+                        return; // Hold — show banner
+                    }
+                    // ALLOW or SKIP — proceed
+                    await executeGenerate(author, { preflightId: data.preflightId ?? undefined });
+                } catch {
+                    // Preflight network error — fail-open
+                    await executeGenerate(author);
+                } finally {
+                    setIsPending(false);
+                }
+            } else {
+                // No keyword — skip preflight
+                await executeGenerate(author);
+            }
+        },
+        [siteId, executeGenerate]
+    );
+
+    /** User confirmed the WARN — proceed with forceSerpMismatch */
+    const handleGateConfirm = useCallback(async () => {
+        if (!pendingAuthor) return;
+        setSerpGateDecision(null);
+        await executeGenerate(pendingAuthor, {
+            preflightId: preflightId ?? undefined,
+            forceSerpMismatch: true,
+        });
+        setPendingAuthor(null);
+        setPreflightId(null);
+    }, [pendingAuthor, preflightId, executeGenerate]);
+
+    const handleGateCancel = useCallback(() => {
+        setSerpGateDecision(null);
+        setPendingAuthor(null);
+        setPreflightId(null);
+    }, []);
+
     const currentOption =
         PIPELINE_OPTIONS.find((o) => o.key === selectedPipeline) ?? PIPELINE_OPTIONS[0];
 
     return (
         <>
+            {/* SERP gate banner — shown above generate button when WARN/BLOCK */}
+            {serpGateDecision && (serpGateDecision.verdict === "WARN" || serpGateDecision.verdict === "BLOCK") && (
+                <div className="mb-3 w-full max-w-sm">
+                    <SerpGateBanner
+                        decision={serpGateDecision}
+                        keyword={pendingKeyword}
+                        onConfirm={handleGateConfirm}
+                        onCancel={handleGateCancel}
+                    />
+                </div>
+            )}
+
             <div className="relative inline-flex flex-col items-center gap-2">
                 <CreditGate action="blog_generation">
                     <div className="flex items-stretch">

@@ -108,12 +108,12 @@ export function CompetitorsPanel({ siteId, initialCompetitors, userRole = "AGENC
             gap.competitorDomain,
             gap.searchVolume,
             gap.difficulty
-        );
+        ) as { success: boolean; error?: string; blog?: { id: string } };
 
-        if (attackResult.success && attackResult.blog) {
+        if (attackResult.success) {
             toast.success("Attack Content Generated! Check the Blogs tab for your draft.", { id: gap.keyword });
         } else {
-            toast.error(!attackResult.success ? attackResult.error : "Failed to generate content.", { id: gap.keyword });
+            toast.error(attackResult.error ?? "Failed to generate content.", { id: gap.keyword });
         }
         setAttackingKeyword(null);
     };

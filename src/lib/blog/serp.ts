@@ -303,14 +303,14 @@ export async function scrapePageData(
 
     $(
       "script, style, noscript, header, footer, nav, aside, " +
-        "iframe, svg, img, form, [aria-hidden='true'], " +
-        ".cookie-banner, .cookie-notice, .ad, .advertisement, " +
-        "#cookie-consent, .popup, .modal"
+      "iframe, svg, img, form, [aria-hidden='true'], " +
+      ".cookie-banner, .cookie-notice, .ad, .advertisement, " +
+      "#cookie-consent, .popup, .modal"
     ).remove();
 
     const semanticText = $(
       "article, main, [role='main'], .content, #content, " +
-        ".post-content, .entry-content, .article-body, .post-body"
+      ".post-content, .entry-content, .article-body, .post-body"
     )
       .map((_, el) => $(el).text())
       .get()
@@ -528,19 +528,15 @@ export type SerpFormat =
   | "video"
   | "general";
 
+export type SerpConfidence = "high" | "medium" | "low";
+
 export interface SerpFormatSignal {
   format: SerpFormat;
-  confidence: "high" | "medium" | "low";
+  confidence: SerpConfidence;
   reasoning: string;
 }
 
-/**
- * Classifies the dominant SERP content format using position-weighted scoring
- * across title text, snippet text, and URL slugs.
- *
- * Rank 1 is weighted 3×, rank 2 is 2×, rank 3 is 1× — matching the real-world
- * signal strength of each position.
- */
+
 export function classifySerpFormat(results: SerpResult[]): SerpFormatSignal {
   if (results.length === 0) {
     return { format: "general", confidence: "low", reasoning: "No results to classify" };

@@ -37,6 +37,9 @@ import { limiters } from "@/lib/rate-limit";
 import { guardErrorToResult } from "@/lib/stripe/guards";
 import { consumeCredits } from "@/lib/credits";
 import { normalizeKeywordDateRange, fmtDate, type DateRangeParams } from "@/lib/gsc/gsc-date-range";
+import { fetchGoogleSerp, classifySerpFormat } from "@/lib/blog/serp";
+import { evaluateSerpIntentGate, validateSerpPreflight } from "@/lib/blog/serp-gate";
+
 
 type EnrichedKeywordRow = KeywordRow & {
     positionHistory: Array<{ date: string; position: number }>;
@@ -368,7 +371,8 @@ export async function generateBlogForKeyword(
     position: number,
     impressions: number,
     siteId?: string,
-    intent?: string
+    intent?: string,
+    gateInput?: { preflightId?: string; forceSerpMismatch?: boolean }
 ): Promise<{
     success: boolean;
     generationSucceeded?: boolean;
@@ -376,6 +380,9 @@ export async function generateBlogForKeyword(
     status?: string;
     blog?: Record<string, unknown>;
     error?: string;
+    code?: string;
+    serpGate?: unknown;
+    requiresConfirmation?: boolean;
 }> {
     try {
         if (!keyword || keyword.length > 200) {
@@ -394,6 +401,46 @@ export async function generateBlogForKeyword(
         });
         if (!user) return { success: false, error: "User not found" };
 
+        // ── SERP gate (authoritative) ────────────────────────────────────────
+        // GSC path: keyword is always known. BLOCK = do not consume credits
+        // and return a clear error so the user knows why the opportunity skipped.
+        if (process.env.SERPER_API_KEY) {
+            const { preflightId, forceSerpMismatch = false } = gateInput ?? {};
+            let gateDecision;
+            if (preflightId) {
+                const validation = await validateSerpPreflight(preflightId, userId, siteId ?? "", safeKeyword);
+                gateDecision = validation.valid
+                    ? validation.record.decision
+                    : evaluateSerpIntentGate(
+                          await fetchGoogleSerp(safeKeyword, 7)
+                              .then(({ organic }) => organic.length > 0 ? classifySerpFormat(organic) : null)
+                              .catch(() => null)
+                      );
+            } else {
+                const { organic } = await fetchGoogleSerp(safeKeyword, 7).catch(() => ({ organic: [] }));
+                gateDecision = evaluateSerpIntentGate(organic.length > 0 ? classifySerpFormat(organic) : null);
+            }
+
+            if (gateDecision.verdict === "BLOCK") {
+                return {
+                    success: false,
+                    error: "reason" in gateDecision ? gateDecision.reason : "SERP format mismatch — generation blocked.",
+                    code: "SERP_GATE_BLOCK",
+                    serpGate: gateDecision,
+                };
+            }
+            if (gateDecision.verdict === "WARN" && !forceSerpMismatch) {
+                return {
+                    success: false,
+                    error: "reason" in gateDecision ? gateDecision.reason : "SERP format mismatch — please confirm to proceed.",
+                    code: "SERP_GATE_WARN",
+                    serpGate: gateDecision,
+                    requiresConfirmation: true,
+                };
+            }
+        }
+
+        // ── Credits: deduct AFTER gate passes ───────────────────────────────
         const creditResult = await consumeCredits(user.id, "blog_generation");
         if (!creditResult.allowed) {
             return {

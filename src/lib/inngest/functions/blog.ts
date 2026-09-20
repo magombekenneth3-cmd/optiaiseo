@@ -15,7 +15,8 @@ import { getFunnelForIntent, SearchIntent as FunnelIntent } from "@/lib/aeo/funn
 import { detectIntent, cleanDomainToDisplayName } from "@/lib/blog/prompt-context";
 import { gateCitationScore } from "@/lib/blog/ai-citation-template";
 import { AI_MODELS } from "@/lib/constants/ai-models";
-import { getSerpContextForKeyword, type SerpContext } from "@/lib/blog/serp";
+import { getSerpContextForKeyword, type SerpContext, type SerpFormatSignal } from "@/lib/blog/serp";
+
 import { getEffectiveTier } from "@/lib/stripe/guards";
 import { getPlan } from "@/lib/stripe/plans";
 
@@ -223,9 +224,9 @@ export const generateBlogJob = inngest.createFunction(
                 (event.data as Record<string, unknown> | undefined) ??
                 {};
 
-            const blogId  = originalData.blogId  as string | undefined;
-            const siteId  = originalData.siteId  as string | undefined;
-            const userId  = originalData.userId  as string | undefined;
+            const blogId = originalData.blogId as string | undefined;
+            const siteId = originalData.siteId as string | undefined;
+            const userId = originalData.userId as string | undefined;
 
             logger.error(`[Inngest/Blog] Job failed for site ${siteId ?? "unknown"}:`, {
                 error: error?.message || error,
@@ -273,11 +274,28 @@ export const generateBlogJob = inngest.createFunction(
                 }
             }
         },
-    
+
         triggers: [{ event: "blog.generate" }],
     },
     async ({ event, step }) => {
-        const { siteId, pipelineType, keyword, competitorDomain, searchVolume, difficulty } = event.data;
+        const { siteId, pipelineType, keyword, competitorDomain, searchVolume, difficulty, serpSignal } = event.data as {
+            siteId: string;
+            pipelineType: string;
+            keyword?: string;
+            competitorDomain?: string;
+            searchVolume?: number;
+            difficulty?: number;
+            blogId?: string;
+            userId?: string;
+            authorName?: string;
+            authorRole?: string;
+            authorBio?: string;
+            realExperience?: string;
+            realNumbers?: string;
+            localContext?: string;
+            /** Pre-classified SERP format signal from the server action gate. */
+            serpSignal?: SerpFormatSignal;
+        };
 
         if (!process.env.GEMINI_API_KEY) {
             throw new NonRetriableError("Missing GEMINI_API_KEY — dropping job");
@@ -326,7 +344,7 @@ export const generateBlogJob = inngest.createFunction(
             // Redis key format mirrors the monthly/index.ts pattern: blog:{userId}:{YYYY-MM}
             const now = new Date();
             const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-            const redisKey  = `blog:${site.userId}:${monthKey}`;
+            const redisKey = `blog:${site.userId}:${monthKey}`;
 
             try {
                 // Use the shared redis instance — GET is read-only, no INCR
@@ -394,13 +412,13 @@ export const generateBlogJob = inngest.createFunction(
             // blocking every blog job for 30 s on a rate-limit or outage.
             const CB_KEY = "cb:perplexity:state";
             const CB_FAIL = "cb:perplexity:failures";
-            const CB_AT   = "cb:perplexity:openedAt";
-            const CB_MAX  = 5;
-            const CB_TTL  = 90_000; // 90 s cool-down
+            const CB_AT = "cb:perplexity:openedAt";
+            const CB_MAX = 5;
+            const CB_TTL = 90_000; // 90 s cool-down
             let cbOpen = false;
             try {
                 const { redis } = await import("@/lib/redis");
-                const state    = await redis.get<string>(CB_KEY);
+                const state = await redis.get<string>(CB_KEY);
                 const openedAt = await redis.get<number>(CB_AT);
                 if (state === "OPEN" && openedAt && Date.now() - openedAt < CB_TTL) {
                     cbOpen = true;
@@ -514,24 +532,26 @@ Be specific and concise. This will be used to write a better article.`,
             });
             serpContextForGate = competitorSerpContext;
 
-        // ── Timeout guard: Railway functions time out at ~5 min. Without an
-        // abort boundary the step silently hangs and Inngest never calls onFailure.
-        // We race the generation call against a 4.5-min deadline so Inngest has
-        // time to mark the job failed and trigger onFailure cleanly.
-        const GENERATION_TIMEOUT_MS = 4.5 * 60 * 1000; // 4 min 30 sec
 
-        liveBlogPost = await step.run("generate-competitor-content", async () => {
-            const res = await Promise.race([
-                generateBlogFromCompetitorGap(
-                    keyword, competitorDomain, searchVolume, difficulty,
-                    author, site.domain, undefined, site.blogTone || undefined, siteId, competitorSerpContext
-                ),
-                new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error("[Blog] generate-competitor-content timed out after 4.5 min")), GENERATION_TIMEOUT_MS)
-                ),
-            ]);
-            return { ...res, ogImage: res.heroImage?.url };
-        });
+            const GENERATION_TIMEOUT_MS = 4.5 * 60 * 1000;
+
+            if (!keyword) throw new NonRetriableError("[Blog] COMPETITOR_ATTACK job missing keyword — dropping job");
+            if (!competitorDomain) throw new NonRetriableError("[Blog] COMPETITOR_ATTACK job missing competitorDomain — dropping job");
+            // Capture narrowed values — TSC doesn't narrow across async closures
+            const safeKeyword = keyword;
+            const safeDomain  = competitorDomain;
+            liveBlogPost = await step.run("generate-competitor-content", async () => {
+                const res = await Promise.race([
+                    generateBlogFromCompetitorGap(
+                        safeKeyword, safeDomain, searchVolume ?? 0, difficulty ?? 0,
+                        author, site.domain, undefined, site.blogTone || undefined, siteId, competitorSerpContext
+                    ),
+                    new Promise<never>((_, reject) =>
+                        setTimeout(() => reject(new Error("[Blog] generate-competitor-content timed out after 4.5 min")), GENERATION_TIMEOUT_MS)
+                    ),
+                ]);
+                return { ...res, ogImage: res.heroImage?.url };
+            });
         } else {
             const siteContext = await step.run("extract-site-context", async () => {
                 return await extractSiteContext(site.domain);
@@ -1006,11 +1026,11 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 factCheckIssues: factCheck.issues,
                 factCheckSuggestions: factCheck.suggestions,
                 // AI Citation Template gate results
-                citationScore:    citationGate.citationScore,
+                citationScore: citationGate.citationScore,
                 citationCriteria: citationGate.citationCriteria,
                 // Evidence pipeline — feeds the dashboard EvidenceBadge
                 evidenceCoverage: liveBlogPost.evidenceCoverage,
-                missingEvidence:  liveBlogPost.missingEvidence ?? [],
+                missingEvidence: liveBlogPost.missingEvidence ?? [],
             };
             if (event.data.blogId) {
                 await prisma.blog.update({ where: { id: event.data.blogId }, data: blogData });
@@ -1019,7 +1039,7 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 // If a retry fires after the DB write already succeeded, this overwrites
                 // cleanly rather than creating a duplicate post.
                 await prisma.blog.upsert({
-                    where:  { siteId_slug: { siteId, slug: blogData.slug } },
+                    where: { siteId_slug: { siteId, slug: blogData.slug } },
                     create: { siteId, ...blogData },
                     update: blogData,
                 });
@@ -1060,9 +1080,9 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 name: "blog.published",
                 data: {
                     siteId,
-                    blogId:         event.data.blogId ?? "new",
+                    blogId: event.data.blogId ?? "new",
                     targetKeywords: liveBlogPost.targetKeywords.slice(0, 5),
-                    publishedAt:    new Date().toISOString(),
+                    publishedAt: new Date().toISOString(),
                 },
             });
         }

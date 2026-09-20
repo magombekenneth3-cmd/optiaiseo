@@ -7,7 +7,6 @@ import {
     MapPin, BarChart,
 } from "lucide-react";
 import { getSiteAuthorDetails } from "@/app/actions/blog";
-import { generateBlog } from "@/app/actions/blog";
 import { getSiteKeywordSuggestions, type KeywordSuggestion } from "@/app/actions/keyword-suggest";
 
 export interface AuthorInput {
@@ -548,8 +547,7 @@ export function GenerateBlogModal({
         localContext:   "",
         keyword:        initialKeyword ?? "",
     });
-    const [isGenerating, setIsGenerating]       = useState(false);
-    const [generatedBlogId, setGeneratedBlogId] = useState<string | null>(null);
+    const [isGenerating, setIsGenerating] = useState(false);
 
     useEffect(() => {
         getSiteAuthorDetails(siteId).then(res => {
@@ -583,24 +581,15 @@ export function GenerateBlogModal({
         setIsGenerating(true);
         setStep(2);
         try {
-            const res = await generateBlog(pipelineType, siteId, { ...form, keyword });
-            if (res.success && res.blog?.id) {
-                setGeneratedBlogId(res.blog.id);
-                setStep(3);
-            } else {
-                await onGenerate({ ...form, keyword });
-                onClose();
-            }
+            // Delegate to parent — GenerateBlogButton owns preflight + gate
+            await onGenerate({ ...form, keyword });
+            onClose();
         } catch {
-            try {
-                await onGenerate({ ...form, keyword });
-            } catch {
-            }
             onClose();
         } finally {
             setIsGenerating(false);
         }
-    }, [pipelineType, siteId, form, keyword, onGenerate, onClose]);
+    }, [form, keyword, onGenerate, onClose]);
 
     const isDataReport = pipelineType === "DATA_REPORT";
 
@@ -662,15 +651,6 @@ export function GenerateBlogModal({
 
                     {step === 2 && <GeneratingStep pipelineType={pipelineType} />}
 
-                    {step === 3 && generatedBlogId && (
-                        <HumanizeStep
-                            blogId={generatedBlogId}
-                            authorName={form.authorName}
-                            authorBio={form.authorBio}
-                            onDone={onClose}
-                            onSkip={onClose}
-                        />
-                    )}
                 </div>
 
                 {step === 1 && (

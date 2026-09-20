@@ -13,7 +13,12 @@ import { getUserGscToken } from "@/lib/gsc/token";
 import { consumeCredits } from "@/lib/credits";
 import { requireUser } from "@/lib/auth/require-user";
 import { Prisma } from "@prisma/client";
-
+import { fetchGoogleSerp, classifySerpFormat, type SerpFormatSignal } from "@/lib/blog/serp";
+import {
+    evaluateSerpIntentGate,
+    validateSerpPreflight,
+    type SerpGateDecision,
+} from "@/lib/blog/serp-gate";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,6 +30,14 @@ type AuthorInput = {
     realNumbers?: string;
     localContext?: string;
     keyword?: string;
+};
+
+/** Input accepted by generateBlog / generateAttackBlog for SERP gate. */
+type SerpGateInput = {
+    /** preflightId returned by /api/blogs/serp-gate. Absent = gate runs now. */
+    preflightId?: string;
+    /** User explicitly acknowledged the SERP mismatch warning. */
+    forceSerpMismatch?: boolean;
 };
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -98,6 +111,101 @@ async function runRateLimitChecks(
     return null;
 }
 
+/**
+ * Authoritative server-side SERP gate enforcement.
+ *
+ * Invariants:
+ *   BLOCK                         → credits MUST NOT be consumed (cannot override)
+ *   WARN + !forceSerpMismatch     → credits MUST NOT be consumed
+ *   WARN + forceSerpMismatch + valid preflight → credits may be consumed
+ *   ALLOW + valid preflight       → credits may be consumed
+ *   SKIP                          → generation proceeds without gating
+ *   forceSerpMismatch without valid preflight → MUST NOT bypass gate
+ *
+ * Returns null on pass, or an error object to return immediately.
+ */
+async function runSerpGate(
+    userId: string,
+    siteId: string,
+    keyword: string | undefined,
+    gateInput: SerpGateInput | undefined
+): Promise<{ blocked: true; result: Record<string, unknown> } | { blocked: false; signal: SerpFormatSignal | null }> {
+    // No keyword — nothing to classify.
+    if (!keyword) {
+        return { blocked: false, signal: null };
+    }
+
+    const { preflightId, forceSerpMismatch = false } = gateInput ?? {};
+
+    let decision: SerpGateDecision;
+    let signal: SerpFormatSignal | null = null;
+
+    if (preflightId) {
+        // Validate the preflight token from Redis.
+        const validation = await validateSerpPreflight(preflightId, userId, siteId, keyword);
+
+        if (!validation.valid) {
+            // Token missing, expired, or mismatched — run the gate fresh.
+            logger.warn("[SerpGate] Invalid preflight — re-running gate", {
+                reason: validation.reason,
+                userId,
+                keyword,
+            });
+            // Fall through to fresh fetch below.
+            const { organic } = await fetchGoogleSerp(keyword, 7).catch(() => ({ organic: [] }));
+            signal = organic.length > 0 ? classifySerpFormat(organic) : null;
+            decision = evaluateSerpIntentGate(signal);
+        } else {
+            signal = validation.record.signal;
+            decision = validation.record.decision;
+        }
+    } else {
+        // No preflight provided — run fresh.
+        if (!process.env.SERPER_API_KEY) {
+            return { blocked: false, signal: null }; // SKIP — not configured
+        }
+        const { organic } = await fetchGoogleSerp(keyword, 7).catch(() => ({ organic: [] }));
+        signal = organic.length > 0 ? classifySerpFormat(organic) : null;
+        decision = evaluateSerpIntentGate(signal);
+    }
+
+    // Enforce the decision.
+    if (decision.verdict === "SKIP") {
+        return { blocked: false, signal };
+    }
+
+    if (decision.verdict === "BLOCK") {
+        return {
+            blocked: true,
+            result: {
+                success: false,
+                error: "reason" in decision ? decision.reason : "SERP format mismatch — generation blocked.",
+                code: "SERP_GATE_BLOCK",
+                serpGate: decision,
+            },
+        };
+    }
+
+    if (decision.verdict === "WARN") {
+        if (!forceSerpMismatch) {
+            return {
+                blocked: true,
+                result: {
+                    success: false,
+                    error: "reason" in decision ? decision.reason : "SERP format mismatch — please confirm to proceed.",
+                    code: "SERP_GATE_WARN",
+                    serpGate: decision,
+                    // Tells the UI to show the banner and send forceSerpMismatch=true
+                    requiresConfirmation: true,
+                },
+            };
+        }
+        // WARN + forceSerpMismatch — user acknowledged, allow through.
+    }
+
+    // ALLOW or acknowledged WARN — gate passed.
+    return { blocked: false, signal };
+}
 
 // ─── Public actions ───────────────────────────────────────────────────────────
 
@@ -172,7 +280,8 @@ export async function getSiteAuthorDetails(siteId: string) {
 export async function generateBlog(
     targetPipelineType?: string,
     siteId?: string,
-    authorInput?: AuthorInput
+    authorInput?: AuthorInput,
+    gateInput?: SerpGateInput
 ) {
     try {
         const auth = await requireUser();
@@ -196,9 +305,16 @@ export async function generateBlog(
         const rateLimitError = await runRateLimitChecks(user.id, effectiveTier);
         if (rateLimitError) return { success: false, error: rateLimitError };
 
-        // CREDITS: deduct BEFORE running the expensive LLM pipeline.
-        // The rule: check → deduct → generate. Credits consumed on failure are intentional —
-        // this prevents the free-generation exploit. Cost: CREDIT_COSTS.blog_generation (10).
+        // ── SERP gate (authoritative) ──────────────────────────────────────────
+        // Resolve the keyword that will be used — same priority order as the
+        // Inngest dispatch below.  At this point GSC/seed not yet fetched so
+        // we only have authorInput.keyword; the gate skips when keyword is absent.
+        const chosenKeywordForGate = authorInput?.keyword?.trim() || undefined;
+        const gateResult = await runSerpGate(user.id, site.id, chosenKeywordForGate, gateInput);
+        if (gateResult.blocked) return gateResult.result;
+        const serpSignalForInngest = gateResult.signal;
+
+        // ── Credits: deduct AFTER gate passes ─────────────────────────────────
         const creditResult = await consumeCredits(user.id, "blog_generation");
         if (!creditResult.allowed) {
             return {
@@ -322,6 +438,9 @@ export async function generateBlog(
                     // Always forward keyword so SERP research, intent detection,
                     // and semantic enrichment all target the correct term.
                     keyword: chosenKeyword || compKeyword?.keyword || unusedSeed?.keyword || gscOpportunities[0]?.keyword || undefined,
+                    // Forward the pre-classified SERP signal so Inngest doesn't
+                    // need to re-classify (it still fetches for research context).
+                    serpSignal: serpSignalForInngest ?? undefined,
                     // Forward author context so Inngest doesn't need an extra
                     // DB round-trip to reconstruct the AuthorProfile.
                     authorName: author.name,
@@ -368,7 +487,8 @@ export async function generateAttackBlog(
     competitorDomain: string,
     searchVolume: number,
     difficulty: number,
-    authorInput?: Omit<AuthorInput, "keyword">
+    authorInput?: Omit<AuthorInput, "keyword">,
+    gateInput?: SerpGateInput
 ) {
     try {
         const auth = await requireUser();
@@ -379,6 +499,12 @@ export async function generateAttackBlog(
         const rateLimitError = await runRateLimitChecks(user.id, effectiveTier);
         if (rateLimitError) return { success: false, error: rateLimitError };
 
+        // ── SERP gate (authoritative) ──────────────────────────────────────────
+        const gateResult = await runSerpGate(user.id, siteId, keyword, gateInput);
+        if (gateResult.blocked) return gateResult.result;
+        const serpSignalForInngest = gateResult.signal;
+
+        // ── Credits: deduct AFTER gate passes ─────────────────────────────────
         // CREDITS: same 10-credit cost as generateBlog
         const creditResult = await consumeCredits(user.id, "blog_generation");
         if (!creditResult.allowed) {
@@ -430,6 +556,7 @@ export async function generateAttackBlog(
                     competitorDomain,
                     searchVolume,
                     difficulty,
+                    serpSignal: serpSignalForInngest ?? undefined,
                     authorName: author.name,
                     authorRole: author.role,
                     authorBio: author.bio,
