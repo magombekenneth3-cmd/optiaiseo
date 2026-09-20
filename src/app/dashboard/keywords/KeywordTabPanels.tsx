@@ -14,6 +14,7 @@ import { KeywordClustersPanel } from "./KeywordClustersPanel";
 import { AllKeywordsTable } from "./AllKeywordsTable";
 import { estimateKeywordRoi } from "@/lib/keywords/roi";
 import { SerpFeatureHistoryPanel } from "./SerpFeatureHistoryPanel";
+import { TopicalAuthorityPanel } from "./TopicalAuthorityPanel";
 
 const TABS = [
     { id: "keywords", label: "Keywords", desc: "Full keyword rankings from Search Console" },
@@ -21,6 +22,7 @@ const TABS = [
     { id: "research", label: "Research", desc: "Discover new keyword opportunities" },
     { id: "competitors", label: "Competitors", desc: "Benchmark against rivals" },
     { id: "tracked", label: "Tracked", desc: "Position history & rank tracking" },
+    { id: "authority", label: "Authority Map", desc: "Topical clusters, pillar/spoke coverage, internal link detection" },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];
@@ -137,6 +139,13 @@ export function KeywordTabPanels({
                             )}
                             {hasShareOfVoice && <ShareOfVoiceChart siteId={siteId} />}
                             <SerpFeatureHistoryPanel siteId={siteId} />
+                        </div>
+                    </PanelErrorBoundary>
+                )}
+                {activeTab === "authority" && (
+                    <PanelErrorBoundary fallbackTitle="Authority Map failed to load">
+                        <div className="p-5">
+                            <TopicalAuthorityPanel siteId={siteId} />
                         </div>
                     </PanelErrorBoundary>
                 )}

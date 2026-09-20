@@ -11,7 +11,7 @@ export interface TopicSpokeNode {
     position?: number;
     impressions?: number;
     clicks?: number;
-    inboundClusterLinksCount: number;
+    inboundClusterMentionCount: number;
     lastUpdated: Date;
 }
 
@@ -19,8 +19,7 @@ export interface MissingSpokeGap {
     topicClusterKey: string;
     suggestedKeyword: string;
     suggestedTitle: string;
-    searchDemandImpressions: number;
-    estimatedAuthorityImpact: number; // e.g. +8 pts
+    hasGscEvidence: boolean;
     targetPillarUrl?: string;
 }
 
@@ -89,7 +88,7 @@ export async function buildTopicalAuthorityMatrix(siteId: string): Promise<Topic
                 title: pillarBlog.title,
                 url: `/blog/${pillarBlog.slug}`,
                 isPillar: true,
-                inboundClusterLinksCount: 0,
+                inboundClusterMentionCount: 0,
                 lastUpdated: pillarBlog.updatedAt,
                 ...gscMap.get(`/blog/${pillarBlog.slug}`)
             };
@@ -103,7 +102,7 @@ export async function buildTopicalAuthorityMatrix(siteId: string): Promise<Topic
                     title: spoke.title,
                     url: `/blog/${spoke.slug}`,
                     isPillar: false,
-                    inboundClusterLinksCount: inboundCount,
+                    inboundClusterMentionCount: inboundCount,
                     lastUpdated: spoke.updatedAt,
                     ...gscMap.get(`/blog/${spoke.slug}`)
                 });
@@ -113,7 +112,7 @@ export async function buildTopicalAuthorityMatrix(siteId: string): Promise<Topic
             const coverageScore = Math.min(100, Math.round((spokeNodes.length / 4) * 100));
 
             // Calculate Internal Link Score (% of spokes with >= 1 internal link to pillar)
-            const linkedSpokes = spokeNodes.filter(s => s.inboundClusterLinksCount > 0).length;
+            const linkedSpokes = spokeNodes.filter(s => s.inboundClusterMentionCount > 0).length;
             const internalLinkScore = spokeNodes.length > 0 ? Math.round((linkedSpokes / spokeNodes.length) * 100) : 100;
 
             const clusterAuthorityScore = Math.round(coverageScore * 0.6 + internalLinkScore * 0.4);
@@ -121,19 +120,19 @@ export async function buildTopicalAuthorityMatrix(siteId: string): Promise<Topic
             // Detect Missing Spokes based on GSC queries
             const missingSpokes: MissingSpokeGap[] = [];
             if (spokeNodes.length < 3) {
+                const hasGscEvidence = gscMap.has(`/blog/${pillarBlog.slug}`) || spokeNodes.some(s => gscMap.has(s.url));
                 missingSpokes.push({
                     topicClusterKey: cKey,
                     suggestedKeyword: `${cKey} guide`,
-                    suggestedTitle: `Complete Guide to ${cKey.toUpperCase()}`,
-                    searchDemandImpressions: 1400,
-                    estimatedAuthorityImpact: 12,
+                    suggestedTitle: `Complete Guide to ${pillarBlog.title}`,
+                    hasGscEvidence,
                     targetPillarUrl: pillarNode.url
                 });
             }
 
             clusterTrees.push({
                 clusterKey: cKey,
-                clusterName: cKey.toUpperCase(),
+                clusterName: pillarBlog.title,
                 pillarNode,
                 spokeNodes,
                 coverageScore,
@@ -149,7 +148,7 @@ export async function buildTopicalAuthorityMatrix(siteId: string): Promise<Topic
             : 0;
 
         const allMissing = clusterTrees.flatMap(c => c.missingSpokes);
-        allMissing.sort((a, b) => b.estimatedAuthorityImpact - a.estimatedAuthorityImpact);
+        allMissing.sort((a, b) => Number(b.hasGscEvidence) - Number(a.hasGscEvidence));
 
         return {
             siteId,
