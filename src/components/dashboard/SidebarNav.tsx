@@ -38,7 +38,6 @@ import {
     BookOpen,
     Send,
     PenSquare,
-    Sparkles,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -70,11 +69,11 @@ const ACT_ITEMS = [
 ];
 
 const CONTENT_SUB_ITEMS = [
-    { name: "Library", href: "/dashboard/blogs", icon: BookOpen, exact: true },
-    { name: "Generate", href: "/dashboard/blogs/generate", icon: Sparkles, exact: false },
-    { name: "Editorial", href: "/dashboard/blogs/editorial", icon: PenSquare, exact: false },
-    { name: "Publishing", href: "/dashboard/blogs/publishing", icon: Send, exact: false },
+    { name: "Library",    href: "/dashboard/blogs",           icon: BookOpen,  exact: true },
+    { name: "Editorial",  href: "/dashboard/blogs/editorial", icon: PenSquare, exact: false },
+    { name: "Publishing", href: "/dashboard/blogs/publishing", icon: Send,     exact: false },
 ];
+
 
 const PROVE_ITEMS = [
     { name: "Operations", href: "/dashboard/operations", icon: Activity, exact: false, contextSiteId: true },
