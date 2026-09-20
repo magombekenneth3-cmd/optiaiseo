@@ -211,7 +211,7 @@ export function extractEvidencePacket(
         }
     }
 
-    return EvidencePacketSchema.parse({
+    const payload = {
         availability,
         claims,
         sources,
@@ -233,5 +233,42 @@ export function extractEvidencePacket(
             sourceCitationCount,
             claimCount: claims.length,
         },
-    });
+    };
+
+    // Use safeParse so a Zod schema mismatch degrades gracefully to an
+    // UNAVAILABLE packet rather than crashing the Inngest job and marking
+    // the entire blog as FAILED.
+    const result = EvidencePacketSchema.safeParse(payload);
+    if (!result.success) {
+        // Log the schema violation for debugging but do not throw.
+        // The blog will route to EVIDENCE_REVIEW (human review) instead of FAILED.
+        const topIssue = result.error.issues[0];
+        console.warn(
+            `[EvidenceExtractor] Schema validation failed — degrading to UNAVAILABLE packet. ` +
+            `Path: ${topIssue?.path.join(".")}, Issue: ${topIssue?.message}`
+        );
+        return EvidencePacketSchema.parse({
+            availability: "UNAVAILABLE",
+            claims: [],
+            sources: [],
+            claimSourceMap: [],
+            examples: [],
+            caseStudies: [],
+            visuals: [],
+            unsupportedClaims: [],
+            unsourcedStatistics: [],
+            unverifiedCaseStudies: [],
+            fabricatedClaims: [],
+            extraction: {
+                extractedAt: new Date().toISOString(),
+                extractorVersion: EXTRACTOR_VERSION,
+                researchAvailability: "UNAVAILABLE",
+                researchCollectedAt: null,
+                sourceCitationCount: 0,
+                claimCount: 0,
+            },
+        });
+    }
+
+    return result.data;
 }

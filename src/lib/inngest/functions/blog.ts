@@ -973,28 +973,73 @@ ${liveBlogPost.content.substring(0, 80000)}`,
 
         // ── Publication Gate ──────────────────────────────────────────────
         const publicationGateStep = await step.run("publication-gate", async () => {
-            const { runPublicationGate } = await import("@/lib/blog/publication-gate");
-            const { extractEvidencePacket } = await import("@/lib/blog/evidence-extractor");
+            try {
+                const { runPublicationGate } = await import("@/lib/blog/publication-gate");
+                const { extractEvidencePacket } = await import("@/lib/blog/evidence-extractor");
 
-            // Re-extract from the final post-Claude content. The packet carried
-            // by the draft is the single authoritative research snapshot, but
-            // citations can change during an editorial rewrite.
-            const evidencePacket = extractEvidencePacket(
-                liveBlogPost.researchPacket,
-                liveBlogPost.content,
-            );
-            const publicationGate = await runPublicationGate({
-                content: liveBlogPost.content,
-                title: liveBlogPost.title,
-                metaDescription: liveBlogPost.metaDescription,
-                targetKeywords: liveBlogPost.targetKeywords,
-                evidencePacket,
-                serpContext: serpContextForGate,
-                researchPacket: liveBlogPost.researchPacket,
-                riskTier: liveBlogPost.riskTier,
-                hasFirstPartyEvidence: liveBlogPost.hasFirstPartyEvidence,
-            });
-            return { evidencePacket, publicationGate };
+                // Re-extract from the final post-Claude content. The packet carried
+                // by the draft is the single authoritative research snapshot, but
+                // citations can change during an editorial rewrite.
+                const evidencePacket = extractEvidencePacket(
+                    liveBlogPost.researchPacket,
+                    liveBlogPost.content,
+                );
+                const publicationGate = await runPublicationGate({
+                    content: liveBlogPost.content,
+                    title: liveBlogPost.title,
+                    metaDescription: liveBlogPost.metaDescription,
+                    targetKeywords: liveBlogPost.targetKeywords,
+                    evidencePacket,
+                    serpContext: serpContextForGate,
+                    researchPacket: liveBlogPost.researchPacket,
+                    riskTier: liveBlogPost.riskTier,
+                    hasFirstPartyEvidence: liveBlogPost.hasFirstPartyEvidence,
+                });
+                return { evidencePacket, publicationGate };
+            } catch (gateErr: unknown) {
+                // The publication gate must never crash the Inngest job.
+                // A crash here would trigger onFailure → FAILED even though the
+                // article content is valid and fully generated.
+                // Degrade: route to EVIDENCE_REVIEW so a human can review.
+                logger.error("[Blog/PublicationGate] Gate threw — degrading to EVIDENCE_REVIEW", {
+                    error: (gateErr as Error)?.message,
+                    siteId,
+                    keyword,
+                });
+                const emptyEvidencePacket = {
+                    availability: "UNAVAILABLE" as const,
+                    claims: [],
+                    sources: [],
+                    claimSourceMap: [],
+                    examples: [],
+                    caseStudies: [],
+                    visuals: [],
+                    unsupportedClaims: [],
+                    unsourcedStatistics: [],
+                    unverifiedCaseStudies: [],
+                    fabricatedClaims: [],
+                    extraction: {
+                        extractedAt: new Date().toISOString(),
+                        extractorVersion: "blog-evidence-v1",
+                        researchAvailability: "UNAVAILABLE" as const,
+                        researchCollectedAt: null,
+                        sourceCitationCount: 0,
+                        claimCount: 0,
+                    },
+                };
+                const fallbackGate = {
+                    passed: false,
+                    status: "EVIDENCE_REVIEW" as const,
+                    evidenceAvailability: "UNAVAILABLE" as const,
+                    blockingIssues: ["Publication gate validation failed — human review required."],
+                    warnings: [],
+                    evidenceIssues: ["Evidence gate crashed during validation."],
+                    originalityIssues: [],
+                    repetitionIssues: [],
+                    fabricationIssues: [],
+                };
+                return { evidencePacket: emptyEvidencePacket, publicationGate: fallbackGate };
+            }
         });
         liveBlogPost.evidencePacket = publicationGateStep.evidencePacket;
         const publicationGateResult = publicationGateStep.publicationGate;

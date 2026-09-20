@@ -18,12 +18,14 @@ import {
     Loader2,
     MoreHorizontal,
     RefreshCw,
+    RotateCcw,
     Search,
     Shield,
     Sparkles,
     X,
     Zap,
 } from "lucide-react";
+import { retryFailedBlog } from "@/app/actions/blog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -794,6 +796,7 @@ function ActionMenu({
     onLinks,
     onDelete,
     onSnippet,
+    onRetry,
 }: {
     blog: Blog;
     onReview: () => void;
@@ -801,6 +804,7 @@ function ActionMenu({
     onLinks: () => void;
     onDelete: () => void;
     onSnippet: () => void;
+    onRetry: () => void;
 }) {
     const [open, setOpen] = useState(false);
 
@@ -891,6 +895,22 @@ function ActionMenu({
                         </>
                     )}
 
+                    {failed && (
+                        <>
+                            <div className="my-1 border-t border-border" />
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setOpen(false);
+                                    onRetry();
+                                }}
+                                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-amber-400 transition-colors hover:bg-amber-500/10"
+                            >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                Retry generation
+                            </button>
+                        </>
+                    )}
                     {(failed || stuck) && (
                         <>
                             <div className="my-1 border-t border-border" />
@@ -1069,6 +1089,25 @@ export function BlogList({
                 router.refresh();
             } catch {
                 toast.error("Failed to remove blog.");
+            }
+        },
+        [router]
+    );
+
+    const handleRetryFailed = useCallback(
+        async (id: string) => {
+            const toastId = toast.loading("Queuing retry…");
+            try {
+                const result = await retryFailedBlog(id);
+                if (result && "success" in result && result.success) {
+                    toast.success("Retry queued! Generation will begin shortly.", { id: toastId });
+                    router.refresh();
+                } else {
+                    const errMsg = result && "error" in result ? result.error : "Retry failed.";
+                    toast.error(errMsg ?? "Retry failed.", { id: toastId });
+                }
+            } catch {
+                toast.error("Failed to queue retry.", { id: toastId });
             }
         },
         [router]
@@ -1479,6 +1518,7 @@ export function BlogList({
                                                 onLinks={() => setLinkModalBlog(blog)}
                                                 onDelete={() => handleDeleteStuck(blog.id)}
                                                 onSnippet={() => {}}
+                                                onRetry={() => handleRetryFailed(blog.id)}
                                             />
                                         </div>
                                     </div>
@@ -1621,6 +1661,7 @@ export function BlogList({
                                                         onLinks={() => setLinkModalBlog(blog)}
                                                         onDelete={() => handleDeleteStuck(blog.id)}
                                                         onSnippet={() => {}}
+                                                        onRetry={() => handleRetryFailed(blog.id)}
                                                     />
                                                 </td>
                                             </tr>

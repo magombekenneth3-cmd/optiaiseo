@@ -209,6 +209,121 @@ async function runSerpGate(
 
 // ─── Public actions ───────────────────────────────────────────────────────────
 
+/**
+ * Retry a FAILED blog — resets it to GENERATING and re-fires the Inngest job.
+ * Credits are NOT re-deducted: the user already paid for the original attempt.
+ * If the original attempt was refunded by onFailure, we deduct 10 credits here
+ * to keep accounting consistent (fail → refund → retry → deduct).
+ */
+export async function retryFailedBlog(blogId: string) {
+    try {
+        const auth = await requireUser();
+        if (!auth.ok) return { success: false, error: "Unauthorized" };
+        const { user } = auth;
+
+        // Confirm the blog belongs to this user and is actually FAILED
+        const blog = await prisma.blog.findFirst({
+            where: { id: blogId, site: { userId: user.id } },
+            select: {
+                id: true,
+                siteId: true,
+                status: true,
+                targetKeywords: true,
+                pipelineType: true,
+                site: {
+                    select: {
+                        id: true,
+                        domain: true,
+                        authorName: true,
+                        authorRole: true,
+                        authorBio: true,
+                        realExperience: true,
+                        realNumbers: true,
+                        localContext: true,
+                        user: { select: { name: true } },
+                    },
+                },
+            },
+        });
+
+        if (!blog) return { success: false, error: "Blog not found." };
+        if (blog.status !== "FAILED") {
+            return { success: false, error: `Blog is not in FAILED state (current: ${blog.status}).` };
+        }
+
+        // Deduct credits for the retry (the onFailure handler refunded them on failure)
+        const creditResult = await consumeCredits(user.id, "blog_generation");
+        if (!creditResult.allowed) {
+            return {
+                success: false,
+                error: creditResult.reason === "credits_locked"
+                    ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
+                    : `Insufficient credits. Retry costs 10 credits. You have ${creditResult.remaining}.`,
+                code: creditResult.reason ?? "insufficient_credits",
+            };
+        }
+
+        // Reset the blog stub to GENERATING
+        await prisma.blog.update({
+            where: { id: blog.id },
+            data: {
+                status: "GENERATING",
+                validationErrors: [],
+                validationWarnings: [],
+                factCheckIssues: [],
+                factCheckSuggestions: [],
+            },
+        });
+
+        // Re-fire the Inngest job
+        try {
+            const { inngest } = await import("@/lib/inngest/client");
+            const keyword = Array.isArray(blog.targetKeywords) ? (blog.targetKeywords as string[])[0] : undefined;
+            await inngest.send({
+                name: "blog.generate",
+                data: {
+                    siteId: blog.siteId,
+                    blogId: blog.id,
+                    userId: user.id,
+                    pipelineType: blog.pipelineType ?? "USER_KEYWORD",
+                    keyword,
+                    authorName: blog.site.authorName ?? blog.site.user?.name ?? undefined,
+                    authorRole: blog.site.authorRole ?? undefined,
+                    authorBio: blog.site.authorBio ?? undefined,
+                    realExperience: blog.site.realExperience ?? undefined,
+                    realNumbers: blog.site.realNumbers ?? undefined,
+                    localContext: blog.site.localContext ?? undefined,
+                },
+            });
+        } catch (e) {
+            // Inngest send failed — revert to FAILED and refund credits
+            logger.warn("[Blog Action] retryFailedBlog: inngest.send failed — reverting", {
+                blogId: blog.id,
+                error: e instanceof Error ? e.message : String(e),
+            });
+            await prisma.blog.update({
+                where: { id: blog.id },
+                data: { status: "FAILED" },
+            }).catch(() => null);
+            // Refund the credits we just charged for the retry
+            try {
+                const { refundCreditsIdempotent } = await import("@/lib/credits");
+                await refundCreditsIdempotent(user.id, 10, `refund:retry:${blog.id}:${Date.now()}`, "Refund: Failed Blog Retry");
+            } catch { /* non-fatal */ }
+            return { success: false, error: "Failed to queue retry. Please try again in a moment." };
+        }
+
+        revalidatePath("/dashboard/blogs");
+        revalidatePath("/dashboard");
+        return { success: true, status: "Retrying" };
+
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        logger.error("[Blog Action] retryFailedBlog failed:", { error: msg });
+        return { success: false, error: `Retry failed: ${msg}` };
+    }
+}
+
 export async function scoreBlogContent(content: string, targetKeywords: string[]) {
     try {
         const auth = await requireUser();
