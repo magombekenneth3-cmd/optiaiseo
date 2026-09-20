@@ -82,7 +82,11 @@ type FilterStatus =
     | "REVIEW"
     | "PUBLISHED"
     | "FAILED"
-    | "GENERATING";
+    | "GENERATING"
+    | "WRITING"
+    | "EVIDENCE"
+    | "READY"
+    | "ISSUES";
 
 type SortOption =
     | "UPDATED_DESC"
@@ -161,6 +165,24 @@ function getQualityState(blog: Blog) {
     return "unknown";
 }
 
+function computeHealthScore(blog: Blog): number | null {
+    const seo = blog.validationScore == null ? null : Number(blog.validationScore);
+    const evidence = blog.evidenceCoverage == null ? null : Number(blog.evidenceCoverage);
+    const citation = blog.citationScore == null ? null : Number(blog.citationScore);
+
+    const parts: { value: number; weight: number }[] = [];
+    if (seo != null && !Number.isNaN(seo)) parts.push({ value: seo, weight: 0.4 });
+    if (evidence != null && !Number.isNaN(evidence)) parts.push({ value: evidence, weight: 0.35 });
+    if (citation != null && !Number.isNaN(citation)) parts.push({ value: citation, weight: 0.25 });
+
+    if (parts.length === 0) return null;
+
+    // Normalize weights to sum to 1
+    const totalWeight = parts.reduce((sum, p) => sum + p.weight, 0);
+    const score = parts.reduce((sum, p) => sum + p.value * (p.weight / totalWeight), 0);
+    return Math.max(0, Math.min(100, Math.round(score)));
+}
+
 function getStatusConfig(blog: Blog) {
     if (blog.status === "PUBLISHED") {
         return {
@@ -207,9 +229,9 @@ function getStatusConfig(blog: Blog) {
     if (isGeneratingStatus(blog.status)) {
         if (isStuckBlog(blog)) {
             return {
-                label: "Stuck",
-                className: "border-red-500/20 bg-red-500/10 text-red-400",
-                dot: "bg-red-400",
+                label: "Paused",
+                className: "border-amber-500/20 bg-amber-500/10 text-amber-400",
+                dot: "bg-amber-400",
             };
         }
         return {
@@ -895,10 +917,12 @@ export function BlogList({
     blogs,
     success,
     initialReviewId,
+    pipelineFilter,
 }: {
     blogs: Blog[];
     success: boolean;
     initialReviewId?: string;
+    pipelineFilter?: string;
 }) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -939,6 +963,22 @@ export function BlogList({
     useEffect(() => {
         setPage(1);
     }, [search, statusFilter, sort]);
+
+    // Sync external pipeline filter → internal statusFilter
+    useEffect(() => {
+        if (!pipelineFilter) return;
+        const map: Record<string, FilterStatus> = {
+            ALL: "ALL",
+            WRITING: "WRITING",
+            EVIDENCE: "EVIDENCE",
+            REVIEW: "REVIEW",
+            READY: "READY",
+            PUBLISHED: "PUBLISHED",
+            ISSUES: "ISSUES",
+        };
+        const mapped = map[pipelineFilter];
+        if (mapped) setStatusFilter(mapped);
+    }, [pipelineFilter]);
 
     useEffect(() => {
         if (!showSort) return;
@@ -1111,6 +1151,15 @@ export function BlogList({
             if (statusFilter === "PUBLISHED" && blog.status !== "PUBLISHED") return false;
             if (statusFilter === "FAILED" && blog.status !== "FAILED") return false;
             if (statusFilter === "GENERATING" && !isGeneratingStatus(blog.status)) return false;
+            // Pipeline-specific states
+            if (statusFilter === "WRITING" && !(isGeneratingStatus(blog.status) || blog.status === "DRAFT")) return false;
+            if (statusFilter === "EVIDENCE" && blog.status !== "EVIDENCE_REVIEW") return false;
+            if (statusFilter === "READY" && !(blog.status === "DRAFT" && blog.validationScore != null && Number(blog.validationScore) >= 60)) return false;
+            if (statusFilter === "ISSUES") {
+                const hasErrors = Array.isArray(blog.validationErrors) && blog.validationErrors.length > 0;
+                const lowScore = blog.validationScore != null && Number(blog.validationScore) < 60;
+                if (!(hasErrors || lowScore || blog.status === "FAILED" || isEditorialRejection(blog.status))) return false;
+            }
             if (!normalizedSearch) return true;
             const title = blog.title?.toLowerCase() ?? "";
             const keyword = blog.targetKeywords?.join(" ").toLowerCase() ?? "";
@@ -1263,132 +1312,18 @@ export function BlogList({
                     </div>
                 )}
 
-                <div className="rounded-2xl border border-border bg-card/30 p-4">
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                        <button
-                            type="button"
-                            onClick={() => setStatusFilter("ALL")}
-                            className={`rounded-xl border p-3 text-left transition-colors ${
-                                statusFilter === "ALL"
-                                    ? "border-primary/30 bg-primary/5"
-                                    : "border-border bg-background/40 hover:bg-muted/40"
-                            }`}
-                        >
-                            <div className="flex items-center justify-between">
-                                <FileText className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-lg font-bold text-foreground">
-                                    {stats.total}
-                                </span>
-                            </div>
-                            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
-                                All content
-                            </p>
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setStatusFilter("DRAFT")}
-                            className={`rounded-xl border p-3 text-left transition-colors ${
-                                statusFilter === "DRAFT"
-                                    ? "border-amber-500/30 bg-amber-500/5"
-                                    : "border-border bg-background/40 hover:bg-muted/40"
-                            }`}
-                        >
-                            <div className="flex items-center justify-between">
-                                <CircleDot className="h-4 w-4 text-amber-400" />
-                                <span className="text-lg font-bold text-foreground">
-                                    {stats.draft}
-                                </span>
-                            </div>
-                            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
-                                Drafts
-                            </p>
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setStatusFilter("REVIEW")}
-                            className={`rounded-xl border p-3 text-left transition-colors ${
-                                statusFilter === "REVIEW"
-                                    ? "border-orange-500/30 bg-orange-500/5"
-                                    : "border-border bg-background/40 hover:bg-muted/40"
-                            }`}
-                        >
-                            <div className="flex items-center justify-between">
-                                <Eye className="h-4 w-4 text-orange-400" />
-                                <span className="text-lg font-bold text-foreground">
-                                    {stats.review}
-                                </span>
-                            </div>
-                            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
-                                In review
-                            </p>
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setStatusFilter("PUBLISHED")}
-                            className={`rounded-xl border p-3 text-left transition-colors ${
-                                statusFilter === "PUBLISHED"
-                                    ? "border-emerald-500/30 bg-emerald-500/5"
-                                    : "border-border bg-background/40 hover:bg-muted/40"
-                            }`}
-                        >
-                            <div className="flex items-center justify-between">
-                                <Check className="h-4 w-4 text-emerald-400" />
-                                <span className="text-lg font-bold text-foreground">
-                                    {stats.published}
-                                </span>
-                            </div>
-                            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
-                                Published
-                            </p>
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setStatusFilter("GENERATING")}
-                            className={`rounded-xl border p-3 text-left transition-colors ${
-                                statusFilter === "GENERATING"
-                                    ? "border-blue-500/30 bg-blue-500/5"
-                                    : "border-border bg-background/40 hover:bg-muted/40"
-                            }`}
-                        >
-                            <div className="flex items-center justify-between">
-                                <RefreshCw className="h-4 w-4 text-blue-400" />
-                                <span className="text-lg font-bold text-foreground">
-                                    {stats.generating}
-                                </span>
-                            </div>
-                            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
-                                Writing
-                            </p>
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setStatusFilter("FAILED")}
-                            className={`rounded-xl border p-3 text-left transition-colors ${
-                                statusFilter === "FAILED"
-                                    ? "border-red-500/30 bg-red-500/5"
-                                    : "border-border bg-background/40 hover:bg-muted/40"
-                            }`}
-                        >
-                            <div className="flex items-center justify-between">
-                                <AlertTriangle className="h-4 w-4 text-red-400" />
-                                <span className="text-lg font-bold text-foreground">
-                                    {stats.issues}
-                                </span>
-                            </div>
-                            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
-                                Issues
-                            </p>
-                        </button>
-                    </div>
-                </div>
 
                 <div className="overflow-hidden rounded-2xl border border-border bg-card/40">
-                    <div className="flex flex-col gap-3 border-b border-border px-4 pb-3 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-3 border-b border-border px-5 pb-3 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-3">
+                            <div>
+                                <h2 className="text-sm font-bold text-foreground">Content Library</h2>
+                                <p className="text-[11px] text-muted-foreground">
+                                    {filteredBlogs.length} {filteredBlogs.length === 1 ? "article" : "articles"}
+                                    {statusFilter !== "ALL" && ` · filtered`}
+                                </p>
+                            </div>
+                        </div>
                         <div className="flex items-center gap-2">
                             <div className="relative">
                                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -1396,7 +1331,7 @@ export function BlogList({
                                     type="text"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search title, keyword, or slug…"
+                                    placeholder="Search articles..."
                                     className="h-8 w-56 rounded-lg border border-border bg-background pl-8 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                                 />
                                 {search && (
@@ -1528,7 +1463,7 @@ export function BlogList({
 
                     <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-left text-sm whitespace-nowrap">
-                            <thead className="border-b border-border bg-card/60 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            <thead className="border-b border-border bg-card/60 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60">
                                 <tr>
                                     <th className="w-10 px-4 py-3">
                                         <input
@@ -1541,20 +1476,20 @@ export function BlogList({
                                             className="h-3.5 w-3.5 rounded border-border accent-emerald-500"
                                         />
                                     </th>
-                                    <th className="px-4 py-3 font-medium">Title</th>
-                                    <th className="px-4 py-3 font-medium">Keyword</th>
-                                    <th className="px-4 py-3 font-medium">SEO Score</th>
+                                    <th className="px-4 py-3 font-medium">Article</th>
+                                    <th className="px-4 py-3 font-medium">SEO</th>
                                     <th className="px-4 py-3 font-medium">Evidence</th>
+                                    <th className="px-4 py-3 font-medium">Health</th>
                                     <th className="px-4 py-3 font-medium">Status</th>
-                                    <th className="px-4 py-3 font-medium">Published On</th>
                                     <th className="px-4 py-3 font-medium">Updated</th>
-                                    <th className="px-4 py-3 text-right font-medium">Action</th>
+                                    <th className="px-4 py-3 text-right font-medium">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
                                 {paginatedBlogs.length > 0 ? (
                                     paginatedBlogs.map((blog) => {
                                         const blogUrl = getBlogUrl(blog);
+                                        const healthScore = computeHealthScore(blog);
                                         return (
                                             <tr
                                                 key={blog.id}
@@ -1568,26 +1503,31 @@ export function BlogList({
                                                         className="h-3.5 w-3.5 rounded border-border accent-emerald-500"
                                                     />
                                                 </td>
-                                                <td
-                                                    className="max-w-[240px] truncate px-4 py-3.5 font-medium"
-                                                    title={blog.title}
-                                                >
-                                                    {blogUrl ? (
-                                                        <a
-                                                            href={blogUrl}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="inline-flex items-center gap-1.5 transition-colors hover:text-primary"
+                                                {/* Article — title dominates, keyword below */}
+                                                <td className="max-w-[280px] px-4 py-3.5">
+                                                    <div className="min-w-0">
+                                                        <p
+                                                            className="truncate text-sm font-semibold text-foreground"
+                                                            title={blog.title}
                                                         >
-                                                            {blog.title}
-                                                            <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-40" />
-                                                        </a>
-                                                    ) : (
-                                                        blog.title
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3.5 text-muted-foreground">
-                                                    {blog.targetKeywords?.[0] || "Auto-assigned"}
+                                                            {blogUrl ? (
+                                                                <a
+                                                                    href={blogUrl}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="inline-flex items-center gap-1.5 transition-colors hover:text-primary"
+                                                                >
+                                                                    {blog.title}
+                                                                    <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-40" />
+                                                                </a>
+                                                            ) : (
+                                                                blog.title
+                                                            )}
+                                                        </p>
+                                                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                                            {blog.targetKeywords?.[0] || "Auto-assigned"}
+                                                        </p>
+                                                    </div>
                                                 </td>
                                                 <td className="px-4 py-3.5">
                                                     <QualityScore blog={blog} />
@@ -1595,15 +1535,34 @@ export function BlogList({
                                                 <td className="px-4 py-3.5">
                                                     <EvidenceBadge blog={blog} />
                                                 </td>
+                                                {/* Health — composite of SEO + Evidence + Citation */}
                                                 <td className="px-4 py-3.5">
-                                                    <StatusBadge blog={blog} />
+                                                    {healthScore != null ? (
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className={`text-xs font-bold ${
+                                                                healthScore >= 80 ? "text-emerald-400" :
+                                                                healthScore >= 60 ? "text-amber-400" :
+                                                                "text-red-400"
+                                                            }`}>
+                                                                {healthScore}%
+                                                            </span>
+                                                            <div className="h-1 w-10 overflow-hidden rounded-full bg-border/30">
+                                                                <div
+                                                                    className={`h-full rounded-full ${
+                                                                        healthScore >= 80 ? "bg-emerald-500" :
+                                                                        healthScore >= 60 ? "bg-amber-500" :
+                                                                        "bg-red-500"
+                                                                    }`}
+                                                                    style={{ width: `${healthScore}%` }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-xs text-muted-foreground/40">—</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-4 py-3.5">
-                                                    <DistributionLinks
-                                                        blog={blog}
-                                                        onHashnodeSync={handleHashnodeSync}
-                                                        syncing={syncingIds.has(blog.id)}
-                                                    />
+                                                    <StatusBadge blog={blog} />
                                                 </td>
                                                 <td className="px-4 py-3.5 text-muted-foreground">
                                                     <span title={formatDate(blog.updatedAt ?? blog.createdAt)}>
