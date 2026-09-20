@@ -5,11 +5,20 @@ import { redirect } from "next/navigation";
 import { getUserBlogs } from "@/app/actions/blog";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { ArrowLeft, Send, ExternalLink, Globe, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Send, ExternalLink, CheckCircle2 } from "lucide-react";
 
 export const metadata: Metadata = {
     title: "Publishing | OptiAISEO",
     description: "Publish and syndicate your content across platforms.",
+};
+
+type Blog = {
+    id: string;
+    title: string;
+    slug: string | null;
+    status: string;
+    targetKeywords: string[] | null;
+    validationScore: number | string | null;
 };
 
 export default async function PublishingPage() {
@@ -18,19 +27,20 @@ export default async function PublishingPage() {
 
     const site = await prisma.site.findFirst({
         where: { userId: session.user.id },
-        select: { id: true, url: true, hashnodePublicationId: true, mediumIntegrationToken: true },
+        select: { id: true, domain: true, hashnodePublicationId: true, mediumToken: true },
     });
 
-    const blogs = site
-        ? await getUserBlogs(site.id)
+    const result = await getUserBlogs();
+    const allBlogs: Blog[] = "blogs" in result && Array.isArray(result.blogs)
+        ? result.blogs
         : [];
 
-    const published = (blogs ?? []).filter((b) => b.status === "PUBLISHED");
-    const readyToPublish = (blogs ?? []).filter(
+    const published = allBlogs.filter((b) => b.status === "PUBLISHED");
+    const readyToPublish = allBlogs.filter(
         (b) => b.status === "DRAFT" && b.validationScore != null && Number(b.validationScore) >= 60
     );
 
-    const hasMedium = !!site?.mediumIntegrationToken;
+    const hasMedium = !!site?.mediumToken;
     const hasHashnode = !!site?.hashnodePublicationId;
 
     return (
@@ -106,11 +116,9 @@ export default async function PublishingPage() {
                                         {blog.targetKeywords?.[0] || "No keyword"} · {blog.validationScore}% SEO
                                     </p>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-300">
-                                        Ready
-                                    </span>
-                                </div>
+                                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-300">
+                                    Ready
+                                </span>
                             </Link>
                         ))}
                     </div>

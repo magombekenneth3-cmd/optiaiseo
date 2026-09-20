@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getUserBlogs } from "@/app/actions/blog";
-import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { ArrowLeft, PenSquare, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 
@@ -12,20 +11,24 @@ export const metadata: Metadata = {
     description: "Review and approve content before publication.",
 };
 
+type Blog = {
+    id: string;
+    title: string;
+    status: string;
+    targetKeywords: string[] | null;
+    validationScore: number | string | null;
+};
+
 export default async function EditorialPage() {
     const session = await getServerSession(authOptions);
     if (!session?.user) redirect("/login");
 
-    const site = await prisma.site.findFirst({
-        where: { userId: session.user.id },
-        select: { id: true },
-    });
-
-    const blogs = site
-        ? await getUserBlogs(site.id)
+    const result = await getUserBlogs();
+    const allBlogs: Blog[] = "blogs" in result && Array.isArray(result.blogs)
+        ? result.blogs
         : [];
 
-    const reviewBlogs = (blogs ?? []).filter(
+    const reviewBlogs = allBlogs.filter(
         (b) =>
             b.status === "EVIDENCE_REVIEW" ||
             b.status === "EDITORIAL_REVIEW" ||

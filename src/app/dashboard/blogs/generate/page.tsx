@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
 import { GenerateBlogButton } from "../GenerateBlogButton";
 import { Sparkles, ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -14,6 +15,13 @@ export const metadata: Metadata = {
 export default async function GeneratePage() {
     const session = await getServerSession(authOptions);
     if (!session?.user) redirect("/login");
+
+    const site = await prisma.site.findFirst({
+        where: { userId: session.user.id },
+        select: { id: true, domain: true },
+    });
+
+    if (!site) redirect("/dashboard/blogs");
 
     return (
         <div className="mx-auto max-w-3xl space-y-8 px-4 py-8">
@@ -39,7 +47,7 @@ export default async function GeneratePage() {
             </div>
 
             <div className="rounded-2xl border border-border bg-card/40 p-6">
-                <GenerateBlogButton />
+                <GenerateBlogButton siteId={site.id} siteDomain={site.domain} />
             </div>
         </div>
     );

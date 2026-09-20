@@ -1374,20 +1374,6 @@ export function BlogList({
                                 </button>
                             )}
 
-                            {/* Status filter */}
-                            <select
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value as any)}
-                                className="h-8 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
-                            >
-                                <option value="ALL">Status</option>
-                                <option value="DRAFT">Draft</option>
-                                <option value="GENERATING">Writing</option>
-                                <option value="REVIEW">Review</option>
-                                <option value="PUBLISHED">Published</option>
-                                <option value="FAILED">Failed</option>
-                            </select>
-
                             {/* Health filter */}
                             <select
                                 value={healthFilter}
