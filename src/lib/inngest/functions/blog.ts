@@ -697,6 +697,14 @@ Be specific and concise. This will be used to write a better article.`,
             });
         }
 
+        // ── Step progress: drafting → editorial ────────────────────────────
+        if (_blogIdForStep) {
+            await step.run("mark-step-editorial", async () => {
+                const { redis: stepRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
+                await stepRedis?.set(`blog:step:${_blogIdForStep}`, "editorial", { ex: 7200 }).catch(() => null);
+            });
+        }
+
         // Claude Sonnet is significantly better than Gemini at detecting and removing
         // AI writing patterns, adding narrative voice, and enforcing E-E-A-T structure.
         // Degrades gracefully to the existing Gemini humanization if key is absent.

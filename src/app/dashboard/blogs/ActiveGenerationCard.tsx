@@ -13,13 +13,16 @@ import {
 import Link from "next/link";
 
 /* ── Step definitions ──────────────────────────────────────────────── */
+// These keys MUST match the values written to Redis by the Inngest pipeline
+// mark-step-* steps in src/lib/inngest/functions/blog.ts
 
 const STEPS = [
-    { key: "researching", label: "Research",  detail: "Analyzing keywords & SERP competitors" },
-    { key: "drafting",    label: "Draft",     detail: "Writing introduction and comparison sections..." },
-    { key: "fact_check",  label: "Evidence",  detail: "Fact-checking & evidence validation" },
-    { key: "schema",      label: "Editorial", detail: "Schema markup & publication gate" },
-    { key: "widget",      label: "Publish",   detail: "Saving & publishing content" },
+    { key: "researching", label: "Research",   detail: "Analyzing keywords & SERP competitors" },
+    { key: "drafting",    label: "Draft",      detail: "Writing sections with evidence & examples" },
+    { key: "editorial",   label: "Editorial",  detail: "Claude humanisation & E-E-A-T rewrite" },
+    { key: "fact_check",  label: "Evidence",   detail: "Fact-checking & claim provenance" },
+    { key: "schema",      label: "Schema",     detail: "Schema markup & publication gate" },
+    { key: "widget",      label: "Publish",    detail: "Saving & publishing content" },
 ] as const;
 
 type StepKey = typeof STEPS[number]["key"];
@@ -33,9 +36,10 @@ function stepIndex(step: string): number {
 
 function computePercent(step: string): number {
     const idx = stepIndex(step);
-    const map = [10, 35, 60, 80, 93];
-    return map[idx] ?? 10;
+    const map = [8, 30, 55, 72, 88, 96];
+    return map[idx] ?? 8;
 }
+
 
 /* ── Main component ────────────────────────────────────────────────── */
 
@@ -213,7 +217,16 @@ function GenerationTracker({
                                             active ? "text-blue-300" :
                                             "text-muted-foreground/30"
                                         }`}>
-                                            {done ? "✓ Complete" : active ? `● ${s.detail.split(" ").slice(0, 3).join(" ")}...` : "○ Pending"}
+                                            {done ? "✓ Complete" : active ? (
+                                                <span className="animate-pulse">
+                                                    {s.key === "researching" ? "● Analysing SERP..." :
+                                                     s.key === "drafting"    ? "● Writing sections..." :
+                                                     s.key === "editorial"   ? "● Rewriting with Claude..." :
+                                                     s.key === "fact_check"  ? "● Checking evidence..." :
+                                                     s.key === "schema"      ? "● Building schema..." :
+                                                     "● Saving..."}
+                                                </span>
+                                            ) : "○ Pending"}
                                         </span>
                                     </div>
                                 );
