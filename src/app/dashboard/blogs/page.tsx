@@ -73,8 +73,8 @@ export default async function BlogsPage({
 
     const readyCount = content.filter(
         (b) => b.status === "DRAFT" &&
-               b.validationScore != null &&
-               Number(b.validationScore) >= 60
+            b.validationScore != null &&
+            Number(b.validationScore) >= 60
     ).length;
 
     const publishedCount = content.filter(
@@ -116,7 +116,7 @@ export default async function BlogsPage({
 
     const aiOpportunityCount = content.filter(
         (b) => b.citationScore != null && Number(b.citationScore) < 70 &&
-               b.status !== "GENERATING" && b.status !== "FAILED"
+            b.status !== "GENERATING" && b.status !== "FAILED"
     ).length;
 
     /* ── Generate button ─────────────────────────────────────────── */
@@ -158,7 +158,7 @@ export default async function BlogsPage({
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
             {/* ── BlogPoller (invisible — toast logic only) ──────── */}
-            <BlogPoller generatingBlogIds={generatingIds} />
+            {/* <BlogPoller generatingBlogIds={generatingIds} /> */}
 
             {/* ── ZONE 1: Header ─────────────────────────────────── */}
             <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
