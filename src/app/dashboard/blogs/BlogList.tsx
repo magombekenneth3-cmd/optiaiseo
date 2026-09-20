@@ -933,6 +933,7 @@ export function BlogList({
     const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<FilterStatus>("ALL");
+    const [healthFilter, setHealthFilter] = useState("ALL");
     const [sort, setSort] = useState<SortOption>("UPDATED_DESC");
     const [page, setPage] = useState(1);
     const [showSort, setShowSort] = useState(false);
@@ -1160,7 +1161,25 @@ export function BlogList({
                 const lowScore = blog.validationScore != null && Number(blog.validationScore) < 60;
                 if (!(hasErrors || lowScore || blog.status === "FAILED" || isEditorialRejection(blog.status))) return false;
             }
-            if (!normalizedSearch) return true;
+            if (!normalizedSearch) {
+                // Health filter
+                if (healthFilter !== "ALL") {
+                    const hs = computeHealthScore(blog);
+                    if (hs == null) return false;
+                    if (healthFilter === "STRONG" && hs < 80) return false;
+                    if (healthFilter === "NEEDS_WORK" && (hs < 60 || hs >= 80)) return false;
+                    if (healthFilter === "CRITICAL" && hs >= 60) return false;
+                }
+                return true;
+            }
+            // Health filter on search results too
+            if (healthFilter !== "ALL") {
+                const hs = computeHealthScore(blog);
+                if (hs == null) return false;
+                if (healthFilter === "STRONG" && hs < 80) return false;
+                if (healthFilter === "NEEDS_WORK" && (hs < 60 || hs >= 80)) return false;
+                if (healthFilter === "CRITICAL" && hs >= 60) return false;
+            }
             const title = blog.title?.toLowerCase() ?? "";
             const keyword = blog.targetKeywords?.join(" ").toLowerCase() ?? "";
             const slug = blog.slug?.toLowerCase() ?? "";
@@ -1189,7 +1208,7 @@ export function BlogList({
         });
 
         return result;
-    }, [blogs, search, statusFilter, sort]);
+    }, [blogs, search, statusFilter, healthFilter, sort]);
 
     const totalPages = Math.max(1, Math.ceil(filteredBlogs.length / PAGE_SIZE));
     const currentPage = Math.min(page, totalPages);
@@ -1222,11 +1241,12 @@ export function BlogList({
             (blog) => blog.status === "PUBLISHED" && blog.id !== dismissedRepurposeId
         ) ?? null;
 
-    const activeFilterCount = (statusFilter !== "ALL" ? 1 : 0) + (search.trim() ? 1 : 0);
+    const activeFilterCount = (statusFilter !== "ALL" ? 1 : 0) + (healthFilter !== "ALL" ? 1 : 0) + (search.trim() ? 1 : 0);
 
     const clearFilters = useCallback(() => {
         setSearch("");
         setStatusFilter("ALL");
+        setHealthFilter("ALL");
         setPage(1);
     }, []);
 
@@ -1319,8 +1339,7 @@ export function BlogList({
                             <div>
                                 <h2 className="text-sm font-bold text-foreground">Content Library</h2>
                                 <p className="text-[11px] text-muted-foreground">
-                                    {filteredBlogs.length} {filteredBlogs.length === 1 ? "article" : "articles"}
-                                    {statusFilter !== "ALL" && ` · filtered`}
+                                    Your AI-powered articles, ready for review, publishing or optimization.
                                 </p>
                             </div>
                         </div>
@@ -1354,6 +1373,32 @@ export function BlogList({
                                     Clear
                                 </button>
                             )}
+
+                            {/* Status filter */}
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value as any)}
+                                className="h-8 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
+                            >
+                                <option value="ALL">Status</option>
+                                <option value="DRAFT">Draft</option>
+                                <option value="GENERATING">Writing</option>
+                                <option value="REVIEW">Review</option>
+                                <option value="PUBLISHED">Published</option>
+                                <option value="FAILED">Failed</option>
+                            </select>
+
+                            {/* Health filter */}
+                            <select
+                                value={healthFilter}
+                                onChange={(e) => setHealthFilter(e.target.value)}
+                                className="h-8 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
+                            >
+                                <option value="ALL">Health</option>
+                                <option value="STRONG">Strong (80+)</option>
+                                <option value="NEEDS_WORK">Needs work (60-79)</option>
+                                <option value="CRITICAL">Critical (&lt;60)</option>
+                            </select>
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -1477,6 +1522,7 @@ export function BlogList({
                                         />
                                     </th>
                                     <th className="px-4 py-3 font-medium">Article</th>
+                                    <th className="px-4 py-3 font-medium">Keyword</th>
                                     <th className="px-4 py-3 font-medium">SEO</th>
                                     <th className="px-4 py-3 font-medium">Evidence</th>
                                     <th className="px-4 py-3 font-medium">Health</th>
@@ -1503,31 +1549,43 @@ export function BlogList({
                                                         className="h-3.5 w-3.5 rounded border-border accent-emerald-500"
                                                     />
                                                 </td>
-                                                {/* Article — title dominates, keyword below */}
-                                                <td className="max-w-[280px] px-4 py-3.5">
-                                                    <div className="min-w-0">
-                                                        <p
-                                                            className="truncate text-sm font-semibold text-foreground"
-                                                            title={blog.title}
-                                                        >
-                                                            {blogUrl ? (
-                                                                <a
-                                                                    href={blogUrl}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    className="inline-flex items-center gap-1.5 transition-colors hover:text-primary"
-                                                                >
-                                                                    {blog.title}
-                                                                    <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-40" />
-                                                                </a>
-                                                            ) : (
-                                                                blog.title
-                                                            )}
-                                                        </p>
-                                                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                                            {blog.targetKeywords?.[0] || "Auto-assigned"}
-                                                        </p>
+                                                {/* Article — title with thumbnail */}
+                                                <td className="max-w-[260px] px-4 py-3.5">
+                                                    <div className="flex items-center gap-3 min-w-0">
+                                                        {/* Tiny thumbnail placeholder */}
+                                                        <div className="hidden xl:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-gradient-to-br from-emerald-900/20 to-card">
+                                                            <span className="text-[7px] font-black uppercase tracking-wider text-emerald-500/60">SEO</span>
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p
+                                                                className="truncate text-sm font-semibold text-foreground"
+                                                                title={blog.title}
+                                                            >
+                                                                {blogUrl ? (
+                                                                    <a
+                                                                        href={blogUrl}
+                                                                        target="_blank"
+                                                                        rel="noreferrer"
+                                                                        className="inline-flex items-center gap-1.5 transition-colors hover:text-primary"
+                                                                    >
+                                                                        {blog.title}
+                                                                        <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-40" />
+                                                                    </a>
+                                                                ) : (
+                                                                    blog.title
+                                                                )}
+                                                            </p>
+                                                            <p className="mt-0.5 truncate text-[11px] text-muted-foreground/50">
+                                                                {blog.wordCount ? `${blog.wordCount.toLocaleString()} words` : "Draft"}
+                                                            </p>
+                                                        </div>
                                                     </div>
+                                                </td>
+                                                {/* Keyword — separate column */}
+                                                <td className="max-w-[160px] px-4 py-3.5">
+                                                    <p className="truncate text-xs text-muted-foreground">
+                                                        {blog.targetKeywords?.[0] || "—"}
+                                                    </p>
                                                 </td>
                                                 <td className="px-4 py-3.5">
                                                     <QualityScore blog={blog} />

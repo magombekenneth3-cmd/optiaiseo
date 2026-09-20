@@ -123,9 +123,10 @@ export function ContentPipeline({
 }) {
     return (
         <div className="rounded-2xl border border-border bg-card/40 px-2 py-1.5">
-            <div className="flex items-center gap-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground/60 px-3 pt-1.5 pb-1">
+            <div className="flex items-center gap-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground/60 px-3 pt-1.5 pb-0.5">
                 <span>Content Pipeline</span>
             </div>
+            <p className="px-3 pb-1.5 text-[10px] text-muted-foreground/40">Track your content from research to publication.</p>
             <div className="flex items-center gap-0.5 overflow-x-auto">
                 {STAGES.map((stage, idx) => {
                     const Icon = stage.icon;
