@@ -4,6 +4,8 @@ import { checkPerplexityCitation } from "@/lib/aeo/perplexity-citation-check";
 import { callGeminiJson } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 
+export const MAX_INFORMATION_GAIN_DIRECTIVE_LENGTH = 2_000;
+
 export interface InformationGainGapAnalysis {
     keyword: string;
     crawledResultCount: number;
@@ -13,6 +15,59 @@ export interface InformationGainGapAnalysis {
     recommendedQuotes: string[];
     originalInsightsBlueprint: string[];
     informationGainPromptDirective: string;
+}
+
+export function buildCompactDirective(params: {
+    saturatedTopics: string[];
+    uniqueContentGaps: string[];
+    missingDataMetrics: string[];
+    recommendedQuotes: string[];
+    originalInsightsBlueprint: string[];
+    maxChars?: number;
+}): string {
+    const max = params.maxChars ?? MAX_INFORMATION_GAIN_DIRECTIVE_LENGTH;
+
+    const sections: { title: string; items: string[] }[] = [
+        { title: "1. SATURATED ANGLES TO AVOID", items: params.saturatedTopics.length > 0 ? [params.saturatedTopics.join(", ")] : ["generic overviews"] },
+        { title: "2. MANDATORY CONTENT GAPS", items: params.uniqueContentGaps },
+        { title: "3. HIGH-GAIN METRICS", items: params.missingDataMetrics },
+        { title: "4. EXPERT QUOTES", items: params.recommendedQuotes },
+        { title: "5. NOVEL FRAMEWORKS", items: params.originalInsightsBlueprint },
+    ];
+
+    const header = "INFORMATION-GAIN MANDATE:";
+    const parts: string[] = [header];
+    let used = header.length + 1;
+
+    for (const section of sections) {
+        const titleLine = section.title;
+        const titleCost = titleLine.length + 1;
+
+        if (used + titleCost >= max) break;
+
+        parts.push(titleLine);
+        used += titleCost;
+
+        for (const item of section.items) {
+            const trimmed = item.trim();
+            if (!trimmed) continue;
+            const line = `- ${trimmed}`;
+            const lineCost = line.length + 1;
+
+            if (used + lineCost >= max) break;
+
+            parts.push(line);
+            used += lineCost;
+        }
+    }
+
+    const result = parts.join("\n").trim();
+
+    if (result.length > max) {
+        return result.slice(0, max - 3).trimEnd() + "...";
+    }
+
+    return result;
 }
 
 export async function runInformationGainAlgorithm(
@@ -69,6 +124,13 @@ Top Competitor Content Excerpts:
 ${validPages.slice(0, 3).map(p => p.text.slice(0, 400)).join("\n---\n")}
 
 Perform an Information-Gain gap analysis. Identify missing perspectives that NO competitor is covering.
+
+OUTPUT CONSTRAINTS:
+- Each array item must be one concise sentence (max 120 characters).
+- Do not repeat the SERP results or competitor headings verbatim.
+- Do not include preamble, commentary, or markdown fences.
+- 3 items max per array.
+
 Respond in strict JSON:
 {
   "uniqueContentGaps": ["gap 1", "gap 2", "gap 3"],
@@ -96,18 +158,20 @@ Respond in strict JSON:
         logger.warn("[InformationGain] AI analysis fallback used:", { error: (err as Error)?.message });
     }
 
-    const informationGainPromptDirective = `
-INFORMATION-GAIN MANDATE (Search Engine Originality Protocol):
-1. SATURATED ANGLES TO AVOID/REJECT: Do not write generic fluff on: ${saturatedTopics.join(", ") || "generic overviews"}.
-2. MANDATORY UNIQUE GAPS TO COVER:
-   ${aiOutput.uniqueContentGaps.map(g => `- ${g}`).join("\n   ")}
-3. HIGH INFORMATION GAIN METRICS: Include these verified/benchmark data points:
-   ${aiOutput.missingDataMetrics.map(m => `- ${m}`).join("\n   ")}
-4. EXPERT QUOTES & PERSPECTIVES: Incorporate practitioner quote perspectives:
-   ${aiOutput.recommendedQuotes.map(q => `- ${q}`).join("\n   ")}
-5. NOVEL COUNTER-INTUITIVE FRAMEWORK:
-   ${aiOutput.originalInsightsBlueprint.map(i => `- ${i}`).join("\n   ")}
-`;
+    const informationGainPromptDirective = buildCompactDirective({
+        saturatedTopics,
+        uniqueContentGaps: aiOutput.uniqueContentGaps,
+        missingDataMetrics: aiOutput.missingDataMetrics,
+        recommendedQuotes: aiOutput.recommendedQuotes,
+        originalInsightsBlueprint: aiOutput.originalInsightsBlueprint,
+    });
+
+    if (informationGainPromptDirective.length > MAX_INFORMATION_GAIN_DIRECTIVE_LENGTH) {
+        logger.error("[InformationGain] Directive exceeded max after buildCompactDirective — this should never happen", {
+            length: informationGainPromptDirective.length,
+            max: MAX_INFORMATION_GAIN_DIRECTIVE_LENGTH,
+        });
+    }
 
     return {
         keyword,
