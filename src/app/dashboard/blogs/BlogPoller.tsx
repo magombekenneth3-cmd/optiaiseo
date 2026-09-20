@@ -6,14 +6,19 @@ import { toast } from "sonner";
 import { CheckCircle2, FileText } from "lucide-react";
 import Link from "next/link";
 
+// Step labels match the real Inngest pipeline mark-step-* markers.
+// Timing thresholds (STEP_AT) are in poll attempts at 8s each.
 const STEPS = [
-    { label: "Researching keywords & SERP", pct: 15 },
-    { label: "Writing draft with AI",        pct: 45 },
-    { label: "Editorial & fact-check pass",  pct: 75 },
-    { label: "Finalising & saving",          pct: 95 },
+    { label: "Researching keywords & SERP", pct: 10 },
+    { label: "Writing draft sections",       pct: 35 },
+    { label: "Claude editorial rewrite",     pct: 55 },
+    { label: "Fact-checking evidence",       pct: 72 },
+    { label: "Schema & publication gate",    pct: 88 },
+    { label: "Saving & publishing",          pct: 96 },
 ];
 
-const STEP_AT = [0, 3, 7, 11];
+const STEP_AT = [0, 3, 7, 11, 15, 18];
+
 const MAX_ATTEMPTS = 75;
 const POLL_INTERVAL_MS = 8_000;
 

@@ -6,7 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { BlogList } from "./BlogList";
-import { BlogPoller } from "./BlogPoller";
+
 import { GenerateBlogButton } from "./GenerateBlogButton";
 import { ContentPipelineWrapper, ContentPipelineWithList } from "./ContentPipelineWrapper";
 import { ActiveGenerationCard } from "./ActiveGenerationCard";
@@ -157,8 +157,7 @@ export default async function BlogsPage({
 
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
-            {/* ── BlogPoller (invisible — toast logic only) ──────── */}
-            {/* <BlogPoller generatingBlogIds={generatingIds} /> */}
+            {/* BlogPoller disabled — ActiveGenerationCard handles polling every 3s */}
 
             {/* ── ZONE 1: Header ─────────────────────────────────── */}
             <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
