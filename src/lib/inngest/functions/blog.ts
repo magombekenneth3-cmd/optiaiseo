@@ -964,14 +964,28 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         // Scores 8 criteria: direct answer, definition block, stats, FAQ, comparison
         // table, E-E-A-T attribution, internal links, structured data.
         const citationGate = await step.run("citation-template-gate", async () => {
-            const htmlWithSchema = schemaMarkup
-                ? liveBlogPost.content + schemaMarkup
-                : liveBlogPost.content;
-            return gateCitationScore(
-                htmlWithSchema,
-                liveBlogPost.targetKeywords,
-                liveBlogPost.title,
-            );
+            try {
+                const htmlWithSchema = schemaMarkup
+                    ? liveBlogPost.content + schemaMarkup
+                    : liveBlogPost.content;
+                return gateCitationScore(
+                    htmlWithSchema,
+                    liveBlogPost.targetKeywords,
+                    liveBlogPost.title,
+                );
+            } catch (citErr: unknown) {
+                // gateCitationScore must never crash the job — degrade to zero score
+                logger.warn("[Blog/CitationGate] gateCitationScore threw — returning zero score", {
+                    error: (citErr as Error)?.message,
+                });
+                return {
+                    citationScore: 0,
+                    citationReady: false,
+                    citationTopFix: "Citation scoring failed — manual review recommended.",
+                    citationCriteria: {},
+                    intent: "informational" as const,
+                };
+            }
         });
 
         logger.info(`[Blog/CitationGate] Score ${citationGate.citationScore}/100 — ready: ${citationGate.citationReady}`, {
@@ -1089,19 +1103,30 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         });
 
         const contentWithFunnel = await step.run("inject-funnel-cta", async () => {
-            const funnelIntent = (detectedIntent === "local" ? "informational" : detectedIntent) as FunnelIntent;
-            const funnelConfig = getFunnelForIntent(
-                funnelIntent,
-                site.id,
-                site.domain.startsWith("http") ? site.domain : `https://${site.domain}`,
-                displayName,
-                event.data.blogId || "new"
-            );
-            const h2Splits = liveBlogPost.content.split(/(?=<h2[\s>])/i);
-            if (h2Splits.length >= 3) {
-                return [...h2Splits.slice(0, 2), funnelConfig.htmlSnippet, ...h2Splits.slice(2)].join("");
+            try {
+                const funnelIntent = (detectedIntent === "local" ? "informational" : detectedIntent) as FunnelIntent;
+                const funnelConfig = getFunnelForIntent(
+                    funnelIntent,
+                    site.id,
+                    site.domain.startsWith("http") ? site.domain : `https://${site.domain}`,
+                    displayName,
+                    event.data.blogId || "new"
+                );
+                const h2Splits = liveBlogPost.content.split(/(?=<h2[\s>])/i);
+                if (h2Splits.length >= 3) {
+                    return [...h2Splits.slice(0, 2), funnelConfig.htmlSnippet, ...h2Splits.slice(2)].join("");
+                }
+                return liveBlogPost.content + funnelConfig.htmlSnippet;
+            } catch (funnelErr: unknown) {
+                // Funnel injection must never crash the job — content is already generated.
+                // Degrade gracefully: return original content without the CTA.
+                logger.warn("[Blog/Funnel] inject-funnel-cta threw — using original content", {
+                    error: (funnelErr as Error)?.message,
+                    siteId,
+                    keyword,
+                });
+                return liveBlogPost.content;
             }
-            return liveBlogPost.content + funnelConfig.htmlSnippet;
         });
 
         await step.run("save-blog", async () => {
@@ -1144,29 +1169,44 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         });
 
         await step.run("extract-brand-facts", async () => {
-            const { extractFactsFromContent } = await import("@/lib/aeo/fact-extractor");
-            return await extractFactsFromContent(siteId, liveBlogPost.content);
+            try {
+                const { extractFactsFromContent } = await import("@/lib/aeo/fact-extractor");
+                return await extractFactsFromContent(siteId, liveBlogPost.content);
+            } catch (factErr: unknown) {
+                // Non-critical enrichment step — never crash the job after save-blog
+                logger.warn("[Blog/BrandFacts] extract-brand-facts failed — skipping", {
+                    error: (factErr as Error)?.message, siteId,
+                });
+                return null;
+            }
         });
 
         await step.run("save-enrichment-data", async () => {
-            const existingBlog = event.data.blogId
-                ? await prisma.blog.findUnique({ where: { id: event.data.blogId }, select: { citationCriteria: true } })
-                : null;
-            const existingCriteria = existingBlog?.citationCriteria as Record<string, unknown> | null;
-            const targetId = event.data.blogId ?? (
-                await prisma.blog.findUnique({ where: { siteId_slug: { siteId, slug: liveBlogPost.slug } }, select: { id: true } })
-            )?.id;
-            if (targetId) {
-                await prisma.blog.update({
-                    where: { id: targetId },
-                    data: {
-                        citationCriteria: {
-                            ...(existingCriteria ?? {}),
-                            missingEntities: enrichment.missingEntities,
-                            enrichmentScore: enrichment.enrichmentScore,
-                            factCheckScore: factCheck.qualityScore,
+            try {
+                const existingBlog = event.data.blogId
+                    ? await prisma.blog.findUnique({ where: { id: event.data.blogId }, select: { citationCriteria: true } })
+                    : null;
+                const existingCriteria = existingBlog?.citationCriteria as Record<string, unknown> | null;
+                const targetId = event.data.blogId ?? (
+                    await prisma.blog.findUnique({ where: { siteId_slug: { siteId, slug: liveBlogPost.slug } }, select: { id: true } })
+                )?.id;
+                if (targetId) {
+                    await prisma.blog.update({
+                        where: { id: targetId },
+                        data: {
+                            citationCriteria: {
+                                ...(existingCriteria ?? {}),
+                                missingEntities: enrichment.missingEntities,
+                                enrichmentScore: enrichment.enrichmentScore,
+                                factCheckScore: factCheck.qualityScore,
+                            },
                         },
-                    },
+                    });
+                }
+            } catch (enrichErr: unknown) {
+                // Non-critical enrichment step — blog is already saved, never crash the job
+                logger.warn("[Blog/Enrichment] save-enrichment-data failed — skipping", {
+                    error: (enrichErr as Error)?.message, siteId,
                 });
             }
         });
