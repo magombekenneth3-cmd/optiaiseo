@@ -1,7 +1,5 @@
 "use client";
 
-import { TrendingUp } from "lucide-react";
-
 interface HealthMetric {
     label: string;
     value: string | null;
@@ -36,7 +34,7 @@ export function ContentHealthRow({
     };
 
     const contentReadiness = avg(b => b.validationScore);
-    const seoAvg = avg(b => b.validationScore);
+    const seoAvg = avg(b => b.citationScore);
     const evidenceAvg = avg(b => b.evidenceCoverage);
     const aiReadiness = avg(b => b.citationScore);
 
@@ -73,19 +71,26 @@ export function ContentHealthRow({
         ? Math.round((origCount / scored.length) * 100)
         : null;
 
+    function statusLabel(score: number | null): string | undefined {
+        if (score == null) return undefined;
+        if (score >= 80) return "Good";
+        if (score >= 60) return "Fair";
+        return "Needs work";
+    }
+
     const metrics: HealthMetric[] = [
         {
             label: "Content Readiness",
             value: contentReadiness != null ? `${contentReadiness}%` : null,
-            trend: contentReadiness != null ? `↑ ${Math.max(1, Math.round(contentReadiness * 0.14))}%` : undefined,
+            trend: statusLabel(contentReadiness),
             color: "text-emerald-400",
             barColor: "bg-emerald-500",
             barPercent: contentReadiness ?? 0,
         },
         {
-            label: "SEO Avg. Score",
+            label: "AI Citation Score",
             value: seoAvg != null ? `${seoAvg}` : null,
-            trend: seoAvg != null ? `↑ ${Math.max(1, Math.round(seoAvg * 0.11))}%` : undefined,
+            trend: statusLabel(seoAvg),
             color: "text-blue-400",
             barColor: "bg-blue-500",
             barPercent: seoAvg ?? 0,
@@ -93,7 +98,9 @@ export function ContentHealthRow({
         {
             label: "Evidence Coverage",
             value: evidenceFraction ?? (evidenceAvg != null ? `${evidenceAvg}%` : null),
-            trend: evidencePercent != null ? `${evidencePercent}%` : (evidenceAvg != null ? `${evidenceAvg}%` : undefined),
+            trend: evidencePercent != null
+                ? statusLabel(evidencePercent)
+                : statusLabel(evidenceAvg),
             color: "text-emerald-400",
             barColor: "bg-emerald-500",
             barPercent: evidencePercent ?? evidenceAvg ?? 0,
@@ -101,7 +108,7 @@ export function ContentHealthRow({
         {
             label: "Originality Score",
             value: originality != null ? `${originality}` : null,
-            trend: originality != null ? `↑ ${Math.max(1, Math.round(originality * 0.05))}%` : undefined,
+            trend: statusLabel(originality),
             color: "text-purple-400",
             barColor: "bg-purple-500",
             barPercent: originality ?? 0,
@@ -109,7 +116,7 @@ export function ContentHealthRow({
         {
             label: "AI Readiness",
             value: aiReadiness != null ? `${aiReadiness}` : null,
-            trend: aiReadiness != null ? `↑ ${Math.max(1, Math.round(aiReadiness * 0.1))}%` : undefined,
+            trend: statusLabel(aiReadiness),
             color: "text-violet-400",
             barColor: "bg-violet-500",
             barPercent: aiReadiness ?? 0,
@@ -136,8 +143,11 @@ export function ContentHealthRow({
                             {metric.value ?? "—"}
                         </span>
                         {metric.trend && (
-                            <span className="mb-1 flex items-center gap-0.5 text-[10px] font-medium text-emerald-400/70">
-                                <TrendingUp className="h-3 w-3" />
+                            <span className={`mb-1 text-[10px] font-medium ${
+                                metric.trend === "Good" ? "text-emerald-400/70" :
+                                metric.trend === "Fair" ? "text-amber-400/70" :
+                                "text-rose-400/70"
+                            }`}>
                                 {metric.trend}
                             </span>
                         )}
