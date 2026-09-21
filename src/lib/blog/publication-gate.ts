@@ -38,6 +38,11 @@ export interface PublicationGateInput {
     riskTier: string;
     /** Whether the author has real first-party evidence */
     hasFirstPartyEvidence: boolean;
+    /**
+     * Extra originality issues from the Gemini fact-checker (blog.ts).
+     * These bridge the gap between the fact-checker and evidence-gate truth sources.
+     */
+    additionalOriginalityIssues?: string[];
 }
 
 // ─── Structure gate ───────────────────────────────────────────────────────
@@ -289,6 +294,16 @@ export async function runPublicationGate(
         originalityIssues.push(...productClaims.blockingIssues);
     }
     allWarnings.push(...productClaims.warnings);
+
+    // ── Gate 6: External fact-checker issues (from Gemini runFactCheckValidation)
+    // These arrive from blog.ts after the AI fact-check runs. They represent
+    // fabrication / unsourced-statistic flags that the evidence gate doesn't see.
+    if (input.additionalOriginalityIssues && input.additionalOriginalityIssues.length > 0) {
+        originalityIssues.push(...input.additionalOriginalityIssues);
+        logger.info("[Publication Gate] Merged fact-check issues into originality gate", {
+            count: input.additionalOriginalityIssues.length,
+        });
+    }
 
     // ── Decision logic ────────────────────────────────────────────────────
 

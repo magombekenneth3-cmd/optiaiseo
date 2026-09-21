@@ -1006,6 +1006,16 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                     liveBlogPost.researchPacket,
                     liveBlogPost.content,
                 );
+                // Bridge fact-check findings → publication gate.
+                // The Gemini fact-checker and the evidence gate use different truth sources.
+                // Without this wiring, fabrication flags from the fact-checker are only
+                // logged — they never affect the DRAFT / NEEDS_REVIEW decision.
+                const factCheckBlockers = (factCheck.issues ?? [])
+                    .filter((issue: string) =>
+                        /fabricat|unsourced|statistic|invented|unverifi/i.test(issue)
+                    )
+                    .slice(0, 5);
+
                 const publicationGate = await runPublicationGate({
                     content: liveBlogPost.content,
                     title: liveBlogPost.title,
@@ -1016,6 +1026,7 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                     researchPacket: liveBlogPost.researchPacket,
                     riskTier: liveBlogPost.riskTier,
                     hasFirstPartyEvidence: liveBlogPost.hasFirstPartyEvidence,
+                    additionalOriginalityIssues: factCheckBlockers,
                 });
                 return { evidencePacket, publicationGate };
             } catch (gateErr: unknown) {

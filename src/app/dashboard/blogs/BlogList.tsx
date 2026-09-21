@@ -465,6 +465,115 @@ function EvidenceBadge({ blog }: { blog: Blog }) {
     );
 }
 
+/**
+ * ReadinessPanel — shows blocking issues and warnings for blogs in review
+ * so users immediately know what to fix without opening the editor.
+ */
+function ReadinessPanel({ blog }: { blog: Blog }) {
+    const errors: string[] = Array.isArray(blog.validationErrors)
+        ? blog.validationErrors
+        : [];
+
+    // Separate blockers (hard issues) from warnings (soft)
+    const blockers = errors.filter((e) =>
+        /fabricat|reject|block|missing.*source|unsourced|evidence.*unavail|product.*claim|superlat/i.test(e)
+    );
+    const warnings = errors.filter((e) => !blockers.includes(e));
+
+    // Gate-level status flags derived from status + errors
+    const gateChecks = [
+        {
+            label: "Structure",
+            ok: !errors.some((e) => /structure|heading|h2|h3|intro/i.test(e)),
+        },
+        {
+            label: "Evidence",
+            ok: blog.status !== "EVIDENCE_REVIEW" &&
+                !errors.some((e) => /evidence|unsourced|statistic/i.test(e)),
+        },
+        {
+            label: "Originality",
+            ok: !errors.some((e) => /original|plagiar|duplicate/i.test(e)),
+        },
+        {
+            label: "Product claims",
+            ok: !errors.some((e) => /product.*claim|superlat|unverified/i.test(e)),
+        },
+        {
+            label: "SEO / AEO",
+            ok: !errors.some((e) => /keyword|seo|aeo|meta|title/i.test(e)),
+        },
+        {
+            label: "Fact-check",
+            ok: !errors.some((e) => /fabricat|invented|fact.check/i.test(e)),
+        },
+    ];
+
+    const allClean = blockers.length === 0 && warnings.length === 0;
+
+    return (
+        <div className="border-t border-amber-500/10 bg-amber-500/5 px-4 py-3">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-amber-400">
+                Publication Readiness
+            </p>
+
+            {/* Gate check row */}
+            <div className="mb-3 flex flex-wrap gap-1.5">
+                {gateChecks.map((gate) => (
+                    <span
+                        key={gate.label}
+                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold ${
+                            gate.ok
+                                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                                : "border-red-500/20 bg-red-500/10 text-red-400"
+                        }`}
+                    >
+                        {gate.ok ? "✓" : "✗"} {gate.label}
+                    </span>
+                ))}
+            </div>
+
+            {allClean && (
+                <p className="text-[11px] text-emerald-400">
+                    All checks passed — review content before approving.
+                </p>
+            )}
+
+            {blockers.length > 0 && (
+                <div className="mb-2">
+                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-red-400">
+                        Blocking issues ({blockers.length})
+                    </p>
+                    <ul className="space-y-0.5">
+                        {blockers.map((issue, i) => (
+                            <li key={i} className="flex items-start gap-1.5 text-[11px] text-red-300/80">
+                                <span className="mt-0.5 shrink-0">•</span>
+                                <span>{issue}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {warnings.length > 0 && (
+                <div>
+                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-amber-400/70">
+                        Warnings ({warnings.length})
+                    </p>
+                    <ul className="space-y-0.5">
+                        {warnings.slice(0, 4).map((w, i) => (
+                            <li key={i} className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                                <span className="mt-0.5 shrink-0">⚠</span>
+                                <span>{w}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function DistributionLinks({
     blog,
     onHashnodeSync,
@@ -958,6 +1067,7 @@ export function BlogList({
     const [page, setPage] = useState(1);
     const [showSort, setShowSort] = useState(false);
     const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [expandedReadiness, setExpandedReadiness] = useState<Set<string>>(new Set());
     const [dismissedRepurposeId, setDismissedRepurposeId] = useState<string | null>(
         () => {
             if (typeof window === "undefined") return null;
@@ -1562,7 +1672,17 @@ export function BlogList({
                                     paginatedBlogs.map((blog) => {
                                         const blogUrl = getBlogUrl(blog);
                                         const healthScore = computeHealthScore(blog);
+                                        const showReadiness = isReviewStatus(blog.status) || isEditorialRejection(blog.status) || blog.status === "EVIDENCE_REVIEW";
+                                        const isExpanded = expandedReadiness.has(blog.id);
+                                        const toggleReadiness = () =>
+                                            setExpandedReadiness((prev) => {
+                                                const next = new Set(prev);
+                                                if (next.has(blog.id)) next.delete(blog.id);
+                                                else next.add(blog.id);
+                                                return next;
+                                            });
                                         return (
+                                            <>
                                             <tr
                                                 key={blog.id}
                                                 className="group transition-colors hover:bg-card/80"
@@ -1583,6 +1703,7 @@ export function BlogList({
                                                             <span className="text-[7px] font-black uppercase tracking-wider text-emerald-500/60">SEO</span>
                                                         </div>
                                                         <div className="min-w-0 flex-1">
+                                                            <div className="flex items-center gap-1.5">
                                                             <p
                                                                 className="truncate text-sm font-semibold text-foreground"
                                                                 title={blog.title}
@@ -1601,6 +1722,18 @@ export function BlogList({
                                                                     blog.title
                                                                 )}
                                                             </p>
+                                                            {showReadiness && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={toggleReadiness}
+                                                                    title={isExpanded ? "Hide readiness checklist" : "Show readiness checklist"}
+                                                                    aria-label={isExpanded ? "Hide readiness checklist" : "Show readiness checklist"}
+                                                                    className="shrink-0 rounded p-0.5 text-amber-400/60 transition-colors hover:text-amber-400"
+                                                                >
+                                                                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                                                                </button>
+                                                            )}
+                                                            </div>
                                                             <p className="mt-0.5 truncate text-[11px] text-muted-foreground/50">
                                                                 {blog.wordCount ? `${blog.wordCount.toLocaleString()} words` : "Draft"}
                                                             </p>
@@ -1665,6 +1798,14 @@ export function BlogList({
                                                     />
                                                 </td>
                                             </tr>
+                                            {showReadiness && isExpanded && (
+                                                <tr key={`${blog.id}-readiness`}>
+                                                    <td colSpan={9} className="p-0">
+                                                        <ReadinessPanel blog={blog} />
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            </>
                                         );
                                     })
                                 ) : (

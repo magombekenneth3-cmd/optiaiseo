@@ -642,6 +642,14 @@ FORBIDDEN:
 
 ${isIntro ? `INTRO RULE: 3 sentences max. (1) Most surprising/useful fact about "${ctx.keyword}". (2) What conventional wisdom gets wrong. (3) What the reader gets. No fluff.` : ""}
 ${isFaq ? `FAQ FORMAT: ## for each question. Answer opens immediately with Yes/No/number/tool/timeframe. No preamble. Max 3 sentences per answer.` : ""}
+${!isIntro && !isFaq ? `ANSWER-FIRST RULE (mandatory for AEO/AI search citability):
+- Sentence 1–2: Deliver the direct answer to "${section.goal}" immediately. No preamble, no context-setting.
+  ❌ BAD:  "Many marketers wonder about ${section.heading.toLowerCase()}..."
+  ✅ GOOD: Start with the specific answer, recommendation, or verdict.
+- Sentence 3–5: Explain WHY the answer is correct. Mechanism, not restatement.
+- Evidence: One named source, real statistic, or concrete example that proves the answer.
+- Action: One specific thing the reader can do today based on this section.
+This structure lets AI search engines (Perplexity, ChatGPT, Gemini) extract your answer for citations.` : ""}
 
 Output: ONLY the section in Markdown including the ## heading. No commentary.`;
 
