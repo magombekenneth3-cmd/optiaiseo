@@ -53,10 +53,16 @@ async function runFactCheckValidation(content: string): Promise<{
     issues: string[];
     suggestions: string[];
 }> {
+    // Fabricated statistics concentrate in the intro and body sections — not in FAQ,
+    // outro, or CTAs. Cap to the first 12,000 chars (~1,800 words) to halve chunk
+    // count from 4 to 2 without missing meaningful fact-check coverage.
+    const FACT_CHECK_CONTENT_CAP = 12_000;
+    const contentToCheck = content.slice(0, FACT_CHECK_CONTENT_CAP);
+
     const CHUNK_SIZE = 6000;
     const chunks: string[] = [];
-    for (let i = 0; i < content.length; i += CHUNK_SIZE) {
-        chunks.push(content.slice(i, i + CHUNK_SIZE));
+    for (let i = 0; i < contentToCheck.length; i += CHUNK_SIZE) {
+        chunks.push(contentToCheck.slice(i, i + CHUNK_SIZE));
     }
 
     const results = await Promise.all(

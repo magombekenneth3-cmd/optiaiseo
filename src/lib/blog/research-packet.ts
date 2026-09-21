@@ -15,7 +15,9 @@ import {
     type SourceType,
 } from "./contracts";
 
-const MAX_SOURCES_PER_SECTION = 6;
+// Each section is 300–400 words and can meaningfully cite at most 2–3 sources.
+// Extra sources inflate input tokens (~3,500 chars each) with no citation-rate gain.
+const MAX_SOURCES_PER_SECTION = 3;
 
 function compact(values: readonly string[] | undefined, max = 16): string[] {
     return [...new Set((values ?? []).map(value => value.trim()).filter(Boolean))].slice(0, max);

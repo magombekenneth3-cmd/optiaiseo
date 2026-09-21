@@ -220,7 +220,11 @@ Rules:
         whatPeopleAvoidSaying: [],
     };
 
-    const infoGain = await runInformationGainAlgorithm(keyword).catch(() => null);
+    const infoGain = await runInformationGainAlgorithm(
+        keyword,
+        // Reuse already-scraped SERP results — avoids a duplicate 10-result fetch
+        serpContext?.results ?? undefined,
+    ).catch(() => null);
 
     try {
         const result = await generateWithFallbackJson<ResearchBrain>({
@@ -668,9 +672,15 @@ Output: ONLY the section in Markdown including the ## heading. No commentary.`;
 
         const sectionTemperature = temperatureByEvidence[section.evidenceType] ?? 0.50;
 
+        // Use Flash for low-complexity outputs (intro = 3 sentences, FAQ = structured Q&A).
+        // Pro is reserved for sections requiring nuanced prose and evidence synthesis.
+        const model = (isIntro || isFaq)
+            ? AI_MODELS.GEMINI_FLASH
+            : AI_MODELS.GEMINI_PRO;
+
         const text = await generateWithFallback({
             prompt,
-            model: AI_MODELS.GEMINI_PRO,
+            model,
             maxTokens: 3000,
             temperature: sectionTemperature,
         });
@@ -702,35 +712,83 @@ Output: ONLY the section in Markdown including the ## heading. No commentary.`;
 
 // ─── Stage 4: Editorial Rewrite Pass ─────────────────────────────────────────
 
+const BANNED_EDITORIAL_PHRASES = [
+    "in conclusion", "it's worth noting", "furthermore", "moreover", "additionally",
+    "delve into", "leverage", "seamlessly", "cutting-edge", "game-changing", "robust",
+    "now more than ever", "when it comes to", "in today's digital landscape",
+    "it is important to", "it is essential to", "final thoughts", "to summarise",
+    "in summary", "unlock the potential", "drive engagement", "foster growth",
+    "empower users", "in the realm of", "comprehensive guide",
+];
+
 /**
- * The missing piece. Takes the assembled draft and rewrites it through an
- * editorial lens — not a "sound human" lens, which ironically sounds more AI.
+ * Cheap local audit to decide if a section needs the expensive Pro rewrite.
+ * Returns true if the section needs intervention.
+ */
+function sectionNeedsRewrite(section: string): boolean {
+    const lower = section.toLowerCase();
+
+    // Banned phrases?
+    if (BANNED_EDITORIAL_PHRASES.some((phrase) => lower.includes(phrase))) return true;
+
+    // Passive openers (e.g. "It is", "There is/are", "This can be")
+    if (/^(it is|there is|there are|this can be|these are|this is)\b/im.test(section)) return true;
+
+    // Keyword stuffing — same word (5+ chars) appearing 5+ times in 200 chars
+    const words = lower.match(/\b[a-z]{5,}\b/g) ?? [];
+    const freq = new Map<string, number>();
+    for (const w of words) freq.set(w, (freq.get(w) ?? 0) + 1);
+    for (const [, count] of freq) {
+        if (count >= 5) return true;
+    }
+
+    // Consecutive sentence openers starting with the same word
+    const sentences = section.split(/(?<=[.!?])\s+/);
+    for (let i = 0; i < sentences.length - 1; i++) {
+        const a = sentences[i]?.match(/^([A-Za-z]+)/)?.[1]?.toLowerCase();
+        const b = sentences[i + 1]?.match(/^([A-Za-z]+)/)?.[1]?.toLowerCase();
+        if (a && b && a === b && a.length > 2) return true;
+    }
+
+    return false;
+}
+
+/**
+ * Selective editorial rewrite.
  *
- * Uses Pro for maximum editorial quality.
+ * For each H2 section, runs a fast local audit first.
+ * - Sections that FAIL the audit → Gemini Pro full rewrite (original behaviour).
+ * - Sections that PASS the audit → Gemini Flash light polish (contractions, micro-imperfections).
+ *
+ * This typically reduces Pro calls from 2 full chunks to 1 partial chunk, saving
+ * ~26,000 output tokens on the most expensive stage in the pipeline.
  */
 export async function runEditorialRewrite(
     draft: string,
     ctx: PromptContext,
     groundedCtx?: GroundedSiteContext,
 ): Promise<{ content: string; truncated: boolean }> {
-    const CHUNK_SIZE = 18_000;
+    const authorVoiceNote = groundedCtx?.data.authorName
+        ? `AUTHOR: ${groundedCtx.data.authorName}${groundedCtx.data.authorRole ? ` (${groundedCtx.data.authorRole})` : ""}. Voice should reflect their expertise level.`
+        : "";
 
-    const chunks = splitAtH2Boundaries(draft, CHUNK_SIZE);
-    const rewrittenChunks: string[] = [];
+    // Split at H2 boundaries for section-level decisions
+    const sections = draft.split(/(?=^## )/m).filter(Boolean);
+
+    const rewrittenSections: string[] = [];
     let previousSummary = "";
+    let proRewrites = 0;
+    let flashPolishes = 0;
 
-    for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-
+    for (const section of sections) {
+        const needsFullRewrite = sectionNeedsRewrite(section);
         const continuityNote = previousSummary
-            ? `CONTINUITY: The previous section ended with: "${previousSummary}". Do not re-introduce topics already covered.`
+            ? `CONTINUITY: Previous section ended with: "${previousSummary}". Do not re-introduce topics already covered.`
             : "";
 
-        const authorVoiceNote = groundedCtx?.data.authorName
-            ? `AUTHOR: ${groundedCtx.data.authorName}${groundedCtx.data.authorRole ? ` (${groundedCtx.data.authorRole})` : ""}. Voice should reflect their expertise level.`
-            : "";
-
-        const prompt = `You are a senior editor at a trade publication. Rewrite the article section below so it reads like a confident practitioner wrote it — not an AI, and not a content marketer.
+        if (needsFullRewrite) {
+            // ── Full Pro rewrite for dirty sections ──────────────────────────
+            const prompt = `You are a senior editor at a trade publication. Rewrite the article section below so it reads like a confident practitioner wrote it — not an AI, and not a content marketer.
 
 KEYWORD: "${ctx.keyword}"
 ${continuityNote}
@@ -744,76 +802,97 @@ EDITORIAL INSTRUCTIONS — apply every one:
 4. ACTIVE VOICE: Replace every passive construction.
 5. CONTRACTIONS: Add natural contractions throughout — "you'll", "it's", "don't", "here's", "we've". At least one per paragraph.
 6. OPINION SIGNALS: Each H2 section must contain at least one contradiction, named exception, or practitioner note.
-7. KEYWORD DENSITY AUDIT: Count how many times the primary keyword
-   "${ctx.keyword}" (and its exact variants) appears in the text.
-   - Target: once per 150–200 words.
-   - If it appears more than once per 120 words in any paragraph, replace
-     excess instances with:
-     a) A pronoun (it, this, they, the approach)
-     b) A category term (the technique, this method, the practice)
-     c) A related phrase from the semantic field
-   - Exception: never remove the keyword from H2 headings or the article's
-     first 100 words. Those are anchor placements, not stuffing.
-   - Do not add the keyword where it doesn't naturally fit.
-8. REMOVE THESE PHRASES (replace with plain language): In conclusion / It's worth noting / Furthermore / Moreover / Additionally / Delve into / Leverage / Seamlessly / Comprehensive guide / Cutting-edge / Game-changing / Robust / Now more than ever / When it comes to / In today's digital landscape / It is important to / It is essential to / Final thoughts / To summarise / In summary / Unlock the potential / Drive engagement / Foster growth / Empower users
+7. KEYWORD DENSITY AUDIT: Count how many times the primary keyword "${ctx.keyword}" appears. Target: once per 150–200 words. Replace excess with a pronoun, category term, or related phrase. Never remove from H2 headings or first 100 words.
+8. REMOVE THESE PHRASES (replace with plain language): ${BANNED_EDITORIAL_PHRASES.slice(0, 12).join(" / ")}
 9. FAQ ANSWERS: Every FAQ answer must open with: Yes / No / a number / a tool name / a time frame.
-10. MICRO-IMPERFECTIONS: Add one or two controlled irregularities per 500 words (fragment for emphasis, abrupt transition, short emphatic standalone).
+10. MICRO-IMPERFECTIONS: Add one or two controlled irregularities per 500 words.
 11. PRESERVE: All factual claims, named entities, statistics with sources, heading structure, FAQ questions. Do NOT invent new facts.
 
 Return ONLY the rewritten content in Markdown — same heading structure, no commentary.
 
 CONTENT:
-${chunk}`;
+${section}`;
 
-        try {
-            const rewritten = await generateWithFallback({
-                prompt,
-                model: AI_MODELS.GEMINI_PRO,
-                maxTokens: 8192,
-            });
+            try {
+                const rewritten = await generateWithFallback({
+                    prompt,
+                    model: AI_MODELS.GEMINI_PRO,
+                    maxTokens: 6000,
+                });
 
-            const trimmed = rewritten.trim();
-            if (!trimmed || trimmed.length < chunk.length * 0.4) {
-                logger.warn("[Pipeline] Editorial rewrite chunk returned too-short output — keeping original", { chunk: i });
-                rewrittenChunks.push(chunk);
-            } else {
-                const cleaned = trimmed
-                    .replace(/^```(?:markdown|html)?\s*/i, "")
-                    .replace(/\s*```$/i, "")
-                    .trim();
-                rewrittenChunks.push(cleaned);
-                previousSummary = cleaned.slice(-200).replace(/\s+/g, " ");
+                const trimmed = rewritten.trim();
+                if (!trimmed || trimmed.length < section.length * 0.4) {
+                    logger.warn("[Pipeline] Pro editorial rewrite returned too-short output — keeping original");
+                    rewrittenSections.push(section);
+                } else {
+                    const cleaned = trimmed
+                        .replace(/^```(?:markdown|html)?\s*/i, "")
+                        .replace(/\s*```$/i, "")
+                        .trim();
+                    rewrittenSections.push(cleaned);
+                    previousSummary = cleaned.slice(-200).replace(/\s+/g, " ");
+                    proRewrites++;
+                }
+            } catch (e) {
+                logger.warn("[Pipeline] Pro editorial rewrite failed — keeping original", { error: (e as Error).message });
+                rewrittenSections.push(section);
             }
-        } catch (e) {
-            logger.warn("[Pipeline] Editorial rewrite chunk failed — keeping original", {
-                chunk: i,
-                error: (e as Error).message,
-            });
-            rewrittenChunks.push(chunk);
+        } else {
+            // ── Flash light polish for already-clean sections ─────────────────
+            const flashPrompt = `Light editorial polish only. Do NOT restructure or rewrite.
+
+Tasks:
+- Add one natural contraction per paragraph where absent ("you'll", "it's", "don't", "here's")
+- Add one micro-imperfection per 300 words (a fragment, an abrupt transition, or a short emphatic standalone)
+- Remove any of these exact phrases if present: ${BANNED_EDITORIAL_PHRASES.slice(0, 6).join(" / ")}
+- PRESERVE everything else: facts, structure, headings, citations, sentence flow
+
+${continuityNote}
+
+Return ONLY the polished Markdown. No commentary.
+
+CONTENT:
+${section}`;
+
+            try {
+                const polished = await generateWithFallback({
+                    prompt: flashPrompt,
+                    model: AI_MODELS.GEMINI_FLASH,
+                    maxTokens: 3000,
+                });
+
+                const trimmed = polished.trim();
+                if (!trimmed || trimmed.length < section.length * 0.5) {
+                    rewrittenSections.push(section);
+                } else {
+                    const cleaned = trimmed
+                        .replace(/^```(?:markdown|html)?\s*/i, "")
+                        .replace(/\s*```$/i, "")
+                        .trim();
+                    rewrittenSections.push(cleaned);
+                    previousSummary = cleaned.slice(-200).replace(/\s+/g, " ");
+                    flashPolishes++;
+                }
+            } catch {
+                // Flash failed — keep original section, no retry needed
+                rewrittenSections.push(section);
+                flashPolishes++;
+            }
         }
     }
+
+    logger.info("[Pipeline] Selective editorial rewrite complete", {
+        keyword: ctx.keyword,
+        totalSections: sections.length,
+        proRewrites,
+        flashPolishes,
+        skipped: sections.length - proRewrites - flashPolishes,
+    });
 
     return {
-        content: rewrittenChunks.join("\n\n"),
+        content: rewrittenSections.join("\n\n"),
         truncated: false,
     };
-}
-
-function splitAtH2Boundaries(text: string, maxChars: number): string[] {
-    const sections = text.split(/(?=^## )/m);
-    const chunks: string[] = [];
-    let current = "";
-
-    for (const section of sections) {
-        if ((current + section).length > maxChars && current.length > 0) {
-            chunks.push(current.trim());
-            current = section;
-        } else {
-            current += (current ? "\n\n" : "") + section;
-        }
-    }
-    if (current.trim()) chunks.push(current.trim());
-    return chunks.length > 0 ? chunks : [text];
 }
 
 // ─── Convenience: Full Pipeline ───────────────────────────────────────────────

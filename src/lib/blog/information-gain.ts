@@ -71,33 +71,49 @@ export function buildCompactDirective(params: {
 }
 
 export async function runInformationGainAlgorithm(
-    keyword: string
+    keyword: string,
+    existingResults?: Array<{ link?: string; title?: string; snippet?: string; scrapedContent?: string; scrapedHeadings?: string[] }>
 ): Promise<InformationGainGapAnalysis> {
-    const [serpData, perplexityResult] = await Promise.allSettled([
-        fetchGoogleSerp(keyword, 10),
-        checkPerplexityCitation(`Best options and expert analysis for ${keyword}`, "analysis"),
-    ]);
+    let validPages: Array<{ url: string; text: string; headings: string[]; schemaTypes: string[] }>;
 
-    const organic = serpData.status === "fulfilled" ? serpData.value.organic : [];
-    const perplexityCitations = perplexityResult.status === "fulfilled" && perplexityResult.value.cited
-        ? [perplexityResult.value.citationUrl].filter((u): u is string => !!u)
-        : [];
+    if (existingResults && existingResults.length > 0) {
+        // Reuse already-fetched SERP data — skip the second full scrape
+        validPages = existingResults
+            .filter(r => (r.scrapedContent?.length ?? 0) > 200 || (r.snippet?.length ?? 0) > 50)
+            .slice(0, 10)
+            .map(r => ({
+                url: r.link ?? "",
+                text: r.scrapedContent ?? r.snippet ?? "",
+                headings: r.scrapedHeadings ?? [],
+                schemaTypes: [],
+            }));
+    } else {
+        // No existing data — fetch fresh (original behaviour)
+        const [serpData, perplexityResult] = await Promise.allSettled([
+            fetchGoogleSerp(keyword, 10),
+            checkPerplexityCitation(`Best options and expert analysis for ${keyword}`, "analysis"),
+        ]);
 
-    const urlsToScrape = [...new Set([...organic.map(r => r.link), ...perplexityCitations])].slice(0, 10);
+        const organic = serpData.status === "fulfilled" ? serpData.value.organic : [];
+        const perplexityCitations = perplexityResult.status === "fulfilled" && perplexityResult.value.cited
+            ? [perplexityResult.value.citationUrl].filter((u): u is string => !!u)
+            : [];
 
-    const scrapedResults = await Promise.all(
-        urlsToScrape.map(async (url) => {
-            const pageData = await scrapePageData(url);
-            return {
-                url,
-                text: pageData.text,
-                headings: pageData.headings,
-                schemaTypes: pageData.schemaTypes,
-            };
-        })
-    );
+        const urlsToScrape = [...new Set([...organic.map(r => r.link), ...perplexityCitations])].slice(0, 10);
 
-    const validPages = scrapedResults.filter(p => p.text.length > 200);
+        const scrapedResults = await Promise.all(
+            urlsToScrape.map(async (url) => {
+                const pageData = await scrapePageData(url);
+                return {
+                    url,
+                    text: pageData.text,
+                    headings: pageData.headings,
+                    schemaTypes: pageData.schemaTypes,
+                };
+            })
+        );
+        validPages = scrapedResults.filter(p => p.text.length > 200);
+    }
 
     const headingFreq = new Map<string, number>();
     for (const page of validPages) {
