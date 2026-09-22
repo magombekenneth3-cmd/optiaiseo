@@ -550,6 +550,10 @@ model Blog {
   evidenceCoverage     Int?
   /// Descriptions of unsourced claims flagged by the evidence extractor.
   missingEvidence      String[]          @default([])
+  /// GSC opportunity evidence captured at generation time.
+  /// Null for non-GSC pipelines or blogs generated before this field existed.
+  /// Validated via GscOpportunityEvidenceSchema (Zod) before writing.
+  gscEvidence          Json?
   aeoEvents            AeoEvent[]
   repurposedResult     RepurposedResult?
   sourceLinks          InternalLink[]    @relation("SourceLinks")

@@ -5,7 +5,10 @@ import { rateLimit } from "@/lib/rate-limit/check";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { AuthorProfile } from "@/lib/blog";
-import { fetchGSCKeywords, findOpportunities, normaliseSiteUrl } from "@/lib/gsc";
+import { fetchGSCKeywords, findOpportunities } from "@/lib/gsc";
+import { classifyGscError, logGscFailure, type GscDataResult } from "@/lib/gsc/gsc-availability";
+import { getAuthorizedGscProperty } from "@/lib/gsc/property-resolver";
+import { validateGscEvidence, type GscOpportunityEvidence } from "@/lib/gsc/gsc-evidence";
 import { extractSiteContext } from "@/lib/blog/context";
 import { scoreContent } from "@/lib/content-scoring";
 import { getEffectiveTier } from "@/lib/stripe/guards";
@@ -450,18 +453,33 @@ export async function generateBlog(
 
         // Original code fired these sequentially; they have no dependency on each
         // other, so run them concurrently. Typical saving: ~600–1200ms per call.
-        const [siteContext, gscOpportunities, compKeyword, usedBlogKeywords, seedKeywords] =
+        const [siteContext, gscResult, compKeyword, usedBlogKeywords, seedKeywords] =
             await Promise.all([
                 extractSiteContext(site.domain),
 
-                // GSC — swallow errors; missing token is expected for new users
-                (async () => {
+                // GSC — typed availability semantics; API_ERROR ≠ NO_DATA ≠ NOT_CONNECTED
+                (async (): Promise<{ opportunities: Awaited<ReturnType<typeof findOpportunities>>; gscStatus: GscDataResult<unknown>["status"]; gscProperty?: string }> => {
                     try {
                         const token = await getUserGscToken(user.id);
-                        const raw = await fetchGSCKeywords(token, normaliseSiteUrl(site.domain));
-                        return findOpportunities(raw);
-                    } catch {
-                        return [] as Awaited<ReturnType<typeof findOpportunities>>;
+                        const gscProperty = await getAuthorizedGscProperty(token, site.domain);
+                        const raw = await fetchGSCKeywords(token, gscProperty);
+                        const opps = findOpportunities(raw);
+                        return {
+                            opportunities: opps,
+                            gscStatus: opps.length > 0 ? "AVAILABLE" : "NO_DATA",
+                            gscProperty,
+                        };
+                    } catch (err) {
+                        const status = classifyGscError(err);
+                        logGscFailure("Blog", status, {
+                            siteId: site.id,
+                            userId: user.id,
+                            note: "Proceeding without GSC opportunities — pipeline selection may be degraded",
+                        });
+                        return {
+                            opportunities: [] as Awaited<ReturnType<typeof findOpportunities>>,
+                            gscStatus: status,
+                        };
                     }
                 })(),
 
@@ -512,7 +530,7 @@ export async function generateBlog(
             pipelineType = "USER_KEYWORD";
         } else if (unusedSeed) {
             pipelineType = "SEED_KEYWORD";
-        } else if (gscOpportunities[0]) {
+        } else if (gscResult.opportunities[0]) {
             pipelineType = "GSC_GAP";
         } else if (compKeyword?.competitor) {
             pipelineType = "COMPETITOR_GAP";
@@ -541,6 +559,43 @@ export async function generateBlog(
             },
         });
 
+        // Build GSC opportunity evidence for GSC_GAP blogs (provenance snapshot)
+        let gscEvidence: GscOpportunityEvidence | undefined;
+        if (pipelineType === "GSC_GAP" && gscResult.opportunities[0] && gscResult.gscProperty) {
+            const opp = gscResult.opportunities[0];
+            // Reconstruct the exact date range used by fetchGSCKeywords (90 days, 3-day lag)
+            const GSC_LAG_DAYS = 3;
+            const endDate = new Date();
+            endDate.setDate(endDate.getDate() - GSC_LAG_DAYS);
+            const startDate = new Date();
+            startDate.setDate(endDate.getDate() - 90);
+            const fmtDate = (d: Date) => d.toISOString().split("T")[0];
+
+            const rawEvidence = {
+                generationId: savedBlog.id,
+                siteId: site.id,
+                property: gscResult.gscProperty,
+                sourceStatus: "AVAILABLE" as const,
+                query: opp.keyword,
+                url: opp.urls?.[0]?.url,
+                dateRange: {
+                    startDate: fmtDate(startDate),
+                    endDate: fmtDate(endDate),
+                },
+                position: opp.avgPosition,
+                impressions: opp.impressions,
+                clicks: opp.clicks,
+                ctr: opp.ctr,
+                expectedCtr: undefined,
+                opportunityScore: opp.opportunityScore,
+                opportunityType: opp.opportunityType,
+                reason: opp.reason,
+                capturedAt: new Date().toISOString(),
+            };
+
+            gscEvidence = validateGscEvidence(rawEvidence, `blog:${savedBlog.id}`) ?? undefined;
+        }
+
         try {
             const { inngest } = await import("@/lib/inngest/client");
             await inngest.send({
@@ -552,7 +607,7 @@ export async function generateBlog(
                     pipelineType,
                     // Always forward keyword so SERP research, intent detection,
                     // and semantic enrichment all target the correct term.
-                    keyword: chosenKeyword || compKeyword?.keyword || unusedSeed?.keyword || gscOpportunities[0]?.keyword || undefined,
+                    keyword: chosenKeyword || compKeyword?.keyword || unusedSeed?.keyword || gscResult.opportunities[0]?.keyword || undefined,
                     // Forward the pre-classified SERP signal so Inngest doesn't
                     // need to re-classify (it still fetches for research context).
                     serpSignal: serpSignalForInngest ?? undefined,
@@ -571,6 +626,9 @@ export async function generateBlog(
                             difficulty: compKeyword.difficulty ?? 0,
                         }
                         : {}),
+                    // GSC opportunity evidence — full provenance for GSC_GAP blogs.
+                    // Undefined for non-GSC pipelines (USER_KEYWORD, COMPETITOR_GAP, etc.)
+                    gscEvidence: gscEvidence ?? undefined,
                 },
             });
         } catch (e) {

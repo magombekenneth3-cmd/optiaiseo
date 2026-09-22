@@ -303,7 +303,7 @@ export const generateBlogJob = inngest.createFunction(
         triggers: [{ event: "blog.generate" }],
     },
     async ({ event, step }) => {
-        const { siteId, pipelineType, keyword, competitorDomain, searchVolume, difficulty, serpSignal } = event.data as {
+        const { siteId, pipelineType, keyword, competitorDomain, searchVolume, difficulty, serpSignal, gscEvidence } = event.data as {
             siteId: string;
             pipelineType: string;
             keyword?: string;
@@ -320,6 +320,8 @@ export const generateBlogJob = inngest.createFunction(
             localContext?: string;
             /** Pre-classified SERP format signal from the server action gate. */
             serpSignal?: SerpFormatSignal;
+            /** GSC opportunity evidence — full provenance for GSC_GAP blogs. */
+            gscEvidence?: Record<string, unknown>;
         };
 
         if (!process.env.GEMINI_API_KEY) {
@@ -1170,6 +1172,9 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 // Evidence pipeline — feeds the dashboard EvidenceBadge
                 evidenceCoverage: liveBlogPost.evidenceCoverage,
                 missingEvidence: liveBlogPost.missingEvidence ?? [],
+                // GSC opportunity evidence — immutable provenance snapshot
+                // Null for non-GSC pipelines (USER_KEYWORD, COMPETITOR_GAP, etc.)
+                gscEvidence: gscEvidence ?? undefined,
             };
             if (event.data.blogId) {
                 await prisma.blog.update({ where: { id: event.data.blogId }, data: blogData });

@@ -1,8 +1,10 @@
 import { getUserGscToken } from "@/lib/gsc/token";
-import { fetchGSCKeywords, normaliseSiteUrl } from "@/lib/gsc";
+import { fetchGSCKeywords } from "@/lib/gsc";
+import { getAuthorizedGscProperty } from "@/lib/gsc/property-resolver";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { GscPageMetric } from "./types";
+import { classifyGscError, logGscFailure } from "@/lib/gsc/gsc-availability";
 
 // Minimum number of days of persisted data required before we trust the DB
 // over the live API. Below this, a fresh install falls back to live GSC.
@@ -40,8 +42,11 @@ export async function fetchGscEvidence(siteId: string): Promise<GscPageMetric[]>
         });
         return fetchEvidenceFromLiveApi(site);
     } catch (err: unknown) {
-        logger.error("[EvidenceProvider] Failed to fetch GSC evidence", {
-            siteId, error: (err as Error)?.message || String(err),
+        const status = classifyGscError(err);
+        logGscFailure("EvidenceProvider", status, {
+            siteId,
+            note: "Returning empty evidence — opportunity scoring will lack GSC data",
+            error: (err as Error)?.message || String(err),
         });
         return [];
     }
@@ -202,13 +207,16 @@ async function fetchEvidenceFromDb(siteId: string): Promise<GscPageMetric[]> {
 async function fetchEvidenceFromLiveApi(
     site: { id: string; domain: string; userId: string }
 ): Promise<GscPageMetric[]> {
-    const accessToken = await getUserGscToken(site.userId);
-    if (!accessToken) {
-        logger.info("[EvidenceProvider] No GSC access token found for site", { siteId: site.id });
+    let accessToken: string;
+    try {
+        accessToken = await getUserGscToken(site.userId);
+    } catch (err) {
+        const status = classifyGscError(err);
+        logGscFailure("EvidenceProvider.liveApi", status, { siteId: site.id, phase: "token" });
         return [];
     }
 
-    const siteUrl = normaliseSiteUrl(site.domain);
+    const siteUrl = await getAuthorizedGscProperty(accessToken, site.domain);
     const keywordRows = await fetchGSCKeywords(accessToken, siteUrl, 90, 3600);
 
     // Aggregate by URL (preserved from original implementation)

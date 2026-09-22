@@ -70,10 +70,16 @@ function getOAuthCredentials(): { clientId: string; clientSecret: string } {
  * Resolution order:
  * 1. Redis cache (`ga4:token:{userId}`)
  * 2. Dedicated `google-ga4` Account row
- * 3. Legacy fallback: `google-gsc` Account IF its scope includes `analytics.readonly`
  *
- * The legacy fallback ensures existing users who connected GSC with the combined
- * scope can still access GA4 data until they perform the separate GA4 connect.
+ * Provider isolation invariant:
+ *   GA4 credentials come from `google-ga4` ONLY.
+ *   GSC credentials come from `google-gsc` ONLY (see getUserGscToken).
+ *   No cross-provider fallback exists. Disconnecting one integration
+ *   can never affect the other.
+ *
+ * Users who previously connected GSC with analytics.readonly scope
+ * but never connected a dedicated google-ga4 will see GA4 as
+ * "not_connected" and should be prompted to connect GA4 separately.
  */
 export async function getUserGa4Token(userId: string): Promise<string> {
     const now = Math.floor(Date.now() / 1000);
@@ -81,29 +87,13 @@ export async function getUserGa4Token(userId: string): Promise<string> {
     const cached = await getCachedToken(userId);
     if (cached) return cached;
 
-    // Primary: dedicated google-ga4 Account
-    let acc = await prisma.account.findFirst({
+    // Strict: only google-ga4 provider — no cross-provider fallback
+    const acc = await prisma.account.findFirst({
         where: {
             userId,
             provider: "google-ga4",
         },
     });
-
-    // Legacy fallback: google-gsc Account with analytics.readonly scope
-    if (!acc) {
-        acc = await prisma.account.findFirst({
-            where: {
-                userId,
-                provider: { in: ["google-gsc", "google"] },
-            },
-            orderBy: [{ provider: "desc" }],
-        });
-
-        // Only use the legacy account if it actually has analytics scope
-        if (acc && !acc.scope?.includes("analytics.readonly")) {
-            acc = null;
-        }
-    }
 
     if (!acc?.access_token) {
         throw new Error("GA4_NOT_CONNECTED");

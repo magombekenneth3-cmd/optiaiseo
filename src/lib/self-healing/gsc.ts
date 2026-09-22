@@ -4,6 +4,7 @@ import { getUserGscToken } from "@/lib/gsc/token";
 import { prisma } from "@/lib/prisma";
 import { HealingAction, filterDuplicateHealingActions } from "./engine";
 import { callGemini } from "@/lib/gemini/client";
+import { classifyGscError, logGscFailure } from "@/lib/gsc/gsc-availability";
 
  
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -14,8 +15,9 @@ export async function detectGscAnomalies(siteId: string): Promise<{ dropped: boo
     let token: string;
     try {
         token = await getUserGscToken(site.userId);
-    } catch {
-        // User hasn't connected GSC — skip silently, self-healing is best-effort
+    } catch (err) {
+        const status = classifyGscError(err);
+        logGscFailure("SelfHealing", status, { siteId, phase: "token" });
         return { dropped: false, anomalies: [] };
     }
 
@@ -75,7 +77,12 @@ export async function detectGscAnomalies(siteId: string): Promise<{ dropped: boo
         return { dropped: anomalies.length > 0, anomalies };
      
     } catch (e: unknown) {
-        logger.error(`[GSC Anomaly] Failed for site ${siteId}`, { error: (e as Error)?.message || String(e) });
+        const status = classifyGscError(e);
+        logGscFailure("SelfHealing", status, {
+            siteId,
+            phase: "data_fetch",
+            error: (e as Error)?.message || String(e),
+        });
         return { dropped: false, anomalies: [] };
     }
  
