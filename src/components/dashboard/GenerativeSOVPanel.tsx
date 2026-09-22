@@ -22,8 +22,8 @@ interface TrendPoint {
 }
 
 const MODEL_COLORS: Record<string, string> = {
-    "gemini-2.5-flash":   "#6366f1",
-    "gemini-2.0-flash":   "#8b5cf6",
+    "gemini-3.8-flash":   "#6366f1",
+    "gemini-3.7-flash":   "#8b5cf6",
     "gpt-4o":             "#22d3ee",
     "claude-3-5-sonnet":  "#f59e0b",
     "sonar":              "#34d399",

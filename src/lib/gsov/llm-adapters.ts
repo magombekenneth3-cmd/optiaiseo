@@ -54,7 +54,7 @@ export class GeminiProbeAdapter implements ProbeProviderAdapter {
     constructor(
         private readonly http: HttpClient = defaultHttpClient,
         private readonly apiKey: string = process.env.GEMINI_API_KEY || "mock-gemini-key",
-        private readonly model: string = "gemini-2.5-flash"
+        private readonly model: string = "gemini-3.8-flash"
     ) { }
 
     async probe(query: string, webpageBody: string): Promise<ProbeResult> {

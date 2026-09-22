@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { NonRetriableError } from "inngest";
 import { callGeminiJson } from "@/lib/gemini";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 
 type UrlGroup = {
     url: string;
@@ -96,7 +97,7 @@ Return ONLY valid JSON. No preamble or markdown fences.`;
 
             try {
                 const plans = await callGeminiJson<FixPlanItem[]>(prompt, {
-                    model: "gemini-2.5-flash",
+                    model: AI_MODELS.GEMINI_FLASH,
                     temperature: 0.3,
                     maxOutputTokens: 4000,
                 });

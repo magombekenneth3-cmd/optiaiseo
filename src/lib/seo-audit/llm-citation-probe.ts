@@ -4,8 +4,8 @@ import { GeminiProbeAdapter } from "@/lib/gsov/llm-adapters";
 import { sanitizeBodyForLlm } from "@/lib/gsov/sanitizer";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-const GROUNDED_MODEL = "gemini-2.5-flash";
-const FALLBACK_MODEL = "gemini-1.5-flash";
+const GROUNDED_MODEL = "gemini-3.8-flash";
+const FALLBACK_MODEL = "gemini-3.7-flash";
 const PROBE_TTL_S = 48 * 3600;
 
 let redis: import("ioredis").Redis | null = null;

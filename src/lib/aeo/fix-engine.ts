@@ -35,7 +35,7 @@ async function callGemini(prompt: string) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
             const text = await geminiCall(prompt, { maxOutputTokens: 8192, temperature: 0.1 });
-            return { text, model: "gemini-2.5-flash", durationMs: Date.now() - t0 };
+            return { text, model: "gemini-3.8-flash", durationMs: Date.now() - t0 };
         } catch (error: unknown) {
             if (attempt === 1) {
                 logger.warn("[AEO Fix Engine] Gemini generation failed after retry", { error: (error as Error)?.message || String(error) });

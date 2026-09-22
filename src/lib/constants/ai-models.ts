@@ -1,12 +1,28 @@
-const useExperimental = process.env.GEMINI_EXPERIMENTAL_MODELS === "1";
+/**
+ * Central AI model registry — single source of truth for all model IDs.
+ *
+ * Gemini 3.x production chain (Sep 2026):
+ *   gemini-3.8-flash → gemini-3.7-flash → gemini-3.6-flash → gemini-3.1-flash-lite
+ *
+ * Every call site must reference these constants. Hardcoded model strings are
+ * forbidden — the `sanitizeGeminiModel()` guard in gemini/client.ts intercepts
+ * any stale ID that slips through.
+ */
+
+export const GEMINI_PRODUCTION_CHAIN = [
+    'gemini-3.8-flash',
+    'gemini-3.7-flash',
+    'gemini-3.6-flash',
+    'gemini-3.1-flash-lite',
+] as const;
 
 export const AI_MODELS = {
-    // Gemini — real model strings only
-    GEMINI_FLASH:      'gemini-2.5-flash',
-    GEMINI_FLASH_LITE: 'gemini-2.0-flash-lite',
-    GEMINI_FLASH_2_0:  'gemini-2.0-flash',
-    GEMINI_LIVE:       'gemini-2.0-flash-live-001',
-    GEMINI_PRO:        useExperimental ? 'gemini-2.0-pro-exp' : 'gemini-2.5-pro',
+    // Gemini 3.x — production chain
+    GEMINI_FLASH:      'gemini-3.8-flash',
+    GEMINI_FLASH_LITE: 'gemini-3.1-flash-lite',
+    GEMINI_FLASH_2_0:  'gemini-3.7-flash',   // compat alias → second-tier fallback
+    GEMINI_LIVE:       'gemini-2.0-flash-live-001',  // voice-only — separate chain
+    GEMINI_PRO:        'gemini-3.8-flash',
 
     // OpenAI
     OPENAI_PRIMARY:    'gpt-4o',

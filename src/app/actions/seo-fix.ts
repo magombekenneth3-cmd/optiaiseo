@@ -90,7 +90,7 @@ async function callGemini(prompt: string, opts: { maxTokens?: number; temperatur
                 setTimeout(() => reject(new Error("Gemini timeout")), 30_000)
             ),
         ]);
-        return { text, model: "gemini-2.5-flash", durationMs: Date.now() - t0 };
+        return { text, model: "gemini-3.8-flash", durationMs: Date.now() - t0 };
     } catch {
         return null;
     }

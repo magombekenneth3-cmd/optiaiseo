@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireUser, assertSiteOwnership } from "@/lib/auth/require-user";
 import { callGeminiJson } from "@/lib/gemini";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 import { logger } from "@/lib/logger";
 import type { Campaign } from "@prisma/client";
 
@@ -125,7 +126,7 @@ Return ONLY a valid JSON array. No preamble or markdown.`;
         };
 
         const plans = await callGeminiJson<PlanItem[]>(prompt, {
-            model: "gemini-2.5-flash",
+            model: AI_MODELS.GEMINI_FLASH,
             temperature: 0.3,
             maxOutputTokens: 4000,
         });

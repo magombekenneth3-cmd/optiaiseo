@@ -1,4 +1,5 @@
 import { callGeminiJson } from "@/lib/gemini/client";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 import { extractBrandIdentity } from "@/lib/aeo/brand-utils";
 import { logger } from "@/lib/logger";
 
@@ -87,7 +88,7 @@ Respond ONLY in JSON:
   try {
     const result = await callGeminiJson<{ known: boolean; confidence: number }>(
       prompt,
-      { model: "gemini-2.0-flash", temperature: 0.1, maxOutputTokens: 100 },
+      { model: AI_MODELS.GEMINI_FLASH, temperature: 0.1, maxOutputTokens: 100 },
     );
     return { known: result.known ?? false, confidence: result.confidence ?? 0 };
   } catch {

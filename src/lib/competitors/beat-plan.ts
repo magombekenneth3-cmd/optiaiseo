@@ -1,4 +1,5 @@
 import { callGeminiJson } from "@/lib/gemini/client";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 import { logger } from "@/lib/logger";
 import { redis } from "@/lib/redis";
 import type { CompetitorContentProfile } from "@/lib/aeo/competitor-content-profile";
@@ -167,7 +168,7 @@ Respond ONLY in this exact JSON format:
     const parsed = await callGeminiJson<Omit<BeatCompetitorPlan, "competitorDomain" | "clientDomain" | "generatedAt">>(
       prompt,
       {
-        model: "gemini-2.0-flash",
+        model: AI_MODELS.GEMINI_FLASH,
         temperature: 0.3,
         maxOutputTokens: 1000,
       },

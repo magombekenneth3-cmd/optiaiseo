@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { checkPerplexityCitation } from "./perplexity-citation-check";
 import { callGeminiJson } from "@/lib/gemini/client";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 import { performVectorGapAnalysis } from "./vector-gap";
 import { redis } from "@/lib/redis";
 import { TTL } from "@/lib/constants/ttl";
@@ -137,7 +138,7 @@ Respond ONLY in this JSON format (no markdown, no preamble):
 
   try {
     const parsed = await callGeminiJson<ClassifiedGap>(prompt, {
-      model: "gemini-2.0-flash",
+      model: AI_MODELS.GEMINI_FLASH,
       temperature: 0.2,
       maxOutputTokens: 300,
     });
@@ -568,7 +569,7 @@ Respond in this EXACT JSON format:
       gapReason: GapReason;
       explanation: string;
       fix: string;
-    }>(prompt, { model: "gemini-2.0-flash", temperature: 0.3 });
+    }>(prompt, { model: AI_MODELS.GEMINI_FLASH, temperature: 0.3 });
 
     return {
       gapReason: parsed.gapReason ?? "content_too_thin",

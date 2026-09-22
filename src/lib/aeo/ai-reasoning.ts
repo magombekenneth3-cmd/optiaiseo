@@ -1,4 +1,5 @@
 import { callGeminiJson } from "@/lib/gemini/client";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 import { logger } from "@/lib/logger";
 import { redis } from "@/lib/redis";
 
@@ -116,7 +117,7 @@ Rules:
       factors: AiReasoningResult["factors"];
       confidence: number;
     }>(prompt, {
-      model: "gemini-2.0-flash",
+      model: AI_MODELS.GEMINI_FLASH,
       temperature: 0.2,
       maxOutputTokens: 600,
     });

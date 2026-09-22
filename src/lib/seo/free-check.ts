@@ -123,7 +123,7 @@ export async function runFreeSeoCheck(rawDomain: string): Promise<FreeSeoCheckRe
     if (!geminiKey) return 50;
     const prompt = `You are an AEO (Answer Engine Optimisation) evaluator. On a scale of 0-100, how well would '${rawDomain}' likely appear in AI-generated answers? Just respond with a single integer, no explanation.`;
     const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -12,6 +12,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { callGemini } from "@/lib/gemini/client";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 import { logger } from "@/lib/logger";
 
 export interface VisibilityForecast {
@@ -213,7 +214,7 @@ Rules:
 - If data is sparse, say so in the reasoning and give a conservative projection`;
 
         const rawResponse = await callGemini(prompt, {
-            model: "gemini-2.5-flash",
+            model: AI_MODELS.GEMINI_FLASH,
             maxOutputTokens: 1024,
             temperature: 0.2,
             responseFormat: "json",

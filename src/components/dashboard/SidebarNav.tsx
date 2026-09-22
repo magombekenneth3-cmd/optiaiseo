@@ -68,11 +68,7 @@ const ACT_ITEMS = [
     { name: "Autopilot", href: "/dashboard/autopilot", icon: Bot, exact: false, contextSiteId: true },
 ];
 
-const CONTENT_SUB_ITEMS = [
-    { name: "Library",    href: "/dashboard/blogs",           icon: BookOpen,  exact: true },
-    { name: "Editorial",  href: "/dashboard/blogs/editorial", icon: PenSquare, exact: false },
-    { name: "Publishing", href: "/dashboard/blogs/publishing", icon: Send,     exact: false },
-];
+
 
 
 const PROVE_ITEMS = [
@@ -433,66 +429,9 @@ function SidebarNavInner({
                     const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
                     const missingContext = item.contextSiteId && !siteId;
 
-                    // Content item — show expand chevron and sub-items
-                    if (item.name === "Content" && !isCollapsed) {
-                        const contentActive = pathname.startsWith("/dashboard/blogs");
-                        return (
-                            <div key={item.name}>
-                                <Link
-                                    href={href}
-                                    className={`
-                                        group flex items-center gap-3 rounded-lg text-sm transition-all relative px-3 py-2
-                                        ${contentActive
-                                            ? "text-foreground font-semibold"
-                                            : "text-muted-foreground font-medium hover:bg-sidebar-accent hover:text-foreground"
-                                        }
-                                    `}
-                                    style={contentActive ? { background: "rgba(16,185,129,0.09)" } : {}}
-                                >
-                                    {contentActive && (
-                                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-r-full bg-brand" aria-hidden="true" />
-                                    )}
-                                    <FileText
-                                        className={`shrink-0 w-4 h-4 transition-colors ${
-                                            contentActive ? "text-brand" : "text-muted-foreground/70 group-hover:text-foreground"
-                                        }`}
-                                        aria-hidden="true"
-                                    />
-                                    <span className="flex-1 min-w-0 truncate">{item.name}</span>
-                                    <ChevronDown
-                                        className={`w-3 h-3 text-muted-foreground/50 transition-transform duration-200 ${contentActive ? "rotate-180" : ""}`}
-                                        aria-hidden="true"
-                                    />
-                                </Link>
-                                {contentActive && (
-                                    <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border/40 pl-2">
-                                        {CONTENT_SUB_ITEMS.map((sub) => {
-                                            const subActive = sub.exact
-                                                ? pathname === sub.href
-                                                : pathname.startsWith(sub.href);
-                                            const SubIcon = sub.icon;
-                                            return (
-                                                <Link
-                                                    key={sub.name}
-                                                    href={sub.href}
-                                                    className={`
-                                                        flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors
-                                                        ${subActive
-                                                            ? "text-foreground bg-brand/10"
-                                                            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
-                                                        }
-                                                    `}
-                                                >
-                                                    <SubIcon className={`w-3.5 h-3.5 ${subActive ? "text-brand" : "text-muted-foreground/60"}`} />
-                                                    {sub.name}
-                                                </Link>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    }
+                    return (
+                        <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed={isCollapsed} />
+                    );
 
                     return (
                         <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed={isCollapsed} />

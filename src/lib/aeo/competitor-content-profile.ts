@@ -1,4 +1,5 @@
 import { callGeminiJson } from "@/lib/gemini/client";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 import { logger } from "@/lib/logger";
 
 export interface CompetitorContentProfile {
@@ -85,7 +86,7 @@ Respond ONLY in this exact JSON format:
       hasComparisonContent: boolean;
       readingLevel: "basic" | "intermediate" | "expert";
       strengths: string[];
-    }>(prompt, { model: "gemini-2.0-flash", temperature: 0.1, maxOutputTokens: 400 });
+    }>(prompt, { model: AI_MODELS.GEMINI_FLASH, temperature: 0.1, maxOutputTokens: 400 });
 
     return {
       domain,

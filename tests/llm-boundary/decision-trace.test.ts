@@ -38,7 +38,7 @@ function makeInput(): LLMDecisionInput {
 describe("§23 — Audit envelope completeness", () => {
   it("contains all required fields", () => {
     const envelope = buildAuditEnvelope({
-      modelId: "gemini-2.5-flash",
+      modelId: "gemini-3.8-flash",
       promptVersion: "d4-title-v1",
       promptHash: "abc123",
       inputHash: "def456",
@@ -49,7 +49,7 @@ describe("§23 — Audit envelope completeness", () => {
       latencyMs: 1200,
     });
 
-    expect(envelope.modelId).toBe("gemini-2.5-flash");
+    expect(envelope.modelId).toBe("gemini-3.8-flash");
     expect(envelope.promptVersion).toBe("d4-title-v1");
     expect(envelope.promptHash).toBe("abc123");
     expect(envelope.inputHash).toBe("def456");
@@ -71,7 +71,7 @@ describe("§23 — Audit envelope completeness", () => {
 
   it("envelope is frozen (immutable)", () => {
     const envelope = buildAuditEnvelope({
-      modelId: "gemini-2.5-flash",
+      modelId: "gemini-3.8-flash",
       promptVersion: "v1",
       promptHash: "h",
       inputHash: "i",
@@ -129,7 +129,7 @@ describe("§25 — outputHash determinism", () => {
 describe("§26 — Audit envelope persists on ActionProposal.metadata.llm", () => {
   it("envelope is JSON-serializable for Prisma Json field", () => {
     const envelope = buildAuditEnvelope({
-      modelId: "gemini-2.5-flash",
+      modelId: "gemini-3.8-flash",
       promptVersion: "d4-title-v1",
       promptHash: "abc",
       inputHash: "def",
@@ -143,14 +143,14 @@ describe("§26 — Audit envelope persists on ActionProposal.metadata.llm", () =
     // Must be JSON-serializable
     const json = JSON.stringify({ llm: envelope });
     const parsed = JSON.parse(json);
-    expect(parsed.llm.modelId).toBe("gemini-2.5-flash");
+    expect(parsed.llm.modelId).toBe("gemini-3.8-flash");
     expect(parsed.llm.inputHash).toBe("def");
     expect(parsed.llm.outputHash).toBe("ghi");
   });
 
   it("envelope does NOT contain raw input or output", () => {
     const envelope = buildAuditEnvelope({
-      modelId: "gemini-2.5-flash",
+      modelId: "gemini-3.8-flash",
       promptVersion: "v1",
       promptHash: "h",
       inputHash: "i",

@@ -26,7 +26,7 @@ describe("Direct Provider Adapters Unit Tests (Gate 2)", () => {
         const res = await adapter.probe("keyword", "webpage body content");
 
         expect(res).not.toBeNull();
-        expect(requestedUrl).toContain("generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash");
+        expect(requestedUrl).toContain("generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash");
         expect(res.provider).toEqual("google_gemini");
         expect(res.score).toEqual(4);
         expect(res.wouldCite).toBe(true);

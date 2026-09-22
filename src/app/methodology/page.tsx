@@ -86,7 +86,7 @@ export default function MethodologyPage() {
                             </thead>
                             <tbody className="divide-y divide-border text-foreground/80">
                                 {[
-                                    { engine: "Google Gemini", model: "gemini-2.0-flash", tier: "All tiers", queries: "5 (Quick), 15 (Standard), 30 (Deep)" },
+                                    { engine: "Google Gemini", model: "gemini-3.8-flash", tier: "All tiers", queries: "5 (Quick), 15 (Standard), 30 (Deep)" },
                                     { engine: "Anthropic Claude", model: "claude-3-5-sonnet-20241022", tier: "Standard + Deep", queries: "10 (Standard), 20 (Deep)" },
                                     { engine: "OpenAI ChatGPT", model: "gpt-4o-mini", tier: "Standard + Deep", queries: "10 (Standard), 20 (Deep)" },
                                     { engine: "Google AI Overview", model: "Serper.dev SERP parse", tier: "Deep only", queries: "10 (Direct SERP)" },

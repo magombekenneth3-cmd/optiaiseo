@@ -20,7 +20,7 @@ import type { LLMValidationResult } from "./types";
 // ── Configuration ───────────────────────────────────────────────────────────
 
 const LLM_TIMEOUT_MS = 15_000;
-const LLM_MODEL = process.env.D4_LLM_MODEL || "gemini-2.5-flash";
+const LLM_MODEL = process.env.D4_LLM_MODEL || "gemini-3.8-flash";
 
 // ── Result Types ────────────────────────────────────────────────────────────
 

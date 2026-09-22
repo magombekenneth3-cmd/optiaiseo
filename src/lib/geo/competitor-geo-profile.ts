@@ -1,4 +1,5 @@
 import { callGeminiJson } from "@/lib/gemini/client";
+import { AI_MODELS } from "@/lib/constants/ai-models";
 import { logger } from "@/lib/logger";
 
 export interface GeoFitnessSignals {
@@ -80,7 +81,7 @@ Respond ONLY in this exact JSON format:
   try {
     const analysis = await callGeminiJson<Omit<GeoFitnessSignals, "domain" | "geoScore" | "hasAggregateRating">>(
       prompt,
-      { model: "gemini-2.0-flash", temperature: 0.1, maxOutputTokens: 300 },
+      { model: AI_MODELS.GEMINI_FLASH, temperature: 0.1, maxOutputTokens: 300 },
     );
 
     const signals: GeoFitnessSignals = {
