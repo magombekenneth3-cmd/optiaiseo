@@ -2,599 +2,148 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { Suspense } from "react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-    LayoutDashboard,
-    Globe,
-    Lightbulb,
-    TrendingUp,
-    TrendingDown,
-    MonitorSmartphone,
-    ClipboardList,
-    FileText,
-    Highlighter,
-    CreditCard,
-    Settings,
-    Mic,
-    ChevronDown,
-    Calendar,
-    Zap,
-    Shield,
-    Users,
-    Link2,
-    ChevronRight,
-    Crosshair,
-    PanelLeftOpen,
-    BarChart3,
-    Gift,
-    History,
-    Target,
-    FlaskConical,
-    Code,
-    Activity,
-    Bot,
-    Eye,
-    BookOpen,
-    Send,
-    PenSquare,
-} from "lucide-react";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { LayoutDashboard, Globe, Lightbulb, TrendingUp, TrendingDown, MonitorSmartphone, ClipboardList, FileText, CreditCard, Settings, Mic, ChevronDown, Calendar, Zap, Shield, Users, Link2, ChevronRight, Crosshair, PanelLeftOpen, BarChart3, Gift, History, Target, FlaskConical, Code, Activity, Bot, Highlighter } from "lucide-react";
 
 function extractSiteId(pathname: string): string | null {
-    const match = pathname.match(/\/dashboard\/sites\/([^/]+)/);
-    const id = match?.[1];
-    if (!id || id === "new") return null;
-    return id;
+  const match = pathname.match(/\/dashboard\/sites\/([^/]+)/);
+  const id = match?.[1];
+  return id && id !== "new" ? id : null;
 }
 
-function buildHref(base: string, siteId: string | null): string {
-    if (siteId) return `${base}?siteId=${siteId}`;
-    return base;
+function buildHref(base: string, siteId: string | null) {
+  return siteId ? `${base}?siteId=${siteId}` : base;
 }
 
-const OVERVIEW_ITEMS = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true, contextSiteId: false },
+const DISCOVER_ITEMS = [
+  { name: "Opportunities", href: "/dashboard/recommendations", icon: Lightbulb, context: false },
+  { name: "SEO Audits", href: "/dashboard/audits", icon: ClipboardList, context: true },
+  { name: "AI Visibility", href: "/dashboard/aeo", icon: MonitorSmartphone, context: true },
 ];
 
-const OBSERVE_ITEMS = [
-    { name: "SEO Audits", href: "/dashboard/audits", icon: ClipboardList, exact: false, contextSiteId: true },
-    { name: "AI Visibility", href: "/dashboard/aeo", icon: MonitorSmartphone, exact: true, contextSiteId: true },
+const IMPROVE_ITEMS = [
+  { name: "Content", href: "/dashboard/blogs", icon: FileText, context: false },
+  { name: "Autopilot", href: "/dashboard/autopilot", icon: Bot, context: true },
 ];
 
-const ACT_ITEMS = [
-    { name: "Opportunities", href: "/dashboard/recommendations", icon: Lightbulb, exact: false, contextSiteId: false },
-    { name: "Content", href: "/dashboard/blogs", icon: FileText, exact: false, contextSiteId: false },
-    { name: "Autopilot", href: "/dashboard/autopilot", icon: Bot, exact: false, contextSiteId: true },
+const MONITOR_ITEMS = [
+  { name: "Operations", href: "/dashboard/operations", icon: Activity, context: true },
 ];
 
-
-
-
-const PROVE_ITEMS = [
-    { name: "Operations", href: "/dashboard/operations", icon: Activity, exact: false, contextSiteId: true },
+const MORE_ITEMS = [
+  { name: "My Sites", href: "/dashboard/sites", icon: Globe, context: false },
+  { name: "Keywords", href: "/dashboard/keywords", icon: TrendingUp, context: true },
+  { name: "Competitors", href: "/dashboard/competitors", icon: Crosshair, context: true },
+  { name: "SERP Gap Analysis", href: "/dashboard/serp-gap", icon: BarChart3, context: true },
+  { name: "Content Editor", href: "/dashboard/editor", icon: Highlighter, context: false },
+  { name: "Content Planner", href: "/dashboard/planner", icon: Calendar, context: true },
+  { name: "Programmatic SEO", href: "/dashboard/pseo", icon: Zap, context: false },
+  { name: "Re-Optimize", href: "/dashboard/refresh", icon: ClipboardList, context: true },
+  { name: "Content Decay", href: "/dashboard/content-decay", icon: TrendingDown, context: true },
+  { name: "Backlinks", href: "/dashboard/backlinks", icon: Link2, context: true },
+  { name: "Auto Indexer", href: "/dashboard/indexing", icon: Zap, context: false },
+  { name: "Auto-Heal Log", href: "/dashboard/healing", icon: Shield, context: true },
+  { name: "Citation History", href: "/dashboard/aeo/proofs", icon: History, context: true },
+  { name: "Experiments", href: "/dashboard/experiments", icon: FlaskConical, context: true },
+  { name: "Campaigns", href: "/dashboard/campaign", icon: Target, context: true },
+  { name: "Team", href: "/dashboard/team", icon: Users, context: false },
+  { name: "Talk to Aria", href: "/dashboard/voice", icon: Mic, context: false },
 ];
 
 const ACCOUNT_ITEMS = [
-    { name: "Billing",     href: "/dashboard/billing",  icon: CreditCard, exact: false, contextSiteId: false },
-    { name: "Refer & Earn",href: "/dashboard/referral", icon: Gift,        exact: false, contextSiteId: false },
-    { name: "Settings",    href: "/dashboard/settings", icon: Settings,    exact: false, contextSiteId: false },
-    { name: "API & Docs",  href: "/api-docs",            icon: Code,        exact: false, contextSiteId: false },
+  { name: "Billing", href: "/dashboard/billing", icon: CreditCard },
+  { name: "Refer & Earn", href: "/dashboard/referral", icon: Gift },
+  { name: "Settings", href: "/dashboard/settings", icon: Settings },
+  { name: "API & Docs", href: "/api-docs", icon: Code },
 ];
-
-const MORE_NAV_ITEMS = [
-    { name: "My Sites", href: "/dashboard/sites", icon: Globe, exact: false, contextSiteId: false },
-    { name: "Talk to Aria", href: "/dashboard/voice", icon: Mic, exact: false, contextSiteId: false },
-    { name: "Keywords", href: "/dashboard/keywords", icon: TrendingUp, exact: false, contextSiteId: true },
-    { name: "Competitors", href: "/dashboard/competitors", icon: Crosshair, exact: false, contextSiteId: true },
-    { name: "Auto Indexer", href: "/dashboard/indexing", icon: Zap, exact: false, contextSiteId: false },
-    { name: "Auto-Heal Log", href: "/dashboard/healing", icon: Shield, exact: false, contextSiteId: true },
-    { name: "Citation History", href: "/dashboard/aeo/proofs", icon: History, exact: false, contextSiteId: true },
-];
-
-const SECONDARY_ITEMS = [
-    { name: "SERP Gap Analysis", href: "/dashboard/serp-gap", icon: BarChart3, contextSiteId: true, group: "strategy" },
-    { name: "Campaigns", href: "/dashboard/campaign", icon: Target, contextSiteId: true, group: "strategy" },
-    { name: "Experiments", href: "/dashboard/experiments", icon: FlaskConical, contextSiteId: true, group: "strategy" },
-    { name: "Wikidata Entity", href: "/dashboard/aeo/entity", icon: Globe, contextSiteId: true, group: "strategy" },
-    { name: "Content Editor", href: "/dashboard/editor", icon: Highlighter, contextSiteId: false, group: "content" },
-    { name: "Content Planner", href: "/dashboard/planner", icon: Calendar, contextSiteId: true, group: "content" },
-    { name: "Programmatic SEO", href: "/dashboard/pseo", icon: Zap, contextSiteId: false, group: "content" },
-    { name: "Re-Optimize", href: "/dashboard/refresh", icon: ClipboardList, contextSiteId: true, group: "content" },
-    { name: "Content Decay", href: "/dashboard/content-decay", icon: TrendingDown, contextSiteId: true, group: "content" },
-    { name: "Backlinks", href: "/dashboard/backlinks", icon: Link2, contextSiteId: true, group: "technical" },
-    { name: "Team", href: "/dashboard/team", icon: Users, contextSiteId: false, group: "strategy" },
-];
-
-const ALL_PRIMARY_ITEMS = [...OVERVIEW_ITEMS, ...OBSERVE_ITEMS, ...ACT_ITEMS, ...PROVE_ITEMS, ...MORE_NAV_ITEMS];
 
 interface Site { id: string; domain: string; grade?: string | null; }
 
-function getGradeColor(grade?: string | null): string {
-    if (grade === "A" || grade === "B") return "bg-emerald-500";
-    if (grade === "C") return "bg-amber-500";
-    if (grade === "D" || grade === "F") return "bg-rose-500";
-    return "bg-muted-foreground/30";
+function domainInitial(domain: string) {
+  return domain.replace(/^www\./, "").charAt(0).toUpperCase();
 }
 
-function getDomainInitial(domain: string): string {
-    return domain.replace(/^www\./, "").charAt(0).toUpperCase();
+function NavLabel({ children, collapsed }: { children: React.ReactNode; collapsed: boolean }) {
+  if (collapsed) return <div className="h-3" />;
+  return <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground/45">{children}</p>;
 }
 
-function SitePickerDropdown({ sites, activeSiteId }: { sites: Site[]; activeSiteId: string | null }) {
-    const router = useRouter();
-    const pathname = usePathname();
-    const [open, setOpen] = useState(false);
-    const activeSite = sites.find(s => s.id === activeSiteId) ?? sites[0];
-
-    if (sites.length === 0) return null;
-
-    const switchSite = (siteId: string) => {
-        setOpen(false);
-        const base = pathname.startsWith("/dashboard/sites/") ? "/dashboard" : pathname;
-        const contextPages = [
-            "/dashboard/keywords",
-            "/dashboard/audits",
-            "/dashboard/aeo",
-            "/dashboard/refresh",
-            "/dashboard/backlinks",
-            "/dashboard/competitors",
-            "/dashboard/serp-gap",
-            "/dashboard/campaign",
-            "/dashboard/experiments",
-            "/dashboard/operations",
-            "/dashboard/autopilot",
-            "/dashboard/content-decay",
-            "/dashboard/planner",
-            "/dashboard/indexing",
-            "/dashboard/healing",
-            "/dashboard/recommendations",
-        ];
-        const isContextPage = contextPages.some(p => base.startsWith(p));
-        router.push(isContextPage ? `${base}?siteId=${siteId}` : `/dashboard?siteId=${siteId}`);
-    };
-
-    return (
-        <div className="relative px-2 pb-3">
-            <button
-                onClick={() => setOpen(o => !o)}
-                aria-expanded={open}
-                aria-haspopup="listbox"
-                aria-label={`Site selector — ${activeSite?.domain ?? "none selected"}`}
-                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl border border-border bg-muted/40 text-sm text-left transition-all hover:bg-muted hover:border-border/60"
-            >
-                {/* Domain initial avatar */}
-                <div className="w-6 h-6 rounded-md bg-brand/15 border border-brand/20 flex items-center justify-center shrink-0">
-                    <span className="text-[10px] font-black text-brand leading-none">
-                        {activeSite ? getDomainInitial(activeSite.domain) : "—"}
-                    </span>
-                </div>
-
-                <span className="flex-1 min-w-0 truncate text-xs font-semibold text-foreground">
-                    {activeSite?.domain ?? "Select site"}
-                </span>
-
-                {/* Grade indicator */}
-                {activeSite?.grade && (
-                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${activeSite.grade === "A" || activeSite.grade === "B"
-                            ? "text-emerald-400 bg-emerald-500/10"
-                            : activeSite.grade === "C"
-                                ? "text-amber-400 bg-amber-500/10"
-                                : "text-rose-400 bg-rose-500/10"
-                        }`}>
-                        {activeSite.grade}
-                    </span>
-                )}
-
-                <ChevronDown
-                    className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-                    aria-hidden="true"
-                />
-            </button>
-
-            {open && (
-                <>
-                    <button
-                        aria-label="Close site selector"
-                        tabIndex={-1}
-                        className="fixed inset-0 z-10 cursor-default"
-                        onClick={() => setOpen(false)}
-                    />
-                    <div
-                        role="listbox"
-                        aria-label="Select a site"
-                        className="absolute left-0 right-0 mt-1 z-20 bg-popover border border-border rounded-xl shadow-2xl shadow-black/20 overflow-hidden"
-                    >
-                        {sites.map(site => (
-                            <button
-                                key={site.id}
-                                role="option"
-                                aria-selected={site.id === activeSiteId}
-                                onClick={() => switchSite(site.id)}
-                                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-colors hover:bg-accent ${site.id === activeSiteId ? "bg-accent/60" : ""
-                                    }`}
-                            >
-                                <div className="w-5 h-5 rounded-md bg-muted border border-border flex items-center justify-center shrink-0">
-                                    <span className="text-[9px] font-black text-muted-foreground leading-none">
-                                        {getDomainInitial(site.domain)}
-                                    </span>
-                                </div>
-                                <span className="truncate min-w-0 flex-1 text-xs font-medium">{site.domain}</span>
-                                {site.id === activeSiteId && (
-                                    <span className="ml-auto text-xs font-bold text-brand shrink-0">✓</span>
-                                )}
-                            </button>
-                        ))}
-                        <div className="border-t border-border px-3 py-2">
-                            <Link
-                                href="/dashboard/sites/new"
-                                onClick={() => setOpen(false)}
-                                className="text-xs text-muted-foreground hover:text-foreground transition-colors font-medium"
-                            >
-                                + Add new site
-                            </Link>
-                        </div>
-                    </div>
-                </>
-            )}
-        </div>
-    );
+function NavItem({ item, siteId, pathname, collapsed }: { item: { name: string; href: string; icon: React.ElementType; context: boolean }; siteId: string | null; pathname: string; collapsed: boolean }) {
+  const Icon = item.icon;
+  const href = item.context ? buildHref(item.href, siteId) : item.href;
+  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const disabled = item.context && !siteId;
+  return (
+    <Link href={disabled ? "#" : href} aria-disabled={disabled || undefined} tabIndex={disabled ? -1 : undefined} title={collapsed ? item.name : disabled ? `${item.name} — select a site first` : undefined} className={`group relative flex items-center gap-3 rounded-xl text-sm transition-all duration-150 ${collapsed ? "mx-auto h-10 w-10 justify-center" : "px-3 py-2.5"} ${active ? "bg-brand/10 font-semibold text-foreground" : disabled ? "cursor-not-allowed text-muted-foreground/30" : "font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"}`} onClick={(event) => disabled && event.preventDefault()}>
+      {active && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-brand" aria-hidden="true" />}
+      <Icon className={`h-4 w-4 shrink-0 ${active ? "text-brand" : "text-muted-foreground/70 group-hover:text-foreground"}`} aria-hidden="true" />
+      {!collapsed && <span className="min-w-0 flex-1 truncate">{item.name}</span>}
+      {disabled && !collapsed && <ChevronRight className="h-3 w-3 opacity-30" aria-hidden="true" />}
+    </Link>
+  );
 }
 
-function NavLink({
-    item,
-    href,
-    isActive,
-    missingContext,
-    indent = false,
-    isCollapsed = false,
-}: {
-    item: { name: string; icon: React.ElementType; contextSiteId: boolean; isBeta?: boolean };
-    href: string;
-    isActive: boolean;
-    missingContext: boolean;
-    indent?: boolean;
-    isCollapsed?: boolean;
-}) {
-    const Icon = item.icon;
-    const linkEl = (
-        <Link
-            href={href}
-            aria-disabled={missingContext ? true : undefined}
-            tabIndex={missingContext ? -1 : undefined}
-            aria-label={isCollapsed ? item.name : undefined}
-            className={`
-                group flex items-center gap-3 rounded-lg text-sm transition-all relative
-                ${isCollapsed ? "justify-center p-2 mx-auto w-10 h-10" : `px-3 py-2 ${indent ? "pl-4" : ""}`}
-                ${isActive
-                    ? "text-foreground font-semibold"
-                    : missingContext
-                        ? "text-muted-foreground/35 pointer-events-none select-none cursor-not-allowed"
-                        : "text-muted-foreground font-medium hover:bg-sidebar-accent hover:text-foreground"
-                }
-            `}
-            style={isActive ? { background: "rgba(16,185,129,0.09)" } : {}}
-        >
-            {/* Left active bar */}
-            {isActive && !isCollapsed && (
-                <span
-                    className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-r-full bg-brand"
-                    aria-hidden="true"
-                />
-            )}
-            {isActive && isCollapsed && (
-                <span
-                    className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full bg-brand"
-                    aria-hidden="true"
-                />
-            )}
-
-            {/* Icon */}
-            <Icon
-                className={`shrink-0 transition-colors ${isCollapsed ? "w-5 h-5" : "w-4 h-4"
-                    } ${isActive ? "text-brand" : "text-muted-foreground/70 group-hover:text-foreground"}`}
-                aria-hidden="true"
-            />
-
-            {/* Label — hidden when collapsed */}
-            {!isCollapsed && (
-                <span className="flex-1 min-w-0 truncate">{item.name}</span>
-            )}
-
-            {/* Missing context hint */}
-            {missingContext && !isCollapsed && (
-                <span className="ml-auto text-xs font-medium text-muted-foreground/40 shrink-0" aria-hidden="true">
-                    <ChevronRight className="w-3 h-3 opacity-40" />
-                </span>
-            )}
-            {missingContext && (
-                <span className="sr-only">(requires site selection)</span>
-            )}
-        </Link>
-    );
-
-    if (isCollapsed) {
-        return (
-            <TooltipProvider>
-                <Tooltip>
-                    <TooltipTrigger render={linkEl} />
-                    <TooltipContent side="right" className="text-xs">
-                        {missingContext ? `${item.name} — select a site first` : item.name}
-                    </TooltipContent>
-                </Tooltip>
-            </TooltipProvider>
-        );
-    }
-
-    return missingContext ? (
-        <TooltipProvider delay={200}>
-            <Tooltip>
-                <TooltipTrigger>{linkEl}</TooltipTrigger>
-                <TooltipContent side="right" className="text-xs">Select a site first</TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
-    ) : linkEl;
+function SitePicker({ sites, siteId }: { sites: Site[]; siteId: string | null }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const active = sites.find((site) => site.id === siteId) ?? sites[0];
+  if (!active) return null;
+  const switchSite = (nextSiteId: string) => {
+    setOpen(false);
+    const contextRoutes = ["/dashboard/recommendations", "/dashboard/audits", "/dashboard/aeo", "/dashboard/autopilot", "/dashboard/operations", ...MORE_ITEMS.filter((item) => item.context).map((item) => item.href)];
+    const isContextRoute = contextRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+    router.push(isContextRoute ? `${pathname}?siteId=${nextSiteId}` : `/dashboard?siteId=${nextSiteId}`);
+  };
+  return (
+    <div className="relative px-2 pb-2">
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-haspopup="listbox" className="flex w-full items-center gap-2.5 rounded-xl border border-border bg-muted/30 px-2.5 py-2.5 text-left transition-colors hover:bg-muted/60">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-xs font-bold text-brand">{domainInitial(active.domain)}</span>
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">{active.domain}</span>
+        {active.grade && <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">{active.grade}</span>}
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && <><button type="button" aria-label="Close site selector" className="fixed inset-0 z-10 cursor-default" onClick={() => setOpen(false)} /><div role="listbox" aria-label="Select site" className="absolute left-2 right-2 top-full z-20 overflow-hidden rounded-xl border border-border bg-popover shadow-2xl">
+        {sites.map((site) => <button key={site.id} type="button" role="option" aria-selected={site.id === siteId} onClick={() => switchSite(site.id)} className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-xs transition-colors hover:bg-accent ${site.id === siteId ? "bg-accent/60" : ""}`}><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-[10px] font-bold text-muted-foreground">{domainInitial(site.domain)}</span><span className="min-w-0 flex-1 truncate font-medium">{site.domain}</span>{site.id === siteId && <span className="font-bold text-brand">✓</span>}</button>)}
+        <div className="border-t border-border px-3 py-2"><Link href="/dashboard/sites/new" onClick={() => setOpen(false)} className="text-xs font-medium text-muted-foreground hover:text-foreground">+ Add new site</Link></div>
+      </div></>}
+    </div>
+  );
 }
 
-function NavSectionLabel({ children }: { children: React.ReactNode }) {
-    return (
-        <p className="px-3 pt-4 pb-1 text-xs font-semibold text-muted-foreground/50 uppercase tracking-widest select-none">
-            {children}
-        </p>
-    );
+function SidebarNavInner({ defaultSiteId, sites, isSuperAdmin, isCollapsed, onToggleCollapse }: { defaultSiteId?: string | null; sites: Site[]; isSuperAdmin: boolean; isCollapsed: boolean; onToggleCollapse?: () => void }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const siteId = extractSiteId(pathname) || searchParams.get("siteId") || defaultSiteId || null;
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreActive = MORE_ITEMS.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+  return (
+    <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="Dashboard navigation">
+      {isCollapsed && onToggleCollapse && <button type="button" onClick={onToggleCollapse} aria-label="Expand sidebar" title="Expand sidebar" className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"><PanelLeftOpen className="h-4 w-4" /></button>}
+      {!isCollapsed && sites.length > 0 && <SitePicker sites={sites} siteId={siteId} />}
+      <NavLabel collapsed={isCollapsed}>Overview</NavLabel>
+      <NavItem item={{ name: "Mission Control", href: "/dashboard", icon: LayoutDashboard, context: false }} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />
+      <NavLabel collapsed={isCollapsed}>Discover</NavLabel>
+      {DISCOVER_ITEMS.map((item) => <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />)}
+      <NavLabel collapsed={isCollapsed}>Improve</NavLabel>
+      {IMPROVE_ITEMS.map((item) => <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />)}
+      <NavLabel collapsed={isCollapsed}>Monitor</NavLabel>
+      {MONITOR_ITEMS.map((item) => <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />)}
+      <div className={isCollapsed ? "mt-2" : "mt-3"}>
+        <button type="button" onClick={() => setMoreOpen((value) => !value)} aria-expanded={moreOpen} className={`relative flex w-full items-center gap-3 rounded-xl text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground ${isCollapsed ? "mx-auto h-10 w-10 justify-center" : "px-3 py-2.5"}`} title={isCollapsed ? "More tools" : undefined}>
+          <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${moreOpen ? "rotate-180" : ""}`} />
+          {!isCollapsed && <span className="text-[10px] font-bold uppercase tracking-[0.16em]">More tools</span>}
+          {moreActive && <span className={`${isCollapsed ? "absolute right-1 top-1" : "ml-auto"} h-1.5 w-1.5 rounded-full bg-brand`} />}
+        </button>
+        {moreOpen && <div className="mt-1 space-y-0.5">{MORE_ITEMS.map((item) => <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />)}</div>}
+      </div>
+      <NavLabel collapsed={isCollapsed}>Account</NavLabel>
+      {ACCOUNT_ITEMS.map((item) => { const Icon = item.icon; const active = pathname === item.href || pathname.startsWith(`${item.href}/`); return <Link key={item.name} href={item.href} title={isCollapsed ? item.name : undefined} className={`group relative flex items-center gap-3 rounded-xl text-sm transition-colors ${isCollapsed ? "mx-auto h-10 w-10 justify-center" : "px-3 py-2.5"} ${active ? "bg-brand/10 font-semibold text-foreground" : "font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"}`}>{active && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-brand" />}<Icon className={`h-4 w-4 shrink-0 ${active ? "text-brand" : "text-muted-foreground/70 group-hover:text-foreground"}`} />{!isCollapsed && <span className="truncate">{item.name}</span>}</Link>; })}
+      {isSuperAdmin && !isCollapsed && <div className="mt-3 border-t border-border pt-3"><NavLabel collapsed={false}>Admin</NavLabel><Link href="/admin" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-violet-400 hover:bg-violet-500/10"><Shield className="h-4 w-4" /><span>Admin Dashboard</span></Link></div>}
+    </nav>
+  );
 }
 
-function SidebarNavInner({
-    defaultSiteId,
-    sites = [],
-    isSuperAdmin = false,
-    isCollapsed = false,
-    onToggleCollapse,
-}: {
-    defaultSiteId?: string | null;
-    sites?: Site[];
-    isSuperAdmin?: boolean;
-    isCollapsed?: boolean;
-    onToggleCollapse?: () => void;
-}) {
-    const pathname = usePathname();
-    const searchParams = useSearchParams();
-
-    const siteId =
-        extractSiteId(pathname) ||
-        searchParams.get("siteId") ||
-        defaultSiteId ||
-        null;
-
-    const isSecondaryActive = SECONDARY_ITEMS.some(item =>
-        pathname === item.href || pathname.startsWith(item.href + "/")
-    );
-    const [moreOpen, setMoreOpen] = useState(isSecondaryActive);
-
-    return (
-        <nav className="flex-1 px-2 py-3 overflow-y-auto space-y-0.5" aria-label="Dashboard navigation">
-
-            {/* Expand button — only in collapsed mode */}
-            {isCollapsed && onToggleCollapse && (
-                <div className="flex justify-center pb-2">
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger
-                                onClick={onToggleCollapse}
-                                aria-label="Expand sidebar"
-                                className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
-                            >
-                                <PanelLeftOpen className="w-4 h-4" aria-hidden="true" />
-                            </TooltipTrigger>
-                            <TooltipContent side="right" className="text-xs">Expand sidebar</TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                </div>
-            )}
-
-            {/* Site picker — hide entirely when collapsed */}
-            {!isCollapsed && sites.length > 0 && (
-                <SitePickerDropdown sites={sites} activeSiteId={siteId} />
-            )}
-
-            {!isCollapsed && <NavSectionLabel>Overview</NavSectionLabel>}
-            <div className={isCollapsed ? "flex flex-col items-center" : ""}>
-                {OVERVIEW_ITEMS.map((item) => {
-                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
-                    const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
-                    return (
-                        <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={false} isCollapsed={isCollapsed} />
-                    );
-                })}
-            </div>
-
-            {!isCollapsed && <NavSectionLabel>Research</NavSectionLabel>}
-            <div className={isCollapsed ? "flex flex-col items-center" : ""}>
-                {OBSERVE_ITEMS.map((item) => {
-                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
-                    const isActive = item.href === "/dashboard/aeo"
-                        ? (pathname === "/dashboard/aeo" || /\/dashboard\/sites\/[^/]+\/aeo/.test(pathname))
-                        : item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
-                    const missingContext = item.contextSiteId && !siteId;
-                    return (
-                        <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed={isCollapsed} />
-                    );
-                })}
-            </div>
-
-            {!isCollapsed && <NavSectionLabel>Optimize</NavSectionLabel>}
-            <div className={isCollapsed ? "flex flex-col items-center" : ""}>
-                {ACT_ITEMS.map((item) => {
-                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
-                    const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
-                    const missingContext = item.contextSiteId && !siteId;
-
-                    return (
-                        <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed={isCollapsed} />
-                    );
-
-                    return (
-                        <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed={isCollapsed} />
-                    );
-                })}
-            </div>
-
-            {!isCollapsed && <NavSectionLabel>Automation</NavSectionLabel>}
-            <div className={isCollapsed ? "flex flex-col items-center" : ""}>
-                {PROVE_ITEMS.map((item) => {
-                    const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
-                    const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
-                    const missingContext = item.contextSiteId && !siteId;
-                    return (
-                        <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed={isCollapsed} />
-                    );
-                })}
-            </div>
-
-            {/* ── MORE (collapsible) ───────────────────────────── */}
-            {isCollapsed ? (
-                <div className="pt-1 flex flex-col items-center space-y-0.5">
-                    {moreOpen && [...MORE_NAV_ITEMS, ...SECONDARY_ITEMS].map((item) => {
-                        const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
-                        const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                        const missingContext = item.contextSiteId && !siteId;
-                        return (
-                            <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} isCollapsed />
-                        );
-                    })}
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger
-                                onClick={() => setMoreOpen(o => !o)}
-                                aria-expanded={moreOpen}
-                                className="p-2 rounded-lg text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors"
-                            >
-                                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${moreOpen ? "rotate-180" : ""}`} aria-hidden="true" />
-                            </TooltipTrigger>
-                            <TooltipContent side="right" className="text-xs">{moreOpen ? "Hide more" : "More"}</TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                </div>
-            ) : (
-                <div className="pt-1">
-                    <button
-                        onClick={() => setMoreOpen(o => !o)}
-                        aria-expanded={moreOpen}
-                        aria-controls="more-tools-list"
-                        className="w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium text-muted-foreground/60 hover:bg-sidebar-accent hover:text-foreground transition-all"
-                    >
-                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${moreOpen ? "rotate-180" : ""}`} aria-hidden="true" />
-                        <span className="text-xs font-semibold tracking-wide uppercase">More</span>
-                        {isSecondaryActive && (
-                            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-brand shrink-0" aria-hidden="true" />
-                        )}
-                    </button>
-
-                    {moreOpen && (
-                        <div id="more-tools-list" className="space-y-0.5 mt-0.5">
-                            {MORE_NAV_ITEMS.map((item) => {
-                                const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
-                                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                                return (
-                                    <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={false} />
-                                );
-                            })}
-                            {(["strategy", "content", "technical"] as const).map(group => {
-                                const groupItems = SECONDARY_ITEMS.filter(i => i.group === group);
-                                const groupLabel = group === "strategy" ? "Strategy" : group === "content" ? "Content" : "Technical";
-                                return (
-                                    <div key={group}>
-                                        <p className="px-3 pt-3 pb-0.5 text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest select-none">{groupLabel}</p>
-                                        {groupItems.map((item) => {
-                                            const href = item.contextSiteId ? buildHref(item.href, siteId) : item.href;
-                                            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                                            const missingContext = item.contextSiteId && !siteId;
-                                            return (
-                                                <NavLink key={item.name} item={item} href={href} isActive={isActive} missingContext={!!missingContext} />
-                                            );
-                                        })}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* ── Account ──────────────────────────────────────── */}
-            {!isCollapsed && (
-                <div className="pt-1">
-                    <NavSectionLabel>Account</NavSectionLabel>
-                    <div className="space-y-0.5">
-                        {ACCOUNT_ITEMS.map((item) => {
-                            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                            return (
-                                <NavLink key={item.name} item={item} href={item.href} isActive={isActive} missingContext={false} />
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-            {isCollapsed && (
-                <div className="pt-1 flex flex-col items-center space-y-0.5">
-                    {ACCOUNT_ITEMS.map((item) => {
-                        const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                        return (
-                            <NavLink key={item.name} item={item} href={item.href} isActive={isActive} missingContext={false} isCollapsed />
-                        );
-                    })}
-                </div>
-            )}
-
-            {/* Super-admin section */}
-            {isSuperAdmin && !isCollapsed && (
-                <div className="pt-1">
-                    <NavSectionLabel>Admin</NavSectionLabel>
-                    <Link
-                        href="/admin"
-                        className={`flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-all relative ${pathname.startsWith("/admin")
-                                ? "bg-violet-500/10 text-violet-300"
-                                : "text-violet-400/60 hover:bg-violet-500/10 hover:text-violet-300"
-                            }`}
-                    >
-                        {pathname.startsWith("/admin") && (
-                            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-r-full bg-violet-500" />
-                        )}
-                        <Shield className="w-4 h-4 shrink-0 text-violet-400" aria-hidden="true" />
-                        <span>Admin Dashboard</span>
-                    </Link>
-                </div>
-            )}
-        </nav>
-    );
-}
-
-export function SidebarNav({
-    defaultSiteId,
-    sites = [],
-    isSuperAdmin = false,
-    isCollapsed = false,
-    onToggleCollapse,
-}: {
-    defaultSiteId?: string | null;
-    sites?: Site[];
-    isSuperAdmin?: boolean;
-    isCollapsed?: boolean;
-    onToggleCollapse?: () => void;
-}) {
-    return (
-        <Suspense fallback={<nav className="flex-1 px-2 py-4 space-y-1">
-            {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-9 rounded-lg skeleton" />
-            ))}
-        </nav>}>
-            <SidebarNavInner
-                defaultSiteId={defaultSiteId}
-                sites={sites}
-                isSuperAdmin={isSuperAdmin}
-                isCollapsed={isCollapsed}
-                onToggleCollapse={onToggleCollapse}
-            />
-        </Suspense>
-    );
+export function SidebarNav({ defaultSiteId, sites = [], isSuperAdmin = false, isCollapsed = false, onToggleCollapse }: { defaultSiteId?: string | null; sites?: Site[]; isSuperAdmin?: boolean; isCollapsed?: boolean; onToggleCollapse?: () => void }) {
+  return <Suspense fallback={<nav className="flex-1 space-y-2 px-2 py-4">{Array.from({ length: 7 }).map((_, index) => <div key={index} className="h-10 rounded-xl skeleton" />)}</nav>}><SidebarNavInner defaultSiteId={defaultSiteId} sites={sites} isSuperAdmin={isSuperAdmin} isCollapsed={isCollapsed} onToggleCollapse={onToggleCollapse} /></Suspense>;
 }
