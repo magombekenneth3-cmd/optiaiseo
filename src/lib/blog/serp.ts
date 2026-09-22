@@ -486,6 +486,15 @@ export async function getSerpContextForKeyword(
     ctx += "\n";
   });
 
+  // Structured opportunity intelligence
+  if (gapAnalysis.analysis.opportunities.length > 0) {
+    ctx += "PRIORITIZED SEO OPPORTUNITIES:\n";
+    for (const opportunity of gapAnalysis.analysis.opportunities.slice(0, 12)) {
+      ctx += `- [${opportunity.score}/100] ${opportunity.topic} — ${opportunity.reason}\n`;
+    }
+    ctx += "\n";
+  }
+
   // Content gap analysis
   if (gaps.commonTopics.length > 0 || gaps.gapTopics.length > 0) {
     ctx += "CONTENT GAP ANALYSIS:\n";
