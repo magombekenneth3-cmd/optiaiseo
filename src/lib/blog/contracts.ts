@@ -9,7 +9,7 @@ import { z } from "zod";
 
 const NonEmptyString = z.string().trim().min(1);
 const ShortString = NonEmptyString.max(500);
-const StringList = z.array(NonEmptyString).max(30);
+const StringList = z.array(NonEmptyString).max(30);\n\nexport const SeoOpportunitySchema = z.object({\n    type: z.enum(["topic_gap", "question_gap", "serp_gap"]),\n    topic: ShortString,\n    score: z.number().min(0).max(100),\n    coverage: z.number().min(0).max(100),\n    competitorCount: z.number().int().nonnegative(),\n    competitorTotal: z.number().int().nonnegative(),\n    rankWeightedCoverage: z.number().min(0).max(100),\n    intentRelevance: z.number().min(0).max(100),\n    evidence: z.array(NonEmptyString).max(10),\n    reason: z.string().trim().max(1000),\n});
 
 export const SourceTypeSchema = z.enum([
     "official",
