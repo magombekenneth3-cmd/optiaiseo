@@ -41,7 +41,7 @@ export interface ContentScoreResult {
         headings: { score: number; covered: string[]; missing: string[] };
         readability: { score: number; gradeLevel: number };
     };
-    competitors: { url: string; wordCount: number; score: number }[];
+    competitors: { url: string; wordCount: number; score: number; title?: string; text?: string }[];
     topOpportunities: string[];
     entities: Entity[];
     keywordDensity: Record<string, number>;
@@ -211,7 +211,7 @@ async function getSerpBenchmark(keyword: string) {
         p25Images,
         p75Images,
          
-        competitors: competitorData.map(c => ({ url: c.url, wordCount: c.wordCount }))
+        competitors: competitorData.map(c => ({ url: c.url, wordCount: c.wordCount, title: c.url, text: c.text }))
     };
 
     try {
@@ -554,10 +554,9 @@ export const scoreContent = async (
     }
 
     // FIX #12: TF-IDF semantic coverage
-    const competitorTexts = benchmark.competitors.map((_c: { url: string; wordCount: number }) => {
-        // We only have wordCount here — reuse cached allTexts if available via entities
-        return benchmark.top20Entities.map((e: Entity) => e.name).join(' ');
-    });
+    const competitorTexts = benchmark.competitors
+        .map((competitor: { url: string; wordCount: number; text?: string }) => competitor.text || "")
+        .filter((text: string) => text.length >= 300);
     const tfIdf = computeTfIdf(textOnly, competitorTexts.length > 0 ? competitorTexts : [textOnly]);
 
     // FIX #13: Sentence-level AI detection

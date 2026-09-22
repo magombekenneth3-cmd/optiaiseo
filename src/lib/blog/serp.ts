@@ -2,6 +2,8 @@ import { logger } from "@/lib/logger";
 import * as cheerio from "cheerio";
 
 
+import { computeContentGapsFromOpportunities, type SeoOpportunityAnalysis } from "./seo-opportunity";
+
 export interface SerpResult {
   title: string;
   link: string;
@@ -445,7 +447,7 @@ export async function getSerpContextForKeyword(
     });
   }
 
-  const gaps = computeContentGaps(organic);
+  const gapAnalysis = computeContentGapsFromOpportunities(keyword, organic, peopleAlsoAsk);\n  const gaps = { commonTopics: gapAnalysis.commonTopics, gapTopics: gapAnalysis.gapTopics };
 
 
   let ctx = `LIVE SEARCH CONTEXT FOR "${keyword}"\n`;
@@ -483,6 +485,15 @@ export async function getSerpContextForKeyword(
     }
     ctx += "\n";
   });
+
+  // Structured opportunity intelligence
+  if (gapAnalysis.analysis.opportunities.length > 0) {
+    ctx += "PRIORITIZED SEO OPPORTUNITIES:\n";
+    for (const opportunity of gapAnalysis.analysis.opportunities.slice(0, 12)) {
+      ctx += `- [${opportunity.score}/100] ${opportunity.topic} — ${opportunity.reason}\n`;
+    }
+    ctx += "\n";
+  }
 
   // Content gap analysis
   if (gaps.commonTopics.length > 0 || gaps.gapTopics.length > 0) {
