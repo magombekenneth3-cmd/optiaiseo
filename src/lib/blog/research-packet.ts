@@ -176,7 +176,7 @@ export async function buildResearchPacket(params: {
                 question: truncate(item.question, 500),
                 ...(item.answer ? { answer: truncate(item.answer, 2_000) } : {}),
             })),
-            format: serpContext ? classifySerpFormat(serpContext.results).format : null,
+            format: serpContext ? classifySerpFormat(serpContext.results).format : null,\n            tableStakes: serpContext?.opportunityAnalysis?.tableStakes ?? [],\n            opportunities: serpContext?.opportunityAnalysis?.opportunities ?? [],\n            unansweredQuestions: serpContext?.opportunityAnalysis?.unansweredQuestions ?? [],
         },
         sources,
         entities: compact(brain.entities, 20).map(entity => ({
@@ -190,7 +190,7 @@ export async function buildResearchPacket(params: {
         ...(brain.informationGainDirective ? { informationGain: brain.informationGainDirective } : {}),
         contentGaps: compact(brain.contentGaps),
         misconceptions: compact(brain.commonMisconceptions),
-        contrarianAngles: compact(brain.contrarianAngles),
+        contrarianAngles: compact(brain.contrarianAngles),\n        ...(serpContext?.opportunityAnalysis ? { opportunityAnalysis: serpContext.opportunityAnalysis } : {}),
     });
 }
 
