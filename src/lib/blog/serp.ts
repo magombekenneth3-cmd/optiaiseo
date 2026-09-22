@@ -2,6 +2,8 @@ import { logger } from "@/lib/logger";
 import * as cheerio from "cheerio";
 
 
+import { computeContentGapsFromOpportunities, type SeoOpportunityAnalysis } from "./seo-opportunity";
+
 export interface SerpResult {
   title: string;
   link: string;
@@ -445,7 +447,7 @@ export async function getSerpContextForKeyword(
     });
   }
 
-  const gaps = computeContentGaps(organic);
+  const gapAnalysis = computeContentGapsFromOpportunities(keyword, organic, peopleAlsoAsk);\n  const gaps = { commonTopics: gapAnalysis.commonTopics, gapTopics: gapAnalysis.gapTopics };
 
 
   let ctx = `LIVE SEARCH CONTEXT FOR "${keyword}"\n`;
