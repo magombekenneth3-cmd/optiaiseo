@@ -381,7 +381,7 @@ export async function reconcileEffects(
               });
               await appendAuditEvent(
                 effect.operationId,
-                "EFFECT_VERIFICATION_UNKNOWN",
+                "STALE",
                 "system:reconciler",
                 { effectId: effect.id, effectType: effect.effectType, platform: effect.platform, reason: result.reason }
               );

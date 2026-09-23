@@ -25,9 +25,9 @@ function packet(overrides: Partial<EvidencePacket> = {}): EvidencePacket {
         ],
         sources: [source],
         claimSourceMap: [
-            { claim: "Google changed its pricing plans in 2026.", sourceIds: ["source-1"], matchMethod: "explicit_citation" },
-            { claim: "This claim has no source.", sourceIds: [], matchMethod: "unsupported" },
-            { claim: "A fabricated claim.", sourceIds: ["source-1"], matchMethod: "explicit_citation" },
+            { claimId: "claim-1", claim: "Google changed its pricing plans in 2026.", sourceIds: ["source-1"], matchMethod: "explicit_citation" },
+            { claimId: "claim-2", claim: "This claim has no source.", sourceIds: [], matchMethod: "unsupported" },
+            { claimId: "claim-3", claim: "A fabricated claim.", sourceIds: ["source-1"], matchMethod: "explicit_citation" },
         ],
         examples: [],
         caseStudies: [],
@@ -60,7 +60,7 @@ describe("claim ledger governance", () => {
     it("rejects a cited claim when the source does not substantively support it", () => {
         const sourcePacket = packet();
         sourcePacket.claims[0] = { text: "Apple opened a new store in Nairobi.", sourceIds: ["source-1"], type: "fact" };
-        sourcePacket.claimSourceMap[0] = { claim: "Apple opened a new store in Nairobi.", sourceIds: ["source-1"], matchMethod: "explicit_citation" };
+        sourcePacket.claimSourceMap[0] = { claimId: "claim-1", claim: "Apple opened a new store in Nairobi.", sourceIds: ["source-1"], matchMethod: "explicit_citation" };
         const ledger = buildClaimLedger(sourcePacket);
         expect(ledger[0].verificationStatus).toBe("unsupported");
         expect(ledger[0].action).toBe("REMOVE");
