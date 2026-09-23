@@ -3,15 +3,9 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import {
   ArrowRight,
-  ArrowUpRight,
-  Shield,
-  Sparkles,
   ChevronRight,
   CheckCircle2,
-  AlertTriangle,
-  Activity,
   TrendingUp,
-  Link2,
 } from "lucide-react";
 import { extractAuditMetrics } from "@/lib/audit/helpers";
 import { getCachedDashboardMetricsForUser } from "@/lib/cache/dashboard";
@@ -20,14 +14,11 @@ import { OnboardingProgress } from "@/components/dashboard/OnboardingProgress";
 import { MetricTrendChart } from "@/components/dashboard/MetricTrendChart";
 import { getMetricTrend } from "@/lib/metrics/metric-snapshot";
 import { ScoreDropAlert } from "@/components/dashboard/ScoreDropAlert";
-import { NextBestActionCard } from "@/components/dashboard/NextBestActionCard";
-import { OAuthConnectButton } from "@/components/auth/OAuthConnectButton";
 import {
   WinCelebrationToast,
   ReAuditNudge,
 } from "@/components/dashboard/DashboardClientWidgets";
 import { DashboardHeroHeader } from "@/components/dashboard/DashboardHeroHeader";
-import { PriorityActions } from "@/components/dashboard/PriorityActions";
 import { AutonomousActivity } from "@/components/dashboard/AutonomousActivity";
 import { DashboardAttentionQueue } from "@/components/dashboard/DashboardAttentionQueue";
 import { DashboardRemediationPipeline } from "@/components/dashboard/DashboardRemediationPipeline";
@@ -47,7 +38,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const requestedSiteId = params.siteId && availableSiteIds.includes(params.siteId) ? params.siteId : null;
   const siteIds = requestedSiteId ? [requestedSiteId] : availableSiteIds;
 
-  const { audits, blogsThisWeek, pendingPrsCount, pendingBlogs } =
+  const { audits, pendingPrsCount } =
     await getCachedDashboardMetricsForUser(user.id, siteIds);
 
   const latestAeoReport = await prisma.aeoReport.findFirst({
@@ -82,9 +73,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       };
     });
 
-  const avgSeoScore =
-    auditsWithSeo > 0 ? Math.round(totalSeoScore / auditsWithSeo) : 0;
-
   const latestScore = chartData.length > 0 ? chartData[chartData.length - 1].score : null;
   const previousScore = chartData.length > 1 ? chartData[chartData.length - 2].score : null;
   const scoreDelta = (latestScore !== null && previousScore !== null) ? (latestScore - previousScore) : null;
@@ -97,13 +85,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     ? "Welcome to OptiAISEO — let's connect your first site 👋"
     : isNewUser && hasSites
       ? "Site connected — your audit is queued ✓"
-      : "All sites healthy";
+      : "Monitoring your SEO and AI search visibility";
   if (!isNewUser && pendingPrsCount > 0) {
     statusHeadline = `${pendingPrsCount} issue${pendingPrsCount !== 1 ? 's' : ''} need attention`;
   } else if (scoreDelta !== null && scoreDelta !== 0) {
     statusHeadline = `Your score ${scoreDelta > 0 ? 'improved' : 'dropped'} ${Math.abs(scoreDelta)} points since last audit`;
   } else if (!isNewUser && audits.length > 0) {
-    statusHeadline = `All sites healthy — last audit ${new Date(audits[0].runTimestamp).toLocaleDateString()}`;
+    statusHeadline = `Latest audit completed · ${new Date(audits[0].runTimestamp).toLocaleDateString()}`;
   }
 
   const startOfMonth = new Date();
@@ -128,18 +116,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       return fail?.label ?? fail?.title ?? null;
     })()
     : null;
-
-  const actionState = pendingPrsCount > 0
-    ? {
-      label: `${pendingPrsCount} fix${pendingPrsCount === 1 ? "" : "es"} awaiting review`,
-      detail: "A proposed change already exists. Review it before starting another fix.",
-      tone: "border-amber-500/25 bg-amber-500/10 text-amber-300",
-    }
-    : {
-      label: "Ready to act",
-      detail: "Based on your latest completed audit and current visibility signals.",
-      tone: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
-    };
 
   const onboardingSteps = [
     { id: "site", label: "Connect your domain", href: "/dashboard/sites/new", done: hasSites },
@@ -192,67 +168,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const primarySiteDomain = primarySiteData?.domain ?? null;
   const primarySiteHasGithub = !!primarySiteData?.githubRepoUrl;
 
-  const [hasTrackedKeywords, hasBlogPosts, hasTeamMember] = await Promise.all([
-    primarySiteId
-      ? prisma.trackedKeyword.count({ where: { siteId: primarySiteId } }).then((n) => n > 0).catch(() => false)
-      : Promise.resolve(false),
-    siteIds.length > 0
-      ? prisma.blog.count({ where: { siteId: { in: siteIds } } }).then((n) => n > 0).catch(() => false)
-      : Promise.resolve(false),
-    prisma.teamMember.count({ where: { ownerId: user.id } }).then((n) => n > 0).catch(() => false),
-  ]);
-
   const [
-    creditHistoryThisMonth,
     aiCitationsThisMonth,
     prsCreatedThisMonth,
     metricSnapshots,
   ] = await Promise.all([
-    prisma.creditHistory.findMany({
-      where: { userId: user.id, createdAt: { gte: startOfMonth } },
-      select: { action: true, cost: true },
-    }).catch(() => [] as { action: string; cost: number }[]),
     primarySiteId
-      ? prisma.aeoEvent.count({
-        where: { siteId: primarySiteId, eventType: "CITED", createdAt: { gte: startOfMonth } },
-      }).catch(() => 0)
+      ? prisma.aeoEvent.count({ where: { siteId: primarySiteId, eventType: "CITED", createdAt: { gte: startOfMonth } } }).catch(() => 0)
       : Promise.resolve(0),
     primarySiteId
-      ? prisma.selfHealingLog.count({
-        where: {
-          siteId: primarySiteId,
-          createdAt: { gte: startOfMonth },
-        },
-      }).catch(() => 0)
+      ? prisma.selfHealingLog.count({ where: { siteId: primarySiteId, createdAt: { gte: startOfMonth } } }).catch(() => 0)
       : Promise.resolve(0),
     primarySiteId
-      ? prisma.metricSnapshot.findMany({
-        where: { siteId: primarySiteId },
-        orderBy: { capturedAt: "desc" },
-        take: 2,
-        select: { organicTraffic: true },
-      }).catch(() => [])
+      ? prisma.metricSnapshot.findMany({ where: { siteId: primarySiteId }, orderBy: { capturedAt: "desc" }, take: 2, select: { organicTraffic: true } }).catch(() => [])
       : Promise.resolve([]),
   ]);
-
-  // Derive per-action counts from credit history
-  const auditCreditsUsed = creditHistoryThisMonth.filter((h) => h.action.includes("audit")).length;
-  const blogCreditsUsed = creditHistoryThisMonth.filter((h) => h.action.includes("blog")).length;
-  const aeoCreditsUsed = creditHistoryThisMonth.filter((h) => h.action.includes("aeo")).length;
-  const creditsUsedThisMonth = creditHistoryThisMonth.reduce((sum, h) => sum + h.cost, 0);
-
-  // Organic traffic delta (latest - previous snapshot)
-  const organicTrafficDelta =
-    metricSnapshots.length >= 2 &&
-      metricSnapshots[0].organicTraffic !== null &&
-      metricSnapshots[1].organicTraffic !== null
-      ? metricSnapshots[0].organicTraffic - metricSnapshots[1].organicTraffic
-      : null;
-
-  // Estimated clicks gained — use organicTraffic delta as proxy if available
-  const clicksGained = organicTrafficDelta !== null && organicTrafficDelta > 0
-    ? organicTrafficDelta
-    : null;
 
   // ── Computed values for redesigned layout ──────────────────────────────────
   const organicClicks = metricSnapshots.length > 0 && metricSnapshots[0].organicTraffic !== null
@@ -263,9 +193,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     : null;
   const rankMovement = rankWin ? rankWin.delta : null;
   const latestIssueCount = chartData.length > 0 ? chartData[chartData.length - 1].issues ?? 0 : 0;
-  const prevAuditDateStr = audits.length > 1
-    ? "vs " + new Date(audits[1].runTimestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-    : "vs last";
   function formatCompact(n: number): string {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
     if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
