@@ -645,7 +645,7 @@ export async function generateBlog(
                 await refundCreditsIdempotent(
                     user.id,
                     10,
-                    `refund:dispatch:${savedBlog.id}`,
+                    `refund:blog_gen:${savedBlog?.id ?? blog?.id}`,
                     "Refund: Failed Blog Dispatch"
                 );
             } catch (refundErr) {
@@ -766,7 +766,7 @@ export async function generateAttackBlog(
                 await refundCreditsIdempotent(
                     user.id,
                     10,
-                    `refund:dispatch:${blog.id}`,
+                    `refund:blog_gen:${savedBlog?.id ?? blog?.id}`,
                     "Refund: Failed Blog Dispatch"
                 );
             } catch (refundErr) {
