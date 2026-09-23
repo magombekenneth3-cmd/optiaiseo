@@ -69,7 +69,7 @@ function confidence(type: SourceType, evidence: string): number {
 
 export function sourceFromSerpResult(result: SerpResult, id: string, retrievedAt = new Date().toISOString()): SourceEvidence | null {
     if (!isUrl(result.link) || !result.title.trim() || !result.snippet.trim()) return null;
-    const evidence = truncate(result.snippet || result.scrapedContent || "", 3_500);
+    const evidence = truncate(result.scrapedContent || result.snippet || "", 3_500);
     const type = sourceType(result.link);
     const candidate = {
         id,
