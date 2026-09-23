@@ -201,10 +201,6 @@ Return ONLY the HTML starting with <div id="blog-interactive-widget">`,
     }
 }
 
-function escapeJsonLd(value: string): string {
-    return JSON.stringify(value).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026");
-}
-
 function extractFaqsForSchema(content: string): { question: string; answer: string }[] {
     const items: { question: string; answer: string }[] = [];
     const pattern = /<h3[^>]*>([\s\S]*?)<\/h3>\s*<p[^>]*>([\s\S]*?)<\/p>/gi;
@@ -315,17 +311,20 @@ export const generateBlogJob = inngest.createFunction(
                 siteId,
             });
 
-            // Always sweep GENERATING → FAILED, even when blogId is unknown.
-            // Without this, orphaned GENERATING rows can never be cleared by the UI.
             const effectiveBlogId = blogId;
-            if (!blogId) {
+            if (blogId) {
+                await prisma.blog
+                    .updateMany({ where: { id: blogId }, data: { status: "FAILED" } })
+                    .catch((e: unknown) =>
+                        logger.error("[Inngest/Blog] onFailure DB write failed", {
+                            blogId,
+                            error: e instanceof Error ? e.message : String(e),
+                        })
+                    );
+            } else {
                 logger.error("[Inngest/Blog] onFailure: missing blogId — refusing to infer a target blog", {
                     siteId,
                 });
-            }
-                }
-            } else {
-                logger.error("[Inngest/Blog] onFailure: no blogId or siteId — cannot auto-recover stuck blog. Manual DB sweep needed.");
             }
 
             // Persist the failure reason to Redis so the status API can surface it
