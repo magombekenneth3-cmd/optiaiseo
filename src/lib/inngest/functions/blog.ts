@@ -1,7 +1,155 @@
+import { logger } from "@/lib/logger";
+import { inngest } from "../client";
+import { NonRetriableError } from "inngest";
+import { prisma } from "@/lib/prisma";
+import {
+    generateEvergreenPost,
+    generateBlogFromCompetitorGap,
+    AuthorProfile,
+    type BlogPostDraft,
+} from "@/lib/blog";
+import { extractSiteContext } from "@/lib/blog/context";
+import { fetchGSCKeywords, findOpportunities, normaliseSiteUrl } from "@/lib/gsc";
+import { callGemini, callGeminiJson } from "@/lib/gemini/client";
+import { getFunnelForIntent, SearchIntent as FunnelIntent } from "@/lib/aeo/funnels";
+import { detectIntent, cleanDomainToDisplayName } from "@/lib/blog/prompt-context";
+import { gateCitationScore } from "@/lib/blog/ai-citation-template";
+import { AI_MODELS } from "@/lib/constants/ai-models";
+import { getSerpContextForKeyword, type SerpContext, type SerpFormatSignal } from "@/lib/blog/serp";
+
+import { getEffectiveTier } from "@/lib/stripe/guards";
+import { getPlan } from "@/lib/stripe/plans";
+
+function buildAuthorFromSite(site: {
+    id: string;
+    domain: string;
+    authorName?: string | null;
+    authorRole?: string | null;
+    authorBio?: string | null;
+    realExperience?: string | null;
+    realNumbers?: string | null;
+    localContext?: string | null;
+    user?: { name?: string | null } | null;
+}): AuthorProfile {
+    const name = site.authorName || site.user?.name;
+    if (!name) {
+        throw new NonRetriableError(
+            `[Blog] Site ${site.id} (${site.domain}) is missing an author name. ` +
+            "Set an author name in Site Settings → Author Profile before generating content."
+        );
+    }
+    return {
+        name,
+        role: site.authorRole || undefined,
+        bio: site.authorBio || undefined,
+        realExperience: site.realExperience || undefined,
+        realNumbers: site.realNumbers || undefined,
+        localContext: site.localContext || undefined,
+    };
+}
+
+async function runFactCheckValidation(content: string): Promise<{
+    qualityScore: number | null;
+    issues: string[];
+    suggestions: string[];
+    checkedChunks: number;
+    totalChunks: number;
+    coverage: number;
+    complete: boolean;
+}> {
+    const FACT_CHECK_CONTENT_CAP = 50_000;
+    const CHUNK_SIZE = 10_000;
+    const contentToCheck = content.slice(0, FACT_CHECK_CONTENT_CAP);
+    const chunks: string[] = [];
+    for (let i = 0; i < contentToCheck.length; i += CHUNK_SIZE) {
+        chunks.push(contentToCheck.slice(i, i + CHUNK_SIZE));
+    }
+
+    if (chunks.length === 0) {
+        return {
+            qualityScore: null,
+            issues: ["Fact-check coverage is 0% because the article has no content."],
+            suggestions: ["Regenerate the article before publishing."],
+            checkedChunks: 0,
+            totalChunks: 0,
+            coverage: 0,
+            complete: false,
+        };
+    }
+
+    const results = await Promise.all(
+        chunks.map((chunk, idx) =>
+            callGeminiJson<{ qualityScore: number; issues: string[]; suggestions: string[] }>(
+                `You are a fact-checking editor. Review this article excerpt (chunk ${idx + 1}/${chunks.length}) and:
+1. Identify vague claims with no supporting data
+2. Identify statistics that appear fabricated or unverifiable
+3. Identify precise case-study outcomes that lack a named source
+4. Suggest specific real statistics with named sources only when the supplied excerpt supports the need
+5. Return JSON: { "issues": [...strings], "suggestions": [...strings], "qualityScore": 0-100 }
+
+SCORING GUIDE:
+- Start at 100
+- Deduct 15 for each fabricated or unsourced statistic
+- Deduct 10 for each vague claim presented as fact
+- Deduct 15 for each precise unsupported case-study outcome
+- Deduct 5 for each banned filler phrase that survived
+- Do not invent sources or facts
+- Score below 60 = hold for review; below 40 = reject
+
+Only output valid JSON, nothing else.
+
+Article excerpt:
+${chunk}`,
+                { maxOutputTokens: 2048, temperature: 0.2, timeoutMs: 60000 }
+            ).catch((error: unknown): null => {
+                logger.warn(`[Blog/FactCheck] Chunk ${idx + 1} failed`, {
+                    error: error instanceof Error ? error.message : String(error),
+                });
+                return null;
+            })
+        )
+    );
+
+    const validResults = results.filter(
+        (r): r is { qualityScore: number; issues: string[]; suggestions: string[] } => r !== null
+    );
+    const checkedChunks = validResults.length;
+    const totalChunks = chunks.length;
+    const coverage = Math.round((checkedChunks / totalChunks) * 100);
+    const complete = contentToCheck.length === content.length && checkedChunks === totalChunks;
+    const allIssues = validResults.flatMap(r => r.issues ?? []);
+    const allSuggestions = validResults.flatMap(r => r.suggestions ?? []);
+
+    if (!complete) {
+        allIssues.unshift(`Fact-check coverage is incomplete at ${coverage}%. Automatic publication requires 100% coverage.`);
+    }
+
+    const qualityScore: number | null = complete && validResults.length > 0
+        ? Math.round(validResults.reduce((sum, r) => sum + Math.max(0, Math.min(100, r.qualityScore ?? 0)), 0) / validResults.length)
+        : null;
+
+    return {
+        qualityScore,
+        issues: [...new Set(allIssues)].slice(0, 50),
+        suggestions: [...new Set(allSuggestions)].slice(0, 50),
+        checkedChunks,
+        totalChunks,
+        coverage,
+        complete,
+    };
+}
+async function runSemanticEnrichmentCheck(
+    keyword: string,
+    content: string
+): Promise<{ missingEntities: string[]; enrichmentScore: number }> {
+    try {
+        const parsed = await callGeminiJson<{
+            expectedEntities: string[];
+            missingEntities: string[];
             enrichmentScore: number;
         }>(
-            `You are an SEO content strategist. Using the topic and available SERP context for "${keyword}", identify:
-1. The 12 most relevant entities, concepts, tools, and related terms for a strong article on this topic
+            `You are an SEO content strategist. For a top-ranking article on "${keyword}", identify:
+1. The 12 most important related entities, concepts, and LSI terms Google's NLP expects to find
 2. Which of those are absent or mentioned fewer than twice in the article below
 3. An enrichment score (0–100): 100 = all entities present, deduct 8 per missing high-importance entity
 
@@ -51,7 +199,6 @@ Return ONLY the HTML starting with <div id="blog-interactive-widget">`,
         return null;
     }
 }
-
 function extractFaqsForSchema(content: string): { question: string; answer: string }[] {
     const items: { question: string; answer: string }[] = [];
     const faqSection = content.match(/<h2[^>]*id=["']frequently-asked-questions["'][^>]*>[\s\S]*?<\/section>/i)?.[0] ?? "";
@@ -102,3 +249,1102 @@ async function generateSchemaMarkup(params: {
                 publisher: { "@type": "Organization", name: params.siteDomain },
             }),
             ...(faqItems.length > 0
+                ? [buildSchemaScript({
+                    "@context": "https://schema.org",
+                    "@type": "FAQPage",
+                    mainEntity: faqItems.map(item => ({
+                        "@type": "Question",
+                        name: item.question,
+                        acceptedAnswer: {
+                            "@type": "Answer",
+                            text: item.answer,
+                        },
+                    })),
+                })]
+                : []),
+            buildSchemaScript({
+                "@context": "https://schema.org",
+                "@type": "BreadcrumbList",
+                itemListElement: [
+                    { "@type": "ListItem", position: 1, name: params.siteDomain, item: siteUrl },
+                    { "@type": "ListItem", position: 2, name: params.title, item: articleUrl },
+                ],
+            }),
+        ];
+        return scripts.join("\n");
+    } catch (e: unknown) {
+        logger.warn("[Blog/Schema] Schema markup failed:", { error: e instanceof Error ? e.message : String(e) });
+        return null;
+    }
+}
+export const generateBlogJob = inngest.createFunction(
+    {
+        id: "generate-blog",
+        name: "Generate SEO Blog Post",
+        // Cap at 2 retries: 3 attempts × up to 90s (Claude) = ~270s max, well inside
+        // Railway's 5-min function timeout. More retries cause compounding hangs.
+        retries: 2,
+        // Idempotency: Inngest deduplicates events with the same blogId within its
+        // dedup window. Prevents double credit burns when users double-click or
+        // the server action fires the event more than once (e.g. after a 504 retry).
+        idempotency: "event.data.blogId",
+        concurrency: { limit: 5 },
+        rateLimit: {
+            limit: 10,
+            period: "1m",
+            key: "event.data.userId",
+        },
+        onFailure: async ({ event, error }) => {
+            // Inngest wraps the original event under event.data.event for onFailure.
+            // Defensive multi-path extraction so blogId is never silently lost.
+            const originalData =
+                (event.data?.event?.data as Record<string, unknown> | undefined) ??
+                (event.data as Record<string, unknown> | undefined) ??
+                {};
+
+            const blogId = originalData.blogId as string | undefined;
+            const siteId = originalData.siteId as string | undefined;
+            const userId = originalData.userId as string | undefined;
+
+            logger.error(`[Inngest/Blog] Job failed for site ${siteId ?? "unknown"}:`, {
+                error: error?.message || error,
+                blogId,
+                siteId,
+            });
+
+            // Always sweep GENERATING → FAILED, even when blogId is unknown.
+            // Without this, orphaned GENERATING rows can never be cleared by the UI.
+            const effectiveBlogId = blogId;
+            if (blogId) {
+                await prisma.blog
+                    .updateMany({ where: { id: blogId }, data: { status: "FAILED" } })
+                    .catch((e: unknown) =>
+                        logger.error("[Inngest/Blog] onFailure DB write failed", {
+                            blogId,
+                            error: e instanceof Error ? e.message : String(e),
+                        })
+                    );
+            } else {
+                logger.error("[Inngest/Blog] onFailure: missing blogId — refusing to infer a target blog", { siteId });
+            }
+            // Persist the failure reason to Redis so the status API can surface it
+            // to the generating page — users see the actual cause, not a generic error.
+            if (effectiveBlogId) {
+                const { redis: failRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
+                if (failRedis) {
+                    const reason = (error?.message ?? "Generation failed unexpectedly.").slice(0, 300);
+                    await Promise.all([
+                        failRedis.set(`blog:fail:${effectiveBlogId}`, reason, { ex: 3600 }),
+                        failRedis.del(`blog:step:${effectiveBlogId}`),
+                    ]).catch(() => null);
+                }
+            }
+
+            // Refund 10 credits idempotently — unique referenceId prevents double-refunds on retries.
+            if (userId && blogId) {
+                try {
+                    const { refundCreditsIdempotent } = await import("@/lib/credits");
+                    const refId = `refund:blog_gen:${blogId}`;
+                    await refundCreditsIdempotent(userId, 10, refId, "Refund: Failed Blog Generation");
+                    logger.info("[Inngest/Blog] Idempotently refunded 10 credits after job failure", { userId, blogId, refId });
+                } catch (refundErr) {
+                    logger.error("[Inngest/Blog] Failed to refund credits — manual action required", {
+                        blogId,
+                        userId,
+                        error: (refundErr as Error)?.message,
+                    });
+                }
+            }
+        },
+
+        triggers: [{ event: "blog.generate" }],
+    },
+    async ({ event, step }) => {
+        const { siteId, pipelineType, keyword, competitorDomain, searchVolume, difficulty, serpSignal, gscEvidence } = event.data as {
+            siteId: string;
+            pipelineType: string;
+            keyword?: string;
+            competitorDomain?: string;
+            searchVolume?: number;
+            difficulty?: number;
+            blogId?: string;
+            userId?: string;
+            authorName?: string;
+            authorRole?: string;
+            authorBio?: string;
+            realExperience?: string;
+            realNumbers?: string;
+            localContext?: string;
+            /** Pre-classified SERP format signal from the server action gate. */
+            serpSignal?: SerpFormatSignal;
+            /** GSC opportunity evidence — full provenance for GSC_GAP blogs. */
+            gscEvidence?: Record<string, unknown>;
+        };
+
+        if (!process.env.GEMINI_API_KEY) {
+            throw new NonRetriableError("Missing GEMINI_API_KEY — dropping job");
+        }
+
+        const site = await step.run("fetch-site", async () => {
+            const s = await prisma.site.findUnique({
+                where: { id: siteId },
+                select: {
+                    id: true,
+                    domain: true,
+                    userId: true,
+                    blogTone: true,
+                    authorName: true,
+                    authorRole: true,
+                    authorBio: true,
+                    realExperience: true,
+                    realNumbers: true,
+                    localContext: true,
+                    user: { select: { name: true, email: true, subscriptionTier: true } },
+                },
+            });
+            if (!s) throw new Error("Site not found");
+            return s;
+        });
+
+        const author = buildAuthorFromSite(site);
+        const displayName = cleanDomainToDisplayName(site.domain);
+
+        const allowed = await step.run("check-blog-rate-limit", async () => {
+            // IMPORTANT: use getEffectiveTier — not raw subscriptionTier from DB.
+            // Raw tier ignores active trials and promo overrides.
+            const effectiveTier = await getEffectiveTier(site.userId);
+            const plan = getPlan(effectiveTier);
+            const limitPerMonth = plan.limits.blogsPerMonth;
+
+            // AGENCY = unlimited
+            if (limitPerMonth === -1) return true;
+
+            // The server action (generateBlog) already called checkBlogLimit() which
+            // incremented the Redis counter via INCR. Calling checkBlogLimit() again
+            // here would INCR a second time — double-counting — causing FREE users
+            // (limit=3) to be blocked after their 2nd blog, STARTER after their 30th.
+            //
+            // Fix: read the current counter value with GET (no INCR) and compare.
+            // Redis key format mirrors the monthly/index.ts pattern: blog:{userId}:{YYYY-MM}
+            const now = new Date();
+            const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+            const redisKey = `blog:${site.userId}:${monthKey}`;
+
+            try {
+                // Use the shared redis instance — GET is read-only, no INCR
+                const { redis } = await import("@/lib/redis");
+                const currentCount = await redis.get<number>(redisKey);
+                const count = typeof currentCount === "number" ? currentCount : parseInt(String(currentCount ?? "0"), 10) || 0;
+                const isAllowed = count <= limitPerMonth;
+
+                logger.info("[Inngest/Blog] Read-only rate limit check", {
+                    effectiveTier,
+                    limitPerMonth,
+                    currentCount: count,
+                    allowed: isAllowed,
+                    userId: site.userId,
+                });
+
+                return isAllowed;
+            } catch (err: unknown) {
+                // Fail-open: Redis error should never block blog generation
+                logger.warn("[Inngest/Blog] Rate limit read failed — failing open", {
+                    error: (err as Error)?.message,
+                    userId: site.userId,
+                });
+                return true;
+            }
+        });
+        if (!allowed) {
+            // Blog stub is already in DB with status GENERATING — mark it FAILED
+            // so the user sees the real state and can retry, not a perpetual spinner.
+            const blogId = event.data.blogId as string | undefined;
+            const userId = event.data.userId as string | undefined;
+            if (blogId) {
+                await step.run("mark-rate-limited-blog-failed", async () => {
+                    await prisma.blog
+                        .updateMany({ where: { id: blogId }, data: { status: "FAILED" } })
+                        .catch((e: unknown) =>
+                            logger.warn("[Inngest/Blog] Failed to mark rate-limited blog as FAILED", {
+                                blogId,
+                                error: (e as Error)?.message,
+                            })
+                        );
+                    // Refund the 10 credits that were deducted pre-dispatch
+                    if (userId) {
+                        await prisma.$executeRaw`
+                            UPDATE "User" SET credits = credits + 10 WHERE id = ${userId}
+                        `.catch(() => null);
+                        logger.info("[Inngest/Blog] Rate-limit skip: refunded 10 credits", { userId, blogId });
+                    }
+                });
+            }
+            logger.warn("[Inngest/Blog] Skipped — rate limit reached", { blogId, userId });
+            return { skipped: true, reason: "rate_limit" };
+        }
+
+
+        const detectedIntent = detectIntent(keyword ?? "");
+        // Runs before generation so the writer knows the competitive landscape.
+        // Fires for ALL pipeline types: uses the explicit keyword when provided,
+        // falls back to the primary site topic/brand for INDUSTRY & SITE_CONTEXT blogs.
+        // Degrades gracefully if Perplexity key is missing.
+        const researchBrief = await step.run("perplexity-research", async () => {
+            if (!process.env.PERPLEXITY_API_KEY) return null;
+
+            // Circuit breaker: skip Perplexity when it is known-bad to avoid
+            // blocking every blog job for 30 s on a rate-limit or outage.
+            const CB_KEY = "cb:perplexity:state";
+            const CB_FAIL = "cb:perplexity:failures";
+            const CB_AT = "cb:perplexity:openedAt";
+            const CB_MAX = 5;
+            const CB_TTL = 90_000; // 90 s cool-down
+            let cbOpen = false;
+            try {
+                const { redis } = await import("@/lib/redis");
+                const state = await redis.get<string>(CB_KEY);
+                const openedAt = await redis.get<number>(CB_AT);
+                if (state === "OPEN" && openedAt && Date.now() - openedAt < CB_TTL) {
+                    cbOpen = true;
+                    logger.warn("[Blog/Research] Perplexity circuit is OPEN — skipping");
+                } else if (state === "OPEN") {
+                    // Cool-down elapsed — allow one probe through
+                    await redis.del(CB_KEY);
+                }
+            } catch { /* Redis unavailable — fail open */ }
+
+            if (cbOpen) return null;
+
+            const researchTopic = keyword || site.domain.replace(/^www\./, "").split(".")[0];
+            try {
+                const res = await fetch("https://api.perplexity.ai/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        model: "sonar-pro",
+                        messages: [{
+                            role: "user",
+                            content: `Search for the top ranking pages for "${researchTopic}".
+
+Extract and summarise:
+1. The H2 structure / main topics the top 3 results cover
+2. Questions they answer in their FAQ sections
+3. Obvious gaps — angles they miss, unanswered questions, or outdated information
+4. Whether ${site.domain} appears in any of the results
+
+Be specific and concise. This will be used to write a better article.`,
+                        }],
+                        return_citations: true,
+                        return_related_questions: false,
+                        temperature: 0.1,
+                        max_tokens: 3500,
+                    }),
+                    signal: AbortSignal.timeout(25_000),
+                });
+
+                if (!res.ok) {
+                    logger.warn(`[Blog/Research] Perplexity returned ${res.status}`);
+                    // Record failure toward circuit breaker
+                    try {
+                        const { redis } = await import("@/lib/redis");
+                        const f = await redis.incr(CB_FAIL);
+                        await redis.expire(CB_FAIL, 300);
+                        if (f >= CB_MAX) { await redis.set(CB_KEY, "OPEN"); await redis.set(CB_AT, Date.now()); }
+                    } catch { /* non-fatal */ }
+                    return null;
+                }
+
+                // Success — reset failure counter
+                try {
+                    const { redis } = await import("@/lib/redis");
+                    await redis.del(CB_KEY, CB_FAIL, CB_AT);
+                } catch { /* non-fatal */ }
+
+                const data = await res.json();
+                const brief = data.choices?.[0]?.message?.content ?? null;
+                const citations: string[] = (data.citations ?? []).map((c: unknown) =>
+                    typeof c === "string" ? c : (c as Record<string, string>).url ?? ""
+                ).filter(Boolean);
+                const domainCited = citations.some(url => url.includes(site.domain.replace(/^www\./, "")));
+                logger.info(`[Blog/Research] Research complete for "${researchTopic}" — domain cited: ${domainCited}`, { citationCount: citations.length });
+                return brief ? `COMPETITIVE RESEARCH for "${researchTopic}":\n${brief}` : null;
+            } catch (err: unknown) {
+                logger.warn("[Blog/Research] Perplexity research failed — continuing without brief", {
+                    error: (err as Error)?.message,
+                });
+                // Record failure toward circuit breaker
+                try {
+                    const { redis } = await import("@/lib/redis");
+                    const f = await redis.incr(CB_FAIL);
+                    await redis.expire(CB_FAIL, 300);
+                    if (f >= CB_MAX) { await redis.set(CB_KEY, "OPEN"); await redis.set(CB_AT, Date.now()); }
+                } catch { /* non-fatal */ }
+                return null;
+            }
+        });
+
+        // Pulls brand facts, keyword positions, location and author details
+        // so prompts know exactly where/who they're writing for.
+        const groundedContext = await step.run("build-blog-context", async () => {
+            const { getGroundedContextBlock } = await import("@/lib/prompt-context/build-site-context");
+            return getGroundedContextBlock(siteId);
+        });
+
+        // ── Step progress: researching → drafting ──────────────────────────
+        const _blogIdForStep = event.data.blogId as string | undefined;
+        if (_blogIdForStep) {
+            await step.run("mark-step-drafting", async () => {
+                const { redis: stepRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
+                await stepRedis?.set(`blog:step:${_blogIdForStep}`, "drafting", { ex: 7200 }).catch(() => null);
+            });
+        }
+
+        let liveBlogPost: BlogPostDraft & { ogImage?: string };
+        let finalPipelineType = pipelineType;
+        let serpContextForGate: SerpContext | null = null;
+
+        if (pipelineType === "COMPETITOR_ATTACK" || pipelineType === "COMPETITOR_GAP") {
+            // Pre-fetch SERP once as a dedicated step — same pattern as the evergreen pipeline.
+            // This avoids a duplicate Serper call inside generateBlogFromCompetitorGap.
+            const competitorSerpContext: SerpContext | null = await step.run("fetch-serp-context-competitor", async () => {
+                if (!keyword) return null;
+                try {
+                    const ctx = await getSerpContextForKeyword(keyword, true);
+                    logger.info(`[Blog/SERP] Competitor SERP pre-fetched for "${keyword}" — ${ctx?.results.length ?? 0} results`, { siteId });
+                    return ctx;
+                } catch (err: unknown) {
+                    logger.warn("[Blog/SERP] Competitor SERP pre-fetch failed — generator will fetch internally", {
+                        keyword,
+                        error: (err as Error)?.message,
+                    });
+                    return null;
+                }
+            });
+            serpContextForGate = competitorSerpContext;
+
+
+            const GENERATION_TIMEOUT_MS = 4.5 * 60 * 1000;
+
+            if (!keyword) throw new NonRetriableError("[Blog] COMPETITOR_ATTACK job missing keyword — dropping job");
+            if (!competitorDomain) throw new NonRetriableError("[Blog] COMPETITOR_ATTACK job missing competitorDomain — dropping job");
+            // Capture narrowed values — TSC doesn't narrow across async closures
+            const safeKeyword = keyword;
+            const safeDomain  = competitorDomain;
+            liveBlogPost = await step.run("generate-competitor-content", async () => {
+                const res = await Promise.race([
+                    generateBlogFromCompetitorGap(
+                        safeKeyword, safeDomain, searchVolume ?? 0, difficulty ?? 0,
+                        author, site.domain, undefined, site.blogTone || undefined, siteId, competitorSerpContext
+                    ),
+                    new Promise<never>((_, reject) =>
+                        setTimeout(() => reject(new Error("[Blog] generate-competitor-content timed out after 4.5 min")), GENERATION_TIMEOUT_MS)
+                    ),
+                ]);
+                return { ...res, ogImage: res.heroImage?.url };
+            });
+        } else {
+            const siteContext = await step.run("extract-site-context", async () => {
+                return await extractSiteContext(site.domain);
+            });
+
+            // Enrich site context with grounded data and research brief
+            const enrichedSiteContext = siteContext
+                ? {
+                    ...siteContext,
+                    description: [
+                        siteContext.description,
+                        groundedContext ? `\n${groundedContext}` : "",
+                        researchBrief ? `\n${researchBrief}` : "",
+                    ].filter(Boolean).join("\n"),
+                }
+                : null;
+
+            let category = siteContext?.category ?? site.domain;
+            let keywords = siteContext?.keywords ?? [];
+            finalPipelineType = siteContext ? "SITE_CONTEXT" : "INDUSTRY";
+
+            // The user typed (or we selected) a specific keyword in Step 0.
+            // It arrives as event.data.keyword. We MUST place it at position [0]
+            // so generateEvergreenPost uses it as primaryKeyword for the prompt.
+            // GSC opportunities are still fetched below for semantic enrichment,
+            // but they cannot displace the user's chosen keyword.
+            if (keyword && (pipelineType === "USER_KEYWORD" || pipelineType === "SEED_KEYWORD")) {
+                category = keyword;
+                // Put the chosen keyword first; retain site keywords as semantic support
+                keywords = [keyword, ...(siteContext?.keywords ?? []).filter(k => k.toLowerCase() !== keyword.toLowerCase())].slice(0, 15);
+                finalPipelineType = pipelineType;
+                logger.info(`[Blog/Pipeline] USER_KEYWORD override — primary keyword: "${keyword}"`, { siteId, pipelineType });
+            }
+
+            const gscOpp = await step.run("fetch-gsc-opportunities", async () => {
+                try {
+                    const { getUserGscToken } = await import("@/lib/gsc/token");
+                    const accessToken = await getUserGscToken(site.userId);
+                    if (accessToken && site.domain) {
+                        const siteUrl = normaliseSiteUrl(site.domain);
+                        const gscKeywords = await fetchGSCKeywords(accessToken, siteUrl, 28, 100);
+                        return findOpportunities(gscKeywords, 5);
+                    }
+                } catch (err: unknown) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    if (
+                        msg.includes('Cannot find module') ||
+                        msg.includes('not connected') ||
+                        msg.includes('No GSC token')
+                    ) {
+                        logger.info('[Blog/GSC] GSC unavailable — continuing without GSC keywords', { siteId: site.id });
+                    } else {
+                        logger.warn('[Blog/GSC] Unexpected error fetching GSC opportunities', {
+                            siteId: site.id,
+                            error: msg,
+                        });
+                    }
+                }
+                return [];
+            });
+
+            // Only let GSC override category/keywords when no explicit keyword was supplied.
+            // When the user chose a keyword, GSC data is secondary enrichment only.
+            if (!keyword && gscOpp.length > 0) {
+                keywords = [...gscOpp.map(o => o.keyword), ...(siteContext?.keywords ?? [])].slice(0, 15);
+                category = `${displayName} — GSC Opportunity`;
+                finalPipelineType = "GSC_GAP";
+            } else if (!keyword && keywords.length === 0) {
+                const brand = site.domain.replace(/^www\./, "").split(".")[0];
+                category = brand;
+                keywords = [brand, "guide", "tips", "how to", "best practices"];
+                finalPipelineType = "INDUSTRY";
+            } else if (keyword && gscOpp.length > 0) {
+                // Enrich the user's keyword list with GSC semantic terms (don't replace position 0)
+                const gscTerms = gscOpp.map(o => o.keyword).filter(k => k.toLowerCase() !== keyword.toLowerCase());
+                keywords = [keyword, ...gscTerms, ...(siteContext?.keywords ?? []).filter(k => k.toLowerCase() !== keyword.toLowerCase())].slice(0, 15);
+            }
+
+            // generateEvergreenPost internally calls getSerpContextForKeyword.
+            // By fetching it here as a dedicated step, we:
+            //   1. Avoid a duplicate Serper API call inside the generator
+            //   2. Get Inngest step-level retry/observability for the SERP fetch
+            //   3. Share the same data across both the generator and any future steps
+            const primaryKeywordForSerp = keywords[0]; // position [0] is always the target keyword
+            const precomputedSerpContext: SerpContext | null = await step.run("fetch-serp-context", async () => {
+                if (!primaryKeywordForSerp) return null;
+                try {
+                    const ctx = await getSerpContextForKeyword(primaryKeywordForSerp, true);
+                    logger.info(`[Blog/SERP] Pre-fetched SERP for "${primaryKeywordForSerp}" — ${ctx?.results.length ?? 0} results`, { siteId });
+                    return ctx;
+                } catch (err: unknown) {
+                    logger.warn("[Blog/SERP] SERP pre-fetch failed — generator will skip SERP enrichment", {
+                        keyword: primaryKeywordForSerp,
+                        error: (err as Error)?.message,
+                    });
+                    return null;
+                }
+            });
+            serpContextForGate = precomputedSerpContext;
+
+            liveBlogPost = await step.run("generate-evergreen-post", async () => {
+                // Same 4.5-min timeout as competitor path — prevents Railway host
+                // timeouts from leaving blogs orphaned on GENERATING.
+                const GENERATION_TIMEOUT_MS = 4.5 * 60 * 1000;
+                const res = await Promise.race([
+                    generateEvergreenPost(
+                        category, keywords, author, enrichedSiteContext,
+                        site.blogTone || undefined, siteId, precomputedSerpContext
+                    ),
+                    new Promise<never>((_, reject) =>
+                        setTimeout(() => reject(new Error("[Blog] generate-evergreen-post timed out after 4.5 min")), GENERATION_TIMEOUT_MS)
+                    ),
+                ]);
+                return { ...res, ogImage: res.heroImage?.url };
+            });
+        }
+
+        // ── Step progress: drafting → editorial ────────────────────────────
+        if (_blogIdForStep) {
+            await step.run("mark-step-editorial", async () => {
+                const { redis: stepRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
+                await stepRedis?.set(`blog:step:${_blogIdForStep}`, "editorial", { ex: 7200 }).catch(() => null);
+            });
+        }
+
+        // Claude Sonnet is significantly better than Gemini at detecting and removing
+        // AI writing patterns, adding narrative voice, and enforcing E-E-A-T structure.
+        // Degrades gracefully to the existing Gemini humanization if key is absent.
+        liveBlogPost = await step.run("claude-editorial-pass", async () => {
+            const anthropicKey = process.env.ANTHROPIC_API_KEY;
+            if (!anthropicKey) {
+                logger.info("[Blog/Claude] ANTHROPIC_API_KEY not set — skipping editorial pass");
+                return liveBlogPost;
+            }
+
+            const authorContext = [
+                site.authorBio ? `Author bio: ${site.authorBio}` : "",
+                site.authorRole ? `Author role: ${site.authorRole}` : "",
+                site.realExperience ? `Real experience: ${site.realExperience}` : "",
+                site.realNumbers ? `Real data/numbers: ${site.realNumbers}` : "",
+            ].filter(Boolean).join("\n");
+
+            try {
+                const res = await fetch("https://api.anthropic.com/v1/messages", {
+                    method: "POST",
+                    headers: {
+                        "x-api-key": anthropicKey,
+                        "anthropic-version": "2023-06-01",
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        model: AI_MODELS.ANTHROPIC_SONNET,
+                        max_tokens: 8192,
+                        messages: [{
+                            role: "user",
+                            content: `You are an expert human editor. Your job is to make this SEO article sound like it was written by a knowledgeable practitioner — not an AI. Apply ALL of the following edits in a single pass:
+
+1. REMOVE AI PATTERNS — rewrite every instance of:
+   "In conclusion" / "It's worth noting" / "It's important to note" / "Delve into" / "Dive into" /
+   "Navigate" (abstract) / "In today's digital landscape" / "In the ever-changing" /
+   "At the end of the day" / "Foster" / "Facilitate" / "In the realm of" / "Unlock" (loosely) /
+   "Leverage" (loosely) / "Let's explore" / "Picture this" / "Furthermore" / "Moreover" /
+   "Additionally" / "Notably" / "Seamlessly" / "Robust" / "Cutting-edge" / "Game-changing" /
+   "Groundbreaking" / "Comprehensive guide" / "Ultimate guide" / "Now more than ever" /
+   "As we navigate" / "When it comes to" / "Drive engagement" / "Empower users" /
+   "In summary" / "To summarise" / "Final thoughts" / "Wrapping up".
+
+2. FIX WORD REPETITION — highest priority:
+   - If any content word (noun, verb, adjective) that is not the primary keyword appears more than 4 times in a 150-word passage, replace occurrence 3+ with a pronoun, synonym, or restructured clause.
+   - Never repeat the same subject noun three times in one paragraph. Use "it", "they", or restructure.
+   BAD:  "The platform tracks keywords. The platform also monitors backlinks. The platform sends alerts."
+   GOOD: "It tracks keywords, monitors backlinks, and sends weekly alerts — in one place."
+
+3. SENTENCE RHYTHM:
+   - No three consecutive sentences of the same length (short/medium/long).
+   - No two consecutive sentences starting with the same word, especially "The", "This", "It", "You".
+   - Mix short punchy statements with longer explanatory ones.
+
+4. ADD CONTRACTIONS — at least one per paragraph:
+   "you'll", "it's", "don't", "here's", "we've", "you've", "that's", "there's".
+
+5. ENFORCE E-E-A-T:
+   - Named source for every statistic. If no source, remove the number and make the claim qualitative.
+   - At least one direct stance per H2 section: a contradiction, a named exception, or a practitioner observation.
+
+6. ADD AUTHOR VOICE: Where the author context below is available, weave in 1–2 natural first-person sentences. Write as normal prose, not as bracketed annotations.
+
+7. STRUCTURE CHECK: If a Quick Answer box is present and its text is >50% similar to the intro paragraph, rewrite the Quick Answer to be more direct and specific.
+
+${authorContext ? `AUTHOR CONTEXT:\n${authorContext}\n` : ""}${groundedContext ? `SITE CONTEXT:\n${groundedContext}\n` : ""}
+
+Return ONLY the edited HTML, starting with the first HTML element. No preamble, no explanation, no markdown fences.
+
+ARTICLE TO EDIT:
+${liveBlogPost.content.substring(0, 80000)}`,
+                        }],
+                    }),
+                    signal: AbortSignal.timeout(150000),
+                });
+
+                if (!res.ok) {
+                    logger.warn(`[Blog/Claude] API returned ${res.status} — skipping editorial pass`);
+                    return liveBlogPost;
+                }
+
+                const data = await res.json();
+                const edited: string = data.content?.[0]?.text ?? "";
+
+                // Only accept if edit returned substantial content (not an error message)
+                if (edited && edited.length > liveBlogPost.content.length * 0.4) {
+                    logger.info(`[Blog/Claude] Editorial pass complete`, {
+                        originalLength: liveBlogPost.content.length,
+                        editedLength: edited.length,
+                    });
+                    return { ...liveBlogPost, content: edited };
+                }
+
+                logger.warn("[Blog/Claude] Edited content too short — keeping original");
+                return liveBlogPost;
+
+            } catch (err: unknown) {
+                logger.warn("[Blog/Claude] Editorial pass failed — keeping original", {
+                    error: (err as Error)?.message,
+                });
+                return liveBlogPost;
+            }
+        });
+
+        const factCheck = await step.run("fact-check-validation", async () => {
+            return await runFactCheckValidation(liveBlogPost.content);
+        });
+
+        // ── Step progress: drafting → fact_check ─────────────────────────
+        if (_blogIdForStep) {
+            await step.run("mark-step-fact-check", async () => {
+                const { redis: stepRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
+                await stepRedis?.set(`blog:step:${_blogIdForStep}`, "fact_check", { ex: 7200 }).catch(() => null);
+            });
+        }
+
+        const enrichment = await step.run("semantic-enrichment-check", async () => {
+            const primaryKeyword = keyword || liveBlogPost.targetKeywords[0] || liveBlogPost.title;
+            return runSemanticEnrichmentCheck(primaryKeyword, liveBlogPost.content);
+        });
+
+        // Google rewards depth. Thin content (<900 words) is auto-demoted to NEEDS_REVIEW.
+        // Overly long content (>6000 words) is truncated at the last sentence boundary
+        // before the limit — Google's HCU penalises keyword-stuffed bloat.
+        // Meta descriptions >160 chars are silently truncated in SERPs — fix before save.
+        await step.run("validate-length-constraints", async () => {
+            // Word count (strip HTML tags, count whitespace-delimited tokens)
+            const plainText = liveBlogPost.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+            let wordCount = plainText.split(" ").filter(Boolean).length;
+
+            // The LLM is instructed not to exceed 6000 words, but as a hard safety
+            // net we truncate the HTML at the last sentence boundary before 6000 words.
+            const MAX_WORDS = 6000;
+            if (wordCount > MAX_WORDS) {
+                // Walk through the HTML building up a word-count-aware window.
+                // We truncate by rebuilding the plain-text at the word level,
+                // then finding the matching character position in the original HTML.
+                const words = plainText.split(" ");
+                const allowedPlain = words.slice(0, MAX_WORDS).join(" ");
+                // Find the last sentence-ending punctuation (.?!) before the hard cut
+                const lastSentenceEnd = allowedPlain.search(/[.?!][^.?!]*$/);
+                const cutAt = lastSentenceEnd > 0
+                    ? lastSentenceEnd + 1   // include the punctuation mark
+                    : allowedPlain.length;
+
+                // Map the char position back into the HTML:
+                // Walk HTML chars, counting non-tag text chars until we reach cutAt.
+                let htmlCursor = 0;
+                let textCursor = 0;
+                let inTag = false;
+                while (htmlCursor < liveBlogPost.content.length && textCursor < cutAt) {
+                    const ch = liveBlogPost.content[htmlCursor];
+                    if (ch === "<") inTag = true;
+                    if (!inTag) textCursor++;
+                    if (ch === ">") inTag = false;
+                    htmlCursor++;
+                }
+
+                liveBlogPost.content = liveBlogPost.content.slice(0, htmlCursor) + "</p>";
+                wordCount = MAX_WORDS;   // approximate — re-counting is expensive
+
+                liveBlogPost.validationWarnings.push(
+                    `Content exceeded ${MAX_WORDS} words and was trimmed. Review the truncated ending before publishing.`
+                );
+                logger.warn(`[Blog/LengthGate] Content trimmed from ${words.length} → ${MAX_WORDS} words`, {
+                    originalWords: words.length,
+                });
+            }
+
+            if (wordCount < 900) {
+                liveBlogPost.validationWarnings.push(
+                    `Content is thin (${wordCount} words). Target 1,500+ for informational queries and 2,500+ for how-to/best-X queries.`
+                );
+                if (wordCount < 500) {
+                    // Critically thin — hard error, not just a warning
+                    liveBlogPost.validationErrors.push(`Content too short: ${wordCount} words (minimum 500).`);
+                }
+            }
+
+            // Title length (Google shows ~55-60 chars before truncation)
+            if (liveBlogPost.title.length > 60) {
+                liveBlogPost.validationWarnings.push(
+                    `Title is ${liveBlogPost.title.length} chars — Google truncates at ~60. Consider shortening.`
+                );
+            }
+
+            // Meta description length
+            if (liveBlogPost.metaDescription.length > 160) {
+                // Truncate and log — don't block, just fix silently
+                liveBlogPost.metaDescription = liveBlogPost.metaDescription.slice(0, 157) + "...";
+                liveBlogPost.validationWarnings.push("Meta description truncated to 160 chars.");
+            } else if (liveBlogPost.metaDescription.length < 50) {
+                liveBlogPost.validationWarnings.push(
+                    `Meta description is very short (${liveBlogPost.metaDescription.length} chars). Aim for 130-160 chars.`
+                );
+            }
+
+            logger.info(`[Blog/LengthGate] words=${wordCount} titleLen=${liveBlogPost.title.length} metaLen=${liveBlogPost.metaDescription.length}`);
+        });
+
+
+        // ── Publication Gate (replaces score-based quality gate) ──────────
+        // Import and run the publication gate which checks:
+        // - Fabricated statistics, case studies, experience claims
+        // - Generic AI introductions
+        // - Section duplication / repetition
+        // - Originality vs SERP competitors
+        // - Unsupported product claims
+        // - Structure and SEO/AEO basics
+        //
+        // Decision logic (hard gates, not scores):
+        //   Fabrication detected    → REJECTED
+        //   Evidence issues         → EVIDENCE_REVIEW
+        //   Weak originality / high-risk warnings → NEEDS_REVIEW
+        //   All gates pass          → DRAFT
+
+        const qualityScore = factCheck.qualityScore !== null
+            ? Math.min(factCheck.qualityScore, liveBlogPost.validationScore)
+            : liveBlogPost.validationScore;
+
+        if (factCheck.issues.length > 0) {
+            logger.warn(`[Blog/Pipeline] Fact-check issues (score ${qualityScore}/100):`, {
+                issues: factCheck.issues,
+                factCheckAvailable: factCheck.qualityScore !== null,
+            });
+        }
+
+        const PLACEHOLDER_PATTERN = /\[Section generation failed|\[EDITOR:/i;
+        if (PLACEHOLDER_PATTERN.test(liveBlogPost.content)) {
+            logger.error("[Blog/Pipeline] Content contains placeholder text — marking FAILED, will not publish", { siteId, keyword });
+            liveBlogPost.validationErrors.push("Content contains unresolved placeholder sections. Regenerate before publishing.");
+        }
+
+        const interactiveWidget = await step.run("generate-interactive-widget", async () => {
+            const primaryKeyword = keyword || liveBlogPost.targetKeywords[0] || liveBlogPost.title;
+            return await generateInteractiveWidget(primaryKeyword, liveBlogPost.content);
+        });
+
+        const schemaMarkup = await step.run("generate-schema-markup", async () => {
+            return await generateSchemaMarkup({
+                title: liveBlogPost.title,
+                keyword: keyword || liveBlogPost.targetKeywords[0] || "",
+                content: liveBlogPost.content,
+                slug: liveBlogPost.slug,
+                siteDomain: site.domain,
+                author,
+                description: liveBlogPost.metaDescription,
+            });
+        });
+
+        // ── Step progress: fact_check → schema ──────────────────────────
+        if (_blogIdForStep) {
+            await step.run("mark-step-schema", async () => {
+                const { redis: stepRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
+                await stepRedis?.set(`blog:step:${_blogIdForStep}`, "schema", { ex: 7200 }).catch(() => null);
+            });
+        }
+
+        // Runs after schema markup is generated so JSON-LD is included in the score.
+        // Scores 8 criteria: direct answer, definition block, stats, FAQ, comparison
+        // table, E-E-A-T attribution, internal links, structured data.
+        const citationGate = await step.run("citation-template-gate", async () => {
+            try {
+                const htmlWithSchema = schemaMarkup
+                    ? liveBlogPost.content + schemaMarkup
+                    : liveBlogPost.content;
+                return gateCitationScore(
+                    htmlWithSchema,
+                    liveBlogPost.targetKeywords,
+                    liveBlogPost.title,
+                );
+            } catch (citErr: unknown) {
+                // gateCitationScore must never crash the job — degrade to zero score
+                logger.warn("[Blog/CitationGate] gateCitationScore threw — returning zero score", {
+                    error: (citErr as Error)?.message,
+                });
+                return {
+                    citationScore: 0,
+                    citationReady: false,
+                    citationTopFix: "Citation scoring failed — manual review recommended.",
+                    citationCriteria: {},
+                    intent: "informational" as const,
+                };
+            }
+        });
+
+        logger.info(`[Blog/CitationGate] Score ${citationGate.citationScore}/100 — ready: ${citationGate.citationReady}`, {
+            siteId, keyword, intent: citationGate.intent,
+            topFix: citationGate.citationReady ? null : citationGate.citationTopFix,
+        });
+
+        const finalContent = await step.run("inject-funnel-cta", async () => {
+            try {
+                const funnelIntent = (detectedIntent === "local" ? "informational" : detectedIntent) as FunnelIntent;
+                const funnelConfig = getFunnelForIntent(
+                    funnelIntent,
+                    site.id,
+                    site.domain.startsWith("http") ? site.domain : `https://${site.domain}`,
+                    displayName,
+                    event.data.blogId || "new"
+                );
+                const h2Splits = liveBlogPost.content.split(/(?=<h2[\s>])/i);
+                if (h2Splits.length >= 3) {
+                    return [...h2Splits.slice(0, 2), funnelConfig.htmlSnippet, ...h2Splits.slice(2)].join("");
+                }
+                return liveBlogPost.content + funnelConfig.htmlSnippet;
+            } catch (funnelErr: unknown) {
+                // Funnel injection must never crash the job — content is already generated.
+                // Degrade gracefully: return original content without the CTA.
+                logger.warn("[Blog/Funnel] inject-funnel-cta threw — using original content", {
+                    error: (funnelErr as Error)?.message,
+                    siteId,
+                    keyword,
+                });
+                return liveBlogPost.content;
+            }
+        });
+
+        // ── Publication Gate ──────────────────────────────────────────────
+        const publicationGateStep = await step.run("publication-gate", async () => {
+            try {
+                const { runPublicationGate } = await import("@/lib/blog/publication-gate");
+                const { extractEvidencePacket } = await import("@/lib/blog/evidence-extractor");
+
+                // Re-extract from the final post-Claude content. The packet carried
+                // by the draft is the single authoritative research snapshot, but
+                // citations can change during an editorial rewrite.
+                const evidencePacket = extractEvidencePacket(
+                    liveBlogPost.researchPacket,
+                    liveBlogPost.content,
+                );
+                // Bridge fact-check findings → publication gate.
+                // The Gemini fact-checker and the evidence gate use different truth sources.
+                // Without this wiring, fabrication flags from the fact-checker are only
+                // logged — they never affect the DRAFT / NEEDS_REVIEW decision.
+                const factCheckBlockers = (factCheck.issues ?? [])
+                    .filter((issue: string) =>
+                        /fabricat|unsourced|statistic|invented|unverifi/i.test(issue)
+                    )
+                    .slice(0, 5);
+
+                const publicationGate = await runPublicationGate({
+                    content: liveBlogPost.content,
+                    title: liveBlogPost.title,
+                    metaDescription: liveBlogPost.metaDescription,
+                    targetKeywords: liveBlogPost.targetKeywords,
+                    evidencePacket,
+                    serpContext: serpContextForGate,
+                    researchPacket: liveBlogPost.researchPacket,
+                    riskTier: liveBlogPost.riskTier,
+                    hasFirstPartyEvidence: liveBlogPost.hasFirstPartyEvidence,
+                    factCheckComplete: factCheck.complete,
+                    factCheckCoverage: factCheck.coverage,
+                    additionalOriginalityIssues: factCheckBlockers,
+                });
+                return { evidencePacket, publicationGate };
+            } catch (gateErr: unknown) {
+                // The publication gate must never crash the Inngest job.
+                // A crash here would trigger onFailure → FAILED even though the
+                // article content is valid and fully generated.
+                // Degrade: route to EVIDENCE_REVIEW so a human can review.
+                logger.error("[Blog/PublicationGate] Gate threw — degrading to EVIDENCE_REVIEW", {
+                    error: (gateErr as Error)?.message,
+                    siteId,
+                    keyword,
+                });
+                const emptyEvidencePacket = {
+                    availability: "UNAVAILABLE" as const,
+                    claims: [],
+                    sources: [],
+                    claimSourceMap: [],
+                    examples: [],
+                    caseStudies: [],
+                    visuals: [],
+                    unsupportedClaims: [],
+                    unsourcedStatistics: [],
+                    unverifiedCaseStudies: [],
+                    fabricatedClaims: [],
+                    extraction: {
+                        extractedAt: new Date().toISOString(),
+                        extractorVersion: "blog-evidence-v1",
+                        researchAvailability: "UNAVAILABLE" as const,
+                        researchCollectedAt: null,
+                        sourceCitationCount: 0,
+                        claimCount: 0,
+                    },
+                };
+                const fallbackGate = {
+                    passed: false,
+                    status: "EVIDENCE_REVIEW" as const,
+                    evidenceAvailability: "UNAVAILABLE" as const,
+                    blockingIssues: ["Publication gate validation failed — human review required."],
+                    warnings: [],
+                    evidenceIssues: ["Evidence gate crashed during validation."],
+                    originalityIssues: [],
+                    repetitionIssues: [],
+                    fabricationIssues: [],
+                };
+                return { evidencePacket: emptyEvidencePacket, publicationGate: fallbackGate };
+            }
+        });
+        liveBlogPost.evidencePacket = publicationGateStep.evidencePacket;
+        liveBlogPost.evidenceCoverage = publicationGateStep.evidencePacket.claims.length > 0
+            ? Math.round(
+                (publicationGateStep.evidencePacket.claims.filter(claim => claim.sourceIds.length > 0).length /
+                    publicationGateStep.evidencePacket.claims.length) * 100
+            )
+            : 0;
+        liveBlogPost.missingEvidence = publicationGateStep.evidencePacket.unsupportedClaims.slice(0, 50);
+        const publicationGateResult = publicationGateStep.publicationGate;
+
+        // Publication gate determines status — no score override
+        let blogStatus: "DRAFT" | "NEEDS_REVIEW" | "EVIDENCE_REVIEW" | "REJECTED" | "FAILED";
+
+        // Placeholder text is always FAILED (separate from evidence gates)
+        if (PLACEHOLDER_PATTERN.test(liveBlogPost.content)) {
+            blogStatus = "FAILED";
+            logger.error("[Blog/Pipeline] Placeholder text detected — FAILED", { siteId, keyword });
+        } else {
+            blogStatus = publicationGateResult.status;
+        }
+
+        // Merge publication gate issues into validation arrays for DB storage
+        if (publicationGateResult.blockingIssues.length > 0) {
+            liveBlogPost.validationErrors.push(...publicationGateResult.blockingIssues);
+        }
+        if (publicationGateResult.warnings.length > 0) {
+            liveBlogPost.validationWarnings.push(...publicationGateResult.warnings);
+        }
+        if (!citationGate.citationReady) {
+            liveBlogPost.validationWarnings.push(
+                `Citation readiness score ${citationGate.citationScore}/100 — ${citationGate.citationTopFix ?? "review citation criteria"}`
+            );
+        }
+
+        logger.info(`[Blog/Pipeline] Publication gate decision: ${blogStatus}`, {
+            siteId, keyword,
+            passed: publicationGateResult.passed,
+            blockingIssues: publicationGateResult.blockingIssues.length,
+            evidenceIssues: publicationGateResult.evidenceIssues.length,
+            originalityIssues: publicationGateResult.originalityIssues.length,
+            fabricationIssues: publicationGateResult.fabricationIssues.length,
+            warnings: publicationGateResult.warnings.length,
+            qualityScore,
+            citationScore: citationGate.citationScore,
+        });
+
+        await step.run("save-blog", async () => {
+            const { sanitizeHtml, sanitizeSchemaMarkup } = await import("@/lib/sanitize-html");
+            const blogData = {
+                pipelineType: finalPipelineType,
+                title: liveBlogPost.title,
+                slug: liveBlogPost.slug,
+                targetKeywords: liveBlogPost.targetKeywords,
+                content: liveBlogPost.content,
+                metaDescription: liveBlogPost.metaDescription,
+                ogImage: liveBlogPost.ogImage,
+                interactiveWidget: interactiveWidget ? sanitizeHtml(interactiveWidget) : undefined,
+                schemaMarkup: schemaMarkup ? sanitizeSchemaMarkup(schemaMarkup) : undefined,
+                status: blogStatus,
+                validationScore: qualityScore,
+                validationErrors: liveBlogPost.validationErrors,
+                validationWarnings: liveBlogPost.validationWarnings,
+                factCheckIssues: factCheck.issues,
+                factCheckSuggestions: factCheck.suggestions,
+                // AI Citation Template gate results
+                citationScore: citationGate.citationScore,
+                citationCriteria: citationGate.citationCriteria,
+                // Evidence pipeline — feeds the dashboard EvidenceBadge
+                evidenceCoverage: liveBlogPost.evidenceCoverage,
+                missingEvidence: liveBlogPost.missingEvidence ?? [],
+                // GSC opportunity evidence — immutable provenance snapshot
+                // Null for non-GSC pipelines (USER_KEYWORD, COMPETITOR_GAP, etc.)
+                gscEvidence: gscEvidence ?? undefined,
+            };
+            if (event.data.blogId) {
+                await prisma.blog.update({ where: { id: event.data.blogId }, data: blogData });
+            } else {
+                // Upsert on (siteId, slug) — idempotency guard for Inngest retries.
+                // If a retry fires after the DB write already succeeded, this overwrites
+                // cleanly rather than creating a duplicate post.
+                await prisma.blog.upsert({
+                    where: { siteId_slug: { siteId, slug: blogData.slug } },
+                    create: { siteId, ...blogData },
+                    update: blogData,
+                });
+            }
+        });
+
+        await step.run("extract-brand-facts", async () => {
+            try {
+                const { extractFactsFromContent } = await import("@/lib/aeo/fact-extractor");
+                return await extractFactsFromContent(siteId, liveBlogPost.content);
+            } catch (factErr: unknown) {
+                // Non-critical enrichment step — never crash the job after save-blog
+                logger.warn("[Blog/BrandFacts] extract-brand-facts failed — skipping", {
+                    error: (factErr as Error)?.message, siteId,
+                });
+                return null;
+            }
+        });
+
+        await step.run("save-enrichment-data", async () => {
+            try {
+                const existingBlog = event.data.blogId
+                    ? await prisma.blog.findUnique({ where: { id: event.data.blogId }, select: { citationCriteria: true } })
+                    : null;
+                const existingCriteria = existingBlog?.citationCriteria as Record<string, unknown> | null;
+                const targetId = event.data.blogId ?? (
+                    await prisma.blog.findUnique({ where: { siteId_slug: { siteId, slug: liveBlogPost.slug } }, select: { id: true } })
+                )?.id;
+                if (targetId) {
+                    await prisma.blog.update({
+                        where: { id: targetId },
+                        data: {
+                            citationCriteria: {
+                                ...(existingCriteria ?? {}),
+                                missingEntities: enrichment.missingEntities,
+                                enrichmentScore: enrichment.enrichmentScore,
+                                factCheckScore: factCheck.qualityScore,
+                            },
+                        },
+                    });
+                }
+            } catch (enrichErr: unknown) {
+                // Non-critical enrichment step — blog is already saved, never crash the job
+                logger.warn("[Blog/Enrichment] save-enrichment-data failed — skipping", {
+                    error: (enrichErr as Error)?.message, siteId,
+                });
+            }
+        });
+
+        // Only for non-failed blogs with at least one target keyword to track.
+        if (blogStatus === "DRAFT" && liveBlogPost.targetKeywords.length > 0) {
+            await step.sendEvent("trigger-citation-monitor", {
+                name: "blog.published",
+                data: {
+                    siteId,
+                    blogId: event.data.blogId ?? "new",
+                    targetKeywords: liveBlogPost.targetKeywords.slice(0, 5),
+                    publishedAt: new Date().toISOString(),
+                },
+            });
+        }
+
+        if (blogStatus === "DRAFT") {
+            await step.sendEvent("trigger-internal-links", {
+                name: "blog.published" as const,
+                data: {
+                    siteId,
+                    blogId: event.data.blogId ?? "new",
+                    blogUrl: `https://${site.domain}/${liveBlogPost.slug}`,
+                    keyword: keyword || liveBlogPost.targetKeywords[0] || "",
+                },
+            });
+        }
+
+        return {
+            // `success` remains publication readiness for backward-compatible
+            // consumers. Generation completion is deliberately separate.
+            success: blogStatus === "DRAFT",
+            generationSucceeded: blogStatus !== "FAILED",
+            publicationReady: blogStatus === "DRAFT",
+            status: blogStatus,
+            qualityScore,
+            blogStatus,
+            flaggedForReview: blogStatus === "NEEDS_REVIEW" || blogStatus === "EVIDENCE_REVIEW",
+            hardErrors: liveBlogPost.validationErrors,
+            publicationGate: {
+                passed: publicationGateResult.passed,
+                evidenceAvailability: publicationGateResult.evidenceAvailability,
+                blockingIssues: publicationGateResult.blockingIssues.length,
+                evidenceIssues: publicationGateResult.evidenceIssues.length,
+                originalityIssues: publicationGateResult.originalityIssues.length,
+                fabricationIssues: publicationGateResult.fabricationIssues.length,
+            },
+        };
+    }
+);
