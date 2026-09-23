@@ -54,9 +54,11 @@ Return ONLY the HTML starting with <div id="blog-interactive-widget">`,
 
 function extractFaqsForSchema(content: string): { question: string; answer: string }[] {
     const items: { question: string; answer: string }[] = [];
+    const faqSection = content.match(/<h2[^>]*id=["']frequently-asked-questions["'][^>]*>[\s\S]*?<\/section>/i)?.[0] ?? "";
+    if (!faqSection) return items;
     const pattern = /<h3[^>]*>([\s\S]*?)<\/h3>\s*<p[^>]*>([\s\S]*?)<\/p>/gi;
     let match: RegExpExecArray | null;
-    while ((match = pattern.exec(content)) !== null && items.length < 7) {
+    while ((match = pattern.exec(faqSection)) !== null && items.length < 7) {
         const question = match[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
         const answer = match[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
         if (question.length >= 8 && answer.length >= 2) items.push({ question, answer });
@@ -75,6 +77,7 @@ async function generateSchemaMarkup(params: {
     slug: string;
     siteDomain: string;
     author: AuthorProfile;
+    description?: string;
 }): Promise<string | null> {
     try {
         const now = new Date().toISOString();
@@ -87,7 +90,7 @@ async function generateSchemaMarkup(params: {
                 "@context": "https://schema.org",
                 "@type": "Article",
                 headline: params.title,
-                description: params.title,
+                description: params.description || params.title,
                 author: {
                     "@type": "Person",
                     name: params.author.name,
