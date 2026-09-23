@@ -227,7 +227,8 @@ async function generateSchemaMarkup(params: {
 }): Promise<string | null> {
     try {
         const now = new Date().toISOString();
-        const siteUrl = `https://${params.siteDomain.replace(/^https?:\\/\\//, "").replace(/\\/$/, "")}`;
+        const normalizedDomain = params.siteDomain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+        const siteUrl = normalizedDomain ? `https://${normalizedDomain}` : "https://example.com";
         const articleUrl = `${siteUrl}/blog/${params.slug}`;
         const faqItems = extractFaqsForSchema(params.content);
         const scripts = [
@@ -235,7 +236,7 @@ async function generateSchemaMarkup(params: {
                 "@context": "https://schema.org",
                 "@type": "Article",
                 headline: params.title,
-                description: params.keyword,
+                description: params.title,
                 author: {
                     "@type": "Person",
                     name: params.author.name,
