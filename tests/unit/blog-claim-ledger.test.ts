@@ -33,7 +33,7 @@ function packet(overrides: Partial<EvidencePacket> = {}): EvidencePacket {
         caseStudies: [],
         visuals: [],
         unsupportedClaims: ["This claim has no source."],
-        unsourcedStatistics: ["Google changed its pricing in 2026."],
+        unsourcedStatistics: [],
         unverifiedCaseStudies: [],
         fabricatedClaims: ["A fabricated claim."],
         extraction: {
