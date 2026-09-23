@@ -28,6 +28,7 @@ import {
     ResearchBrainSchema,
     OutlinePlanSchema,
 } from "./contracts";
+import { extractEvidencePacket } from "./evidence-extractor";
 import {
     buildResearchPacket,
     buildSectionResearchMap,
