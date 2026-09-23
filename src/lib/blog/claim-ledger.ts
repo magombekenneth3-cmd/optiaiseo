@@ -9,6 +9,7 @@ export interface ClaimRecord {
     type: "statistic" | "fact" | "quote" | "comparison" | "experience";
     sourceIds: string[];
     sourceAuthority: number;
+    sourceSupportScore: number;
     freshnessStatus: "fresh" | "stale" | "unknown";
     freshnessWindowDays: number;
     verificationStatus: ClaimVerificationStatus;
@@ -45,6 +46,27 @@ function matches(issue: string, claim: string): boolean {
     return a.includes(b.slice(0, Math.min(180, b.length))) || b.includes(a.slice(0, Math.min(180, a.length)));
 }
 
+function supportScore(claim: string, source: SourceEvidence): number {
+    const tokenize = (value: string) =>
+        new Set(
+            value
+                .toLowerCase()
+                .match(/[a-z0-9%$.-]{3,}/g)
+                ?.filter(token => !new Set([
+                    "the", "and", "for", "that", "this", "with", "from", "into", "are", "was", "were",
+                    "has", "have", "had", "can", "will", "its", "their", "they", "you", "your"
+                ]).has(token)) ?? []
+        );
+    const claimTerms = tokenize(claim);
+    if (claimTerms.size === 0) return 0;
+    const sourceTerms = tokenize(`${source.title} ${source.claim} ${source.evidence}`);
+    let matched = 0;
+    for (const term of claimTerms) {
+        if (sourceTerms.has(term)) matched += 1;
+    }
+    return matched / claimTerms.size;
+}
+
 export function buildClaimLedger(packet: EvidencePacket): ClaimRecord[] {
     const sourceById = new Map(packet.sources.map(source => [source.id, source]));
     return packet.claims.map((claim, index) => {
@@ -54,7 +76,10 @@ export function buildClaimLedger(packet: EvidencePacket): ClaimRecord[] {
         const windowDays = freshnessWindowDays(claim.text, claim.type);
         const freshnessStates = sources.map(source => freshness(source, windowDays).status);
         const sourceAuthority = sources.length > 0
-            ? Math.max(...sources.map(source => source.confidence))
+            ? Math.max(...sources.map(source => source.authorityScore ?? source.confidence))
+            : 0;
+        const sourceSupportScore = sources.length > 0
+            ? Math.max(...sources.map(source => supportScore(claim.text, source)))
             : 0;
         const hasFabrication = packet.fabricatedClaims.some(issue => matches(issue, claim.text));
         const hasUnsupported = packet.unsupportedClaims.some(issue => matches(issue, claim.text))
@@ -71,11 +96,11 @@ export function buildClaimLedger(packet: EvidencePacket): ClaimRecord[] {
             verificationStatus = "blocked";
             action = "BLOCK";
             confidence = 0;
-        } else if (sources.length === 0 || hasUnsupported) {
+        } else if (sources.length === 0 || hasUnsupported || sourceSupportScore < 0.2) {
             verificationStatus = "unsupported";
             action = claim.type === "experience" ? "REWRITE" : "REMOVE";
-            confidence = 0;
-        } else if (sourceAuthority >= 0.78 && !stale) {
+            confidence = Number((Math.min(sourceAuthority, sourceSupportScore) * 0.5).toFixed(3));
+        } else if (sourceAuthority >= 0.78 && sourceSupportScore >= 0.35 && !stale) {
             verificationStatus = "supported";
             action = "KEEP";
             confidence = sourceAuthority * (unknownFreshness ? 0.92 : 1);
@@ -91,6 +116,7 @@ export function buildClaimLedger(packet: EvidencePacket): ClaimRecord[] {
             type: claim.type,
             sourceIds: claim.sourceIds,
             sourceAuthority,
+            sourceSupportScore: Number(sourceSupportScore.toFixed(3)),
             freshnessStatus: sources.length === 0
                 ? "unknown"
                 : stale
