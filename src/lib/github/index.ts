@@ -200,7 +200,7 @@ export async function createAutoFixPR(
             logger.info("[GitHub Engine] PR already exists — returning early", { prUrl: pr.html_url });
             // Update effect as DISPATCHED — the PR already exists
             if (effectId) {
-                await updateEffectStatus(effectId, "DISPATCHED", pr.html_url);
+                await updateEffectStatus(effectId, "DISPATCHED", pr.html_url, undefined, { repository: `${owner}/${repo}`, prNumber: pr.number });
             }
             return { success: true, prUrl: pr.html_url, branchName, effectId };
         }
@@ -312,7 +312,7 @@ ${tableRows}
 
         // Update effect status on success
         if (effectId) {
-            await updateEffectStatus(effectId, "DISPATCHED", prData.html_url);
+            await updateEffectStatus(effectId, "DISPATCHED", prData.html_url, undefined, { repository: `${owner}/${repo}`, prNumber: prData.number, commitSha: commit.sha });
         }
 
         if (userEmail) {
@@ -361,6 +361,7 @@ async function updateEffectStatus(
     status: "DISPATCHED" | "FAILED",
     externalId?: string,
     externalError?: string,
+    externalMetadata?: Record<string, unknown>,
 ): Promise<void> {
     try {
         const { prisma } = await import("@/lib/prisma");
@@ -372,6 +373,7 @@ async function updateEffectStatus(
                 failedAt: status === "FAILED" ? new Date() : undefined,
                 externalId: externalId || undefined,
                 externalError: externalError || undefined,
+                externalMetadata: externalMetadata || undefined,
                 attempts: { increment: 1 },
             },
         });
