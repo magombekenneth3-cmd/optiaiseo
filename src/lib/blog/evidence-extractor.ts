@@ -114,7 +114,7 @@ function sourceTextMatchesClaim(claim: string, sources: SourceEvidence[]): strin
             );
             if (!sameNumber) return false;
             const sourceTerms = significantTerms(sourceText);
-            return [...claimTerms].some(term => sourceTerms.has(term));
+            return [...claimTerms].filter(term => sourceTerms.has(term)).length >= 2;
         })
         .map(source => source.id)
         .slice(0, 8);
@@ -175,14 +175,10 @@ export function extractEvidencePacket(
             if (!normalizedClaim || seenClaims.has(dedupeKey) || claims.length >= 100) continue;
             seenClaims.add(dedupeKey);
 
-            const matchedSourceIds = block.sourceIds.length > 0
-                ? block.sourceIds
-                : sourceTextMatchesClaim(normalizedClaim, sources);
-            const matchMethod = block.sourceIds.length > 0
+            const matchedSourceIds = block.sourceIds;
+            const matchMethod = matchedSourceIds.length > 0
                 ? "explicit_citation" as const
-                : matchedSourceIds.length > 0
-                    ? "source_text_match" as const
-                    : "unsupported" as const;
+                : "unsupported" as const;
             const claimId = `claim-${claims.length + 1}`;
             const type = hasStatistic ? "statistic" as const : "fact" as const;
 
