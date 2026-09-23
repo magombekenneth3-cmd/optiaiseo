@@ -25,6 +25,7 @@ import { injectVisualEvidenceIntoBlog } from "./image-evidence";
 import {
     type ResearchPacket,
     type SectionResearch,
+    type QueryDecomposition,
     ResearchBrainSchema,
     OutlinePlanSchema,
 } from "./contracts";
@@ -48,6 +49,7 @@ export interface ResearchBrain {
     industryMyths: string[];
     whatPeopleAvoidSaying: string[];
     informationGainDirective?: string;
+    queryDecomposition?: QueryDecomposition;
 }
 
 export interface OutlineSection {
@@ -90,60 +92,61 @@ function parseJsonSafe<T>(text: string, fallback: T): T {
     }
 }
 
-function wordCountTarget(ctx: PromptContext, serpContext: SerpContext | null): number {
-    const intentBase =
-        ctx.intent === "transactional" ? 1500
-        : ctx.intent === "commercial" ? 2200
-        : ctx.intent === "local" ? 1800
-        : 2200;
+function wordCountTarget(
+    ctx: PromptContext,
+    serpContext: SerpContext | null,
+    brain: ResearchBrain,
+): number {
+    const base =
+        ctx.intent === "transactional" ? 1400
+        : ctx.intent === "commercial" ? 1900
+        : ctx.intent === "local" ? 1600
+        : 1800;
 
-    if (!serpContext) return intentBase;
+    const decomposition = brain.queryDecomposition;
+    const questionCount = decomposition?.requiredQuestions?.length ?? serpContext?.peopleAlsoAsk.length ?? 0;
+    const decisionCount = decomposition?.decisionCriteria?.length ?? 0;
+    const comparisonCount = decomposition?.comparisonDimensions?.length ?? 0;
+    const riskCount = decomposition?.risksAndExceptions?.length ?? 0;
+    const gapCount = brain.contentGaps.length;
+    const evidenceSections = serpContext?.results.length
+        ? Math.min(3, serpContext.results.filter(result => (result.scrapedContent?.length ?? 0) > 1_000).length)
+        : 0;
 
-    const competitorCounts = serpContext.results
-        .map(r => r.wordCount ?? 0)
-        .filter(n => n > 300);
+    const complexity =
+        Math.min(questionCount, 8) * 90 +
+        Math.min(decisionCount, 5) * 110 +
+        Math.min(comparisonCount, 5) * 100 +
+        Math.min(riskCount, 4) * 100 +
+        Math.min(gapCount, 4) * 100 +
+        evidenceSections * 120;
 
-    if (competitorCounts.length === 0) return intentBase;
+    const format = serpContext ? classifySerpFormat(serpContext.results).format : null;
+    const formatAdjustment = format === "comparison" ? 250 : format === "listicle" ? 150 : 0;
 
-    const avgWords = Math.round(competitorCounts.reduce((a, b) => a + b, 0) / competitorCounts.length);
-    const maxWords = Math.max(...competitorCounts);
-
-    // Beat the longest competitor, not just the average
-    const serpTarget = Math.round(Math.max(avgWords * 1.2, maxWords + 300));
-
-    return Math.min(Math.max(intentBase, serpTarget), 5500); // raised from 4000
+    return Math.min(Math.max(base, base + complexity + formatAdjustment), 4800);
 }
 
 /** Builds a full competitor depth benchmark string for the Outline Planner. */
 function buildDepthBenchmark(serpContext: SerpContext | null): string {
     if (!serpContext) return "";
-    const scraped = serpContext.results.filter(r => (r.wordCount ?? 0) > 500);
-    if (scraped.length === 0) return "";
+    const competitors = serpContext.results
+        .filter(result => (result.scrapedHeadings?.length ?? 0) > 0)
+        .slice(0, 5);
+    if (competitors.length === 0) return "";
 
-    const wordCounts = scraped.map(r => r.wordCount ?? 0);
-    const avgWords = Math.round(wordCounts.reduce((a, b) => a + b, 0) / wordCounts.length);
-    const maxWords = Math.max(...wordCounts);
-
-    const coverageSummary = scraped.map((r, i) =>
-        `Competitor ${i + 1} (${r.wordCount} words): ${(r.scrapedHeadings ?? []).slice(0, 6).join(" → ")}`
+    const coverage = competitors.map((result, index) =>
+        `Competitor ${index + 1}: ${(result.scrapedHeadings ?? []).slice(0, 10).join(" → ")}`
     ).join("\n");
 
-    const allHeadings = scraped
-        .flatMap((r, i) => (r.scrapedHeadings ?? []).map(h => `[C${i + 1}] ${h}`))
-        .slice(0, 40);
+    const formats = competitors.map(result => result.scrapedSchemaTypes ?? []).flat();
+    return `SERP COVERAGE MAP:
+${coverage}
 
-    return `COMPETITOR DEPTH BENCHMARK (${scraped.length} full articles analysed):
-- Average: ${avgWords} words | Longest: ${maxWords} words
-- Your minimum target: ${Math.round(Math.max(avgWords * 1.2, maxWords))} words
-
-SECTION STRUCTURE ACROSS ALL COMPETITORS:
-${coverageSummary}
-
-ALL HEADINGS IN USE (identify gaps — what none of them cover):
-${allHeadings.join("\n")}
-
-DEPTH RULE: Any topic competitors cover in 200 words, cover in 400.
-Do not write a section that could be cut without the reader noticing.`;
+SERP STRUCTURE SIGNALS:
+- Schema types observed: ${[...new Set(formats)].slice(0, 12).join(", ") || "not available"}
+- Build the article around searcher task completion, required questions, entities, evidence, risks, and differentiation.
+- Do not increase length simply to exceed competitor word counts.`;
 }
 
 // ─── Stage 1: Research Brain ──────────────────────────────────────────────────
@@ -201,13 +204,28 @@ Produce a research brief as a JSON object with these exact keys:
   "faqTargets": ["actual question a searcher types, answered directly", "..."],
   "commonMisconceptions": ["a widespread belief that is partially or fully wrong", "..."],
   "industryMyths": ["something the industry repeats but practitioners know is false", "..."],
-  "whatPeopleAvoidSaying": ["an uncomfortable truth or unpopular opinion in this space", "..."]
+  "whatPeopleAvoidSaying": ["an uncomfortable truth or unpopular opinion in this space", "..."],
+  "queryDecomposition": {
+    "primaryIntent": "the single primary task the searcher needs to complete",
+    "secondaryIntents": ["secondary tasks that materially affect the answer"],
+    "requiredQuestions": ["questions that must be answered for the task to be complete"],
+    "decisionCriteria": ["criteria the reader uses to choose or act"],
+    "comparisonDimensions": ["dimensions that matter when comparing options"],
+    "entities": ["important entities, tools, standards, organizations, or concepts"],
+    "risksAndExceptions": ["important caveats, failure modes, edge cases, or exceptions"],
+    "freshnessSensitiveFacts": ["facts that become stale quickly and must be sourced carefully"]
+  }
 }
 
 Rules:
 - Be specific and concrete. No generic placeholders.
 - "contentGaps" should name actual topics, not vague descriptions.
-- "entities" should be real named things (e.g. "Ahrefs", "E-E-A-T", "John Mueller").
+- "entities" should be real named things or established concepts.
+- Decompose the query before recommending article structure.
+- "requiredQuestions" must be questions needed to satisfy the primary and secondary tasks, not filler FAQs.
+- "decisionCriteria" and "comparisonDimensions" should be present only when they materially affect the query.
+- "freshnessSensitiveFacts" should identify claims that require recent sources.
+- Do not use "LSI" as an SEO requirement; use related entities, subtopics, concepts, attributes, and terminology.
 - Return ONLY the JSON object. No commentary, no markdown fences.`;
 
     const fallback: ResearchBrain = {
@@ -221,6 +239,16 @@ Rules:
         commonMisconceptions: [],
         industryMyths: [],
         whatPeopleAvoidSaying: [],
+        queryDecomposition: {
+            primaryIntent: `Help the reader accomplish the main task behind "${keyword}"`,
+            secondaryIntents: [],
+            requiredQuestions: [],
+            decisionCriteria: [],
+            comparisonDimensions: [],
+            entities: [],
+            risksAndExceptions: [],
+            freshnessSensitiveFacts: [],
+        },
     };
 
     const infoGain = await runInformationGainAlgorithm(
@@ -266,7 +294,7 @@ export async function runOutlinePlanner(
     ctx: PromptContext,
     tone?: string,
 ): Promise<OutlinePlan> {
-    const targetWords = wordCountTarget(ctx, serpContext);
+    const targetWords = wordCountTarget(ctx, serpContext, brain);
     const depthBenchmark = buildDepthBenchmark(serpContext);
     const serpHeadings = serpContext?.results.slice(0, 3)
         .flatMap(r => r.scrapedHeadings ?? [])
@@ -303,6 +331,11 @@ RESEARCH BRIEF:
 - ${gapSignal}
 - Contrarian angles available: ${brain.contrarianAngles.slice(0, 2).join("; ")}
 - Common misconceptions: ${brain.commonMisconceptions.slice(0, 2).join("; ")}
+- Required questions: ${brain.queryDecomposition?.requiredQuestions?.slice(0, 6).join("; ") || "none identified"}
+- Decision criteria: ${brain.queryDecomposition?.decisionCriteria?.slice(0, 5).join("; ") || "none identified"}
+- Comparison dimensions: ${brain.queryDecomposition?.comparisonDimensions?.slice(0, 5).join("; ") || "none identified"}
+- Risks and exceptions: ${brain.queryDecomposition?.risksAndExceptions?.slice(0, 5).join("; ") || "none identified"}
+- Freshness-sensitive facts: ${brain.queryDecomposition?.freshnessSensitiveFacts?.slice(0, 5).join("; ") || "none identified"}
 
 ${formatInstruction}
 
@@ -347,7 +380,10 @@ RULES:
 - At least one section with evidenceType="case_study" — real example (or placeholder).
 - Vary tones across sections — no two consecutive sections with the same tone.
 - 5-8 sections total.
-- wordTargets should sum close to ${targetWords}.
+- wordTargets should be driven by task complexity and evidence needs, not competitor word counts.
+- Every required question that materially affects the task must be assigned to a section or the FAQ.
+- Every decision criterion or comparison dimension must appear in the outline when relevant.
+- Avoid sections that exist only to increase word count.
 - Return ONLY the JSON object.`;
 
     const fallback: OutlinePlan = {
