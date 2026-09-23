@@ -25,6 +25,8 @@ import { injectVisualEvidenceIntoBlog } from "./image-evidence";
 import {
     type ResearchPacket,
     type SectionResearch,
+    ResearchBrainSchema,
+    OutlinePlanSchema,
 } from "./contracts";
 import {
     buildResearchPacket,
@@ -231,6 +233,7 @@ Rules:
             prompt,
             model: AI_MODELS.GEMINI_FLASH,
             maxTokens: 2048,
+            validate: (data) => ResearchBrainSchema.parse(data),
         });
 
         if (infoGain) {
@@ -366,6 +369,7 @@ RULES:
             prompt,
             model: AI_MODELS.GEMINI_FLASH,
             maxTokens: 3000,
+            validate: (data) => OutlinePlanSchema.parse(data),
         });
 
         if (!parsed || !Array.isArray(parsed.sections) || parsed.sections.length === 0) {
@@ -895,6 +899,65 @@ ${section}`;
     };
 }
 
+async function repairUnsupportedClaims(
+    content: string,
+    researchPacket: ResearchPacket,
+    ctx: PromptContext,
+): Promise<string> {
+    const evidence = extractEvidencePacket(researchPacket, content);
+    const issues = [...evidence.unsourcedStatistics, ...evidence.unverifiedCaseStudies].slice(0, 12);
+    if (issues.length === 0 || researchPacket.sources.length === 0) return content;
+
+    const sourceContext = renderSourceContext(researchPacket.sources);
+    const prompt = `You are a senior fact-preservation editor. Repair only unsupported factual claims in the article below.
+
+PRIMARY KEYWORD: "${ctx.keyword}"
+
+UNSUPPORTED CLAIMS TO REPAIR:
+${issues.map(issue => `- ${issue}`).join("\n")}
+
+AUTHORITATIVE SOURCES:
+${sourceContext}
+
+RULES:
+- Use only facts supported by the supplied sources.
+- Never invent a statistic, date, result, company outcome, quote, or source.
+- If a numeric claim lacks supporting evidence, remove the number and keep the statement qualitative.
+- If a case-study result lacks supporting evidence, remove the precise result or turn it into a clearly labelled hypothetical example.
+- Preserve every supported claim, citation URL, heading, link, and the article's structure.
+- Do not add new sections.
+- Return the full article in Markdown.
+
+ARTICLE:
+${content}`;
+
+    try {
+        const repaired = await generateWithFallback({
+            prompt,
+            model: AI_MODELS.GEMINI_PRO,
+            maxTokens: 7000,
+            temperature: 0.15,
+        });
+        const cleaned = repaired
+            .replace(/^```(?:markdown|html)?\s*/i, "")
+            .replace(/\s*```$/i, "")
+            .trim();
+        if (!cleaned || cleaned.length < content.length * 0.55) return content;
+
+        const after = extractEvidencePacket(researchPacket, cleaned);
+        const h2Before = (content.match(/^##\s+/gm) ?? []).length;
+        const h2After = (cleaned.match(/^##\s+/gm) ?? []).length;
+        if (h2After !== h2Before) return content;
+        if (after.unsourcedStatistics.length + after.unverifiedCaseStudies.length > issues.length) return content;
+        return cleaned;
+    } catch (error) {
+        logger.warn("[Pipeline] Unsupported-claim repair failed — keeping original", {
+            keyword: ctx.keyword,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return content;
+    }
+}
 // ─── Convenience: Full Pipeline ───────────────────────────────────────────────
 
 export interface PipelineResult {
@@ -955,12 +1018,14 @@ export async function runFullPipeline(params: {
         logger.warn("[Pipeline] Editorial rewrite was truncated", { keyword });
     }
 
+    const repairedMarkdown = await repairUnsupportedClaims(polishedMarkdown, researchPacket, ctx);
+
     return {
         title: outline.title,
         slug: outline.slug,
         quickAnswer: outline.quickAnswer,
         metaDescription: outline.metaDescription,
-        markdownContent: polishedMarkdown,
+        markdownContent: repairedMarkdown,
         brain,
         outline,
         researchPacket,
