@@ -15,6 +15,8 @@ import type {
 import type { SerpContext } from "./serp";
 import { runEvidenceGate, type EvidenceGateResult } from "./evidence-gate";
 import { runOriginalValueGate } from "./original-value-gate";
+import { runContentLint } from "./content-lint";
+import { buildClaimLedger } from "./claim-ledger";
 import type { OriginalValueResult } from "./contracts";
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -220,11 +222,21 @@ function uniqueIssues(issues: string[], limit: number): string[] {
 export async function runPublicationGate(
     input: PublicationGateInput
 ): Promise<PublicationGateResult> {
+    const contentLint = runContentLint(input.content);
+    const claimLedger = buildClaimLedger(input.evidencePacket);
     const allBlockingIssues: string[] = [];
     const allWarnings: string[] = [];
     const evidenceIssues = validateEvidenceSnapshot(input.evidencePacket, input.researchPacket);
     const originalityIssues: string[] = [];
     const repetitionIssues: string[] = [];
+    originalityIssues.push(...contentLint.blockingIssues);
+    allWarnings.push(...contentLint.warnings);
+    originalityIssues.push(
+        ...claimLedger
+            .filter(claim => claim.verificationStatus === "weak")
+            .slice(0, 8)
+            .map(claim => `Claim requires review because its source is low-confidence or stale: "${claim.text.slice(0, 120)}…"`)
+    );
     const fabricationIssues: string[] = [];
 
     // ── Gate 1: Structure ─────────────────────────────────────────────────
