@@ -36,6 +36,7 @@ interface EffectRecord {
   compensationPolicy: string;
   externalId: string | null;
   externalError: string | null;
+  externalMetadata: Record<string, unknown> | null;
   attempts: number;
   maxAttempts: number;
   dispatchedAt: Date | null;
@@ -168,7 +169,7 @@ async function confirmWebflow(
  * this would call the GitHub API to verify the PR status.
  */
 async function confirmGitHubPR(effect: EffectRecord): Promise<ReconciliationResult> {
-  const metadata = ((effect as any).externalMetadata ?? {}) as Record<string, any>;
+  const metadata = (effect.externalMetadata ?? {}) as Record<string, any>;
   const prUrl = effect.externalId;
   const repository = String(metadata.repository ?? "");
   const prNumber = Number(metadata.prNumber ?? 0);
