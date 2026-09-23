@@ -9,7 +9,20 @@ import { z } from "zod";
 
 const NonEmptyString = z.string().trim().min(1);
 const ShortString = NonEmptyString.max(500);
-const StringList = z.array(NonEmptyString).max(30);\n\nexport const SeoOpportunitySchema = z.object({\n    type: z.enum(["topic_gap", "question_gap", "serp_gap"]),\n    topic: ShortString,\n    score: z.number().min(0).max(100),\n    coverage: z.number().min(0).max(100),\n    competitorCount: z.number().int().nonnegative(),\n    competitorTotal: z.number().int().nonnegative(),\n    rankWeightedCoverage: z.number().min(0).max(100),\n    intentRelevance: z.number().min(0).max(100),\n    evidence: z.array(NonEmptyString).max(10),\n    reason: z.string().trim().max(1000),\n});
+const StringList = z.array(NonEmptyString).max(30);
+
+export const SeoOpportunitySchema = z.object({
+    type: z.enum(["topic_gap", "question_gap", "serp_gap"]),
+    topic: ShortString,
+    score: z.number().min(0).max(100),
+    coverage: z.number().min(0).max(100),
+    competitorCount: z.number().int().nonnegative(),
+    competitorTotal: z.number().int().nonnegative(),
+    rankWeightedCoverage: z.number().min(0).max(100),
+    intentRelevance: z.number().min(0).max(100),
+    evidence: z.array(NonEmptyString).max(10),
+    reason: z.string().trim().max(1000),
+});
 
 export const SourceTypeSchema = z.enum([
     "official",
