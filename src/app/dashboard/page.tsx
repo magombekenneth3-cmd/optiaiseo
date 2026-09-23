@@ -180,6 +180,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const organicClicks = metricSnapshots.length > 0 && metricSnapshots[0].organicTraffic !== null
     ? metricSnapshots[0].organicTraffic
     : null;
+  const previousOrganicClicks = metricSnapshots.length > 1 && metricSnapshots[1].organicTraffic !== null
+    ? metricSnapshots[1].organicTraffic
+    : null;
+  const organicTrafficDelta = organicClicks !== null && previousOrganicClicks !== null
+    ? organicClicks - previousOrganicClicks
+    : null;
   const organicClicksDeltaPct = organicClicks !== null && organicTrafficDelta !== null && (organicClicks - organicTrafficDelta) > 0
     ? Math.round((organicTrafficDelta / (organicClicks - organicTrafficDelta)) * 100)
     : null;
