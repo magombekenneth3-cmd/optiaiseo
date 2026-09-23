@@ -225,24 +225,13 @@ function getConfirmationHandler(effect: EffectRecord): ConfirmationHandler | nul
  * Default fallback: if a DISPATCHED effect has an externalId set,
  * it's confirmed. If not and it's been > 15 minutes, it's failed.
  */
-async function genericTimeoutConfirmation(
-  effect: EffectRecord
-): Promise<ReconciliationResult> {
-  if (effect.externalId) {
-    return { status: "CONFIRMED", externalId: effect.externalId };
-  }
-
+async function genericTimeoutConfirmation(effect: EffectRecord): Promise<ReconciliationResult> {
   const timeSinceDispatch = effect.dispatchedAt
     ? Date.now() - new Date(effect.dispatchedAt).getTime()
     : 0;
-
   if (timeSinceDispatch > 15 * 60 * 1000) {
-    return {
-      status: "FAILED",
-      error: `Effect ${effect.effectType} timed out — no externalId after 15 minutes`,
-    };
+    return { status: "UNKNOWN", reason: `No confirmation adapter is registered for ${effect.effectType}` };
   }
-
   return { status: "PENDING" };
 }
 
