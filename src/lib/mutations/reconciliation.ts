@@ -21,8 +21,9 @@ import { releaseStaleActiveClaims } from "@/lib/autonomy/execution-claim";
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type ReconciliationResult =
-  | { status: "CONFIRMED"; externalId?: string }
+  | { status: "CONFIRMED"; externalId?: string; metadata?: Record<string, unknown> }
   | { status: "FAILED"; error: string }
+  | { status: "UNKNOWN"; reason: string }
   | { status: "PENDING" }; // not yet confirmable — skip for now
 
 interface EffectRecord {
@@ -169,25 +170,66 @@ async function confirmWebflow(
 async function confirmGitHubPR(
   effect: EffectRecord
 ): Promise<ReconciliationResult> {
+  const payload = effect.payload as Record<string, any>;
   const prUrl = effect.externalId;
+  const repository = String(payload?.repository ?? "");
+  const prNumber = Number(payload?.prNumber ?? 0);
+  const token = String(payload?.token ?? "");
 
   if (!prUrl) {
     const timeSinceDispatch = effect.dispatchedAt
       ? Date.now() - new Date(effect.dispatchedAt).getTime()
       : 0;
-
-    // GitHub PR creation should be fast — 10 minute timeout
     if (timeSinceDispatch > 10 * 60 * 1000) {
-      return {
-        status: "FAILED",
-        error: "GitHub PR timed out — no PR URL after 10 minutes",
-      };
+      return { status: "FAILED", error: "GitHub PR timed out — no PR URL after 10 minutes" };
     }
     return { status: "PENDING" };
   }
 
-  // PR URL recorded → dispatch succeeded
-  return { status: "CONFIRMED", externalId: prUrl };
+  if (!repository || !prNumber || !token) {
+    return { status: "UNKNOWN", reason: "GitHub PR identity or authorization data is unavailable" };
+  }
+
+  const response = await fetch(
+    `https://api.github.com/repos/${repository}/pulls/${prNumber}`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    if (response.status === 404) return { status: "UNKNOWN", reason: "GitHub PR is not currently visible to the connected account" };
+    return { status: "PENDING" };
+  }
+
+  const pr = await response.json() as {
+    state: string;
+    merged: boolean;
+    merged_at: string | null;
+    merge_commit_sha: string | null;
+    head: { sha: string };
+    base: { ref: string };
+  };
+
+  return {
+    status: "CONFIRMED",
+    externalId: prUrl,
+    metadata: {
+      prNumber,
+      state: pr.state,
+      merged: pr.merged,
+      mergedAt: pr.merged_at,
+      mergeCommitSha: pr.merge_commit_sha,
+      headSha: pr.head.sha,
+      baseBranch: pr.base.ref,
+      lifecycleState: pr.merged ? "MERGED" : "OPEN",
+    },
+  };
 }
 
 // ── Handler Registry ────────────────────────────────────────────────────────
@@ -358,6 +400,9 @@ export async function reconcileEffects(
                   status: "CONFIRMED",
                   confirmedAt: new Date(),
                   externalId: result.externalId ?? effect.externalId,
+                  externalMetadata: result.metadata ?? undefined,
+                  verificationStatus: "CONFIRMED",
+                  verifiedAt: new Date(),
                 },
               });
               await appendAuditEvent(
@@ -373,6 +418,24 @@ export async function reconcileEffects(
               );
               confirmed++;
               updatedOperationIds.add(effect.operationId);
+              break;
+            }
+            case "UNKNOWN": {
+              await (prisma as any).mutationEffect.update({
+                where: { id: effect.id },
+                data: {
+                  status: "DISPATCHED",
+                  externalError: result.reason,
+                  externalMetadata: { verificationStatus: "UNKNOWN", reason: result.reason },
+                },
+              });
+              await appendAuditEvent(
+                effect.operationId,
+                "EFFECT_VERIFICATION_UNKNOWN",
+                "system:reconciler",
+                { effectId: effect.id, effectType: effect.effectType, platform: effect.platform, reason: result.reason }
+              );
+              pending++;
               break;
             }
             case "FAILED": {
