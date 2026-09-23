@@ -48,13 +48,19 @@ function publisher(url: string): string | undefined {
 function sourceType(url: string): SourceType {
     const host = publisher(url)?.toLowerCase() ?? "";
     if (host.endsWith(".gov") || host.includes("who.int") || host.includes("europa.eu")) return "government";
-    if (host.endsWith(".edu") || /(journal|research|arxiv|nih\.gov|ncbi)/.test(host)) return "research";
+    if (
+        host.endsWith(".edu") ||
+        /(journal|research|arxiv|nih\.gov|ncbi|nature\.com|science\.org)/.test(host)
+    ) return "research";
+    if (
+        /(developers\.google|support\.google|web\.dev|learn\.microsoft|docs\.microsoft|platform\.openai|docs\.anthropic)/.test(host)
+    ) return "official";
     if (/(reuters|apnews|bbc\.|nytimes|theguardian|bloomberg)/.test(host)) return "news";
     if (/(google|microsoft|openai|anthropic|mozilla|hubspot|salesforce|shopify|ahrefs|semrush)/.test(host)) return "company";
     return "other";
 }
 
-function confidence(type: SourceType, evidence: string): number {
+function sourceAuthority(type: SourceType): number {
     const base: Record<SourceType, number> = {
         official: 0.95,
         government: 0.92,
@@ -64,23 +70,33 @@ function confidence(type: SourceType, evidence: string): number {
         expert: 0.62,
         other: 0.45,
     };
-    return evidence.length >= 100 ? base[type] : Math.max(0.3, base[type] - 0.12);
+    return base[type];
+}
+
+function confidence(type: SourceType, evidence: string): number {
+    const base = sourceAuthority(type);
+    return evidence.length >= 100 ? base : Math.max(0.3, base - 0.12);
 }
 
 export function sourceFromSerpResult(result: SerpResult, id: string, retrievedAt = new Date().toISOString()): SourceEvidence | null {
     if (!isUrl(result.link) || !result.title.trim() || !result.snippet.trim()) return null;
     const evidence = truncate(result.scrapedContent || result.snippet || "", 3_500);
     const type = sourceType(result.link);
+    const publishedAt = result.scrapedPublishedDate && Number.isFinite(Date.parse(result.scrapedPublishedDate))
+        ? new Date(result.scrapedPublishedDate).toISOString()
+        : undefined;
     const candidate = {
         id,
         url: result.link,
         title: truncate(result.title, 500),
         publisher: publisher(result.link),
+        ...(publishedAt ? { publishedAt } : {}),
         retrievedAt,
         claim: truncate(result.snippet, 1_000),
         evidence,
         sourceType: type,
         confidence: confidence(type, evidence),
+        authorityScore: sourceAuthority(type),
     };
     const parsed = SourceEvidenceSchema.safeParse(candidate);
     return parsed.success ? parsed.data : null;
@@ -213,12 +229,32 @@ function selectedAuthorEvidence(section: OutlineSection, packet: ResearchPacket)
     return directlyRelevant || narrativeFit ? truncate(candidate.join("\n"), 3_500) : undefined;
 }
 
+function freshnessBonus(source: SourceEvidence, section: OutlineSection): number {
+    if (!source.publishedAt) return section.evidenceType === "data" ? -1 : 0;
+    const ageDays = Math.max(0, (Date.now() - Date.parse(source.publishedAt)) / 86_400_000);
+    const windowDays =
+        section.evidenceType === "data" ? 365 :
+        section.evidenceType === "comparison" ? 180 :
+        section.evidenceType === "case_study" ? 730 :
+        365;
+    return ageDays <= windowDays ? 2 : -4;
+}
+
 function sourceForSection(section: OutlineSection, sources: SourceEvidence[]): SourceEvidence[] {
     const terms = [...topicTerms(section.heading), ...section.keyEntities.map(entity => entity.toLowerCase())];
     return sources
-        .map(source => ({ source, score: relevance(`${source.title} ${source.claim} ${source.evidence}`, terms) }))
+        .map(source => ({
+            source,
+            score:
+                relevance(`${source.title} ${source.claim} ${source.evidence}`, terms) * 10 +
+                (source.authorityScore ?? source.confidence) * 4 +
+                freshnessBonus(source, section),
+        }))
         .filter(item => item.score > 0)
-        .sort((a, b) => b.score - a.score || b.source.confidence - a.source.confidence)
+        .sort((a, b) =>
+            b.score - a.score ||
+            (b.source.authorityScore ?? b.source.confidence) - (a.source.authorityScore ?? a.source.confidence)
+        )
         .slice(0, MAX_SOURCES_PER_SECTION)
         .map(item => item.source);
 }
@@ -288,6 +324,9 @@ function assembleSectionResearch(section: OutlineSection, packet: ResearchPacket
     }
     if (needsExternalEvidence(section) && sources.length === 0) {
         warnings.push("No verified external sources are available. Do not include externally verifiable facts or statistics.");
+    }
+    if (section.evidenceType === "data" && sources.length > 0 && sources.every(source => freshnessBonus(source, section) < 0)) {
+        warnings.push("Available data sources are stale for a data-heavy section. Prefer a current source or state the limitation explicitly.");
     }
     return SectionResearchSchema.parse({
         sectionId: section.id ?? "section",
