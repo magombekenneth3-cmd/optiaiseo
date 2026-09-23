@@ -3,6 +3,7 @@ import * as cheerio from "cheerio";
 
 
 import { computeContentGapsFromOpportunities, type SeoOpportunityAnalysis } from "./seo-opportunity";
+export type { SeoOpportunityAnalysis };
 
 export interface SerpResult {
   title: string;
@@ -27,6 +28,7 @@ export interface SerpContext {
   featuredSnippet: string | null;
   relatedSearches: string[];
   formattedContext: string;
+  opportunityAnalysis: SeoOpportunityAnalysis;
 }
 
 
@@ -527,6 +529,7 @@ export async function getSerpContextForKeyword(
     featuredSnippet,
     relatedSearches,
     formattedContext: ctx,
+    opportunityAnalysis: gapAnalysis.analysis,
   };
 }
 
