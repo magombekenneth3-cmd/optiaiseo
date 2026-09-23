@@ -52,8 +52,8 @@ describe("claim ledger governance", () => {
     it("routes stale factual evidence to rewrite", () => {
         const ledger = buildClaimLedger(packet());
         const claim = ledger[0];
-        expect(claim.verificationStatus).toBe("unsupported");
-        expect(claim.action).toBe("REMOVE");
+        expect(claim.verificationStatus).toBe("weak");
+        expect(claim.action).toBe("REWRITE");
         expect(claim.freshnessStatus).toBe("stale");
     });
 
