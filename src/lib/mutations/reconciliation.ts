@@ -167,69 +167,29 @@ async function confirmWebflow(
  * GitHub PR confirmation: checks if a PR URL is present. In production,
  * this would call the GitHub API to verify the PR status.
  */
-async function confirmGitHubPR(
-  effect: EffectRecord
-): Promise<ReconciliationResult> {
-  const payload = effect.payload as Record<string, any>;
+async function confirmGitHubPR(effect: EffectRecord): Promise<ReconciliationResult> {
+  const metadata = ((effect as any).externalMetadata ?? {}) as Record<string, any>;
   const prUrl = effect.externalId;
-  const repository = String(payload?.repository ?? "");
-  const prNumber = Number(payload?.prNumber ?? 0);
-  const token = String(payload?.token ?? "");
-
-  if (!prUrl) {
-    const timeSinceDispatch = effect.dispatchedAt
-      ? Date.now() - new Date(effect.dispatchedAt).getTime()
-      : 0;
-    if (timeSinceDispatch > 10 * 60 * 1000) {
-      return { status: "FAILED", error: "GitHub PR timed out — no PR URL after 10 minutes" };
-    }
-    return { status: "PENDING" };
-  }
-
-  if (!repository || !prNumber || !token) {
-    return { status: "UNKNOWN", reason: "GitHub PR identity or authorization data is unavailable" };
-  }
-
-  const response = await fetch(
-    `https://api.github.com/repos/${repository}/pulls/${prNumber}`,
-    {
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-      cache: "no-store",
-    }
-  );
-
-  if (!response.ok) {
-    if (response.status === 404) return { status: "UNKNOWN", reason: "GitHub PR is not currently visible to the connected account" };
-    return { status: "PENDING" };
-  }
-
-  const pr = await response.json() as {
-    state: string;
-    merged: boolean;
-    merged_at: string | null;
-    merge_commit_sha: string | null;
-    head: { sha: string };
-    base: { ref: string };
-  };
-
-  return {
-    status: "CONFIRMED",
-    externalId: prUrl,
-    metadata: {
-      prNumber,
-      state: pr.state,
-      merged: pr.merged,
-      mergedAt: pr.merged_at,
-      mergeCommitSha: pr.merge_commit_sha,
-      headSha: pr.head.sha,
-      baseBranch: pr.base.ref,
-      lifecycleState: pr.merged ? "MERGED" : "OPEN",
-    },
-  };
+  const repository = String(metadata.repository ?? "");
+  const prNumber = Number(metadata.prNumber ?? 0);
+  if (!prUrl) return { status: "PENDING" };
+  if (!repository || !prNumber) return { status: "UNKNOWN", reason: "GitHub PR verification identity is unavailable" };
+  const operation = await (await import("@/lib/prisma")).prisma.mutationOperation.findUnique({
+    where: { id: effect.operationId },
+    select: { site: { select: { userId: true } } },
+  });
+  const userId = operation?.site?.userId;
+  if (!userId) return { status: "UNKNOWN", reason: "GitHub PR owner could not be resolved" };
+  const { getGitHubToken } = await import("@/lib/github/token");
+  const token = await getGitHubToken(userId);
+  if (!token) return { status: "UNKNOWN", reason: "GitHub authorization is unavailable" };
+  const response = await fetch(`https://api.github.com/repos/${repository}/pulls/${prNumber}`, {
+    headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28" },
+    cache: "no-store",
+  });
+  if (!response.ok) return response.status === 404 ? { status: "UNKNOWN", reason: "GitHub PR is not visible to the connected account" } : { status: "PENDING" };
+  const pr = await response.json() as { state: string; merged: boolean; merged_at: string | null; merge_commit_sha: string | null; head: { sha: string }; base: { ref: string } };
+  return { status: "CONFIRMED", externalId: prUrl, metadata: { prNumber, state: pr.state, merged: pr.merged, mergedAt: pr.merged_at, mergeCommitSha: pr.merge_commit_sha, headSha: pr.head.sha, baseBranch: pr.base.ref, lifecycleState: pr.merged ? "MERGED" : "OPEN" } };
 }
 
 // ── Handler Registry ────────────────────────────────────────────────────────
