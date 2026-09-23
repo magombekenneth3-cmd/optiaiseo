@@ -942,7 +942,7 @@ ${liveBlogPost.content.substring(0, 80000)}`,
 
             if (wordCount < 900) {
                 liveBlogPost.validationWarnings.push(
-                    `Content is thin (${wordCount} words). Target 1,500+ for informational queries and 2,500+ for how-to/best-X queries.`
+                    `Content is thin (${wordCount} words) relative to the planned search-task scope. Review coverage before publishing.`
                 );
                 if (wordCount < 500) {
                     // Critically thin — hard error, not just a warning
