@@ -48,9 +48,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   });
   const aeoScore = latestAeoReport?.score || 0;
 
-  let totalSeoScore = 0;
-  let auditsWithSeo = 0;
-
   const chartData = audits
     .slice(0, 14)
     .reverse()
@@ -59,10 +56,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         categoryScores: a.categoryScores as Record<string, unknown> | null,
         issueList: a.issueList,
       });
-      if (seoScore > 0) {
-        totalSeoScore += seoScore;
-        auditsWithSeo++;
-      }
       return {
         name: new Date(a.runTimestamp).toLocaleDateString("en-US", {
           month: "short",
@@ -166,7 +159,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     }).catch(() => null)
     : null;
   const primarySiteDomain = primarySiteData?.domain ?? null;
-  const primarySiteHasGithub = !!primarySiteData?.githubRepoUrl;
 
   const [
     aiCitationsThisMonth,
