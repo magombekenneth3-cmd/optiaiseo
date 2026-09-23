@@ -10,8 +10,8 @@ function packet(overrides: Partial<EvidencePacket> = {}): EvidencePacket {
         publisher: "developers.google.com",
         publishedAt: new Date(Date.now() - 800 * 86_400_000).toISOString(),
         retrievedAt: new Date().toISOString(),
-        claim: "Google documents how search systems work.",
-        evidence: "Google documents how search systems work and provides guidance for search visibility.",
+        claim: "Google changed its pricing plans in 2026.",
+        evidence: "Google documents pricing plans, pricing changes, and related guidance for products and services.",
         sourceType: "official" as const,
         confidence: 0.95,
         authorityScore: 0.95,
@@ -19,13 +19,13 @@ function packet(overrides: Partial<EvidencePacket> = {}): EvidencePacket {
     return {
         availability: "AVAILABLE",
         claims: [
-            { text: "Google changed its pricing in 2026.", sourceIds: ["source-1"], type: "statistic" },
+            { text: "Google changed its pricing plans in 2026.", sourceIds: ["source-1"], type: "statistic" },
             { text: "This claim has no source.", sourceIds: [], type: "fact" },
             { text: "A fabricated claim.", sourceIds: ["source-1"], type: "fact" },
         ],
         sources: [source],
         claimSourceMap: [
-            { claim: "Google changed its pricing in 2026.", sourceIds: ["source-1"], matchMethod: "explicit_citation" },
+            { claim: "Google changed its pricing plans in 2026.", sourceIds: ["source-1"], matchMethod: "explicit_citation" },
             { claim: "This claim has no source.", sourceIds: [], matchMethod: "unsupported" },
             { claim: "A fabricated claim.", sourceIds: ["source-1"], matchMethod: "explicit_citation" },
         ],
@@ -55,6 +55,15 @@ describe("claim ledger governance", () => {
         expect(claim.verificationStatus).toBe("weak");
         expect(claim.action).toBe("REWRITE");
         expect(claim.freshnessStatus).toBe("stale");
+    });
+
+    it("rejects a cited claim when the source does not substantively support it", () => {
+        const sourcePacket = packet();
+        sourcePacket.claims[0] = { text: "Apple opened a new store in Nairobi.", sourceIds: ["source-1"], type: "fact" };
+        sourcePacket.claimSourceMap[0] = { claim: "Apple opened a new store in Nairobi.", sourceIds: ["source-1"], matchMethod: "explicit_citation" };
+        const ledger = buildClaimLedger(sourcePacket);
+        expect(ledger[0].verificationStatus).toBe("unsupported");
+        expect(ledger[0].action).toBe("REMOVE");
     });
 
     it("routes uncited claims to removal", () => {
