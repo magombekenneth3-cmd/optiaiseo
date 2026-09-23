@@ -13,15 +13,19 @@ interface Props {
   pendingPrsCount: number;
   siteId: string | null;
   statusHeadline: string;
+  automationState: "AUTOPILOT" | "SUPERVISED" | "REPORT_ONLY" | "PAUSED";
 }
 
-export function DashboardHeroHeader({ domain, lastAuditDate, seoScore, aeoScore, clicksDeltaPct, rankDelta, pendingPrsCount, siteId, statusHeadline }: Props) {
+export function DashboardHeroHeader({ domain, lastAuditDate, seoScore, aeoScore, clicksDeltaPct, rankDelta, pendingPrsCount, siteId, statusHeadline, automationState }: Props) {
   const activeSignals = [
     seoScore > 0 ? `SEO ${seoScore}` : "SEO not checked",
     aeoScore > 0 ? `AEO ${aeoScore}` : "AEO not checked",
     clicksDeltaPct !== null ? `${clicksDeltaPct > 0 ? "+" : ""}${clicksDeltaPct}% clicks` : null,
     rankDelta !== null ? `↑${rankDelta} positions` : null,
   ].filter(Boolean) as string[];
+
+  const automationLabel = automationState === "AUTOPILOT" ? "Autopilot" : automationState === "SUPERVISED" ? "Approval required" : automationState === "PAUSED" ? "Paused" : "Report only";
+  const automationTone = automationState === "AUTOPILOT" ? "text-emerald-300 border-emerald-500/20 bg-emerald-500/10" : automationState === "PAUSED" ? "text-amber-300 border-amber-500/20 bg-amber-500/10" : "text-muted-foreground border-border bg-background/50";
 
   return (
     <section className="relative overflow-hidden rounded-3xl border border-brand/20 bg-gradient-to-br from-brand/10 via-card to-card px-5 py-5 sm:px-7 sm:py-6">
@@ -33,20 +37,20 @@ export function DashboardHeroHeader({ domain, lastAuditDate, seoScore, aeoScore,
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/25 bg-brand/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-brand">
               <Bot className="h-3 w-3" />
-              SEO Autopilot
+              Automation
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-300">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-              Active
+            <span className={"inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold " + automationTone}>
+              <span className={"h-1.5 w-1.5 rounded-full " + (automationState === "AUTOPILOT" ? "bg-emerald-400 animate-pulse" : automationState === "PAUSED" ? "bg-amber-400" : "bg-muted-foreground")} />
+              {automationLabel}
             </span>
             {domain && <span className="text-xs font-medium text-muted-foreground">{domain}</span>}
           </div>
 
           <h1 className="mt-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl" style={{ fontFamily: "var(--font-display)" }}>
-            Your SEO is running. Automatically.
+            {statusHeadline || "Your SEO command center"}
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-[15px]">
-            Detect issues, prioritize opportunities, execute safe fixes, and verify the impact from one mission control surface.
+            Detect issues, prioritize opportunities, execute safe fixes, and verify production changes from one mission control surface.
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -101,7 +105,7 @@ export function DashboardHeroHeader({ domain, lastAuditDate, seoScore, aeoScore,
         </Link>
       )}
 
-      <span className="sr-only">{statusHeadline}</span>
+
     </section>
   );
 }
