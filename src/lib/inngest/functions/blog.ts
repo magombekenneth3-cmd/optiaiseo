@@ -1247,7 +1247,7 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 missingEvidence: liveBlogPost.missingEvidence ?? [],
                 // GSC opportunity evidence — immutable provenance snapshot
                 // Null for non-GSC pipelines (USER_KEYWORD, COMPETITOR_GAP, etc.)
-                gscEvidence: gscEvidence ?? undefined,
+                gscEvidence: gscEvidence ? (gscEvidence as Record<string, string | number | boolean | null>) : undefined,
             };
             if (event.data.blogId) {
                 await prisma.blog.update({ where: { id: event.data.blogId }, data: blogData });
