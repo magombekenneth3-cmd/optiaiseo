@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Bot, CheckCircle2, Clock, Sparkles, Zap } from "lucide-react";
+import { ArrowRight, Bot, Clock, Sparkles, Zap } from "lucide-react";
 
 interface Props {
   domain: string;
@@ -16,96 +16,66 @@ interface Props {
   automationState: "AUTOPILOT" | "SUPERVISED" | "REPORT_ONLY" | "PAUSED";
 }
 
-export function DashboardHeroHeader({ domain, lastAuditDate, seoScore, aeoScore, clicksDeltaPct, rankDelta, pendingPrsCount, siteId, statusHeadline, automationState }: Props) {
-  const activeSignals = [
-    seoScore > 0 ? `SEO ${seoScore}` : "SEO not checked",
-    aeoScore > 0 ? `AEO ${aeoScore}` : "AEO not checked",
-    clicksDeltaPct !== null ? `${clicksDeltaPct > 0 ? "+" : ""}${clicksDeltaPct}% clicks` : null,
-    rankDelta !== null ? `↑${rankDelta} positions` : null,
-  ].filter(Boolean) as string[];
-
-  const automationLabel = automationState === "AUTOPILOT" ? "Autopilot" : automationState === "SUPERVISED" ? "Approval required" : automationState === "PAUSED" ? "Paused" : "Report only";
-  const automationTone = automationState === "AUTOPILOT" ? "text-emerald-300 border-emerald-500/20 bg-emerald-500/10" : automationState === "PAUSED" ? "text-amber-300 border-amber-500/20 bg-amber-500/10" : "text-muted-foreground border-border bg-background/50";
+export function DashboardHeroHeader({ domain, lastAuditDate, seoScore, aeoScore, pendingPrsCount, siteId, statusHeadline, automationState }: Props) {
+  const automationLabel = automationState === "AUTOPILOT" ? "Autopilot" : automationState === "SUPERVISED" ? "Supervised" : automationState === "PAUSED" ? "Paused" : "Report only";
+  const automationTone = automationState === "AUTOPILOT"
+    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+    : automationState === "PAUSED"
+      ? "border-amber-500/20 bg-amber-500/10 text-amber-300"
+      : "border-border bg-background/60 text-muted-foreground";
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-brand/20 bg-gradient-to-br from-brand/10 via-card to-card px-5 py-5 sm:px-7 sm:py-6">
-      <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-brand/10 blur-3xl" aria-hidden="true" />
-      <div className="pointer-events-none absolute bottom-0 right-1/4 h-24 w-48 rounded-full bg-violet-500/10 blur-3xl" aria-hidden="true" />
-
-      <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0 max-w-3xl">
+    <section aria-labelledby="dashboard-site-title" className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+      <div className="flex min-w-0 flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/25 bg-brand/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-brand">
-              <Bot className="h-3 w-3" />
-              Automation
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+              <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+              SEO workspace
             </span>
-            <span className={"inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold " + automationTone}>
-              <span className={"h-1.5 w-1.5 rounded-full " + (automationState === "AUTOPILOT" ? "bg-emerald-400 animate-pulse" : automationState === "PAUSED" ? "bg-amber-400" : "bg-muted-foreground")} />
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${automationTone}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${automationState === "AUTOPILOT" ? "bg-emerald-400" : automationState === "PAUSED" ? "bg-amber-400" : "bg-muted-foreground"}`} />
               {automationLabel}
             </span>
-            {domain && <span className="text-xs font-medium text-muted-foreground">{domain}</span>}
           </div>
 
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl" style={{ fontFamily: "var(--font-display)" }}>
-            {statusHeadline || "Your SEO command center"}
+          <h1 id="dashboard-site-title" className="mt-3 break-words text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+            {domain || statusHeadline || "Your SEO dashboard"}
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-[15px]">
-            Detect issues, prioritize opportunities, execute safe fixes, and verify production changes from one mission control surface.
+          <p className="mt-2 max-w-2xl text-sm leading-5 text-muted-foreground">
+            {domain ? statusHeadline || "Monitor search performance, technical health, and AI visibility." : statusHeadline || "Connect a website to start tracking search performance."}
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            {activeSignals.slice(0, 4).map((signal) => (
-              <span key={signal} className="rounded-lg border border-border/80 bg-background/50 px-2.5 py-1.5 text-xs font-medium text-muted-foreground">
-                {signal}
-              </span>
-            ))}
-            {lastAuditDate && <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5" />Updated {lastAuditDate}</span>}
+            {seoScore > 0 && <span className="rounded-md bg-muted/60 px-2.5 py-1.5 text-xs font-medium text-muted-foreground">SEO score <span className="font-semibold text-foreground">{seoScore}/100</span></span>}
+            {aeoScore > 0 && <span className="rounded-md bg-muted/60 px-2.5 py-1.5 text-xs font-medium text-muted-foreground">AEO score <span className="font-semibold text-foreground">{aeoScore}/100</span></span>}
+            {lastAuditDate && <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5" aria-hidden="true" />Last audit {lastAuditDate}</span>}
           </div>
         </div>
 
-        <div className="relative flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col xl:flex-row">
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
           {siteId && (
-            <Link href={`/dashboard/autopilot?siteId=${siteId}`} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand/20 transition-all hover:-translate-y-0.5 hover:bg-brand/90">
-              <Sparkles className="h-4 w-4" />
-              Open Autopilot
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          )}
-          {siteId && (
-            <Link href={`/dashboard/audits?siteId=${siteId}`} className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background/60 px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted">
-              <Zap className="h-4 w-4" />
+            <Link href={`/dashboard/audits?siteId=${encodeURIComponent(siteId)}`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2">
+              <Zap className="h-4 w-4" aria-hidden="true" />
               Run audit
             </Link>
           )}
-        </div>
-      </div>
-
-      <div className="relative mt-5 grid grid-cols-1 gap-2 border-t border-border/70 pt-4 sm:grid-cols-3">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-          <span className="font-medium">Detect</span>
-          <span className="text-muted-foreground/60">→ explain</span>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Zap className="h-4 w-4 text-brand" />
-          <span className="font-medium">Recommend</span>
-          <span className="text-muted-foreground/60">→ execute</span>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <CheckCircle2 className="h-4 w-4 text-sky-400" />
-          <span className="font-medium">Verify</span>
-          <span className="text-muted-foreground/60">→ measure impact</span>
+          {siteId && (
+            <Link href={`/dashboard/autopilot?siteId=${encodeURIComponent(siteId)}`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2">
+              <Sparkles className="h-4 w-4" aria-hidden="true" />
+              Autopilot
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          )}
         </div>
       </div>
 
       {pendingPrsCount > 0 && (
-        <Link href={siteId ? `/dashboard/operations?siteId=${siteId}` : "/dashboard/operations"} className="relative mt-3 flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs transition-colors hover:bg-amber-500/10">
-          <span className="font-medium text-amber-200">{pendingPrsCount} proposed fix{pendingPrsCount === 1 ? "" : "es"} waiting for review</span>
-          <span className="font-semibold text-amber-300">Review <ArrowRight className="ml-1 inline h-3 w-3" /></span>
+        <Link href={siteId ? `/dashboard/operations?siteId=${encodeURIComponent(siteId)}` : "/dashboard/operations"} className="mt-4 flex flex-col gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3.5 py-3 text-sm transition-colors hover:bg-amber-500/10 sm:flex-row sm:items-center sm:justify-between">
+          <span className="font-medium text-amber-200">{pendingPrsCount} proposed fix{pendingPrsCount === 1 ? "" : "es"} awaiting review</span>
+          <span className="inline-flex items-center gap-1 font-semibold text-amber-300">Review fixes <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
         </Link>
       )}
-
-
     </section>
   );
 }
