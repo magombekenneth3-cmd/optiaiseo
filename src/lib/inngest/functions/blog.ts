@@ -1084,7 +1084,8 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                     siteId,
                     keyword,
                 });
-                return liveBlogPost.content;
+                const { sanitizeHtml } = await import("@/lib/sanitize-html");
+                return sanitizeHtml(liveBlogPost.content);
             }
         });
         liveBlogPost.content = finalContent;
