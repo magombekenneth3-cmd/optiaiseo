@@ -10,6 +10,7 @@ import {
     detectPaddingSections,
     detectRepetition,
 } from "./validators";
+import { buildClaimLedger } from "./claim-ledger";
 
 export interface EvidenceGateResult {
     passed: boolean;
@@ -115,6 +116,7 @@ export function runEvidenceGate(input: EvidenceGateInput): EvidenceGateResult {
     const editorialIssues: string[] = [];
     const warnings: string[] = [];
 
+    const claimLedger = buildClaimLedger(evidencePacket);
     const fakeExperience = detectFakeExperience(content, hasFirstPartyEvidence);
     const genericIntros = detectGenericIntroductions(content);
     const repetition = detectRepetition(content);
@@ -143,6 +145,11 @@ export function runEvidenceGate(input: EvidenceGateInput): EvidenceGateResult {
     if (paddingIssues.length > 0) {
         if (riskTier === "high") editorialIssues.push(...paddingIssues);
         else warnings.push(...paddingIssues);
+    }
+    for (const claim of claimLedger.filter(item => item.verificationStatus === "weak").slice(0, 8)) {
+        editorialIssues.push(
+            `Claim relies on a low-confidence or stale source: "${claim.text.slice(0, 120)}…"`
+        );
     }
     warnings.push(...repetition.repeatedParagraphs);
 
