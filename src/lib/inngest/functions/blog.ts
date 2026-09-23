@@ -160,11 +160,13 @@ ${content.substring(0, 10000)}`,
             { maxOutputTokens: 1024, temperature: 0.1, timeoutMs: 45000 }
         );
         return {
+            expectedEntities: parsed.expectedEntities ?? [],
             missingEntities: parsed.missingEntities ?? [],
-            enrichmentScore: parsed.enrichmentScore ?? 70,
+            enrichmentScore: Number.isFinite(parsed.enrichmentScore) ? parsed.enrichmentScore : null,
+            available: true,
         };
     } catch {
-        return { missingEntities: [], enrichmentScore: 70 };
+        return { expectedEntities: [], missingEntities: [], enrichmentScore: null, available: false };
     }
 }
 
