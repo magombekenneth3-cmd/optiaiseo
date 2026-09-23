@@ -12,7 +12,7 @@ describe("final content lint", () => {
     });
 
     it("passes balanced, cited article markup", () => {
-        const paragraphs = Array.from({ length: 8 }, (_, index) =>
+        const paragraphs = Array.from({ length: 18 }, (_, index) =>
             `<p>Section paragraph ${index + 1} explains the mechanism, evidence, limitations, practical implications, and next steps with enough detail for a production article.</p>`
         ).join("");
         const result = runContentLint(
