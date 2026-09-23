@@ -3,15 +3,9 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import {
   ArrowRight,
-  ArrowUpRight,
-  Shield,
-  Sparkles,
   ChevronRight,
   CheckCircle2,
-  AlertTriangle,
-  Activity,
   TrendingUp,
-  Link2,
 } from "lucide-react";
 import { extractAuditMetrics } from "@/lib/audit/helpers";
 import { getCachedDashboardMetricsForUser } from "@/lib/cache/dashboard";
@@ -20,15 +14,14 @@ import { OnboardingProgress } from "@/components/dashboard/OnboardingProgress";
 import { MetricTrendChart } from "@/components/dashboard/MetricTrendChart";
 import { getMetricTrend } from "@/lib/metrics/metric-snapshot";
 import { ScoreDropAlert } from "@/components/dashboard/ScoreDropAlert";
-import { NextBestActionCard } from "@/components/dashboard/NextBestActionCard";
-import { OAuthConnectButton } from "@/components/auth/OAuthConnectButton";
 import {
   WinCelebrationToast,
   ReAuditNudge,
 } from "@/components/dashboard/DashboardClientWidgets";
 import { DashboardHeroHeader } from "@/components/dashboard/DashboardHeroHeader";
-import { PriorityActions } from "@/components/dashboard/PriorityActions";
 import { AutonomousActivity } from "@/components/dashboard/AutonomousActivity";
+import { DashboardAttentionQueue } from "@/components/dashboard/DashboardAttentionQueue";
+import { DashboardRemediationPipeline } from "@/components/dashboard/DashboardRemediationPipeline";
 import { getDashboardUser } from "@/lib/auth/dashboard-context";
 
 export const dynamic = "force-dynamic";
@@ -38,12 +31,14 @@ export const metadata: Metadata = {
 };
 
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ siteId?: string }> }) {
   const user = await getDashboardUser();
+  const availableSiteIds = user.sites.map((s) => s.id);
+  const params = await searchParams;
+  const requestedSiteId = params.siteId && availableSiteIds.includes(params.siteId) ? params.siteId : null;
+  const siteIds = requestedSiteId ? [requestedSiteId] : availableSiteIds;
 
-  const siteIds = user.sites.map((s) => s.id);
-
-  const { audits, blogsThisWeek, pendingPrsCount, pendingBlogs } =
+  const { audits, pendingPrsCount } =
     await getCachedDashboardMetricsForUser(user.id, siteIds);
 
   const latestAeoReport = await prisma.aeoReport.findFirst({
@@ -53,9 +48,6 @@ export default async function DashboardPage() {
   });
   const aeoScore = latestAeoReport?.score || 0;
 
-  let totalSeoScore = 0;
-  let auditsWithSeo = 0;
-
   const chartData = audits
     .slice(0, 14)
     .reverse()
@@ -64,10 +56,6 @@ export default async function DashboardPage() {
         categoryScores: a.categoryScores as Record<string, unknown> | null,
         issueList: a.issueList,
       });
-      if (seoScore > 0) {
-        totalSeoScore += seoScore;
-        auditsWithSeo++;
-      }
       return {
         name: new Date(a.runTimestamp).toLocaleDateString("en-US", {
           month: "short",
@@ -77,9 +65,6 @@ export default async function DashboardPage() {
         issues: issueCount,
       };
     });
-
-  const avgSeoScore =
-    auditsWithSeo > 0 ? Math.round(totalSeoScore / auditsWithSeo) : 0;
 
   const latestScore = chartData.length > 0 ? chartData[chartData.length - 1].score : null;
   const previousScore = chartData.length > 1 ? chartData[chartData.length - 2].score : null;
@@ -93,20 +78,20 @@ export default async function DashboardPage() {
     ? "Welcome to OptiAISEO — let's connect your first site 👋"
     : isNewUser && hasSites
       ? "Site connected — your audit is queued ✓"
-      : "All sites healthy";
+      : "Monitoring your SEO and AI search visibility";
   if (!isNewUser && pendingPrsCount > 0) {
     statusHeadline = `${pendingPrsCount} issue${pendingPrsCount !== 1 ? 's' : ''} need attention`;
   } else if (scoreDelta !== null && scoreDelta !== 0) {
     statusHeadline = `Your score ${scoreDelta > 0 ? 'improved' : 'dropped'} ${Math.abs(scoreDelta)} points since last audit`;
   } else if (!isNewUser && audits.length > 0) {
-    statusHeadline = `All sites healthy — last audit ${new Date(audits[0].runTimestamp).toLocaleDateString()}`;
+    statusHeadline = `Latest audit completed · ${new Date(audits[0].runTimestamp).toLocaleDateString()}`;
   }
 
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
-  const primarySiteId = user.sites[0]?.id ?? null;
+  const primarySiteId = siteIds[0] ?? null;
   const metricTrend = primarySiteId
     ? await getMetricTrend(primarySiteId, 6).catch(() => [])
     : [];
@@ -124,18 +109,6 @@ export default async function DashboardPage() {
       return fail?.label ?? fail?.title ?? null;
     })()
     : null;
-
-  const actionState = pendingPrsCount > 0
-    ? {
-      label: `${pendingPrsCount} fix${pendingPrsCount === 1 ? "" : "es"} awaiting review`,
-      detail: "A proposed change already exists. Review it before starting another fix.",
-      tone: "border-amber-500/25 bg-amber-500/10 text-amber-300",
-    }
-    : {
-      label: "Ready to act",
-      detail: "Based on your latest completed audit and current visibility signals.",
-      tone: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
-    };
 
   const onboardingSteps = [
     { id: "site", label: "Connect your domain", href: "/dashboard/sites/new", done: hasSites },
@@ -182,73 +155,26 @@ export default async function DashboardPage() {
   const primarySiteData = primarySiteId
     ? await prisma.site.findFirst({
       where: { id: primarySiteId },
-      select: { domain: true, githubRepoUrl: true },
+      select: { domain: true, githubRepoUrl: true, operatingMode: true, automationsPaused: true },
     }).catch(() => null)
     : null;
   const primarySiteDomain = primarySiteData?.domain ?? null;
-  const primarySiteHasGithub = !!primarySiteData?.githubRepoUrl;
-
-  const [hasTrackedKeywords, hasBlogPosts, hasTeamMember] = await Promise.all([
-    primarySiteId
-      ? prisma.trackedKeyword.count({ where: { siteId: primarySiteId } }).then((n) => n > 0).catch(() => false)
-      : Promise.resolve(false),
-    siteIds.length > 0
-      ? prisma.blog.count({ where: { siteId: { in: siteIds } } }).then((n) => n > 0).catch(() => false)
-      : Promise.resolve(false),
-    prisma.teamMember.count({ where: { ownerId: user.id } }).then((n) => n > 0).catch(() => false),
-  ]);
 
   const [
-    creditHistoryThisMonth,
     aiCitationsThisMonth,
     prsCreatedThisMonth,
     metricSnapshots,
   ] = await Promise.all([
-    prisma.creditHistory.findMany({
-      where: { userId: user.id, createdAt: { gte: startOfMonth } },
-      select: { action: true, cost: true },
-    }).catch(() => [] as { action: string; cost: number }[]),
     primarySiteId
-      ? prisma.aeoEvent.count({
-        where: { siteId: primarySiteId, eventType: "CITED", createdAt: { gte: startOfMonth } },
-      }).catch(() => 0)
+      ? prisma.aeoEvent.count({ where: { siteId: primarySiteId, eventType: "CITED", createdAt: { gte: startOfMonth } } }).catch(() => 0)
       : Promise.resolve(0),
     primarySiteId
-      ? prisma.selfHealingLog.count({
-        where: {
-          siteId: primarySiteId,
-          createdAt: { gte: startOfMonth },
-        },
-      }).catch(() => 0)
+      ? prisma.selfHealingLog.count({ where: { siteId: primarySiteId, createdAt: { gte: startOfMonth } } }).catch(() => 0)
       : Promise.resolve(0),
     primarySiteId
-      ? prisma.metricSnapshot.findMany({
-        where: { siteId: primarySiteId },
-        orderBy: { capturedAt: "desc" },
-        take: 2,
-        select: { organicTraffic: true },
-      }).catch(() => [])
+      ? prisma.metricSnapshot.findMany({ where: { siteId: primarySiteId }, orderBy: { capturedAt: "desc" }, take: 2, select: { organicTraffic: true } }).catch(() => [])
       : Promise.resolve([]),
   ]);
-
-  // Derive per-action counts from credit history
-  const auditCreditsUsed = creditHistoryThisMonth.filter((h) => h.action.includes("audit")).length;
-  const blogCreditsUsed = creditHistoryThisMonth.filter((h) => h.action.includes("blog")).length;
-  const aeoCreditsUsed = creditHistoryThisMonth.filter((h) => h.action.includes("aeo")).length;
-  const creditsUsedThisMonth = creditHistoryThisMonth.reduce((sum, h) => sum + h.cost, 0);
-
-  // Organic traffic delta (latest - previous snapshot)
-  const organicTrafficDelta =
-    metricSnapshots.length >= 2 &&
-      metricSnapshots[0].organicTraffic !== null &&
-      metricSnapshots[1].organicTraffic !== null
-      ? metricSnapshots[0].organicTraffic - metricSnapshots[1].organicTraffic
-      : null;
-
-  // Estimated clicks gained — use organicTraffic delta as proxy if available
-  const clicksGained = organicTrafficDelta !== null && organicTrafficDelta > 0
-    ? organicTrafficDelta
-    : null;
 
   // ── Computed values for redesigned layout ──────────────────────────────────
   const organicClicks = metricSnapshots.length > 0 && metricSnapshots[0].organicTraffic !== null
@@ -259,9 +185,6 @@ export default async function DashboardPage() {
     : null;
   const rankMovement = rankWin ? rankWin.delta : null;
   const latestIssueCount = chartData.length > 0 ? chartData[chartData.length - 1].issues ?? 0 : 0;
-  const prevAuditDateStr = audits.length > 1
-    ? "vs " + new Date(audits[1].runTimestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-    : "vs last";
   function formatCompact(n: number): string {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
     if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
@@ -361,19 +284,23 @@ export default async function DashboardPage() {
     return "text-rose-400";
   }
 
-  return (
-    <div className="flex flex-col gap-6 w-full max-w-6xl mx-auto">
+  const attentionItems = priorityActions.slice(0, 4).map((action) => ({
+    id: action.id,
+    title: action.title,
+    detail: action.subtitle,
+    severity: action.impact === "critical" ? "critical" as const : action.impact === "high" ? "high" as const : "medium" as const,
+    state: pendingPrsCount > 0 ? "review" as const : "unknown" as const,
+    href: action.href,
+    action: action.ctaLabel,
+  }));
 
-      {/* ── 1. HEADER ──────────────────────────────────────────────────── */}
+  const automationState = primarySiteData?.automationsPaused ? "PAUSED" : primarySiteData?.operatingMode === "AUTOPILOT" ? "AUTOPILOT" : primarySiteData?.operatingMode === "SUPERVISED" ? "SUPERVISED" : "REPORT_ONLY";
+
+  return (
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <DashboardHeroHeader
-        domain={primarySiteDomain ?? user.sites[0]?.domain ?? ""}
-        lastAuditDate={
-          audits[0]
-            ? new Date(audits[0].runTimestamp).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
-            " · " +
-            new Date(audits[0].runTimestamp).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
-            : null
-        }
+        domain={primarySiteDomain ?? ""}
+        lastAuditDate={audits[0] ? new Date(audits[0].runTimestamp).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null}
         seoScore={latestScore ?? 0}
         aeoScore={aeoScore}
         clicksDeltaPct={organicClicksDeltaPct}
@@ -381,466 +308,114 @@ export default async function DashboardPage() {
         pendingPrsCount={pendingPrsCount}
         siteId={primarySiteId}
         statusHeadline={statusHeadline}
+        automationState={automationState}
       />
 
-      {/* ── Primary action focus ──────────────────────────────────────── */}
-      {!isNewUser && priorityActions[0] && (
-        <section className="rounded-3xl border border-brand/20 bg-brand/5 p-5 sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand">Recommended next step</p>
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${actionState.tone}`}>
-                  {actionState.label}
-                </span>
+      {isNewUser ? (
+        <>
+          <OnboardingProgress steps={onboardingSteps} />
+          <OnboardingInline />
+        </>
+      ) : (
+        <>
+          {!onboardingDone && <OnboardingProgress steps={onboardingSteps} />}
+          {scoreDelta !== null && scoreDelta <= -8 && <ScoreDropAlert delta={Math.abs(scoreDelta)} topIssue={topIssueLabel} auditId={topAudit?.id ?? null} />}
+          {rankWin && <WinCelebrationToast keyword={rankWin.keyword} delta={rankWin.delta} newPosition={rankWin.newPosition} winId={rankWin.winId} />}
+          {daysSinceAudit !== null && daysSinceAudit > 7 && primarySiteId && primarySiteDomain && <ReAuditNudge daysSince={daysSinceAudit} siteId={primarySiteId} siteUrl={"https://" + primarySiteDomain} />}
+
+          <DashboardAttentionQueue items={attentionItems} />
+
+          {hasAudits && (
+            <section aria-label="Performance overview" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="kpi-card">
+                <div className="flex items-center gap-3">
+                  <ScoreRing score={latestScore ?? 0} color="var(--brand)" size={48} strokeWidth={4} />
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">SEO health</p>
+                    <p className={"mt-1 text-sm font-semibold " + scoreColor(latestScore ?? 0)}>
+                      {scoreDelta !== null && scoreDelta !== 0 ? (scoreDelta > 0 ? "+" : "") + scoreDelta + " since last audit" : "Current score"}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground">{priorityActions[0].title}</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                {priorityActions[0].reason ?? priorityActions[0].subtitle}
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">{actionState.detail}</p>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Link
-                href={priorityActions[0].href}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-600"
-              >
-                {priorityActions[0].ctaLabel}
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-
-              <Link
-                href="/dashboard/recommendations"
-                className="inline-flex items-center justify-center rounded-xl border border-border bg-background/60 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-              >
-                View opportunities
-              </Link>
-
-              <Link
-                href="/dashboard/aeo"
-                className="inline-flex items-center justify-center rounded-xl border border-border bg-background/60 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-              >
-                Check AI visibility
-              </Link>
-            </div>
-          </div>
-
-          {priorityActions.length > 1 && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {priorityActions.slice(1, 3).map((action) => (
-                <Link
-                  key={action.id}
-                  href={action.href}
-                  className="rounded-full border border-border/80 bg-background/50 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground"
-                >
-                  {action.title}
-                </Link>
-              ))}
-            </div>
+              <div className="kpi-card">
+                <p className="text-2xl font-semibold tracking-tight text-foreground tabular-nums">{aeoScore > 0 ? aeoScore : "—"}</p>
+                <p className="mt-1 text-xs font-medium text-muted-foreground">AI visibility</p>
+                <p className="mt-1 text-xs text-muted-foreground">{aeoScore > 0 ? "out of 100" : "Run an AEO check"}</p>
+              </div>
+              <div className="kpi-card">
+                <p className="text-2xl font-semibold tracking-tight text-foreground tabular-nums">{organicClicks !== null ? formatCompact(organicClicks) : "—"}</p>
+                <p className="mt-1 text-xs font-medium text-muted-foreground">Organic clicks</p>
+                <p className={"mt-1 text-xs " + (organicClicksDeltaPct !== null && organicClicksDeltaPct < 0 ? "text-rose-400" : "text-emerald-400")}>
+                  {organicClicksDeltaPct !== null ? (organicClicksDeltaPct > 0 ? "+" : "") + organicClicksDeltaPct + "%" : "No trend yet"}
+                </p>
+              </div>
+              <div className="kpi-card">
+                <p className={"text-2xl font-semibold tracking-tight tabular-nums " + (rankMovement !== null ? "text-emerald-400" : "text-muted-foreground")}>
+                  {rankMovement !== null ? "↑" + rankMovement : "—"}
+                </p>
+                <p className="mt-1 text-xs font-medium text-muted-foreground">Rank movement</p>
+                <p className="mt-1 text-xs text-muted-foreground">{rankMovement !== null ? "positions improved" : "No movement tracked"}</p>
+              </div>
+            </section>
           )}
-        </section>
-      )}
 
-      {/* ── Onboarding ─────────────────────────────────────────────────── */}
-      {!onboardingDone && <OnboardingProgress steps={onboardingSteps} />}
-      {isNewUser && <OnboardingInline />}
+          {(metricTrend.length > 0 || chartData.length > 0) && <MetricTrendChart data={metricTrend.map((m) => ({ capturedAt: m.capturedAt.toISOString(), overallScore: m.overallScore, aeoScore: m.aeoScore, coreWebVitals: m.coreWebVitals, schemaScore: m.schemaScore, organicTraffic: m.organicTraffic }))} auditData={chartData} className="fade-in-up" />}
 
-      {/* ── Score Drop Alert ───────────────────────────────────────────── */}
-      {!isNewUser && scoreDelta !== null && scoreDelta <= -8 && (
-        <ScoreDropAlert
-          delta={Math.abs(scoreDelta)}
-          topIssue={topIssueLabel}
-          auditId={topAudit?.id ?? null}
-        />
-      )}
+          <DashboardRemediationPipeline proposed={pendingPrsCount} active={0} completed={prsCreatedThisMonth} verified={0} />
 
-      {/* ── Win celebration toast ──────────────────────────────────────── */}
-      {rankWin && (
-        <WinCelebrationToast
-          keyword={rankWin.keyword}
-          delta={rankWin.delta}
-          newPosition={rankWin.newPosition}
-          winId={rankWin.winId}
-        />
-      )}
-
-      {/* ── Re-audit nudge ─────────────────────────────────────────────── */}
-      {!isNewUser && daysSinceAudit !== null && daysSinceAudit > 7 && primarySiteId && primarySiteDomain && (
-        <ReAuditNudge
-          daysSince={daysSinceAudit}
-          siteId={primarySiteId}
-          siteUrl={`https://${primarySiteDomain}`}
-        />
-      )}
-
-      {/* ── 2. KPI OVERVIEW — Score Rings + Metrics ────────────────────── */}
-      {!isNewUser && hasAudits && (
-        <section aria-label="Performance overview" className="fade-in-up">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-
-            {/* SEO Score */}
-            <div className="kpi-card">
-              <div className="flex items-center gap-3">
-                <ScoreRing score={latestScore ?? (auditsWithSeo > 0 ? avgSeoScore : 0)} color="var(--brand)" size={52} strokeWidth={4.5} />
-                <div className="min-w-0">
-                  <p className="stat-label" style={{ marginTop: 0 }}>SEO Score</p>
-                  {scoreDelta !== null && scoreDelta !== 0 && (
-                    <span className={`text-xs font-semibold ${scoreDelta > 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                      {scoreDelta > 0 ? "+" : ""}{scoreDelta} {prevAuditDateStr}
-                    </span>
-                  )}
-                  {(scoreDelta === null || scoreDelta === 0) && (
-                    <span className="text-xs text-muted-foreground/60">out of 100</span>
-                  )}
-                </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <section className="rounded-2xl border border-border bg-card p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand">AI search</p><h2 className="mt-1 text-sm font-semibold text-foreground">AI visibility</h2></div>
+                <Link href="/dashboard/aeo" className="text-xs font-semibold text-muted-foreground hover:text-foreground">Open report <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></Link>
               </div>
-              {/* Score bar for accessibility */}
-              <div className="score-bar mt-1" role="progressbar" aria-valuenow={latestScore ?? 0} aria-valuemin={0} aria-valuemax={100} aria-label={`SEO Score: ${latestScore ?? 0} out of 100`}>
-                <div className="score-bar-fill" style={{ width: `${latestScore ?? 0}%` }} />
+              <div className="mt-6 flex items-end gap-6">
+                <div><p className="text-4xl font-semibold tracking-tight text-foreground tabular-nums">{aeoScore > 0 ? aeoScore : "—"}</p><p className="mt-1 text-xs text-muted-foreground">visibility score</p></div>
+                <div className="border-l border-border pl-6"><p className="text-xl font-semibold text-foreground tabular-nums">{aiCitationsThisMonth || "—"}</p><p className="mt-1 text-xs text-muted-foreground">citations this month</p></div>
               </div>
-            </div>
+            </section>
 
-            {/* AEO Visibility */}
-            <div className="kpi-card">
-              <div className="flex items-center gap-3">
-                {aeoScore > 0 ? (
-                  <ScoreRing score={aeoScore} color="var(--ai-accent, #a78bfa)" size={52} strokeWidth={4.5} />
-                ) : (
-                  <div className="w-[52px] h-[52px] rounded-full border-[4.5px] border-border flex items-center justify-center">
-                    <span className="text-base font-bold text-muted-foreground">—</span>
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <p className="stat-label" style={{ marginTop: 0 }}>AEO Visibility</p>
-                  {aeoScore > 0 ? (
-                    <span className={`text-xs font-semibold ${aeoScore >= 80 ? "text-emerald-400" : aeoScore >= 60 ? "text-amber-400" : "text-rose-400"}`}>
-                      {aeoScore >= 80 ? "Strong" : aeoScore >= 60 ? "Moderate" : "Low"}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground/60">Not checked yet</span>
-                  )}
-                </div>
+            <section className="rounded-2xl border border-border bg-card p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand">Technical health</p><h2 className="mt-1 text-sm font-semibold text-foreground">Latest audit health</h2></div>
+                <Link href={topAudit ? "/dashboard/audits/" + topAudit.id : "/dashboard/audits"} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Open audit <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></Link>
               </div>
-              {aeoScore > 0 && (
-                <div className="score-bar mt-1" role="progressbar" aria-valuenow={aeoScore} aria-valuemin={0} aria-valuemax={100} aria-label={`AEO Score: ${aeoScore} out of 100`}>
-                  <div className="score-bar-fill" style={{ width: `${aeoScore}%`, background: "var(--ai-accent, #a78bfa)" }} />
-                </div>
-              )}
-            </div>
-
-            {/* Organic Clicks */}
-            <div className="kpi-card">
-              {organicClicks !== null ? (
-                <>
-                  <p className="stat-value" style={{ fontSize: '1.75rem' }}>{formatCompact(organicClicks)}</p>
-                  <p className="stat-label">Organic Clicks</p>
-                  {organicClicksDeltaPct !== null && organicClicksDeltaPct !== 0 && (
-                    <span className={`text-xs font-semibold ${organicClicksDeltaPct > 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                      {organicClicksDeltaPct > 0 ? "+" : ""}{organicClicksDeltaPct}% {prevAuditDateStr}
-                    </span>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="stat-value text-muted-foreground/30" style={{ fontSize: '1.75rem' }}>—</p>
-                  <p className="stat-label">Organic Clicks</p>
-                  <p className="empty-state-hint">
-                    No Search Console data.{" "}
-                    <OAuthConnectButton provider="google-gsc" callbackUrl="/dashboard" className="hover:underline">
-                      Connect GSC
-                    </OAuthConnectButton>
-                  </p>
-                </>
-              )}
-            </div>
-
-            {/* Rank Movement */}
-            <div className="kpi-card">
-              {rankMovement !== null ? (
-                <>
-                  <p className="stat-value text-emerald-400" style={{ fontSize: '1.75rem' }}>↑{rankMovement}</p>
-                  <p className="stat-label">Rank Movement</p>
-                  <span className="text-xs font-semibold text-emerald-400">
-                    Positions improved
-                  </span>
-                </>
-              ) : (
-                <>
-                  <p className="stat-value text-muted-foreground/30" style={{ fontSize: '1.75rem' }}>—</p>
-                  <p className="stat-label">Rank Movement</p>
-                  <p className="empty-state-hint">
-                    No movement tracked this week
-                  </p>
-                </>
-              )}
-            </div>
-
-          </div>
-        </section>
-      )}
-
-      {/* ── 3. RECOMMENDED ACTIONS — Consolidated ─────────────────────── */}
-      {!isNewUser && (priorityActions.length > 0 || (onboardingDone && hasSites)) && (
-        <>
-          <hr className="section-divider" />
-          <section aria-label="Recommended actions">
-            <p className="section-label mb-3">Recommended Actions</p>
-
-            {/* Next Best Action — always first when available */}
-            {onboardingDone && hasSites && priorityActions.length === 0 && (
-              <div className="mb-2">
-                <NextBestActionCard
-                  hasSite={hasSites}
-                  hasAudit={hasAudits}
-                  hasAeo={aeoScore > 0}
-                  hasKeywords={hasTrackedKeywords}
-                  hasBlogs={hasBlogPosts}
-                  hasTeam={hasTeamMember}
-                  hasGsc={hasGscToken}
-                  siteId={primarySiteId}
-                />
+              <div className="mt-6 flex items-end gap-6">
+                <div><p className="text-4xl font-semibold tracking-tight text-foreground tabular-nums">{latestIssueCount}</p><p className="mt-1 text-xs text-muted-foreground">issues detected</p></div>
+                <div className="border-l border-border pl-6"><p className="text-xl font-semibold text-foreground tabular-nums">{pendingPrsCount}</p><p className="mt-1 text-xs text-muted-foreground">fixes awaiting review</p></div>
               </div>
-            )}
-
-            {/* Priority Actions below */}
-            {priorityActions.length > 0 && (
-              <PriorityActions actions={priorityActions} />
-            )}
-          </section>
-        </>
-      )}
-
-      {/* ── 4. SEO PERFORMANCE — Trend chart ───────────────────────────── */}
-      {(metricTrend.length > 0 || chartData.length > 0) && (
-        <>
-          <hr className="section-divider" />
-          <MetricTrendChart
-            data={metricTrend.map(m => ({
-              capturedAt: m.capturedAt.toISOString(),
-              overallScore: m.overallScore,
-              aeoScore: m.aeoScore,
-              coreWebVitals: m.coreWebVitals,
-              schemaScore: m.schemaScore,
-              organicTraffic: m.organicTraffic,
-            }))}
-            auditData={chartData}
-            className="fade-in-up fade-in-up-1"
-          />
-        </>
-      )}
-
-      {/* ── 5. SECONDARY PANELS — AI Visibility + Technical Health ───── */}
-      {!isNewUser && hasAudits && (
-        <>
-          <hr className="section-divider" />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 fade-in-up fade-in-up-2">
-
-            {/* AI Search Presence */}
-            <div className="border border-border rounded-2xl bg-card p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Sparkles className="w-4 h-4" style={{ color: "var(--ai-accent, #a78bfa)" }} aria-hidden="true" />
-                <h3 className="text-[13px] font-semibold text-foreground">AI Search Presence</h3>
-              </div>
-
-              <div className="flex items-start gap-6">
-                {/* Main score */}
-                <div className="flex flex-col">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-[28px] font-bold tracking-tight text-foreground tabular-nums leading-none">
-                      {aeoScore > 0 ? aeoScore : "—"}
-                    </span>
-                    {aeoScore > 0 && <span className="text-xs text-muted-foreground">/100</span>}
-                  </div>
-                  {aeoScore > 0 ? (
-                    <span className={`text-[11px] font-semibold mt-1.5 ${aeoScore >= 80 ? "text-emerald-400" : aeoScore >= 60 ? "text-amber-400" : "text-rose-400"}`}>
-                      {aeoScore >= 80 ? "Strong" : aeoScore >= 60 ? "Moderate" : "Low"} visibility
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-muted-foreground mt-1.5">Run an AEO check to start</span>
-                  )}
-                </div>
-
-                {/* Citations */}
-                <div className="flex flex-col border-l border-border pl-5">
-                  <span className="text-xs text-muted-foreground mb-0.5">Citations</span>
-                  <span className="text-lg font-bold tabular-nums text-foreground">
-                    {aiCitationsThisMonth > 0 ? aiCitationsThisMonth : "—"}
-                  </span>
-                  {aiCitationsThisMonth > 0 ? (
-                    <span className="text-[10px] text-emerald-400 font-medium">this month</span>
-                  ) : (
-                    <Link
-                      href="/dashboard/aeo"
-                      className="text-[10px] font-medium text-brand hover:underline underline-offset-2"
-                    >
-                      Run AEO check
-                    </Link>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-border">
-                <Link
-                  href="/dashboard/aeo"
-                  className="text-xs font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1 transition-colors"
-                >
-                  View full report <ArrowRight className="w-3 h-3" />
-                </Link>
-              </div>
-            </div>
-
-            {/* Technical Health */}
-            <div className="border border-border rounded-2xl bg-card p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Shield className="w-4 h-4 text-emerald-400" aria-hidden="true" />
-                <h3 className="text-[13px] font-semibold text-foreground">Technical Health</h3>
-              </div>
-
-              <div className="flex items-start gap-6">
-                {/* Issues found */}
-                <div className="flex flex-col">
-                  <span className="text-xs text-muted-foreground mb-0.5">Issues found</span>
-                  <span className="text-lg font-bold tabular-nums text-foreground">{latestIssueCount}</span>
-                  {latestIssueCount === 0 ? (
-                    <span className="text-[10px] text-emerald-400 font-medium">All clear</span>
-                  ) : (
-                    <span className="text-[10px] text-amber-400 font-medium">Needs attention</span>
-                  )}
-                </div>
-
-                {/* Pending fixes */}
-                <div className="flex flex-col border-l border-border pl-5">
-                  <span className="text-xs text-muted-foreground mb-0.5">Pending fixes</span>
-                  <span className="text-lg font-bold tabular-nums text-foreground">
-                    {pendingPrsCount}
-                  </span>
-                  {pendingPrsCount === 0 ? (
-                    <span className="text-[10px] text-emerald-400 font-medium">None pending</span>
-                  ) : (
-                    <span className="text-[10px] text-amber-400 font-medium">Awaiting review</span>
-                  )}
-                </div>
-
-                {/* Fixes applied */}
-                <div className="flex flex-col border-l border-border pl-5">
-                  <span className="text-xs text-muted-foreground mb-0.5">Fixes applied</span>
-                  <span className="text-lg font-bold tabular-nums text-foreground">
-                    {prsCreatedThisMonth > 0 ? prsCreatedThisMonth : "—"}
-                  </span>
-                  {prsCreatedThisMonth > 0 ? (
-                    <span className="text-[10px] text-emerald-400 font-medium">this month</span>
-                  ) : (
-                    <span className="text-[10px] text-muted-foreground">No fixes yet</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-border">
-                <Link
-                  href={topAudit ? `/dashboard/audits/${topAudit.id}` : "/dashboard/audits"}
-                  className="text-xs font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1 transition-colors"
-                >
-                  View audit <ArrowRight className="w-3 h-3" />
-                </Link>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* ── 6. AUTONOMOUS ACTIVITY ─────────────────────────────────────── */}
-      {!isNewUser && primarySiteId && (
-        <>
-          <hr className="section-divider" />
-          <AutonomousActivity siteId={primarySiteId} />
-        </>
-      )}
-
-      {/* ── 7. RECENT AUDITS TABLE ─────────────────────────────────────── */}
-      {!isNewUser && recentAuditRows.length > 0 && (
-        <div className="border border-border rounded-2xl bg-card overflow-hidden fade-in-up fade-in-up-3">
-          <div className="px-5 py-4 flex items-center justify-between">
-            <h3 className="text-[13px] font-semibold text-foreground">Recent Audits</h3>
-            <Link
-              href="/dashboard/audits"
-              className="text-xs font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1 transition-colors"
-            >
-              View all <ChevronRight className="w-3 h-3" />
-            </Link>
+            </section>
           </div>
 
-          {/* Table */}
-          <div className="table-scroll">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-t border-border">
-                  <th className="px-5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Audit</th>
-                  <th className="px-5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">SEO Score</th>
-                  <th className="px-5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Change</th>
-                  <th className="px-5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Date</th>
-                  <th className="px-5 py-2.5 w-8"><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
+          {primarySiteId && <AutonomousActivity siteId={primarySiteId} />}
+
+          {recentAuditRows.length > 0 && (
+            <section className="rounded-2xl border border-border bg-card">
+              <div className="flex items-center justify-between border-b border-border px-5 py-4">
+                <div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand">History</p><h2 className="mt-1 text-sm font-semibold text-foreground">Recent audit activity</h2></div>
+                <Link href="/dashboard/audits" className="text-xs font-semibold text-muted-foreground hover:text-foreground">View all <ChevronRight className="ml-1 inline h-3.5 w-3.5" /></Link>
+              </div>
+              <div className="divide-y divide-border">
                 {recentAuditRows.map((row) => (
-                  <tr key={row.id} className="border-t border-border hover:bg-accent/20 transition-colors">
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-2.5">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <p className="text-[13px] font-medium text-foreground">Technical &amp; Content Audit</p>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <span className={`text-[13px] font-semibold tabular-nums ${scoreColor(row.seoScore)}`}>{row.seoScore}</span>
-                      <span className="text-xs text-muted-foreground ml-0.5">/100</span>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      {row.change !== null ? (
-                        <span className={`inline-flex items-center gap-0.5 text-xs font-semibold ${row.change > 0 ? "text-emerald-400" : row.change < 0 ? "text-rose-400" : "text-muted-foreground"
-                          }`}>
-                          {row.change > 0 ? <ArrowUpRight className="w-3 h-3" /> : row.change < 0 ? <ArrowUpRight className="w-3 h-3 rotate-90" /> : null}
-                          {row.change > 0 ? "+" : ""}{row.change}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 text-xs text-muted-foreground whitespace-nowrap">
-                      {timeAgo(row.date)}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <Link href={`/dashboard/audits/${row.id}`} className="text-muted-foreground hover:text-foreground transition-colors" aria-label={`View audit from ${timeAgo(row.date)}`}>
-                        <ChevronRight className="w-4 h-4" />
-                      </Link>
-                    </td>
-                  </tr>
+                  <Link key={row.id} href={"/dashboard/audits/" + row.id} className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-accent/20">
+                    <div className="flex min-w-0 items-center gap-3"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" /><div className="min-w-0"><p className="truncate text-sm font-medium text-foreground">SEO audit completed</p><p className="mt-1 text-xs text-muted-foreground">{timeAgo(row.date)} · {row.seoScore}/100</p></div></div>
+                    <span className={"shrink-0 text-xs font-semibold " + (row.change !== null && row.change > 0 ? "text-emerald-400" : row.change !== null && row.change < 0 ? "text-rose-400" : "text-muted-foreground")}>{row.change === null ? "—" : (row.change > 0 ? "+" : "") + row.change}</span>
+                  </Link>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </div>
+            </section>
+          )}
+        </>
       )}
 
-      {/* ── Empty state — no audits yet ─────────────────────────────────── */}
       {!isNewUser && hasSites && !hasAudits && (
-        <div className="border border-border rounded-2xl bg-card p-8 text-center fade-in-up">
-          <div className="w-12 h-12 rounded-2xl bg-brand/10 border border-brand/20 flex items-center justify-center mx-auto mb-4">
-            <TrendingUp className="w-6 h-6 text-brand" />
-          </div>
-          <h3 className="text-sm font-semibold text-foreground mb-1">Run your first audit</h3>
-          <p className="text-xs text-muted-foreground mb-4 max-w-sm mx-auto">
-            Start tracking your SEO performance, discover issues, and get actionable recommendations.
-          </p>
-          {primarySiteId && (
-            <Link
-              href={`/dashboard/audits?siteId=${primarySiteId}`}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand hover:bg-brand/90 text-white text-xs font-semibold transition-colors"
-            >
-              Run Audit <ArrowRight className="w-3 h-3" />
-            </Link>
-          )}
-        </div>
+        <section className="rounded-2xl border border-border bg-card p-8 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-brand/20 bg-brand/10"><TrendingUp className="h-6 w-6 text-brand" /></div>
+          <h2 className="text-sm font-semibold text-foreground">Run your first audit</h2>
+          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-muted-foreground">Start tracking SEO performance and turn the first findings into verified improvements.</p>
+          {primarySiteId && <Link href={"/dashboard/audits?siteId=" + primarySiteId} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90">Run audit <ArrowRight className="h-3.5 w-3.5" /></Link>}
+        </section>
       )}
     </div>
   );
