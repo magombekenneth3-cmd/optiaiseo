@@ -256,6 +256,7 @@ model Site {
   evidenceSnapshots       EvidenceSnapshot[]
   gscPerformance          GscDailyPerformance[]
   mutationOperations      MutationOperation[]
+  mutationVerifications   MutationVerification[]
   agentRuns               AgentRun[]
   ga4DailyPerformance     Ga4DailyPerformance[]
   actionProposals         ActionProposal[]
@@ -785,10 +786,21 @@ model SeoFixProposal {
   status      String   @default("PENDING_REVIEW")
   expiresAt   DateTime
   dispatchedAt DateTime?
-  prUrl       String?
-  deploymentUrl String?
-  deployedAt  DateTime?
-  measuredAt  DateTime?
+  prUrl              String?
+  prNumber            Int?
+  proposalBaseCommitSha String?
+  proposalTargetBlobSha String?
+  mergeCommitSha      String?
+  deploymentUrl       String?
+  deploymentId        String?
+  deploymentCommitSha String?
+  deploymentStatus    String   @default("NOT_DEPLOYED")
+  deployedAt          DateTime?
+  measuredAt          DateTime?
+  verificationStatus  String   @default("PENDING")
+  verificationUrl     String?
+  verificationCriteria Json?
+  verificationDetails Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -1898,6 +1910,7 @@ model MutationOperation {
   effects            MutationEffect[]
   auditEvents        MutationAuditEvent[]
   proposal           ActionProposal?
+  verifications       MutationVerification[]
 
   @@index([siteId, status])
   @@index([siteId, targetModel, targetId])
@@ -1941,8 +1954,12 @@ model MutationEffect {
   compensationPolicy String   @default("IRREVERSIBLE") 
 
   
-  externalId         String?  
+  externalId         String?
   externalError      String?
+  externalMetadata   Json?
+  verificationStatus String   @default("PENDING")
+  verificationDetails Json?
+  verifiedAt         DateTime?
 
   // Retry
   attempts           Int      @default(0)
@@ -1961,6 +1978,29 @@ model MutationEffect {
   @@index([operationId])
   @@index([status, nextRetryAt])
   @@index([effectType, status])
+}
+
+model MutationVerification {
+  id                 String   @id @default(cuid())
+  operationId        String
+  proposalId         String?
+  siteId             String
+  verificationType   String
+  status             String
+  targetUrl          String?
+  criteria           Json
+  expectedState      Json?
+  observedState      Json?
+  evidence           Json?
+  attempt            Int      @default(1)
+  checkedAt          DateTime @default(now())
+
+  operation          MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  site               Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([operationId, checkedAt])
+  @@index([siteId, status])
+  @@index([proposalId, checkedAt])
 }
 
 model MutationAuditEvent {
