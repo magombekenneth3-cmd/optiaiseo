@@ -11,6 +11,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { OAuthConnectButton } from "@/components/auth/OAuthConnectButton";
+import { GSC_PROVIDERS } from "@/lib/gsc/token";
 
 export const metadata: Metadata = {
   title: "Audit Reports | OptiAISEO",
@@ -34,7 +35,7 @@ export default async function AuditsPage({
       where: { email: userEmail },
       select: {
         subscriptionTier: true,
-        accounts: { where: { provider: "google-gsc" }, select: { id: true } },
+        accounts: { where: { provider: { in: [...GSC_PROVIDERS] } }, select: { id: true } },
       },
     }) : null,
   ]);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { GSC_PROVIDERS } from "@/lib/gsc/token";
 
 export type IntegrationStatusState =
     | "connected"
@@ -70,7 +71,7 @@ export async function GET(req: NextRequest) {
                 },
             }),
             prisma.account.findFirst({
-                where: { userId, provider: "google-gsc" },
+                where: { userId, provider: { in: [...GSC_PROVIDERS] } },
                 select: { id: true, providerAccountId: true, scope: true, refresh_token: true },
             }),
             prisma.account.findFirst({

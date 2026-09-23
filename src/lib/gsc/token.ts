@@ -1,6 +1,17 @@
 import { logger, formatError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
+/**
+ * Canonical list of OAuth providers that may carry a valid GSC access token.
+ * The dedicated "google-gsc" provider (with webmasters scope) is preferred,
+ * but the generic "google" provider can also carry a valid token when a user
+ * authenticated via basic Google OAuth before the dedicated GSC flow existed.
+ *
+ * Every query that checks GSC connection status MUST use this list to avoid
+ * showing "Connect GSC" buttons to users who are already connected.
+ */
+export const GSC_PROVIDERS = ["google-gsc", "google"] as const;
+
 const TOKEN_CACHE_PREFIX = "gsc:token:";
 const TOKEN_CACHE_TTL_SECONDS = 3500;
 const REFRESH_COOLDOWN_PREFIX = "gsc:refresh_failed:";
@@ -190,7 +201,7 @@ export async function getUserGscToken(userId: string): Promise<string> {
 
 export async function checkGscConnected(userId: string): Promise<boolean> {
     const account = await prisma.account.findFirst({
-        where: { userId, provider: "google-gsc" },
+        where: { userId, provider: { in: [...GSC_PROVIDERS] } },
         select: { id: true },
     });
     return !!account;
@@ -198,8 +209,12 @@ export async function checkGscConnected(userId: string): Promise<boolean> {
 
 export async function disconnectGsc(userId: string): Promise<void> {
     await invalidateCachedToken(userId);
+    // Delete both dedicated and generic Google accounts that carry GSC tokens.
+    // The generic "google" provider is included because its token may have been
+    // used for GSC requests; leaving it would keep checkGscConnected returning
+    // true after the user explicitly disconnects.
     await prisma.account.deleteMany({
-        where: { userId, provider: "google-gsc" },
+        where: { userId, provider: { in: [...GSC_PROVIDERS] } },
     });
     await prisma.user.update({
         where: { id: userId },

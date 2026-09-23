@@ -8,6 +8,7 @@ import { diffAuditSnapshots } from "@/lib/seo-audit/audit-diff";
 import { sendSEODigest, sendAuditCompleteEmail } from "@/lib/email";
 import { notifyAuditComplete } from "@/lib/notifications";
 import { fetchGSCKeywords, findOpportunities, normaliseSiteUrl } from "@/lib/gsc";
+import { GSC_PROVIDERS } from "@/lib/gsc/token";
 import { detectGsovDrop, generateHealingPlan } from "@/lib/self-healing/engine";
 import { executeHealingWithConfidenceGate } from "@/lib/self-healing/confidence";
 import { detectGscAnomalies, generateGscHealingPlan } from "@/lib/self-healing/gsc";
@@ -465,7 +466,7 @@ export const sendWeeklyDigestJob = inngest.createFunction(
 
         const topOpportunities = await step.run("fetch-gsc-opportunities", async () => {
             const gscAccount = await prisma.account.findFirst({
-                where: { userId: user.id, provider: "google-gsc" },
+                where: { userId: user.id, provider: { in: [...GSC_PROVIDERS] } },
                 select: { access_token: true },
             });
             if (gscAccount?.access_token) {

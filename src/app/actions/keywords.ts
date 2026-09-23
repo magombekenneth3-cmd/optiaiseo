@@ -8,11 +8,9 @@ import { authOptions } from "@/lib/auth";
 import {
     fetchGSCKeywords,
     fetchGSCKeywordsByDateRange,
-    fetchGSCSites,
     categoriseKeywords,
     findOpportunities,
     buildRankingSummary,
-    normaliseSiteUrl,
     detectCannibalization,
     aggregateKeywords,
     splitBrandKeywords,
@@ -75,56 +73,28 @@ async function resolveGscToken(userId: string): Promise<{ token: string } | { er
     }
 }
 
-function gscUrlCandidates(domain: string): string[] {
-    const clean = domain
-        .replace(/^https?:\/\//, "")
-        .replace(/^www\./, "")
-        .replace(/\/$/, "");
-    return [
-        `https://www.${clean}/`,
-        `https://${clean}/`,
-        `sc-domain:${clean}`,
-    ];
-}
-
-async function resolveGscPropertyUrl(token: string, domain: string): Promise<string | null> {
-    try {
-        const sites = await fetchGSCSites(token);
-        const candidates = gscUrlCandidates(domain);
-        for (const candidate of candidates) {
-            if (sites.some((s) => s.toLowerCase() === candidate.toLowerCase())) {
-                return candidate;
-            }
-        }
-        const bare = domain.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
-        return sites.find((s) => s.includes(bare)) ?? null;
-    } catch {
-        return null;
-    }
-}
-
 function getCachedGscKeywords(userId: string, siteId: string, domain: string) {
     return unstable_cache(
         async () => {
             const tokenResult = await resolveGscToken(userId);
             if ("error" in tokenResult) throw new Error(tokenResult.error);
-            const primaryUrl = normaliseSiteUrl(domain);
-            try {
-                return await fetchGSCKeywords(tokenResult.token, primaryUrl, 90, 300);
-            } catch (firstErr: unknown) {
-                const msg = (firstErr as Error)?.message ?? "";
-                if (!msg.includes("403")) throw firstErr;
-                logger.warn(`[Keywords] 403 for ${primaryUrl} — auto-detecting GSC property`, { siteId });
-                const resolved = await resolveGscPropertyUrl(tokenResult.token, domain);
-                if (!resolved || resolved === primaryUrl) {
-                    throw new Error(
-                        "GSC 403: Your site is not verified in Google Search Console, or this account doesn't have access to it. " +
-                        "Add and verify your property at search.google.com/search-console then reconnect."
-                    );
-                }
-                logger.info(`[Keywords] Resolved GSC property: ${resolved}`, { siteId });
-                return await fetchGSCKeywords(tokenResult.token, resolved, 90, 300);
+
+            // Use the centralized property resolver to find the correct GSC
+            // property up front, instead of guessing with normaliseSiteUrl()
+            // and recovering from 403 errors.
+            const { resolveGscProperty } = await import("@/lib/gsc/property-resolver");
+            const resolution = await resolveGscProperty(tokenResult.token, domain);
+
+            if (!resolution) {
+                throw new Error(
+                    "No verified Google Search Console property found for this domain. " +
+                    "Add and verify your property at search.google.com/search-console, " +
+                    "then reconnect GSC in Settings."
+                );
             }
+
+            logger.debug(`[Keywords] Using GSC property: ${resolution.property} (matched by ${resolution.matchedBy})`, { siteId });
+            return await fetchGSCKeywords(tokenResult.token, resolution.property, 90, 300);
         },
         [`gsc-keywords-${siteId}`],
         { revalidate: 300, tags: [`gsc-keywords-${siteId}`] }
@@ -593,7 +563,10 @@ export async function getKeywordsComparison(
         const tokenResult = await resolveGscToken(userId);
         if ("error" in tokenResult) return { success: false, error: tokenResult.error };
 
-        const primaryUrl = normaliseSiteUrl(site.domain);
+        const { resolveGscProperty } = await import("@/lib/gsc/property-resolver");
+        const resolution = await resolveGscProperty(tokenResult.token, site.domain);
+        if (!resolution) return { success: false, error: "No verified GSC property found for this domain." };
+        const primaryUrl = resolution.property;
         const today = new Date();
 
         const currEnd = new Date(today);
@@ -711,8 +684,10 @@ export async function getDeviceBreakdown(siteId: string): Promise<{
         if (!site) return { success: false, error: "Site not found" };
 
         const token = await getUserGscToken(userId);
-        const primaryUrl = normaliseSiteUrl(site.domain);
-        const rows = await fetchGSCKeywordsByDevice(token, primaryUrl, 90);
+        const { resolveGscProperty } = await import("@/lib/gsc/property-resolver");
+        const resolution = await resolveGscProperty(token, site.domain);
+        if (!resolution) return { success: false, error: "No verified GSC property found for this domain." };
+        const rows = await fetchGSCKeywordsByDevice(token, resolution.property, 90);
         const deviceMetrics = aggregateDeviceMetrics(rows);
         const breakdown = buildKeywordDeviceBreakdown(rows);
         const gapKeywords = breakdown.filter(k => k.hasMobileCtrGap);
@@ -772,33 +747,24 @@ export async function getKeywordRankingsByDateRange(
         const tokenResult = await resolveGscToken(userId);
         if ("error" in tokenResult) return { success: false, error: tokenResult.error };
 
-        const primaryUrl = normaliseSiteUrl(site.domain);
+        // Use centralized property resolver instead of normaliseSiteUrl() + 403 fallback
+        const { resolveGscProperty } = await import("@/lib/gsc/property-resolver");
+        const resolution = await resolveGscProperty(tokenResult.token, site.domain);
+        if (!resolution) {
+            return {
+                success: false,
+                error: "No verified Google Search Console property found for this domain. " +
+                    "Add and verify your property at search.google.com/search-console, then reconnect GSC in Settings.",
+            };
+        }
 
         let keywords: KeywordRow[];
-        try {
-            keywords = await fetchGSCKeywordsByDateRange(
-                tokenResult.token,
-                primaryUrl,
-                range.startDate,
-                range.endDate,
-            );
-        } catch (firstErr: unknown) {
-            const msg = (firstErr as Error)?.message ?? "";
-            if (!msg.includes("403")) throw firstErr;
-            logger.warn(`[Keywords] 403 for ${primaryUrl} — auto-detecting GSC property`, { siteId });
-            const resolved = await resolveGscPropertyUrl(tokenResult.token, site.domain);
-            if (!resolved || resolved === primaryUrl) {
-                throw new Error(
-                    "GSC 403: Your site is not verified in Google Search Console, or this account doesn't have access to it."
-                );
-            }
-            keywords = await fetchGSCKeywordsByDateRange(
-                tokenResult.token,
-                resolved,
-                range.startDate,
-                range.endDate,
-            );
-        }
+        keywords = await fetchGSCKeywordsByDateRange(
+            tokenResult.token,
+            resolution.property,
+            range.startDate,
+            range.endDate,
+        );
 
         // Dedup: same logic as getKeywordRankingsFast
         const kwMap = new Map<string, KeywordRow>();
@@ -961,7 +927,10 @@ export async function getKeywordComparisonByDateRange(
         const tokenResult = await resolveGscToken(userId);
         if ("error" in tokenResult) return { success: false, error: tokenResult.error };
 
-        const primaryUrl = normaliseSiteUrl(site.domain);
+        const { resolveGscProperty } = await import("@/lib/gsc/property-resolver");
+        const resolution = await resolveGscProperty(tokenResult.token, site.domain);
+        if (!resolution) return { success: false, error: "No verified GSC property found for this domain." };
+        const primaryUrl = resolution.property;
 
         const [current, previous] = await Promise.all([
             fetchGSCKeywordsByDateRange(tokenResult.token, primaryUrl, range.startDate, range.endDate),
