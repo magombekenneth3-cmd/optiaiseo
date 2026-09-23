@@ -70,6 +70,7 @@ describe("AISEO Growth Decision Engine Unit Tests", () => {
                 featuredSnippet: null,
                 relatedSearches: [],
                 formattedContext: "",
+                opportunityAnalysis: { tableStakes: [], opportunities: [], unansweredQuestions: [] },
             });
 
 
