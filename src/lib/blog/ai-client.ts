@@ -2,6 +2,33 @@ import { AI_MODELS } from "@/lib/constants/ai-models";
 import { callGemini, callGeminiJson } from "@/lib/gemini/client";
 import { logger } from "@/lib/logger";
 
+async function callOpenAi(params: { prompt: string; systemPrompt?: string; maxTokens: number; temperature?: number; json?: boolean }): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY not set");
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: AI_MODELS.OPENAI_PRIMARY,
+      messages: [
+        ...(params.systemPrompt ? [{ role: "system", content: params.systemPrompt }] : []),
+        { role: "user", content: params.prompt },
+      ],
+      ...(params.json ? { response_format: { type: "json_object" } } : {}),
+      max_tokens: params.maxTokens,
+      ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
+    }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`OpenAI error: ${res.status} ${body.slice(0, 500)}`);
+  }
+  const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+  return data.choices?.[0]?.message?.content ?? "";
+}
+
+
 type Provider = "gemini" | "openai" | "anthropic" | "openrouter";
 
 interface GenerateOptions {
@@ -26,23 +53,12 @@ export async function generateWithFallback(opts: GenerateOptions): Promise<strin
     },
     {
       name: "openai",
-      fn: async () => {
-        if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not set");
-        const { default: OpenAI } = await import("openai");
-        const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-        const res = await client.chat.completions.create({
-          model: AI_MODELS.OPENAI_PRIMARY, // gpt-4o
-          messages: [
-            ...(opts.systemPrompt
-              ? [{ role: "system" as const, content: opts.systemPrompt }]
-              : []),
-            { role: "user", content: opts.prompt },
-          ],
-          max_tokens: opts.maxTokens ?? 4096,
-          ...(opts.temperature !== undefined && { temperature: opts.temperature }),
-        });
-        return res.choices[0]?.message?.content ?? "";
-      },
+      fn: async () => callOpenAi({
+        prompt: opts.prompt,
+        systemPrompt: opts.systemPrompt,
+        maxTokens: opts.maxTokens ?? 4096,
+        temperature: opts.temperature,
+      }),
     },
     {
       name: "anthropic",
@@ -148,21 +164,13 @@ export async function generateWithFallbackJson<T>(
     {
       name: "openai",
       fn: async () => {
-        if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not set");
-        const { default: OpenAI } = await import("openai");
-        const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-        const res = await client.chat.completions.create({
-          model: AI_MODELS.OPENAI_PRIMARY,
-          messages: [
-            ...(opts.systemPrompt
-              ? [{ role: "system" as const, content: opts.systemPrompt }]
-              : []),
-            { role: "user", content: jsonPrompt },
-          ],
-          response_format: { type: "json_object" },
-          max_tokens: opts.maxTokens ?? 4096,
+        const text = await callOpenAi({
+          prompt: jsonPrompt,
+          systemPrompt: opts.systemPrompt,
+          maxTokens: opts.maxTokens ?? 4096,
+          temperature: opts.temperature,
+          json: true,
         });
-        const text = res.choices[0]?.message?.content ?? "";
         const parsed = JSON.parse(text);
         return opts.validate ? opts.validate(parsed) : (parsed as T);
       },

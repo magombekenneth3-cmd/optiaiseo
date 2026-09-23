@@ -447,7 +447,8 @@ export async function getSerpContextForKeyword(
     });
   }
 
-  const gapAnalysis = computeContentGapsFromOpportunities(keyword, organic, peopleAlsoAsk);\n  const gaps = { commonTopics: gapAnalysis.commonTopics, gapTopics: gapAnalysis.gapTopics };
+  const gapAnalysis = computeContentGapsFromOpportunities(keyword, organic, peopleAlsoAsk);
+  const gaps = { commonTopics: gapAnalysis.commonTopics, gapTopics: gapAnalysis.gapTopics };
 
 
   let ctx = `LIVE SEARCH CONTEXT FOR "${keyword}"\n`;

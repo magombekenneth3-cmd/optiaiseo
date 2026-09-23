@@ -9,7 +9,20 @@ import { z } from "zod";
 
 const NonEmptyString = z.string().trim().min(1);
 const ShortString = NonEmptyString.max(500);
-const StringList = z.array(NonEmptyString).max(30);\n\nexport const SeoOpportunitySchema = z.object({\n    type: z.enum(["topic_gap", "question_gap", "serp_gap"]),\n    topic: ShortString,\n    score: z.number().min(0).max(100),\n    coverage: z.number().min(0).max(100),\n    competitorCount: z.number().int().nonnegative(),\n    competitorTotal: z.number().int().nonnegative(),\n    rankWeightedCoverage: z.number().min(0).max(100),\n    intentRelevance: z.number().min(0).max(100),\n    evidence: z.array(NonEmptyString).max(10),\n    reason: z.string().trim().max(1000),\n});
+const StringList = z.array(NonEmptyString).max(30);
+
+export const SeoOpportunitySchema = z.object({
+    type: z.enum(["topic_gap", "question_gap", "serp_gap"]),
+    topic: ShortString,
+    score: z.number().min(0).max(100),
+    coverage: z.number().min(0).max(100),
+    competitorCount: z.number().int().nonnegative(),
+    competitorTotal: z.number().int().nonnegative(),
+    rankWeightedCoverage: z.number().min(0).max(100),
+    intentRelevance: z.number().min(0).max(100),
+    evidence: z.array(NonEmptyString).max(10),
+    reason: z.string().trim().max(1000),
+});
 
 export const SourceTypeSchema = z.enum([
     "official",
@@ -51,12 +64,24 @@ export const SourceEvidenceSchema = z.object({
     evidence: z.string().trim().min(1).max(4_000),
     sourceType: SourceTypeSchema,
     confidence: z.number().min(0).max(1),
+    authorityScore: z.number().min(0).max(1).optional(),
 });
 
 export const ClaimSchema = z.object({
     text: z.string().trim().min(1).max(1_500),
     sourceIds: z.array(z.string().regex(/^[a-z0-9_-]+$/i)).max(8),
     type: ClaimTypeSchema,
+});
+
+export const QueryDecompositionSchema = z.object({
+    primaryIntent: ShortString,
+    secondaryIntents: StringList.optional(),
+    requiredQuestions: StringList.optional(),
+    decisionCriteria: StringList.optional(),
+    comparisonDimensions: StringList.optional(),
+    entities: StringList.optional(),
+    risksAndExceptions: StringList.optional(),
+    freshnessSensitiveFacts: StringList.optional(),
 });
 
 export const ResearchBrainSchema = z.object({
@@ -71,6 +96,7 @@ export const ResearchBrainSchema = z.object({
     industryMyths: StringList,
     whatPeopleAvoidSaying: StringList,
     informationGainDirective: z.string().trim().max(2_000).optional(),
+    queryDecomposition: QueryDecompositionSchema.optional(),
 });
 
 export const CompetitorResearchSchema = z.object({
@@ -360,6 +386,7 @@ export type Claim = z.infer<typeof ClaimSchema>;
 export type EvidenceAvailability = z.infer<typeof EvidenceAvailabilitySchema>;
 export type SourceEvidence = z.infer<typeof SourceEvidenceSchema>;
 export type ResearchBrain = z.infer<typeof ResearchBrainSchema>;
+export type QueryDecomposition = z.infer<typeof QueryDecompositionSchema>;
 export type CompetitorResearch = z.infer<typeof CompetitorResearchSchema>;
 export type PaaQuestion = z.infer<typeof PaaQuestionSchema>;
 export type EntityEvidence = z.infer<typeof EntityEvidenceSchema>;
