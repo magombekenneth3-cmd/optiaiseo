@@ -12,8 +12,11 @@ describe("final content lint", () => {
     });
 
     it("passes balanced, cited article markup", () => {
+        const paragraphs = Array.from({ length: 8 }, (_, index) =>
+            `<p>Section paragraph ${index + 1} explains the mechanism, evidence, limitations, practical implications, and next steps with enough detail for a production article.</p>`
+        ).join("");
         const result = runContentLint(
-            '<h1>Article</h1><h2>Research</h2><p>This is a sufficiently detailed paragraph with a concrete claim and a source.</p><h2>How it works</h2><p>Another sufficiently detailed paragraph explains the process.</p><h2>Sources</h2><p>Read <a href="https://developers.google.com/search/docs">the documentation</a>.</p>'
+            `<h1>Article</h1><h2>Research</h2>${paragraphs}<h2>How it works</h2><p>Another sufficiently detailed paragraph explains the process with a concrete source-backed example.</p><h2>Sources</h2><p>Read <a href="https://developers.google.com/search/docs">the documentation</a> for the underlying guidance and implementation details.</p>`
         );
         expect(result.passed).toBe(true);
     });
