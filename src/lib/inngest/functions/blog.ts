@@ -52,17 +52,29 @@ async function runFactCheckValidation(content: string): Promise<{
     qualityScore: number | null;
     issues: string[];
     suggestions: string[];
+    checkedChunks: number;
+    totalChunks: number;
+    coverage: number;
+    complete: boolean;
 }> {
-    // Fabricated statistics concentrate in the intro and body sections — not in FAQ,
-    // outro, or CTAs. Cap to the first 12,000 chars (~1,800 words) to halve chunk
-    // count from 4 to 2 without missing meaningful fact-check coverage.
-    const FACT_CHECK_CONTENT_CAP = 12_000;
+    const FACT_CHECK_CONTENT_CAP = 50_000;
+    const CHUNK_SIZE = 10_000;
     const contentToCheck = content.slice(0, FACT_CHECK_CONTENT_CAP);
-
-    const CHUNK_SIZE = 6000;
     const chunks: string[] = [];
     for (let i = 0; i < contentToCheck.length; i += CHUNK_SIZE) {
         chunks.push(contentToCheck.slice(i, i + CHUNK_SIZE));
+    }
+
+    if (chunks.length === 0) {
+        return {
+            qualityScore: null,
+            issues: ["Fact-check coverage is 0% because the article has no content."],
+            suggestions: ["Regenerate the article before publishing."],
+            checkedChunks: 0,
+            totalChunks: 0,
+            coverage: 0,
+            complete: false,
+        };
     }
 
     const results = await Promise.all(
@@ -71,14 +83,17 @@ async function runFactCheckValidation(content: string): Promise<{
                 `You are a fact-checking editor. Review this article excerpt (chunk ${idx + 1}/${chunks.length}) and:
 1. Identify vague claims with no supporting data
 2. Identify statistics that appear fabricated or unverifiable
-3. Suggest specific real statistics with named sources to replace flagged claims
-4. Return JSON: { "issues": [...strings], "suggestions": [...strings], "qualityScore": 0-100 }
+3. Identify precise case-study outcomes that lack a named source
+4. Suggest specific real statistics with named sources only when the supplied excerpt supports the need
+5. Return JSON: { "issues": [...strings], "suggestions": [...strings], "qualityScore": 0-100 }
 
 SCORING GUIDE:
 - Start at 100
 - Deduct 15 for each fabricated or unsourced statistic
 - Deduct 10 for each vague claim presented as fact
+- Deduct 15 for each precise unsupported case-study outcome
 - Deduct 5 for each banned filler phrase that survived
+- Do not invent sources or facts
 - Score below 60 = hold for review; below 40 = reject
 
 Only output valid JSON, nothing else.
@@ -86,8 +101,10 @@ Only output valid JSON, nothing else.
 Article excerpt:
 ${chunk}`,
                 { maxOutputTokens: 2048, temperature: 0.2, timeoutMs: 60000 }
-            ).catch((): null => {
-                logger.warn(`[Blog/FactCheck] Chunk ${idx + 1} timed out — excluded from quality score`);
+            ).catch((error: unknown): null => {
+                logger.warn(`[Blog/FactCheck] Chunk ${idx + 1} failed`, {
+                    error: error instanceof Error ? error.message : String(error),
+                });
                 return null;
             })
         )
@@ -96,15 +113,31 @@ ${chunk}`,
     const validResults = results.filter(
         (r): r is { qualityScore: number; issues: string[]; suggestions: string[] } => r !== null
     );
+    const checkedChunks = validResults.length;
+    const totalChunks = chunks.length;
+    const coverage = Math.round((checkedChunks / totalChunks) * 100);
+    const complete = contentToCheck.length === content.length && checkedChunks === totalChunks;
     const allIssues = validResults.flatMap(r => r.issues ?? []);
     const allSuggestions = validResults.flatMap(r => r.suggestions ?? []);
-    const qualityScore: number | null = validResults.length > 0
-        ? Math.round(validResults.reduce((sum, r) => sum + (r.qualityScore ?? 100), 0) / validResults.length)
+
+    if (!complete) {
+        allIssues.unshift(`Fact-check coverage is incomplete at ${coverage}%. Automatic publication requires 100% coverage.`);
+    }
+
+    const qualityScore: number | null = complete && validResults.length > 0
+        ? Math.round(validResults.reduce((sum, r) => sum + Math.max(0, Math.min(100, r.qualityScore ?? 0)), 0) / validResults.length)
         : null;
 
-    return { qualityScore, issues: allIssues, suggestions: allSuggestions };
+    return {
+        qualityScore,
+        issues: [...new Set(allIssues)].slice(0, 50),
+        suggestions: [...new Set(allSuggestions)].slice(0, 50),
+        checkedChunks,
+        totalChunks,
+        coverage,
+        complete,
+    };
 }
-
 async function runSemanticEnrichmentCheck(
     keyword: string,
     content: string
@@ -138,30 +171,50 @@ ${content.substring(0, 10000)}`,
 async function generateInteractiveWidget(keyword: string, content: string): Promise<string | null> {
     try {
         const text = await callGemini(
-            `Based on this article about "${keyword}", generate ONE interactive element:
-- A calculator if the topic involves numbers, costs, or measurements
-- A 5-question quiz if the topic involves preferences or recommendations
-- An interactive checklist if the topic involves steps or decisions
+            `Based on this article about "${keyword}", generate ONE safe, declarative interactive-content placeholder.
 
 Rules:
-- Output pure HTML and vanilla JavaScript only. No external dependencies.
-- Self-contained in a single div with id="blog-interactive-widget"
-- Mobile responsive using inline styles only
-- Maximum 60 lines of code
-- Clean card style (white background, subtle shadow, border-radius: 12px)
+- Return HTML only.
+- No JavaScript.
+- No <script>, event handlers, iframes, forms, external resources, or executable code.
+- Use only div, p, h3, label, input, ul, li, span.
+- The result is a progressive-enhancement placeholder; the application may attach behavior later.
+- Self-contained in a single div with id="blog-interactive-widget".
+- Mobile responsive with inline styles only.
+- Maximum 40 lines.
 
 Article excerpt:
 ${content.substring(0, 3000)}
 
-Return ONLY the HTML. Start with <div id="blog-interactive-widget"`,
-            { maxOutputTokens: 4096, temperature: 0.3, timeoutMs: 45000 }
+Return ONLY the HTML starting with <div id="blog-interactive-widget">`,
+            { maxOutputTokens: 2048, temperature: 0.2, timeoutMs: 45000 }
         );
-        const match = text.match(/<div[\s\S]*id=["']blog-interactive-widget["'][\s\S]*$/i);
-        return match ? match[0].replace(/```\s*$/g, "").trim() : text.trim();
+        const match = text.match(/<div[\s\S]*id=["']blog-interactive-widget["'][\s\S]*<\/div>\s*$/i);
+        if (!match) return null;
+        const html = match[0].trim();
+        if (/<script|javascript:|on\w+\s*=|<iframe|<form/i.test(html)) return null;
+        return html;
     } catch (e: unknown) {
         logger.warn("[Blog/Widget] Widget generation failed:", { error: (e as Error)?.message });
         return null;
     }
+}
+function extractFaqsForSchema(content: string): { question: string; answer: string }[] {
+    const items: { question: string; answer: string }[] = [];
+    const faqSection = content.match(/<h2[^>]*id=["']frequently-asked-questions["'][^>]*>[\s\S]*?<\/section>/i)?.[0] ?? "";
+    if (!faqSection) return items;
+    const pattern = /<h3[^>]*>([\s\S]*?)<\/h3>\s*<p[^>]*>([\s\S]*?)<\/p>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(faqSection)) !== null && items.length < 7) {
+        const question = match[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        const answer = match[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        if (question.length >= 8 && answer.length >= 2) items.push({ question, answer });
+    }
+    return items;
+}
+
+function buildSchemaScript(value: Record<string, unknown>): string {
+    return `<script type="application/ld+json">${JSON.stringify(value).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026")}</script>`;
 }
 
 async function generateSchemaMarkup(params: {
@@ -170,41 +223,60 @@ async function generateSchemaMarkup(params: {
     content: string;
     slug: string;
     siteDomain: string;
+    author: AuthorProfile;
+    description?: string;
 }): Promise<string | null> {
     try {
-        const text = await callGemini(
-            `Generate JSON-LD schema markup for this article. Include:
-1. Article schema (headline, author, datePublished, dateModified, publisher)
-2. FAQPage schema — extract 4-5 real questions and answers from the content
-3. BreadcrumbList schema
-
-Article Info:
-- Title: ${params.title}
-- Keyword: ${params.keyword}
-- Domain: ${params.siteDomain}
-- Slug: ${params.slug}
-- Published: ${new Date().toISOString()}
-
-Article excerpt:
-${params.content.substring(0, 4000)}
-
-Return ONLY the JSON-LD script tags. No other text.`,
-            { maxOutputTokens: 4096, temperature: 0.1, timeoutMs: 45000 }
-        );
-        const scripts = text.match(/<script type="application\/ld\+json">[\s\S]*?<\/script>/gi);
-        if (!scripts || scripts.length === 0) return null;
-        const firstJson = scripts[0]
-            .replace(/<script type="application\/ld\+json">/, "")
-            .replace(/<\/script>/, "")
-            .trim();
-        JSON.parse(firstJson);
+        const now = new Date().toISOString();
+        const normalizedDomain = params.siteDomain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+        const siteUrl = normalizedDomain ? `https://${normalizedDomain}` : "https://example.com";
+        const articleUrl = `${siteUrl}/blog/${params.slug}`;
+        const faqItems = extractFaqsForSchema(params.content);
+        const scripts = [
+            buildSchemaScript({
+                "@context": "https://schema.org",
+                "@type": "Article",
+                headline: params.title,
+                description: params.description || params.title,
+                author: {
+                    "@type": "Person",
+                    name: params.author.name,
+                    ...(params.author.role ? { jobTitle: params.author.role } : {}),
+                },
+                datePublished: now,
+                dateModified: now,
+                mainEntityOfPage: { "@type": "WebPage", "@id": articleUrl },
+                publisher: { "@type": "Organization", name: params.siteDomain },
+            }),
+            ...(faqItems.length > 0
+                ? [buildSchemaScript({
+                    "@context": "https://schema.org",
+                    "@type": "FAQPage",
+                    mainEntity: faqItems.map(item => ({
+                        "@type": "Question",
+                        name: item.question,
+                        acceptedAnswer: {
+                            "@type": "Answer",
+                            text: item.answer,
+                        },
+                    })),
+                })]
+                : []),
+            buildSchemaScript({
+                "@context": "https://schema.org",
+                "@type": "BreadcrumbList",
+                itemListElement: [
+                    { "@type": "ListItem", position: 1, name: params.siteDomain, item: siteUrl },
+                    { "@type": "ListItem", position: 2, name: params.title, item: articleUrl },
+                ],
+            }),
+        ];
         return scripts.join("\n");
     } catch (e: unknown) {
-        logger.warn("[Blog/Schema] Schema markup failed:", { error: (e as Error)?.message });
+        logger.warn("[Blog/Schema] Schema markup failed:", { error: e instanceof Error ? e.message : String(e) });
         return null;
     }
 }
-
 export const generateBlogJob = inngest.createFunction(
     {
         id: "generate-blog",
@@ -242,34 +314,19 @@ export const generateBlogJob = inngest.createFunction(
 
             // Always sweep GENERATING → FAILED, even when blogId is unknown.
             // Without this, orphaned GENERATING rows can never be cleared by the UI.
-            const effectiveBlogId = blogId ?? (siteId ? (
-                await prisma.blog
-                    .findFirst({ where: { siteId, status: "GENERATING" }, orderBy: { createdAt: "desc" }, select: { id: true } })
-                    .catch(() => null)
-            )?.id : undefined);
-
+            const effectiveBlogId = blogId;
             if (blogId) {
                 await prisma.blog
                     .updateMany({ where: { id: blogId }, data: { status: "FAILED" } })
                     .catch((e: unknown) =>
-                        logger.error("[Inngest/Blog] onFailure DB write failed", { blogId, error: (e as Error)?.message })
+                        logger.error("[Inngest/Blog] onFailure DB write failed", {
+                            blogId,
+                            error: e instanceof Error ? e.message : String(e),
+                        })
                     );
-            } else if (siteId) {
-                // Fallback: mark the most-recent GENERATING blog for this site FAILED.
-                // This covers the case where fetch-site threw before blogId was captured.
-                const stuck = await prisma.blog
-                    .findFirst({ where: { siteId, status: "GENERATING" }, orderBy: { createdAt: "desc" }, select: { id: true } })
-                    .catch(() => null);
-                if (stuck) {
-                    await prisma.blog
-                        .update({ where: { id: stuck.id }, data: { status: "FAILED" } })
-                        .catch(() => null);
-                    logger.info("[Inngest/Blog] onFailure: recovered orphaned GENERATING blog via siteId", { siteId, recoveredId: stuck.id });
-                }
             } else {
-                logger.error("[Inngest/Blog] onFailure: no blogId or siteId — cannot auto-recover stuck blog. Manual DB sweep needed.");
+                logger.error("[Inngest/Blog] onFailure: missing blogId — refusing to infer a target blog", { siteId });
             }
-
             // Persist the failure reason to Redis so the status API can surface it
             // to the generating page — users see the actual cause, not a generic error.
             if (effectiveBlogId) {
@@ -284,10 +341,10 @@ export const generateBlogJob = inngest.createFunction(
             }
 
             // Refund 10 credits idempotently — unique referenceId prevents double-refunds on retries.
-            if (userId) {
+            if (userId && blogId) {
                 try {
                     const { refundCreditsIdempotent } = await import("@/lib/credits");
-                    const refId = blogId ? `refund:blog_gen:${blogId}` : `refund:blog_gen:${siteId ?? "unknown"}:${Date.now()}`;
+                    const refId = `refund:blog_gen:${blogId}`;
                     await refundCreditsIdempotent(userId, 10, refId, "Refund: Failed Blog Generation");
                     logger.info("[Inngest/Blog] Idempotently refunded 10 credits after job failure", { userId, blogId, refId });
                 } catch (refundErr) {
@@ -957,6 +1014,8 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 content: liveBlogPost.content,
                 slug: liveBlogPost.slug,
                 siteDomain: site.domain,
+                author,
+                description: liveBlogPost.metaDescription,
             });
         });
 
@@ -1001,6 +1060,36 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             topFix: citationGate.citationReady ? null : citationGate.citationTopFix,
         });
 
+        const finalContent = await step.run("inject-funnel-cta", async () => {
+            try {
+                const funnelIntent = (detectedIntent === "local" ? "informational" : detectedIntent) as FunnelIntent;
+                const funnelConfig = getFunnelForIntent(
+                    funnelIntent,
+                    site.id,
+                    site.domain.startsWith("http") ? site.domain : `https://${site.domain}`,
+                    displayName,
+                    event.data.blogId || "new"
+                );
+                const h2Splits = liveBlogPost.content.split(/(?=<h2[\s>])/i);
+                const content = h2Splits.length >= 3
+                    ? [...h2Splits.slice(0, 2), funnelConfig.htmlSnippet, ...h2Splits.slice(2)].join("")
+                    : liveBlogPost.content + funnelConfig.htmlSnippet;
+                const { sanitizeHtml } = await import("@/lib/sanitize-html");
+                return sanitizeHtml(content);
+            } catch (funnelErr: unknown) {
+                // Funnel injection must never crash the job — content is already generated.
+                // Degrade gracefully: return original content without the CTA.
+                logger.warn("[Blog/Funnel] inject-funnel-cta threw — using original content", {
+                    error: (funnelErr as Error)?.message,
+                    siteId,
+                    keyword,
+                });
+                const { sanitizeHtml } = await import("@/lib/sanitize-html");
+                return sanitizeHtml(liveBlogPost.content);
+            }
+        });
+        liveBlogPost.content = finalContent;
+
         // ── Publication Gate ──────────────────────────────────────────────
         const publicationGateStep = await step.run("publication-gate", async () => {
             try {
@@ -1034,6 +1123,8 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                     researchPacket: liveBlogPost.researchPacket,
                     riskTier: liveBlogPost.riskTier,
                     hasFirstPartyEvidence: liveBlogPost.hasFirstPartyEvidence,
+                    factCheckComplete: factCheck.complete,
+                    factCheckCoverage: factCheck.coverage,
                     additionalOriginalityIssues: factCheckBlockers,
                 });
                 return { evidencePacket, publicationGate };
@@ -1083,6 +1174,13 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             }
         });
         liveBlogPost.evidencePacket = publicationGateStep.evidencePacket;
+        liveBlogPost.evidenceCoverage = publicationGateStep.evidencePacket.claims.length > 0
+            ? Math.round(
+                (publicationGateStep.evidencePacket.claims.filter(claim => claim.sourceIds.length > 0).length /
+                    publicationGateStep.evidencePacket.claims.length) * 100
+            )
+            : 0;
+        liveBlogPost.missingEvidence = publicationGateStep.evidencePacket.unsupportedClaims.slice(0, 50);
         const publicationGateResult = publicationGateStep.publicationGate;
 
         // Publication gate determines status — no score override
@@ -1121,33 +1219,6 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             citationScore: citationGate.citationScore,
         });
 
-        const contentWithFunnel = await step.run("inject-funnel-cta", async () => {
-            try {
-                const funnelIntent = (detectedIntent === "local" ? "informational" : detectedIntent) as FunnelIntent;
-                const funnelConfig = getFunnelForIntent(
-                    funnelIntent,
-                    site.id,
-                    site.domain.startsWith("http") ? site.domain : `https://${site.domain}`,
-                    displayName,
-                    event.data.blogId || "new"
-                );
-                const h2Splits = liveBlogPost.content.split(/(?=<h2[\s>])/i);
-                if (h2Splits.length >= 3) {
-                    return [...h2Splits.slice(0, 2), funnelConfig.htmlSnippet, ...h2Splits.slice(2)].join("");
-                }
-                return liveBlogPost.content + funnelConfig.htmlSnippet;
-            } catch (funnelErr: unknown) {
-                // Funnel injection must never crash the job — content is already generated.
-                // Degrade gracefully: return original content without the CTA.
-                logger.warn("[Blog/Funnel] inject-funnel-cta threw — using original content", {
-                    error: (funnelErr as Error)?.message,
-                    siteId,
-                    keyword,
-                });
-                return liveBlogPost.content;
-            }
-        });
-
         await step.run("save-blog", async () => {
             const { sanitizeHtml, sanitizeSchemaMarkup } = await import("@/lib/sanitize-html");
             const blogData = {
@@ -1155,7 +1226,7 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 title: liveBlogPost.title,
                 slug: liveBlogPost.slug,
                 targetKeywords: liveBlogPost.targetKeywords,
-                content: sanitizeHtml(contentWithFunnel),
+                content: liveBlogPost.content,
                 metaDescription: liveBlogPost.metaDescription,
                 ogImage: liveBlogPost.ogImage,
                 interactiveWidget: interactiveWidget ? sanitizeHtml(interactiveWidget) : undefined,

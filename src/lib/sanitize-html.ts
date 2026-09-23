@@ -27,7 +27,7 @@ const ALLOWED_ATTRS = new Set([
     "muted", "name", "open", "poster", "preload",
     "rel", "reversed", "role", "rowspan", "scope",
     "shape", "size", "sizes", "span", "src", "srcset", "start",
-    "tabindex", "target", "title", "type",
+    "style", "tabindex", "target", "title", "type",
     "usemap", "value", "width", "wrap",
 ]);
 

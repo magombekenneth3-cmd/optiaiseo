@@ -632,7 +632,6 @@ export async function generateBlog(
                 },
             });
         } catch (e) {
-            // Non-fatal: stub exists — mark FAILED so the UI doesn't spin forever.
             logger.warn("[Blog Action] inngest.send failed — marking blog FAILED", {
                 blogId: savedBlog.id,
                 error: e instanceof Error ? e.message : String(e),
@@ -641,6 +640,21 @@ export async function generateBlog(
                 where: { id: savedBlog.id },
                 data: { status: "FAILED" },
             }).catch(() => null);
+            try {
+                const { refundCreditsIdempotent } = await import("@/lib/credits");
+                await refundCreditsIdempotent(
+                    user.id,
+                    10,
+                    `refund:blog_gen:${savedBlog.id}`,
+                    "Refund: Failed Blog Dispatch"
+                );
+            } catch (refundErr) {
+                logger.error("[Blog Action] Failed to refund credits after dispatch failure", {
+                    blogId: savedBlog.id,
+                    userId: user.id,
+                    error: refundErr instanceof Error ? refundErr.message : String(refundErr),
+                });
+            }
         }
 
         revalidatePath("/dashboard/blogs");
@@ -747,6 +761,21 @@ export async function generateAttackBlog(
                 where: { id: blog.id },
                 data: { status: "FAILED" },
             }).catch(() => null);
+            try {
+                const { refundCreditsIdempotent } = await import("@/lib/credits");
+                await refundCreditsIdempotent(
+                    user.id,
+                    10,
+                    `refund:blog_gen:${blog.id}`,
+                    "Refund: Failed Blog Dispatch"
+                );
+            } catch (refundErr) {
+                logger.error("[Blog Action] Failed to refund attack-blog credits after dispatch failure", {
+                    blogId: blog.id,
+                    userId: user.id,
+                    error: refundErr instanceof Error ? refundErr.message : String(refundErr),
+                });
+            }
         }
 
         revalidatePath("/dashboard/blogs");

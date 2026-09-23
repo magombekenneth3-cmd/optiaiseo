@@ -38,6 +38,8 @@ export interface PublicationGateInput {
     riskTier: string;
     /** Whether the author has real first-party evidence */
     hasFirstPartyEvidence: boolean;
+    factCheckComplete?: boolean;
+    factCheckCoverage?: number;
     /**
      * Extra originality issues from the Gemini fact-checker (blog.ts).
      * These bridge the gap between the fact-checker and evidence-gate truth sources.
@@ -303,6 +305,15 @@ export async function runPublicationGate(
         logger.info("[Publication Gate] Merged fact-check issues into originality gate", {
             count: input.additionalOriginalityIssues.length,
         });
+    }
+
+    if (input.factCheckComplete === false) {
+        const coverage = typeof input.factCheckCoverage === "number"
+            ? Math.max(0, Math.min(100, Math.round(input.factCheckCoverage)))
+            : 0;
+        originalityIssues.push(
+            `Fact-check coverage is incomplete (${coverage}%). Automatic publication requires a complete fact-check pass.`
+        );
     }
 
     // ── Decision logic ────────────────────────────────────────────────────

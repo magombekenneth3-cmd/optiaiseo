@@ -100,26 +100,6 @@ function significantTerms(value: string): Set<string> {
         .filter(term => !stopWords.has(term)));
 }
 
-function sourceTextMatchesClaim(claim: string, sources: SourceEvidence[]): string[] {
-    const claimNumbers = claim.match(STATISTIC_PATTERN) ?? [];
-    if (claimNumbers.length === 0) return [];
-
-    const claimTerms = significantTerms(claim);
-    return sources
-        .filter(source => {
-            const sourceText = `${source.title} ${source.claim} ${source.evidence}`;
-            const sourceNumbers = sourceText.match(STATISTIC_PATTERN) ?? [];
-            const sameNumber = claimNumbers.some(number =>
-                sourceNumbers.some(candidate => candidate.toLowerCase() === number.toLowerCase())
-            );
-            if (!sameNumber) return false;
-            const sourceTerms = significantTerms(sourceText);
-            return [...claimTerms].some(term => sourceTerms.has(term));
-        })
-        .map(source => source.id)
-        .slice(0, 8);
-}
-
 function candidateSentences(block: ContentBlock): string[] {
     const sentences = block.text.match(/[^.!?]+(?:[.!?]+|$)/g) ?? [block.text];
     return sentences.map(sentence => sentence.trim()).filter(Boolean);
@@ -175,14 +155,10 @@ export function extractEvidencePacket(
             if (!normalizedClaim || seenClaims.has(dedupeKey) || claims.length >= 100) continue;
             seenClaims.add(dedupeKey);
 
-            const matchedSourceIds = block.sourceIds.length > 0
-                ? block.sourceIds
-                : sourceTextMatchesClaim(normalizedClaim, sources);
-            const matchMethod = block.sourceIds.length > 0
+            const matchedSourceIds = block.sourceIds;
+            const matchMethod = matchedSourceIds.length > 0
                 ? "explicit_citation" as const
-                : matchedSourceIds.length > 0
-                    ? "source_text_match" as const
-                    : "unsupported" as const;
+                : "unsupported" as const;
             const claimId = `claim-${claims.length + 1}`;
             const type = hasStatistic ? "statistic" as const : "fact" as const;
 
