@@ -99,24 +99,13 @@ export async function verifyProposal(
     await persistVerificationResult(
       prisma,
       input.proposalId,
-      "FAILED",
+      "UNKNOWN",
       failureDetails
     );
 
-    // Transition statuses
-    await transitionProposalStatus(prisma, input.proposalId, "FAILED");
-    await transitionOpportunity({
-      decisionId: proposal.decisionId,
-      from: "VERIFYING",
-      to: "FAILED",
-      actorId: "system:verifier",
-      reason: `Verification fetch failed: ${(fetchErr as Error)?.message}`,
-      proposalId: input.proposalId,
-    });
-
     return {
       proposalId: input.proposalId,
-      outcome: "FAILED",
+      outcome: "UNKNOWN",
       details: failureDetails,
       durationMs: Date.now() - startMs,
     };
@@ -292,6 +281,10 @@ async function persistVerificationResult(
   outcome: VerificationOutcome,
   details: VerificationDetail[]
 ): Promise<void> {
+  const proposal = await prisma.actionProposal.findUnique({
+    where: { id: proposalId },
+    select: { operationId: true, siteId: true, targetUrl: true, verificationUrl: true },
+  });
   await prisma.actionProposal.update({
     where: { id: proposalId },
     data: {
@@ -300,6 +293,21 @@ async function persistVerificationResult(
       verifiedAt: new Date(),
     },
   });
+  if (proposal?.operationId) {
+    await prisma.mutationVerification.create({
+      data: {
+        operationId: proposal.operationId,
+        proposalId,
+        siteId: proposal.siteId,
+        verificationType: "PRODUCTION_PAGE",
+        status: outcome,
+        targetUrl: proposal.verificationUrl ?? proposal.targetUrl,
+        criteria: details,
+        observedState: details,
+        evidence: { checkedAt: new Date().toISOString() },
+      },
+    });
+  }
 }
 
 /**

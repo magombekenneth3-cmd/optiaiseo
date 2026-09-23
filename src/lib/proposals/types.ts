@@ -213,7 +213,7 @@ export interface VerificationCriterion {
   severity: "CRITICAL" | "WARNING";
 }
 
-export type VerificationOutcome = "VERIFIED" | "FAILED" | "PARTIAL";
+export type VerificationOutcome = "VERIFIED" | "FAILED" | "PARTIAL" | "UNKNOWN";
 
 export interface VerificationDetail {
   check: VerificationCheckType;

@@ -20,15 +20,23 @@ export interface AuditIssue {
     recommendation: string
 }
 
-/**
- * Computes a 0–100 priority score from impact × 0.5 + ease × 0.3 + confidence × 0.2.
- * Sort descending so the highest-priority fix is always first.
- */
+export const PRIORITIZATION_POLICY_VERSION = "priority-v3";
+
+export const PRIORITIZATION_WEIGHTS = {
+    impact: 0.5,
+    ease: 0.3,
+    confidence: 0.2,
+} as const;
+
 export function computePriority(issue: AuditIssue): number {
-    const impact = issue.estimatedTrafficImpact / 10
-    const ease = 1 - (issue.fixDifficulty / 10)
-    const conf = issue.confidence
-    return Math.round((impact * 0.5 + ease * 0.3 + conf * 0.2) * 100)
+    const impact = Math.max(0, Math.min(10, issue.estimatedTrafficImpact)) / 10;
+    const ease = 1 - Math.max(0, Math.min(10, issue.fixDifficulty)) / 10;
+    const confidence = Math.max(0, Math.min(1, issue.confidence));
+    return Math.round(
+        (impact * PRIORITIZATION_WEIGHTS.impact +
+            ease * PRIORITIZATION_WEIGHTS.ease +
+            confidence * PRIORITIZATION_WEIGHTS.confidence) * 100
+    );
 }
 
 /** Enrich a list of issues with priorityScore and return sorted descending. */
