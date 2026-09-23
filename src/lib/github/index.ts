@@ -31,7 +31,7 @@ export interface GitHubPRResult {
 
 export async function getRepositoryFile(
     repoUrl: string, path: string, token: string,
-): Promise<{ exists: boolean; sha?: string; content?: string }> {
+): Promise<{ exists: boolean; sha?: string; content?: string; commitSha?: string }> {
     const match = repoUrl.match(/github\.com\/([^/]+)\/([^/.?#]+)(?:\.git)?/);
     if (!match) throw new Error("Cannot parse GitHub URL");
     const [, owner, repo] = match;
@@ -39,9 +39,12 @@ export async function getRepositoryFile(
     try {
         const { data } = await octokit.repos.getContent({ owner, repo, path });
         if (Array.isArray(data) || data.type !== "file") throw new Error("Target is not a file");
+        const { data: repoData } = await octokit.repos.get({ owner, repo });
+        const { data: refData } = await octokit.git.getRef({ owner, repo, ref: `heads/${repoData.default_branch}` });
         return {
             exists: true,
             sha: data.sha,
+            commitSha: refData.object.sha,
             content: "content" in data ? Buffer.from(data.content, "base64").toString("utf8") : undefined,
         };
     } catch (error: unknown) {
