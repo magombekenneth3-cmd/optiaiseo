@@ -1071,10 +1071,11 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                     event.data.blogId || "new"
                 );
                 const h2Splits = liveBlogPost.content.split(/(?=<h2[\s>])/i);
-                if (h2Splits.length >= 3) {
-                    return [...h2Splits.slice(0, 2), funnelConfig.htmlSnippet, ...h2Splits.slice(2)].join("");
-                }
-                return liveBlogPost.content + funnelConfig.htmlSnippet;
+                const content = h2Splits.length >= 3
+                    ? [...h2Splits.slice(0, 2), funnelConfig.htmlSnippet, ...h2Splits.slice(2)].join("")
+                    : liveBlogPost.content + funnelConfig.htmlSnippet;
+                const { sanitizeHtml } = await import("@/lib/sanitize-html");
+                return sanitizeHtml(content);
             } catch (funnelErr: unknown) {
                 // Funnel injection must never crash the job — content is already generated.
                 // Degrade gracefully: return original content without the CTA.
