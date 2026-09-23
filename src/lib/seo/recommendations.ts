@@ -1,3 +1,4 @@
+import { computePriority } from "@/lib/seo-audit/types";
 /**
  * src/lib/seo/recommendations.ts
  *
@@ -335,8 +336,21 @@ const UPLIFT_SCORE: Record<EnrichedRecommendation["trafficUplift"], number> = {
     significant: 30, moderate: 20, minor: 10,
 };
 
-function computePriority(meta: IssueMeta): number {
-    return Math.min(100, IMPACT_SCORE[meta.impact] + EFFORT_SCORE[meta.effort] + UPLIFT_SCORE[meta.trafficUplift]);
+function computeRecommendationPriority(meta: IssueMeta): number {
+    const impact = IMPACT_SCORE[meta.impact] / 4;
+    const difficulty = meta.effort === "quick_win" ? 1 : meta.effort === "medium" ? 5 : 10;
+    const confidence = meta.autoFixable ? 0.9 : 0.7;
+    return computePriority({
+        id: "recommendation",
+        title: meta.title,
+        description: meta.why,
+        severity: meta.impact,
+        estimatedTrafficImpact: impact,
+        fixDifficulty: difficulty,
+        confidence,
+        category: meta.category,
+        recommendation: meta.action,
+    });
 }
 
 function effortToLabel(effort: EffortLevel): EnrichedRecommendation["difficulty"] {
@@ -390,7 +404,7 @@ export interface RawIssue {
 export function enrichIssue(raw: RawIssue, pageUrl?: string): EnrichedRecommendation {
     const checkId = raw.checkId ?? raw.id ?? raw.itemId ?? "unknown";
     const meta    = ISSUE_META[checkId] ?? defaultMeta(raw as Record<string, unknown>);
-    const score   = typeof raw.priorityScore === "number" ? raw.priorityScore : computePriority(meta);
+    const score   = typeof raw.priorityScore === "number" ? raw.priorityScore : computeRecommendationPriority(meta);
 
     // Personalise action with page URL when available
     const resolvedPageUrl = pageUrl ?? raw.pageUrl ?? null;
