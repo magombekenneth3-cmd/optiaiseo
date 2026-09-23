@@ -192,7 +192,10 @@ export async function buildResearchPacket(params: {
                 question: truncate(item.question, 500),
                 ...(item.answer ? { answer: truncate(item.answer, 2_000) } : {}),
             })),
-            format: serpContext ? classifySerpFormat(serpContext.results).format : null,\n            tableStakes: serpContext?.opportunityAnalysis?.tableStakes ?? [],\n            opportunities: serpContext?.opportunityAnalysis?.opportunities ?? [],\n            unansweredQuestions: serpContext?.opportunityAnalysis?.unansweredQuestions ?? [],
+            format: serpContext ? classifySerpFormat(serpContext.results).format : null,
+            tableStakes: serpContext?.opportunityAnalysis?.tableStakes ?? [],
+            opportunities: serpContext?.opportunityAnalysis?.opportunities ?? [],
+            unansweredQuestions: serpContext?.opportunityAnalysis?.unansweredQuestions ?? [],
         },
         sources,
         entities: compact(brain.entities, 20).map(entity => ({
