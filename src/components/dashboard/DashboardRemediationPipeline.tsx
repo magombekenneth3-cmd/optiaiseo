@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, GitPullRequest, Rocket, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, GitPullRequest, ShieldCheck, Sparkles } from "lucide-react";
 
 interface Props {
   proposed: number;
@@ -11,7 +11,7 @@ interface Props {
 const steps = [
   { key: "proposed", label: "Proposed", icon: Sparkles },
   { key: "active", label: "In progress", icon: GitPullRequest },
-  { key: "completed", label: "Deployed", icon: Rocket },
+  { key: "completed", label: "Completed", icon: CheckCircle2 },
   { key: "verified", label: "Verified", icon: ShieldCheck },
 ] as const;
 
@@ -24,7 +24,7 @@ export function DashboardRemediationPipeline({ proposed, active, completed, veri
       <div className="flex flex-col gap-2 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand">Remediation</p>
-          <h2 id="dashboard-remediation" className="mt-1 text-sm font-semibold text-foreground">From recommendation to verified fix</h2>
+          <h2 id="dashboard-remediation" className="mt-1 text-sm font-semibold text-foreground">From recommendation to verified outcome</h2>
         </div>
         <Link href="/dashboard/operations" className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground">
           Open operations
