@@ -100,26 +100,6 @@ function significantTerms(value: string): Set<string> {
         .filter(term => !stopWords.has(term)));
 }
 
-function sourceTextMatchesClaim(claim: string, sources: SourceEvidence[]): string[] {
-    const claimNumbers = claim.match(STATISTIC_PATTERN) ?? [];
-    if (claimNumbers.length === 0) return [];
-
-    const claimTerms = significantTerms(claim);
-    return sources
-        .filter(source => {
-            const sourceText = `${source.title} ${source.claim} ${source.evidence}`;
-            const sourceNumbers = sourceText.match(STATISTIC_PATTERN) ?? [];
-            const sameNumber = claimNumbers.some(number =>
-                sourceNumbers.some(candidate => candidate.toLowerCase() === number.toLowerCase())
-            );
-            if (!sameNumber) return false;
-            const sourceTerms = significantTerms(sourceText);
-            return [...claimTerms].filter(term => sourceTerms.has(term)).length >= 2;
-        })
-        .map(source => source.id)
-        .slice(0, 8);
-}
-
 function candidateSentences(block: ContentBlock): string[] {
     const sentences = block.text.match(/[^.!?]+(?:[.!?]+|$)/g) ?? [block.text];
     return sentences.map(sentence => sentence.trim()).filter(Boolean);
