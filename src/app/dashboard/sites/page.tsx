@@ -8,6 +8,7 @@ import {
   Clock,
   BarChart2,
 } from "lucide-react";
+import { DeleteSiteButton } from "./DeleteSiteButton";
 
 export const metadata: Metadata = {
   title: "My Sites | OptiAISEO",
@@ -80,7 +81,10 @@ export default async function SitesPage() {
                         {domain}
                       </h3>
                     </div>
-                    <Globe className="w-5 h-5 text-muted-foreground mt-1" />
+                    <div className="flex items-center gap-1">
+                      <DeleteSiteButton siteId={site.id} domain={domain} />
+                      <Globe className="w-5 h-5 text-muted-foreground mt-1" />
+                    </div>
                   </div>
 
                   {/* Card body */}
