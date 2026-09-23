@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
     ResponsiveContainer,
     AreaChart,
@@ -28,36 +28,42 @@ interface AuditDataPoint {
 }
 
 type MetricKey = "overallScore" | "aeoScore" | "coreWebVitals" | "schemaScore" | "organicTraffic";
-type TabKey = MetricKey | "auditTrend";
+type TabKey = MetricKey | "auditIssues";
 
-const TABS: { key: TabKey; label: string; color: string; unit?: string; metricKey?: MetricKey }[] = [
-    { key: "overallScore",   label: "SEO Score",       color: "#10b981", metricKey: "overallScore" },
-    { key: "aeoScore",       label: "AEO Visibility",  color: "#a78bfa", metricKey: "aeoScore" },
-    { key: "organicTraffic", label: "Organic Traffic",  color: "#06b6d4", unit: "clicks", metricKey: "organicTraffic" },
-    { key: "auditTrend",     label: "Rankings",         color: "#f59e0b" },
+const TABS: { key: TabKey; label: string; color: string; unit?: string; metricKey?: MetricKey; score?: boolean }[] = [
+    { key: "overallScore", label: "SEO score", color: "#10b981", metricKey: "overallScore", score: true },
+    { key: "aeoScore", label: "AEO visibility", color: "#a78bfa", metricKey: "aeoScore", score: true },
+    { key: "organicTraffic", label: "Organic traffic", color: "#06b6d4", unit: "visits", metricKey: "organicTraffic" },
+    { key: "auditIssues", label: "Audit issues", color: "#f59e0b", unit: "issues" },
 ];
 
 function formatDate(iso: string) {
-    const d = new Date(iso);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function deduplicateDates(dates: string[]): string[] {
     const counts = new Map<string, number>();
-    return dates.map((d) => {
-        const n = (counts.get(d) ?? 0) + 1;
-        counts.set(d, n);
-        return n > 1 ? `${d} (${n})` : d;
+    return dates.map((date) => {
+        const count = (counts.get(date) ?? 0) + 1;
+        counts.set(date, count);
+        return count > 1 ? `${date} (${count})` : date;
     });
 }
 
-function TrendBadge({ current, prev }: { current: number | null; prev: number | null }) {
-    if (current == null || prev == null) return null;
-    const delta = current - prev;
-    const pct = prev > 0 ? Math.round((delta / prev) * 100) : 0;
-    if (Math.abs(pct) < 1) return <span className="flex items-center gap-0.5 text-xs text-muted-foreground"><Minus className="w-3 h-3" /> No change</span>;
-    if (pct > 0) return <span className="flex items-center gap-0.5 text-xs text-emerald-400"><TrendingUp className="w-3 h-3" /> +{pct}%</span>;
-    return <span className="flex items-center gap-0.5 text-xs text-rose-400"><TrendingDown className="w-3 h-3" /> {pct}%</span>;
+function TrendBadge({ current, previous, lowerIsBetter = false }: { current: number | null; previous: number | null; lowerIsBetter?: boolean }) {
+    if (current == null || previous == null) return <span className="text-xs text-muted-foreground">Not enough data to compare</span>;
+    const delta = current - previous;
+    if (Math.abs(delta) < 0.0001) return <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Minus className="h-3 w-3" /> No change</span>;
+    const improved = lowerIsBetter ? delta < 0 : delta > 0;
+    const Icon = delta > 0 ? TrendingUp : TrendingDown;
+    const percent = previous !== 0 ? Math.round((delta / Math.abs(previous)) * 100) : null;
+    return (
+        <span className={`inline-flex items-center gap-1 text-xs ${improved ? "text-emerald-400" : "text-rose-400"}`}>
+            <Icon className="h-3 w-3" />
+            {delta > 0 ? "+" : ""}{delta.toFixed(1)}{percent !== null ? ` (${percent > 0 ? "+" : ""}${percent}%)` : ""}
+        </span>
+    );
 }
 
 interface MetricTrendChartProps {
@@ -66,150 +72,103 @@ interface MetricTrendChartProps {
     className?: string;
 }
 
-export function MetricTrendChart({ data, auditData, className = "" }: MetricTrendChartProps) {
-    const hasAuditData = auditData && auditData.length > 0;
-    const [activeTab, setActiveTab] = useState<TabKey>(data.length > 0 ? "overallScore" : "auditTrend");
+export function MetricTrendChart({ data, auditData = [], className = "" }: MetricTrendChartProps) {
+    const availableTabs = useMemo(() => TABS.filter((tab) => tab.key === "auditIssues"
+        ? auditData.some((point) => point.issues != null)
+        : data.some((point) => point[tab.metricKey!] != null)), [data, auditData]);
+    const [activeTab, setActiveTab] = useState<TabKey>("overallScore");
+    const resolvedTab = availableTabs.some((tab) => tab.key === activeTab) ? activeTab : availableTabs[0]?.key;
 
-    if (data.length === 0 && !hasAuditData) {
+    if (availableTabs.length === 0) {
         return (
-            <div className={`border border-border rounded-2xl bg-card p-6 ${className}`}>
-                <div className="flex flex-col items-center justify-center py-10 gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-                        <BarChart3 className="w-5 h-5 text-muted-foreground" />
+            <div className={`rounded-2xl border border-border bg-card p-5 sm:p-6 ${className}`}>
+                <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted"><BarChart3 className="h-5 w-5 text-muted-foreground" /></div>
+                    <div>
+                        <p className="text-sm font-semibold text-foreground">No performance trends yet</p>
+                        <p className="mt-1 max-w-sm text-xs leading-5 text-muted-foreground">Complete an audit or collect metric data to start building your performance history.</p>
                     </div>
-                    <p className="text-sm text-muted-foreground text-center">
-                        No trend data yet — run your first audit to start tracking.
-                    </p>
                 </div>
             </div>
         );
     }
 
-    const isAuditTab = activeTab === "auditTrend";
-
-    let chartData: { date: string; value: number | null }[];
-    let activeColor: string;
-    let activeUnit: string | undefined;
-    let first: number | null;
-    let last: number | null;
-    let headerLabel: string;
-
-    if (isAuditTab && hasAuditData) {
-        const rawDates = auditData!.map(d => d.name);
-        const dedupedDates = deduplicateDates(rawDates);
-        chartData = auditData!.map((d, i) => ({
-            date: dedupedDates[i],
-            value: d.score,
-        }));
-        activeColor = TABS.find(t => t.key === "auditTrend")!.color;
-        activeUnit = undefined;
-        first = auditData![0]?.score ?? null;
-        last = auditData![auditData!.length - 1]?.score ?? null;
-        headerLabel = "SEO Performance";
-    } else {
-        const tab = TABS.find(t => t.key === activeTab)!;
-        const metricKey = tab.metricKey ?? "overallScore";
-        const rawDates = data.map(d => formatDate(d.capturedAt));
-        const dedupedDates = deduplicateDates(rawDates);
-        chartData = data.map((d, i) => ({
-            date: dedupedDates[i],
-            value: d[metricKey] ?? null,
-        }));
-        activeColor = tab.color;
-        activeUnit = tab.unit;
-        first = data[0]?.[metricKey] ?? null;
-        last = data[data.length - 1]?.[metricKey] ?? null;
-        headerLabel = "SEO Performance";
-    }
-
+    const activeMetric = availableTabs.find((tab) => tab.key === resolvedTab)!;
+    const isAuditIssues = resolvedTab === "auditIssues";
+    const rawPoints = isAuditIssues
+        ? auditData.filter((point) => point.issues != null).map((point) => ({ date: point.name, value: point.issues! }))
+        : data.filter((point) => point[activeMetric.metricKey!] != null).map((point) => ({ date: formatDate(point.capturedAt), value: point[activeMetric.metricKey!]! }));
+    const dates = deduplicateDates(rawPoints.map((point) => point.date));
+    const chartData = rawPoints.map((point, index) => ({ ...point, date: dates[index] }));
+    const first = chartData[0]?.value ?? null;
+    const last = chartData[chartData.length - 1]?.value ?? null;
+    const valueFormat = (value: number) => activeMetric.score ? `${Math.round(value)}/100` : `${value.toLocaleString()}${activeMetric.unit ? ` ${activeMetric.unit}` : ""}`;
     const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) => {
         if (!active || !payload?.[0]) return null;
         return (
-            <div className="bg-card border border-border rounded-xl px-3.5 py-2.5 text-xs shadow-xl backdrop-blur-sm">
-                <p className="text-muted-foreground mb-0.5">{label}</p>
-                <p className="font-semibold text-foreground text-sm">
-                    {payload[0].value?.toFixed(1)}{activeUnit ? ` ${activeUnit}` : ""}
-                </p>
+            <div className="rounded-xl border border-border bg-card px-3.5 py-2.5 text-xs shadow-xl">
+                <p className="mb-0.5 text-muted-foreground">{label}</p>
+                <p className="text-sm font-semibold text-foreground">{valueFormat(payload[0].value)}</p>
             </div>
         );
     };
 
     return (
-        <div className={`border border-border rounded-2xl bg-card p-5 ${className}`}>
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 min-w-0">
-                <h3 className="text-[15px] font-semibold text-foreground">{headerLabel}</h3>
-                <div className="flex items-center gap-2">
-                    {last != null && (
-                        <span className="text-lg font-bold tabular-nums" style={{ color: activeColor }}>
-                            {last.toFixed(0)}{activeUnit ? " " + activeUnit : ""}
-                        </span>
-                    )}
-                    <TrendBadge current={last} prev={first} />
+        <section aria-label="Performance trends" className={`min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-5 ${className}`}>
+            <div className="mb-4 flex min-w-0 flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                <div>
+                    <h2 className="text-sm font-semibold text-foreground">Performance trends</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">Compare recorded values across available snapshots.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    {last != null && <span className="text-lg font-bold tabular-nums" style={{ color: activeMetric.color }}>{valueFormat(last)}</span>}
+                    <TrendBadge current={last} previous={first} lowerIsBetter={isAuditIssues} />
                 </div>
             </div>
 
-            {/* Tab selector — underline style */}
-            <div className="flex gap-4 mb-4 border-b border-border">
-                {TABS.map(t => (
+            <div className="mb-4 flex gap-1 overflow-x-auto border-b border-border" role="tablist" aria-label="Performance metric">
+                {availableTabs.map((tab) => (
                     <button
-                        key={t.key}
-                        onClick={() => setActiveTab(t.key)}
-                        className={`pb-2 text-xs font-medium transition-colors relative ${
-                            activeTab === t.key
-                                ? "text-foreground"
-                                : "text-muted-foreground hover:text-foreground"
-                        }`}
+                        key={tab.key}
+                        type="button"
+                        role="tab"
+                        id={`metric-tab-${tab.key}`}
+                        aria-selected={resolvedTab === tab.key}
+                        aria-controls="metric-trend-panel"
+                        onClick={() => setActiveTab(tab.key)}
+                        className={`relative shrink-0 px-2.5 pb-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${resolvedTab === tab.key ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
                     >
-                        {t.label}
-                        {activeTab === t.key && (
-                            <span
-                                className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full transition-all"
-                                style={{ background: t.color }}
-                            />
-                        )}
+                        {tab.label}
+                        {resolvedTab === tab.key && <span className="absolute inset-x-2.5 bottom-0 h-0.5 rounded-full" style={{ background: tab.color }} />}
                     </button>
                 ))}
             </div>
 
-            {/* Chart */}
-            <div style={{ height: 'clamp(180px, 35vw, 280px)' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                        <defs>
-                            <linearGradient id={`gradient-${activeTab}`} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%"  stopColor={activeColor} stopOpacity={0.18} />
-                                <stop offset="95%" stopColor={activeColor} stopOpacity={0}   />
-                            </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                        <XAxis
-                            dataKey="date"
-                            tick={{ fill: "#6b7280", fontSize: 11 }}
-                            axisLine={false}
-                            tickLine={false}
-                            interval="preserveStartEnd"
-                        />
-                        <YAxis
-                            tick={{ fill: "#6b7280", fontSize: 11 }}
-                            axisLine={false}
-                            tickLine={false}
-                            domain={["auto", "auto"]}
-                        />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Area
-                            type="monotone"
-                            dataKey="value"
-                            stroke={activeColor}
-                            strokeWidth={2}
-                            fill={`url(#gradient-${activeTab})`}
-                            dot={false}
-                            activeDot={{ r: 4, fill: activeColor, strokeWidth: 0 }}
-                            connectNulls
-                        />
-                    </AreaChart>
-                </ResponsiveContainer>
+            <div id="metric-trend-panel" role="tabpanel" aria-labelledby={`metric-tab-${resolvedTab}`}>
+                {chartData.length < 2 ? (
+                    <div className="flex min-h-44 items-center justify-center rounded-lg bg-muted/20 px-4 text-center">
+                        <p className="max-w-sm text-xs leading-5 text-muted-foreground">One data point is available. Add another snapshot to see a trend.</p>
+                    </div>
+                ) : (
+                    <div className="h-[220px] min-w-0 sm:h-[260px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                                <defs>
+                                    <linearGradient id={`metric-gradient-${resolvedTab}`} x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor={activeMetric.color} stopOpacity={0.18} />
+                                        <stop offset="95%" stopColor={activeMetric.color} stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.12)" vertical={false} />
+                                <XAxis dataKey="date" tick={{ fill: "#9296a3", fontSize: 11 }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={20} />
+                                <YAxis tick={{ fill: "#9296a3", fontSize: 11 }} axisLine={false} tickLine={false} domain={activeMetric.score ? [0, 100] : [0, "auto"]} allowDecimals={!activeMetric.score && !isAuditIssues} width={42} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Area type="monotone" dataKey="value" stroke={activeMetric.color} strokeWidth={2} fill={`url(#metric-gradient-${resolvedTab})`} dot={chartData.length <= 8 ? { r: 2, fill: activeMetric.color, strokeWidth: 0 } : false} activeDot={{ r: 4, fill: activeMetric.color, strokeWidth: 0 }} connectNulls={false} />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                )}
             </div>
-        </div>
+        </section>
     );
 }
