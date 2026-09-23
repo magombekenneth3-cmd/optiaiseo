@@ -209,7 +209,8 @@ export async function buildResearchPacket(params: {
         ...(brain.informationGainDirective ? { informationGain: brain.informationGainDirective } : {}),
         contentGaps: compact(brain.contentGaps),
         misconceptions: compact(brain.commonMisconceptions),
-        contrarianAngles: compact(brain.contrarianAngles),\n        ...(serpContext?.opportunityAnalysis ? { opportunityAnalysis: serpContext.opportunityAnalysis } : {}),
+        contrarianAngles: compact(brain.contrarianAngles),
+        ...(serpContext?.opportunityAnalysis ? { opportunityAnalysis: serpContext.opportunityAnalysis } : {}),
     });
 }
 
