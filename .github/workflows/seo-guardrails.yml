@@ -29,6 +29,9 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run Blog Generation Regression Tests
+        run: pnpm exec vitest run tests/unit/blog-evidence-governance.test.ts tests/unit/serp-gate-integration.test.ts
+
       - name: Run Autonomous Guardrails Audit
         run: pnpm exec tsx src/lib/guardrails/ci-check.ts "${{ github.event.deployment_status.target_url || 'https://optiaiseo.online' }}"
 
