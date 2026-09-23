@@ -21,8 +21,9 @@ import { releaseStaleActiveClaims } from "@/lib/autonomy/execution-claim";
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type ReconciliationResult =
-  | { status: "CONFIRMED"; externalId?: string }
+  | { status: "CONFIRMED"; externalId?: string; metadata?: Record<string, unknown> }
   | { status: "FAILED"; error: string }
+  | { status: "UNKNOWN"; reason: string }
   | { status: "PENDING" }; // not yet confirmable — skip for now
 
 interface EffectRecord {
@@ -35,6 +36,7 @@ interface EffectRecord {
   compensationPolicy: string;
   externalId: string | null;
   externalError: string | null;
+  externalMetadata: Record<string, unknown> | null;
   attempts: number;
   maxAttempts: number;
   dispatchedAt: Date | null;
@@ -166,28 +168,29 @@ async function confirmWebflow(
  * GitHub PR confirmation: checks if a PR URL is present. In production,
  * this would call the GitHub API to verify the PR status.
  */
-async function confirmGitHubPR(
-  effect: EffectRecord
-): Promise<ReconciliationResult> {
+async function confirmGitHubPR(effect: EffectRecord): Promise<ReconciliationResult> {
+  const metadata = (effect.externalMetadata ?? {}) as Record<string, any>;
   const prUrl = effect.externalId;
-
-  if (!prUrl) {
-    const timeSinceDispatch = effect.dispatchedAt
-      ? Date.now() - new Date(effect.dispatchedAt).getTime()
-      : 0;
-
-    // GitHub PR creation should be fast — 10 minute timeout
-    if (timeSinceDispatch > 10 * 60 * 1000) {
-      return {
-        status: "FAILED",
-        error: "GitHub PR timed out — no PR URL after 10 minutes",
-      };
-    }
-    return { status: "PENDING" };
-  }
-
-  // PR URL recorded → dispatch succeeded
-  return { status: "CONFIRMED", externalId: prUrl };
+  const repository = String(metadata.repository ?? "");
+  const prNumber = Number(metadata.prNumber ?? 0);
+  if (!prUrl) return { status: "PENDING" };
+  if (!repository || !prNumber) return { status: "UNKNOWN", reason: "GitHub PR verification identity is unavailable" };
+  const operation = await (await import("@/lib/prisma")).prisma.mutationOperation.findUnique({
+    where: { id: effect.operationId },
+    select: { site: { select: { userId: true } } },
+  });
+  const userId = operation?.site?.userId;
+  if (!userId) return { status: "UNKNOWN", reason: "GitHub PR owner could not be resolved" };
+  const { getGitHubToken } = await import("@/lib/github/token");
+  const token = await getGitHubToken(userId);
+  if (!token) return { status: "UNKNOWN", reason: "GitHub authorization is unavailable" };
+  const response = await fetch(`https://api.github.com/repos/${repository}/pulls/${prNumber}`, {
+    headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28" },
+    cache: "no-store",
+  });
+  if (!response.ok) return response.status === 404 ? { status: "UNKNOWN", reason: "GitHub PR is not visible to the connected account" } : { status: "PENDING" };
+  const pr = await response.json() as { state: string; merged: boolean; merged_at: string | null; merge_commit_sha: string | null; head: { sha: string }; base: { ref: string } };
+  return { status: "CONFIRMED", externalId: prUrl, metadata: { prNumber, state: pr.state, merged: pr.merged, mergedAt: pr.merged_at, mergeCommitSha: pr.merge_commit_sha, headSha: pr.head.sha, baseBranch: pr.base.ref, lifecycleState: pr.merged ? "MERGED" : "OPEN" } };
 }
 
 // ── Handler Registry ────────────────────────────────────────────────────────
@@ -358,6 +361,12 @@ export async function reconcileEffects(
                   status: "CONFIRMED",
                   confirmedAt: new Date(),
                   externalId: result.externalId ?? effect.externalId,
+                  externalMetadata: result.metadata ?? undefined,
+                  verificationStatus: "CONFIRMED",
+                  verifiedAt: new Date(),
+                  externalMetadata: result.metadata ?? undefined,
+                  verificationStatus: "CONFIRMED",
+                  verifiedAt: new Date(),
                 },
               });
               await appendAuditEvent(
@@ -373,6 +382,42 @@ export async function reconcileEffects(
               );
               confirmed++;
               updatedOperationIds.add(effect.operationId);
+              break;
+            }
+            case "UNKNOWN": {
+              await (prisma as any).mutationEffect.update({
+                where: { id: effect.id },
+                data: {
+                  status: "DISPATCHED",
+                  externalError: result.reason,
+                  externalMetadata: { verificationStatus: "UNKNOWN", reason: result.reason },
+                },
+              });
+              await appendAuditEvent(
+                effect.operationId,
+                "EFFECT_VERIFICATION_UNKNOWN",
+                "system:reconciler",
+                { effectId: effect.id, effectType: effect.effectType, platform: effect.platform, reason: result.reason }
+              );
+              pending++;
+              break;
+            }
+            case "UNKNOWN": {
+              await (prisma as any).mutationEffect.update({
+                where: { id: effect.id },
+                data: {
+                  status: "DISPATCHED",
+                  externalError: result.reason,
+                  externalMetadata: { ...(effect as any).externalMetadata, verificationStatus: "UNKNOWN", reason: result.reason },
+                },
+              });
+              await appendAuditEvent(effect.operationId, "EFFECT_VERIFICATION_UNKNOWN", "system:reconciler", {
+                effectId: effect.id,
+                effectType: effect.effectType,
+                platform: effect.platform,
+                reason: result.reason,
+              });
+              pending++;
               break;
             }
             case "FAILED": {
