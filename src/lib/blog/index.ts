@@ -572,7 +572,7 @@ export async function generateTrendingPost(
     const ctx = buildPromptContext({
         keyword: industry,
         category: industry,
-        intent: detectIntent(primaryKeyword),
+        intent: detectIntent(industry),
         hasAuthorGrounding: !!(author.realExperience || author.realNumbers),
         displayName: cleanDomainToDisplayName(siteDomain ?? ""),
         siteDomain,
