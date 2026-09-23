@@ -31,7 +31,7 @@ export interface GitHubPRResult {
 
 export async function getRepositoryFile(
     repoUrl: string, path: string, token: string,
-): Promise<{ exists: boolean; sha?: string; content?: string }> {
+): Promise<{ exists: boolean; sha?: string; content?: string; commitSha?: string }> {
     const match = repoUrl.match(/github\.com\/([^/]+)\/([^/.?#]+)(?:\.git)?/);
     if (!match) throw new Error("Cannot parse GitHub URL");
     const [, owner, repo] = match;
@@ -39,9 +39,12 @@ export async function getRepositoryFile(
     try {
         const { data } = await octokit.repos.getContent({ owner, repo, path });
         if (Array.isArray(data) || data.type !== "file") throw new Error("Target is not a file");
+        const { data: repoData } = await octokit.repos.get({ owner, repo });
+        const { data: refData } = await octokit.git.getRef({ owner, repo, ref: `heads/${repoData.default_branch}` });
         return {
             exists: true,
             sha: data.sha,
+            commitSha: refData.object.sha,
             content: "content" in data ? Buffer.from(data.content, "base64").toString("utf8") : undefined,
         };
     } catch (error: unknown) {
@@ -200,7 +203,7 @@ export async function createAutoFixPR(
             logger.info("[GitHub Engine] PR already exists — returning early", { prUrl: pr.html_url });
             // Update effect as DISPATCHED — the PR already exists
             if (effectId) {
-                await updateEffectStatus(effectId, "DISPATCHED", pr.html_url);
+                await updateEffectStatus(effectId, "DISPATCHED", pr.html_url, undefined, { repository: `${owner}/${repo}`, prNumber: pr.number });
             }
             return { success: true, prUrl: pr.html_url, branchName, effectId };
         }
@@ -312,7 +315,7 @@ ${tableRows}
 
         // Update effect status on success
         if (effectId) {
-            await updateEffectStatus(effectId, "DISPATCHED", prData.html_url);
+            await updateEffectStatus(effectId, "DISPATCHED", prData.html_url, undefined, { repository: `${owner}/${repo}`, prNumber: prData.number, commitSha: commit.sha });
         }
 
         if (userEmail) {
@@ -361,6 +364,7 @@ async function updateEffectStatus(
     status: "DISPATCHED" | "FAILED",
     externalId?: string,
     externalError?: string,
+    externalMetadata?: Record<string, unknown>,
 ): Promise<void> {
     try {
         const { prisma } = await import("@/lib/prisma");
@@ -372,6 +376,7 @@ async function updateEffectStatus(
                 failedAt: status === "FAILED" ? new Date() : undefined,
                 externalId: externalId || undefined,
                 externalError: externalError || undefined,
+                externalMetadata: externalMetadata || undefined,
                 attempts: { increment: 1 },
             },
         });
