@@ -353,9 +353,6 @@ export async function reconcileEffects(
                   externalMetadata: result.metadata ?? undefined,
                   verificationStatus: "CONFIRMED",
                   verifiedAt: new Date(),
-                  externalMetadata: result.metadata ?? undefined,
-                  verificationStatus: "CONFIRMED",
-                  verifiedAt: new Date(),
                 },
               });
               await appendAuditEvent(
@@ -391,24 +388,7 @@ export async function reconcileEffects(
               pending++;
               break;
             }
-            case "UNKNOWN": {
-              await (prisma as any).mutationEffect.update({
-                where: { id: effect.id },
-                data: {
-                  status: "DISPATCHED",
-                  externalError: result.reason,
-                  externalMetadata: { ...(effect as any).externalMetadata, verificationStatus: "UNKNOWN", reason: result.reason },
-                },
-              });
-              await appendAuditEvent(effect.operationId, "EFFECT_VERIFICATION_UNKNOWN", "system:reconciler", {
-                effectId: effect.id,
-                effectType: effect.effectType,
-                platform: effect.platform,
-                reason: result.reason,
-              });
-              pending++;
-              break;
-            }
+
             case "FAILED": {
               await (prisma as any).mutationEffect.update({
                 where: { id: effect.id },
