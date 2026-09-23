@@ -51,12 +51,24 @@ export const SourceEvidenceSchema = z.object({
     evidence: z.string().trim().min(1).max(4_000),
     sourceType: SourceTypeSchema,
     confidence: z.number().min(0).max(1),
+    authorityScore: z.number().min(0).max(1).optional(),
 });
 
 export const ClaimSchema = z.object({
     text: z.string().trim().min(1).max(1_500),
     sourceIds: z.array(z.string().regex(/^[a-z0-9_-]+$/i)).max(8),
     type: ClaimTypeSchema,
+});
+
+export const QueryDecompositionSchema = z.object({
+    primaryIntent: ShortString,
+    secondaryIntents: StringList.optional(),
+    requiredQuestions: StringList.optional(),
+    decisionCriteria: StringList.optional(),
+    comparisonDimensions: StringList.optional(),
+    entities: StringList.optional(),
+    risksAndExceptions: StringList.optional(),
+    freshnessSensitiveFacts: StringList.optional(),
 });
 
 export const ResearchBrainSchema = z.object({
@@ -71,6 +83,7 @@ export const ResearchBrainSchema = z.object({
     industryMyths: StringList,
     whatPeopleAvoidSaying: StringList,
     informationGainDirective: z.string().trim().max(2_000).optional(),
+    queryDecomposition: QueryDecompositionSchema.optional(),
 });
 
 export const CompetitorResearchSchema = z.object({
@@ -360,6 +373,7 @@ export type Claim = z.infer<typeof ClaimSchema>;
 export type EvidenceAvailability = z.infer<typeof EvidenceAvailabilitySchema>;
 export type SourceEvidence = z.infer<typeof SourceEvidenceSchema>;
 export type ResearchBrain = z.infer<typeof ResearchBrainSchema>;
+export type QueryDecomposition = z.infer<typeof QueryDecompositionSchema>;
 export type CompetitorResearch = z.infer<typeof CompetitorResearchSchema>;
 export type PaaQuestion = z.infer<typeof PaaQuestionSchema>;
 export type EntityEvidence = z.infer<typeof EntityEvidenceSchema>;
