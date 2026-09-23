@@ -141,7 +141,7 @@ ${chunk}`,
 async function runSemanticEnrichmentCheck(
     keyword: string,
     content: string
-): Promise<{ missingEntities: string[]; enrichmentScore: number }> {
+): Promise<{ expectedEntities: string[]; missingEntities: string[]; enrichmentScore: number | null; available: boolean }> {
     try {
         const parsed = await callGeminiJson<{
             expectedEntities: string[];
@@ -149,9 +149,9 @@ async function runSemanticEnrichmentCheck(
             enrichmentScore: number;
         }>(
             `You are an SEO content strategist. For a top-ranking article on "${keyword}", identify:
-1. The 12 most important related entities, concepts, and LSI terms Google's NLP expects to find
+1. The 12 most important related entities, subtopics, concepts, attributes, terminology, and questions needed to satisfy the search task
 2. Which of those are absent or mentioned fewer than twice in the article below
-3. An enrichment score (0–100): 100 = all entities present, deduct 8 per missing high-importance entity
+3. An enrichment score (0–100): 100 = broad task coverage; deduct 8 for each missing high-importance concept
 
 Return JSON only: { "expectedEntities": [...], "missingEntities": [...], "enrichmentScore": 0-100 }
 
@@ -1291,6 +1291,8 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                                 ...(existingCriteria ?? {}),
                                 missingEntities: enrichment.missingEntities,
                                 enrichmentScore: enrichment.enrichmentScore,
+                                enrichmentAvailable: enrichment.available,
+                                expectedEntities: enrichment.expectedEntities,
                                 factCheckScore: factCheck.qualityScore,
                             },
                         },
