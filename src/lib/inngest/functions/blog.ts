@@ -1086,6 +1086,7 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 return liveBlogPost.content;
             }
         });
+        liveBlogPost.content = finalContent;
 
         // ── Publication Gate ──────────────────────────────────────────────
         const publicationGateStep = await step.run("publication-gate", async () => {
