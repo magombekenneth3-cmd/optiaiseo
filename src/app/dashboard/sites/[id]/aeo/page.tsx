@@ -112,7 +112,7 @@ function CheckCard({ check, domain, githubRepoUrl, preloadedFix }: {
             setFilePath(preloadedFix.filePath);
             setShowFix(true);
         }
-     
+
     }, [preloadedFix]);
 
     const handlePushToGitHub = () => {
@@ -256,7 +256,7 @@ function CheckCard({ check, domain, githubRepoUrl, preloadedFix }: {
 export default function AeoPage() {
     const { id: siteId } = useParams<{ id: string }>();
     const router = useRouter();
-     
+
     const [loading, setLoading] = useState(false);
     const [_history, setHistory] = useState<any[]>([]);
     const [result, setResult] = useState<AeoResult | null>(null);
@@ -265,7 +265,7 @@ export default function AeoPage() {
     const [activeCategory, setActiveCategory] = useState<string>("all");
     const [error, setError] = useState("");
     const [generatingAll, setGeneratingAll] = useState(false);
-     
+
     const [allFixesProgress, setAllFixesProgress] = useState(0);
     const [allFixes, setAllFixes] = useState<Record<string, { fix: string; language: string; filePath?: string }>>({});
     const [metrics, setMetrics] = useState<any>(null);
@@ -285,11 +285,11 @@ export default function AeoPage() {
                             score: latest.score,
                             grade: latest.grade as "A" | "B" | "C" | "D" | "F",
                             checks: latest.checks as unknown as AeoCheck[],
-                             
+
                             schemaTypes: latest.schemaTypes,
-                             
+
                             citationScore: latest.citationScore,
-                             
+
                             generativeShareOfVoice: latest.generativeShareOfVoice,
                             citationLikelihood: latest.citationLikelihood,
                             predictedCitationProbability: latest.citationLikelihood,
@@ -299,13 +299,15 @@ export default function AeoPage() {
                             topRecommendations: latest.topRecommendations,
                             scannedAt: new Date(latest.createdAt),
                             diagnosis: (latest as any).diagnosis ?? null,
+                            dimensions: (latest as any).dimensions ?? undefined,
+                            auditConfidence: (latest as any).auditConfidence ?? undefined,
+                            layerScores: (latest as any).layerScores ?? undefined,
                         });
                     }
                 }
             }
         });
 
-        // Load conversion metrics
         getAeoConversionMetrics(siteId).then(res => {
             if (res.success) setMetrics(res.metrics);
         });
@@ -325,7 +327,7 @@ export default function AeoPage() {
                 checks: [],
                 schemaTypes: [],
                 citationScore: 0,
-                 
+
                 generativeShareOfVoice: 0,
                 citationLikelihood: 0,
                 multiEngineScore: { perplexity: 0, chatgpt: 0, googleAio: 0 },
@@ -334,7 +336,7 @@ export default function AeoPage() {
                 topRecommendations: ["Audit in progress, please refresh in a minute."],
                 scannedAt: new Date()
             } as any);
-            // Use router.refresh() (soft Next.js re-render) — no white flash
+
             router.refresh();
         } else {
             setError(!res.success ? (res.error ?? "Failed to queue AEO audit") : "");
@@ -479,6 +481,68 @@ export default function AeoPage() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Phase 2: Dimension breakdown + confidence */}
+                    {result.dimensions && (
+                        <div className="card-surface p-6 border border-white/5">
+                            <div className="flex items-center justify-between mb-5">
+                                <div>
+                                    <h2 className="text-lg font-bold flex items-center gap-2">
+                                        <span>📊</span> Dimension Breakdown
+                                    </h2>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        4-dimensional decomposition of your AEO readiness
+                                    </p>
+                                </div>
+                                {result.auditConfidence && (
+                                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border ${result.auditConfidence.level === 'high'
+                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                        : result.auditConfidence.level === 'medium'
+                                            ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+                                            : 'bg-red-500/10 text-red-400 border-red-500/30'
+                                        }`}>
+                                        <span className={`w-2 h-2 rounded-full ${result.auditConfidence.level === 'high' ? 'bg-emerald-400'
+                                            : result.auditConfidence.level === 'medium' ? 'bg-yellow-400'
+                                                : 'bg-red-400'
+                                            }`} />
+                                        {result.auditConfidence.level === 'high' ? '🛡️ High' : result.auditConfidence.level === 'medium' ? '⚠️ Medium' : '🔴 Low'} Confidence
+                                        <span className="text-muted-foreground font-normal">
+                                            ({result.auditConfidence.successfulProviders}/{result.auditConfidence.totalProviders} engines)
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                {([
+                                    { key: 'technicalReadiness', label: 'Technical Readiness', icon: '⚙️', color: 'blue' },
+                                    { key: 'contentReadiness', label: 'Content Readiness', icon: '📝', color: 'purple' },
+                                    { key: 'aiVisibility', label: 'AI Visibility', icon: '👁️', color: 'emerald' },
+                                    { key: 'citationQuality', label: 'Citation Quality', icon: '🏆', color: 'yellow' },
+                                ] as const).map(dim => {
+                                    const value = (result.dimensions as any)?.[dim.key] ?? -1;
+                                    const isNA = value < 0;
+                                    const pct = isNA ? 0 : value;
+                                    return (
+                                        <div key={dim.key} className="card-surface p-4 border border-white/5 flex flex-col gap-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-lg">{dim.icon}</span>
+                                                <span className="text-xs font-medium text-muted-foreground">{dim.label}</span>
+                                            </div>
+                                            <div className="text-2xl font-bold">
+                                                {isNA ? <span className="text-muted-foreground text-base">N/A</span> : <span className={`text-${dim.color}-400`}>{pct}%</span>}
+                                            </div>
+                                            <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
+                                                <div
+                                                    className={`h-full rounded-full bg-${dim.color}-500 transition-all duration-1000`}
+                                                    style={{ width: `${pct}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
 
                     {/* God Level: Multi-Engine Visibility */}
                     <div className="card-surface p-6 border-emerald-500/20 bg-emerald-500/5">
