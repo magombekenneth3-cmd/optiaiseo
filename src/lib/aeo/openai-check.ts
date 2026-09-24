@@ -22,8 +22,8 @@ export async function checkChatGptMention(
     if (!process.env.OPENAI_API_KEY) {
         return {
             model: "ChatGPT",
-            mentioned: false,
-            confidence: 0,
+            mentioned: null,
+            confidence: null,
             details: "OpenAI API key not configured",
             providerStatus: "NO_API_KEY",
         };
@@ -63,8 +63,8 @@ export async function checkChatGptMention(
             logger.error("[Multi-Model] ChatGPT API error:", telemetry);
             return {
                 model: "ChatGPT",
-                mentioned: false,
-                confidence: 0,
+                mentioned: null,
+                confidence: null,
                 details: `OpenAI API error: ${res.status}`,
                 providerStatus: "PROVIDER_ERROR",
             };
@@ -145,8 +145,8 @@ export async function checkChatGptMention(
         logger.error("[Multi-Model] ChatGPT check failed:", telemetry);
         return {
             model: "ChatGPT",
-            mentioned: false,
-            confidence: 0,
+            mentioned: null,
+            confidence: null,
             details: `Check failed: ${providerStatus}`,
             providerStatus,
         };

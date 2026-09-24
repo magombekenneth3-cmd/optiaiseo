@@ -10,7 +10,7 @@ export async function checkDeepSeekMention(
     keyword?: string | null
 ): Promise<MentionResult> {
     if (!process.env.DEEPSEEK_API_KEY) {
-        return { model: "DeepSeek", mentioned: false, confidence: 0, details: "No API key", providerStatus: "NO_API_KEY" };
+        return { model: "DeepSeek", mentioned: null, confidence: null, details: "No API key", providerStatus: "NO_API_KEY" };
     }
 
     const question = buildAeoQuestion({ domain, keyword, coreServices });
@@ -38,7 +38,7 @@ export async function checkDeepSeekMention(
             const durationMs = Date.now() - startMs;
             const telemetry: ProviderTelemetry = { provider: "deepseek", operation: "aeo_mention_check", status: "PROVIDER_ERROR", httpStatus, durationMs };
             logger.error("[Multi-Model] DeepSeek API error:", telemetry);
-            return { model: "DeepSeek", mentioned: false, confidence: 0, details: `DeepSeek API error: ${res.status}`, providerStatus: "PROVIDER_ERROR" };
+            return { model: "DeepSeek", mentioned: null, confidence: null, details: `DeepSeek API error: ${res.status}`, providerStatus: "PROVIDER_ERROR" };
         }
 
         const data = await res.json();
@@ -78,6 +78,6 @@ export async function checkDeepSeekMention(
         const providerStatus: ProviderStatus = classifyError(error);
         const telemetry: ProviderTelemetry = { provider: "deepseek", operation: "aeo_mention_check", status: providerStatus, httpStatus, durationMs, error: (error as Error)?.message || String(error) };
         logger.error("[Multi-Model] DeepSeek check failed:", telemetry);
-        return { model: "DeepSeek", mentioned: false, confidence: 0, details: `Check failed: ${providerStatus}`, providerStatus };
+        return { model: "DeepSeek", mentioned: null, confidence: null, details: `Check failed: ${providerStatus}`, providerStatus };
     }
 }

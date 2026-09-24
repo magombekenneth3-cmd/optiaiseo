@@ -47,6 +47,16 @@ export async function saveAeoSnapshot(siteId: string, result: AeoResult) {
         googleAioScore: result.multiEngineScore?.googleAio ?? 0,
         grokScore: grokScore.status === "fulfilled" ? grokScore.value : 0,
         copilotScore: copilotScore.status === "fulfilled" ? copilotScore.value : 0,
+        // Phase 2: 4-dimensional scoring
+        technicalReadiness: result.dimensions?.technicalReadiness ?? 0,
+        contentReadiness: result.dimensions?.contentReadiness ?? 0,
+        aiVisibility: result.dimensions?.aiVisibility ?? 0,
+        citationQuality: result.dimensions?.citationQuality ?? 0,
+        // Phase 2: Audit confidence
+        confidenceLevel: result.auditConfidence?.level ?? "low",
+        confidenceScore: result.auditConfidence?.score ?? 0,
+        successfulProviders: result.auditConfidence?.successfulProviders ?? 0,
+        totalProviders: result.auditConfidence?.totalProviders ?? 0,
         platformBreakdown: {
             ...platformBreakdown,
             // P0.9: Record visibility check provenance so UI knows 0 ≠ error
@@ -133,6 +143,14 @@ export async function getAeoTrend(siteId: string, days = 30) {
         claude:     s.claudeScore,
         grok:       s.grokScore,
         copilot:    s.copilotScore,
+        // Phase 2: dimension scores
+        technicalReadiness: s.technicalReadiness ?? 0,
+        contentReadiness:   s.contentReadiness ?? 0,
+        aiVisibility:       s.aiVisibility ?? 0,
+        citationQuality:    s.citationQuality ?? 0,
+        // Phase 2: audit confidence
+        confidenceLevel:    s.confidenceLevel ?? "low",
+        confidenceScore:    s.confidenceScore ?? 0,
     }));
 }
 

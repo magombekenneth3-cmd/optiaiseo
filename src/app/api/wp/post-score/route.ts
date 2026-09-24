@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { logger }                    from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { runAeoAudit }               from "@/lib/aeo";
 import { rateLimit }                 from "@/lib/rate-limit";
 
@@ -65,6 +66,9 @@ export async function POST(req: NextRequest) {
         checks:                 result.checks as object,
         topRecommendations:     result.topRecommendations,
         multiModelResults:      result.multiModelResults as object,
+        // Phase 2: Structured dimension + confidence data
+        dimensions:             result.dimensions ? (result.dimensions as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+        auditConfidence:        result.auditConfidence ? (result.auditConfidence as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
       },
     });
 

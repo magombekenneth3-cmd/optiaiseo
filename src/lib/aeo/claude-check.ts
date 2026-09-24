@@ -26,8 +26,8 @@ export async function checkClaudeMention(
     if (!process.env.ANTHROPIC_API_KEY) {
         return {
             model: "Claude",
-            mentioned: false,
-            confidence: 0,
+            mentioned: null,
+            confidence: null,
             details: "Anthropic API key not configured",
             providerStatus: "NO_API_KEY",
         };
@@ -73,8 +73,8 @@ export async function checkClaudeMention(
             logger.error("[Multi-Model] Claude API error:", telemetry);
             return {
                 model: "Claude",
-                mentioned: false,
-                confidence: 0,
+                mentioned: null,
+                confidence: null,
                 details: `Anthropic API error: ${res.status}`,
                 providerStatus: "PROVIDER_ERROR",
             };
@@ -148,8 +148,8 @@ export async function checkClaudeMention(
         logger.error("[Multi-Model] Claude check failed:", telemetry);
         return {
             model: "Claude",
-            mentioned: false,
-            confidence: 0,
+            mentioned: null,
+            confidence: null,
             details: `Check failed: ${providerStatus}`,
             providerStatus,
         };

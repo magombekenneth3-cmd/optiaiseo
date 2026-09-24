@@ -716,6 +716,16 @@ model AeoSnapshot {
   copilotScore           Int      @default(0)
   platformBreakdown      Json
   failedChecks           Json
+  // Phase 2: 4-dimensional scoring
+  technicalReadiness     Int?     @default(0)
+  contentReadiness       Int?     @default(0)
+  aiVisibility           Int?     @default(0)
+  citationQuality        Int?     @default(0)
+  // Phase 2: Audit confidence metadata
+  confidenceLevel        String?  @default("low")
+  confidenceScore        Int?     @default(0)
+  successfulProviders    Int?     @default(0)
+  totalProviders         Int?     @default(0)
   createdAt              DateTime @default(now())
   site                   Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -742,7 +752,10 @@ model AeoReport {
   multiEngineScore       Json?
   multiModelResults      Json?
   layerScores            Json? 
-  diagnosis              Json? 
+  diagnosis              Json?
+  // Phase 2: Structured dimension + confidence data
+  dimensions             Json?
+  auditConfidence        Json?
   site                   Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
   proofs                 AeoProof[]
 

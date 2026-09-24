@@ -170,7 +170,7 @@ export async function checkQueryAcrossModels(
     const quality = c.quality;
     results.push({
       model:            "chatgpt",
-      mentioned:        c.mentioned,
+      mentioned:        c.mentioned ?? false,
       mentionPosition:  quality?.positionScore ?? 0,
       isAuthoritative:  quality?.isAuthoritative ?? false,
       citationUrl:      null,
@@ -185,7 +185,7 @@ export async function checkQueryAcrossModels(
     const quality = c.quality;
     results.push({
       model:            "claude",
-      mentioned:        c.mentioned,
+      mentioned:        c.mentioned ?? false,
       mentionPosition:  quality?.positionScore ?? 0,
       isAuthoritative:  quality?.isAuthoritative ?? false,
       citationUrl:      null,
@@ -241,7 +241,7 @@ export async function saveQueryResults(
       data: {
         trackedQueryId,
         model:            result.model,
-        mentioned:        result.mentioned,
+        mentioned:        result.mentioned ?? false,
         mentionPosition:  result.mentionPosition,
         isAuthoritative:  result.isAuthoritative,
         citationUrl:      result.citationUrl,

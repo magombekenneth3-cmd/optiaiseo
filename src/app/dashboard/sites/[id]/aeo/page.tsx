@@ -292,6 +292,7 @@ export default function AeoPage() {
                              
                             generativeShareOfVoice: latest.generativeShareOfVoice,
                             citationLikelihood: latest.citationLikelihood,
+                            predictedCitationProbability: latest.citationLikelihood,
                             multiEngineScore: (latest as any).multiEngineScore,
                             multiModelResults: (latest as any).multiModelResults,
                             factCheckResults: (latest as any).factCheckResults,

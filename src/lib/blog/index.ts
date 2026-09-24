@@ -321,9 +321,9 @@ export const getAiClient = () => {
 export function buildBlogResponseSchema(ctx: PromptContext): Schema {
     const wordTarget =
         ctx.intent === "transactional" ? 1500
-        : ctx.intent === "commercial"  ? 2200
-        : ctx.intent === "local"       ? 1800
-        :                                2200;
+            : ctx.intent === "commercial" ? 2200
+                : ctx.intent === "local" ? 1800
+                    : 2200;
 
     return {
         type: Type.OBJECT,
@@ -520,14 +520,12 @@ export async function buildPost(
         validationScore: validation.score,
         researchPacket: authoritativeResearchPacket,
         evidencePacket,
-        // Persist coverage % and unsourced claim list for the dashboard badge.
-        // Coverage = sourced claims / total claims × 100 (0 when no claims yet).
         evidenceCoverage: evidencePacket.claims.length > 0
             ? Math.round(
-                  (evidencePacket.claims.filter((c) => c.sourceIds.length > 0).length /
-                      evidencePacket.claims.length) *
-                      100
-              )
+                (evidencePacket.claims.filter((c) => c.sourceIds.length > 0).length /
+                    evidencePacket.claims.length) *
+                100
+            )
             : 0,
         missingEvidence: evidencePacket.unsourcedStatistics ?? [],
         riskTier: ctx.riskTier,
@@ -535,11 +533,7 @@ export async function buildPost(
     };
 }
 
-/**
- * Evaluate the final draft at the last responsible moment.  Callers that run
- * a later editorial rewrite must use this helper again, because citations and
- * claims may have changed after buildPost extracted its initial packet.
- */
+
 export async function evaluateDraftForPublication(
     draft: BlogPostDraft,
     serpContext: SerpContext | null = null,

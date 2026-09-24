@@ -106,7 +106,7 @@ async function runMultiModelCheck(
         const r = gpt.value;
         rows.push({
             modelName: "chatgpt",
-            brandMentioned: r.mentioned,
+            brandMentioned: r.mentioned ?? false,
             competitors: [],
         });
     }
@@ -114,7 +114,7 @@ async function runMultiModelCheck(
         const r = cld.value;
         rows.push({
             modelName: "claude",
-            brandMentioned: r.mentioned,
+            brandMentioned: r.mentioned ?? false,
             competitors: [],
         });
     }

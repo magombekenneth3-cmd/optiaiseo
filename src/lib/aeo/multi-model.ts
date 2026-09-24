@@ -25,8 +25,10 @@ import { prisma } from "@/lib/prisma";
 
 export interface MentionResult {
     model: string;
-    mentioned: boolean;
-    confidence: number;
+    /** P0: null means 'unknown due to provider failure' — NOT 'not mentioned' */
+    mentioned: boolean | null;
+    /** P0: null means 'unknown due to provider failure' — NOT 'zero confidence' */
+    confidence: number | null;
     snippet?: string;
     details?: string;
     error?: string;
@@ -115,7 +117,7 @@ export async function checkGeminiMention(
     brandNameOverride?: string | null,
 ): Promise<MentionResult> {
     if (!process.env.GEMINI_API_KEY) {
-        return { model: "Gemini", mentioned: false, confidence: 0, details: "Gemini API key missing", providerStatus: "NO_API_KEY" };
+        return { model: "Gemini", mentioned: null, confidence: null, details: "Gemini API key missing", providerStatus: "NO_API_KEY" };
     }
 
     try {
@@ -210,8 +212,8 @@ export async function checkGeminiMention(
         });
         return {
             model: "Gemini",
-            mentioned: false,
-            confidence: 0,
+            mentioned: null,
+            confidence: null,
             details: "Check failed due to parsing error or timeout.",
             providerStatus: "PROVIDER_ERROR",
         };
@@ -224,7 +226,7 @@ export async function checkPerplexityMention(
     brandNameOverride?: string | null,
 ): Promise<MentionResult> {
     if (!process.env.PERPLEXITY_API_KEY) {
-        return { model: "Perplexity", mentioned: false, confidence: 0, details: "Perplexity API key missing", providerStatus: "NO_API_KEY" };
+        return { model: "Perplexity", mentioned: null, confidence: null, details: "Perplexity API key missing", providerStatus: "NO_API_KEY" };
     }
 
     const query = buildAeoQuestion({ domain, coreServices });
@@ -269,7 +271,7 @@ export async function checkPerplexityMention(
             logger.error("[Multi-Model] Perplexity citation check failed:", {
                 error: (error as Error)?.message || String(error),
             });
-            return { model: "Perplexity", mentioned: false, confidence: 0, details: "Check failed", providerStatus: "PROVIDER_ERROR" };
+            return { model: "Perplexity", mentioned: null, confidence: null, details: "Check failed", providerStatus: "PROVIDER_ERROR" };
         }
     });
 }
@@ -306,8 +308,8 @@ export async function auditMultiModelMentions(domain: string, coreServices?: str
             ? settled.value
             : {
                 model: engineName,
-                mentioned: false,
-                confidence: 0,
+                mentioned: null,
+                confidence: null,
                 error: (settled.reason as Error)?.message ?? "Unknown error",
                 providerStatus: "PROVIDER_ERROR" as ProviderStatus,
             } as MentionResult;
@@ -330,7 +332,7 @@ export async function auditMultiModelMentions(domain: string, coreServices?: str
         r.providerStatus === "SUCCESS" || r.providerStatus === "NO_RESULT"
     );
     const score = availableResults.length > 0
-        ? availableResults.reduce((acc, curr) => acc + (curr.mentioned ? curr.confidence : 0), 0) / availableResults.length
+        ? availableResults.reduce((acc, curr) => acc + (curr.mentioned === true ? (curr.confidence ?? 0) : 0), 0) / availableResults.length
         : 0;
     const validatedKgEntity = kgEntity && isEntityMatch(kgEntity, domain) ? kgEntity : null;
     const output = { results, overallScore: Math.round(score), knowledgeGraphEntity: validatedKgEntity };

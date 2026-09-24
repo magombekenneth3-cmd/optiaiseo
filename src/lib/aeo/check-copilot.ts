@@ -11,7 +11,7 @@ export async function checkCopilotMention(
   keyword?: string | null
 ): Promise<MentionResult> {
   if (!process.env.AZURE_OAI_ENDPOINT || !process.env.AZURE_OAI_KEY) {
-    return { model: "Copilot", mentioned: false, confidence: 0, details: "Azure OAI credentials missing", providerStatus: "NO_API_KEY" };
+    return { model: "Copilot", mentioned: null, confidence: null, details: "Azure OAI credentials missing", providerStatus: "NO_API_KEY" };
   }
   const question = buildAeoQuestion({ domain: brand, keyword, coreServices: services });
 
@@ -42,7 +42,7 @@ export async function checkCopilotMention(
       const durationMs = Date.now() - startMs;
       const telemetry: ProviderTelemetry = { provider: "azure_oai", operation: "aeo_mention_check", status: "PROVIDER_ERROR", httpStatus, durationMs };
       logger.error("[Multi-Model] Copilot API error:", telemetry);
-      return { model: "Copilot", mentioned: false, confidence: 0, details: `Azure OAI error: ${res.status}`, providerStatus: "PROVIDER_ERROR" };
+      return { model: "Copilot", mentioned: null, confidence: null, details: `Azure OAI error: ${res.status}`, providerStatus: "PROVIDER_ERROR" };
     }
 
     const data = await res.json();
@@ -76,7 +76,7 @@ export async function checkCopilotMention(
     const providerStatus: ProviderStatus = classifyError(error);
     const telemetry: ProviderTelemetry = { provider: "azure_oai", operation: "aeo_mention_check", status: providerStatus, httpStatus, durationMs, error: (error as Error)?.message || String(error) };
     logger.error("[Multi-Model] Copilot check failed:", telemetry);
-    return { model: "Copilot", mentioned: false, confidence: 0, details: `Check failed: ${providerStatus}`, providerStatus };
+    return { model: "Copilot", mentioned: null, confidence: null, details: `Check failed: ${providerStatus}`, providerStatus };
   }
 }
 

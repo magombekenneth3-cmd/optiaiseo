@@ -12,16 +12,57 @@ import { cachedQuestions } from "./response-cache";
 import { isSafeUrl } from "@/lib/security/safe-url";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { performVectorGapAnalysis, type SemanticGapResult } from "./vector-gap";
+import {
+    normalizeChecks,
+    computeWeightedScore,
+    computeLayerScore as computeLayerScoreFromEngine,
+    scoreToGrade,
+    predictCitationLikelihood as predictCitationFromEngine,
+    buildTopRecommendations,
+    computeDimensions,
+    computeAuditConfidence,
+    LAYER_CATEGORIES,
+} from "./scoring";
 
+
+// ── Phase 1 (P0): CheckStatus model ─────────────────────────────────────────
+// Replaces binary passed: boolean with a richer status that distinguishes
+// between true failures and checks that simply don't apply.
+export type CheckStatus = "PASS" | "PARTIAL" | "FAIL" | "NOT_APPLICABLE" | "UNKNOWN";
 
 export interface AeoCheck {
     id: string
     category: "schema" | "eeat" | "content" | "technical" | "citation" | "geo" | "aio"
     label: string
+    /** @deprecated Use `status` instead. Kept for backward compat — derived from status. */
     passed: boolean
+    /** P0: Rich status replacing binary passed/failed */
+    status: CheckStatus
     impact: "high" | "medium" | "low"
     detail: string
     recommendation: string
+    /** P0: 0.0–1.0 confidence in this check's result */
+    confidence?: number
+    /** P2: Which page this finding came from */
+    pageUrl?: string
+}
+
+// ── P0: Confidence metadata ─────────────────────────────────────────────────
+export interface AeoConfidence {
+    level: "low" | "medium" | "high";
+    score: number;
+    successfulProviders: number;
+    totalProviders: number;
+    successfulQueries: number;
+    totalQueries: number;
+}
+
+// ── P0: Dimension scores ────────────────────────────────────────────────────
+export interface AeoDimensions {
+    technicalReadiness: number; // schema + technical + eeat
+    contentReadiness: number;   // content checks
+    aiVisibility: number;       // observed multi-model mentions
+    citationQuality: number;    // citation checks
 }
 
 export interface AeoResult {
@@ -40,7 +81,10 @@ export interface AeoResult {
         grok?: number
     }
     generativeShareOfVoice: number // 0-100
+    /** @deprecated Use predictedCitationProbability instead */
     citationLikelihood: number // 0-100 (Predictive)
+    /** P0: Renamed from citationLikelihood — makes clear this is predicted, not observed */
+    predictedCitationProbability: number // 0-100
     multiModelResults: MentionResult[]
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     modelCitationResults?: any
@@ -49,6 +93,10 @@ export interface AeoResult {
     scannedAt: Date
     missingIntegrations?: string[]
     layerScores?: { aeo: number; geo: number; aio: number }
+    /** P0: 4-dimensional decomposition of the score */
+    dimensions?: AeoDimensions
+    /** P0: Confidence metadata for the overall audit */
+    auditConfidence?: AeoConfidence
     diagnosis: AeoDiagnosis | null
     /** Gap 2: semantic vector gap results — undefined for lite audits */
     semanticGaps?: SemanticGapResult[]
@@ -58,15 +106,14 @@ export interface AeoResult {
 // HELPERS
 // =============================================================================
 
-/** Computes a 0-100 score for a subset of check categories */
-const computeLayerScore = (checks: AeoCheck[], categories: AeoCheck["category"][]): number => {
-    const subset = checks.filter(c => categories.includes(c.category))
-    if (subset.length === 0) return -1
-    const weights: Record<AeoCheck["impact"], number> = { high: 15, medium: 8, low: 4 }
-    const total = subset.reduce((s, c) => s + weights[c.impact], 0)
-    const earned = subset.filter(c => c.passed).reduce((s, c) => s + weights[c.impact], 0)
-    return Math.round((earned / total) * 100)
+/** Helper: create an AeoCheck with the new status field, auto-deriving passed */
+function makeCheck(base: Omit<AeoCheck, 'passed' | 'status'> & { passed: boolean; status?: CheckStatus }): AeoCheck {
+    const status = base.status ?? (base.passed ? 'PASS' : 'FAIL');
+    return { ...base, status, passed: status === 'PASS' || status === 'PARTIAL' };
 }
+
+/** @deprecated Use computeLayerScore from scoring/ — kept as a delegate for any external callers */
+const computeLayerScore = computeLayerScoreFromEngine;
 
 import { CRAWLER_USER_AGENT, MAX_REDIRECT_HOPS, MAX_FETCH_RETRIES, RETRY_BASE_DELAY_MS } from "@/lib/constants/crawler";
 
@@ -455,7 +502,7 @@ const checkPerplexityCitation = async (
         })
     );
 
-    const mentionedResults = results.filter(r => r.mentioned);
+    const mentionedResults = results.filter(r => r.mentioned === true);
     const score = Math.round((mentionedResults.length / questions.length) * 100);
     const contexts = mentionedResults.map(r => r.context).filter((c): c is CitationContext => c !== null);
 
@@ -463,33 +510,8 @@ const checkPerplexityCitation = async (
 }
 
 
-const predictCitationLikelihood = (checks: AeoCheck[]): number => {
-
-    const likelihoodWeights: Record<string, number> = {
-        "schema_faq": 15,
-        "schema_organization": 12,
-        "eeat_author": 10,
-        "eeat_about": 10,
-        "content_definitions": 8,
-        "content_statistics": 10,
-        "content_entity_density": 12,
-        "content_micro_answers": 10,
-        "tech_robots": 8,
-        "tech_canonical": 5
-    }
-
-    let score = 0
-    let maxScore = 0
-
-    checks.forEach(c => {
-        if (likelihoodWeights[c.id]) {
-            maxScore += likelihoodWeights[c.id]
-            if (c.passed) score += likelihoodWeights[c.id]
-        }
-    })
-
-    return Math.round((score / (maxScore || 1)) * 100)
-}
+/** @deprecated Use predictCitationLikelihood from scoring/ — kept as a delegate */
+const predictCitationLikelihood = predictCitationFromEngine;
 
 // =============================================================================
 // MAIN AEO AUDIT
@@ -497,7 +519,9 @@ const predictCitationLikelihood = (checks: AeoCheck[]): number => {
 
 export const runAeoAudit = async (domain: string, coreServices?: string | null, lite = false, brandNameOverride?: string | null, reportId?: string): Promise<AeoResult> => {
     const url = domain.startsWith("http") ? domain : `https://${domain}`
-    const checks: AeoCheck[] = []
+    // P0: Use a looser internal type during construction — `status` is auto-filled
+    // by the normalization pass before scoring. This avoids touching 30+ push sites.
+    const checks = [] as (Omit<AeoCheck, 'status'> & { status?: CheckStatus })[]
     const schemaTypes: string[] = []
 
     if (reportId) {
@@ -519,6 +543,7 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
             url, score: 0, grade: "F", checks: [], schemaTypes: [], citationScore: 0,
             generativeShareOfVoice: 0,
             citationLikelihood: 0,
+            predictedCitationProbability: 0,
             multiModelResults: [],
             topRecommendations: ["Could not fetch the page — ensure the URL is publicly accessible"],
             scannedAt: new Date(),
@@ -1413,7 +1438,7 @@ ${cleanText}
     // model results), and never count an unavailable provider as a zero.
     const gsoVEngines = multiModelResults.results
         .filter(result => result.providerStatus === "SUCCESS" || result.providerStatus === "NO_RESULT")
-        .map(result => result.mentioned ? result.confidence : 0);
+        .map(result => result.mentioned === true ? (result.confidence ?? 0) : 0);
     const generativeShareOfVoice = Math.round(
         gsoVEngines.length > 0
             ? gsoVEngines.reduce((a, b) => a + b, 0) / gsoVEngines.length
@@ -1446,35 +1471,22 @@ ${cleanText}
     }
 
 
-    const citationLikelihood = predictCitationLikelihood(checks)
+    const citationLikelihood = predictCitationLikelihood(checks as AeoCheck[])
 
-
-    const weights: Record<AeoCheck["impact"], number> = { high: 15, medium: 8, low: 4 }
-    const totalWeight = checks.reduce((sum, c) => sum + weights[c.impact], 0)
-    const earnedWeight = checks.filter(c => c.passed).reduce((sum, c) => sum + weights[c.impact], 0)
-    const score = Math.round((earnedWeight / totalWeight) * 100)
-
-    const grade: AeoResult["grade"] =
-        score >= 85 ? "A" : score >= 70 ? "B" : score >= 55 ? "C" : score >= 40 ? "D" : "F"
-
-    // Surface the top failing rec from each layer, plus fill remaining slots from high-impact
-    const pickTopFail = (cats: AeoCheck["category"][]): string | null =>
-        checks.find(c => cats.includes(c.category) && !c.passed && c.impact !== "low")?.recommendation ?? null
-
-    const aeoRec = pickTopFail(["schema", "eeat", "content", "technical", "citation"])
-    const geoRec = pickTopFail(["geo"])
-    const aioRec = pickTopFail(["aio"])
-    const layerRecs = [aeoRec, geoRec, aioRec].filter((r): r is string => r !== null)
-    const remainingRecs = checks
-        .filter(c => !c.passed && c.impact === "high" && !layerRecs.includes(c.recommendation))
-        .map(c => c.recommendation)
-    const topRecommendations = [...new Set([...layerRecs, ...remainingRecs])].slice(0, 5)
+    // ── Phase 3: Centralized scoring engine ─────────────────────────────────────
+    const normalizedChecks = normalizeChecks(checks);
+    const score = computeWeightedScore(normalizedChecks);
+    const grade = scoreToGrade(score);
+    const topRecommendations = buildTopRecommendations(normalizedChecks);
 
     const layerScores = {
-        aeo: computeLayerScore(checks, ["schema", "eeat", "content", "technical", "citation"]),
-        geo: computeLayerScore(checks, ["geo"]),
-        aio: computeLayerScore(checks, ["aio"]),
-    }
+        aeo: computeLayerScore(normalizedChecks, LAYER_CATEGORIES.aeo),
+        geo: computeLayerScore(normalizedChecks, LAYER_CATEGORIES.geo),
+        aio: computeLayerScore(normalizedChecks, LAYER_CATEGORIES.aio),
+    };
+
+    const dimensions = computeDimensions(normalizedChecks, generativeShareOfVoice);
+    const auditConfidence = computeAuditConfidence(multiModelResults.results);
 
     // The previous code checked (prisma as any).aeoTracking which is always a
     // truthy object (not the table), so it always tried .findMany() and always
@@ -1588,19 +1600,20 @@ ${cleanText}
         url,
         score,
         grade,
-        checks,
+        checks: normalizedChecks,
         schemaTypes,
         schemaGaps,
         citationScore: Math.max(0, citationScore),
         multiEngineScore,
         generativeShareOfVoice,
         citationLikelihood,
+        predictedCitationProbability: citationLikelihood,
         multiModelResults: multiModelResults.results,
         modelCitationResults: {
             models: multiModelResults.results.map(r => ({
                 modelName: r.model,
                 queriesRun: 1,
-                citationCount: r.mentioned ? 1 : 0,
+                citationCount: r.mentioned === true ? 1 : 0,
                 citationRate: r.confidence ?? 0,
                 topCitedQueries: [],
                 missedQueries: [],
@@ -1610,6 +1623,8 @@ ${cleanText}
         topRecommendations,
         scannedAt: new Date(),
         layerScores,
+        dimensions,
+        auditConfidence,
         diagnosis,
         semanticGaps,
         missingIntegrations: [

@@ -230,6 +230,7 @@ Keep your response under 150 words — it will be read aloud to the user.`,
                         .replace(/-/g, " ")
                         .replace(/\b\w/g, (c: string) => c.toUpperCase()),
                     passed: false,
+                    status: "FAIL",
                     impact: "high",
                     detail: args.issueDetail || `Voice agent flagged issue: ${args.issueType}`,
                     recommendation: args.issueDetail || `Fix the ${args.issueType} issue on ${domain}`,

@@ -11,7 +11,7 @@ export async function checkGrokMention(
   keyword?: string | null
 ): Promise<MentionResult> {
   if (!process.env.XAI_API_KEY) {
-    return { model: "Grok", mentioned: false, confidence: 0, details: "xAI API key missing", providerStatus: "NO_API_KEY" };
+    return { model: "Grok", mentioned: null, confidence: null, details: "xAI API key missing", providerStatus: "NO_API_KEY" };
   }
   const question = buildAeoQuestion({ domain: brand, keyword, coreServices: services });
 
@@ -40,7 +40,7 @@ export async function checkGrokMention(
       const durationMs = Date.now() - startMs;
       const telemetry: ProviderTelemetry = { provider: "xai", operation: "aeo_mention_check", status: "PROVIDER_ERROR", httpStatus, durationMs };
       logger.error("[Multi-Model] Grok API error:", telemetry);
-      return { model: "Grok", mentioned: false, confidence: 0, details: `xAI API error: ${res.status}`, providerStatus: "PROVIDER_ERROR" };
+      return { model: "Grok", mentioned: null, confidence: null, details: `xAI API error: ${res.status}`, providerStatus: "PROVIDER_ERROR" };
     }
 
     const data = await res.json();
@@ -74,7 +74,7 @@ export async function checkGrokMention(
     const providerStatus: ProviderStatus = classifyError(error);
     const telemetry: ProviderTelemetry = { provider: "xai", operation: "aeo_mention_check", status: providerStatus, httpStatus, durationMs, error: (error as Error)?.message || String(error) };
     logger.error("[Multi-Model] Grok check failed:", telemetry);
-    return { model: "Grok", mentioned: false, confidence: 0, details: `Check failed: ${providerStatus}`, providerStatus };
+    return { model: "Grok", mentioned: null, confidence: null, details: `Check failed: ${providerStatus}`, providerStatus };
   }
 }
 

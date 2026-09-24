@@ -2,6 +2,7 @@ import { logger } from "@/lib/logger";
 import { inngest } from "../client";
 import { NonRetriableError } from "inngest";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { checkAeoLimit } from "@/lib/rate-limit";
 import { runAeoAudit, runAeoAuditLite } from "@/lib/aeo";
 import { CREDIT_COSTS } from "@/lib/credits";
@@ -93,6 +94,9 @@ export const runAeoAuditJob = inngest.createFunction(
                     multiModelResults: result.modelCitationResults as any,
                     layerScores: result.layerScores as object ?? null,
                     diagnosis: result.diagnosis as object ?? null,
+                    // Phase 2: Structured dimension + confidence data
+                    dimensions: result.dimensions ? (result.dimensions as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+                    auditConfidence: result.auditConfidence ? (result.auditConfidence as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
                 },
             });
         });
@@ -233,6 +237,9 @@ export const processAeoSiteJob = inngest.createFunction(
                     status: "COMPLETED",
                     layerScores: result.layerScores as object ?? null,
                     diagnosis: result.diagnosis as object ?? null,
+                    // Phase 2: Structured dimension + confidence data
+                    dimensions: result.dimensions ? (result.dimensions as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+                    auditConfidence: result.auditConfidence ? (result.auditConfidence as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
                 },
                 select: { id: true },
             });
