@@ -242,6 +242,7 @@ model Site {
   aeoProofs               AeoProof[]
   trackedKeywords         TrackedKeyword[]
   trackedQueries          TrackedQuery[]
+  aeoQuerySets            AeoQuerySet[]
   visibilitySnapshots     VisibilitySnapshot[]
   healingPlans            HealingPlan[]
   mentionCorrectionLogs   MentionCorrectionLog[]
@@ -1322,20 +1323,46 @@ model SeedKeyword {
 }
 
 model TrackedQuery {
-  id        String        @id @default(cuid())
-  siteId    String
-  queryText String
-  intent    String        @default("informational")
-  reason    String?
-  source    String        @default("auto")
-  isActive  Boolean       @default(true)
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  site      Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  results   QueryResult[]
+  id         String        @id @default(cuid())
+  siteId     String
+  queryText  String
+  intent     String        @default("informational")
+  reason     String?
+  source     String        @default("auto")
+  isActive   Boolean       @default(true)
+  // Phase 3: Link to versioned query set (nullable for backward compat)
+  querySetId String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  site       Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  querySet   AeoQuerySet?  @relation(fields: [querySetId], references: [id])
+  results    QueryResult[]
 
   @@unique([siteId, queryText])
   @@index([siteId, isActive])
+  @@index([querySetId])
+}
+
+// Phase 3: Versioned query sets for reproducible audits
+// Each set captures the exact queries used in an audit run, so trending
+// comparisons use the same query universe across weeks.
+model AeoQuerySet {
+  id            String         @id @default(cuid())
+  siteId        String
+  version       Int            @default(1)
+  tier          String         @default("standard") // quick | standard | deep
+  queryCount    Int            @default(0)
+  generatedBy   String         @default("auto")     // auto | manual | hybrid
+  fingerprint   String?        // Hash of sorted query texts for dedup
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  expiresAt     DateTime?      // null = never expires
+  site          Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  queries       TrackedQuery[]
+
+  @@unique([siteId, fingerprint])
+  @@index([siteId, isActive])
+  @@index([siteId, tier])
 }
 
 model QueryResult {
