@@ -560,6 +560,8 @@ model Blog {
   repurposedResult     RepurposedResult?
   sourceLinks          InternalLink[]    @relation("SourceLinks")
   targetLinks          InternalLink[]    @relation("TargetLinks")
+  researchArtifacts    ResearchArtifact[]
+  blogClaims           BlogClaim[]
   site                 Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
   version              Int               @default(1) // optimistic concurrency token
 
@@ -568,6 +570,119 @@ model Blog {
   @@index([siteId, status, createdAt])
   @@index([siteId, pipelineType, createdAt])
   @@index([siteId, status, publishedAt])
+}
+
+enum EvidenceSourceType {
+  EXTERNAL_SOURCE
+  FIRST_PARTY_EXPERIENCE
+  FIRST_PARTY_DATA
+  GSC_DATA
+  SERP_OBSERVATION
+  INFERENCE
+  LLM_GENERATED
+}
+
+enum BlogClaimType {
+  STATISTIC
+  FACT
+  QUOTE
+  COMPARISON
+  EXPERIENCE
+  OPINION
+  RECOMMENDATION
+}
+
+enum BlogClaimStatus {
+  PENDING
+  SUPPORTED
+  PARTIALLY_SUPPORTED
+  UNSUPPORTED
+  DISPUTED
+  RETRACTED
+}
+
+enum EvidenceSupportLevel {
+  STRONG
+  MODERATE
+  WEAK
+  CONTRADICTORY
+  NEUTRAL
+}
+
+model ResearchArtifact {
+  id             String             @id @default(cuid())
+  blogId         String
+  url            String?
+  title          String?
+  publisher      String?
+  publishedAt    DateTime?
+  retrievedAt    DateTime           @default(now())
+  sourceType     EvidenceSourceType
+  contentHash    String?
+  snippet        String?
+  confidence     Float              @default(0)
+  authorityScore Float?
+  metadata       Json?
+  createdAt      DateTime           @default(now())
+
+  blog           Blog               @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  evidenceItems  EvidenceItem[]
+
+  @@index([blogId])
+  @@index([blogId, sourceType])
+}
+
+model EvidenceItem {
+  id             String             @id @default(cuid())
+  artifactId     String
+  sourceType     EvidenceSourceType
+  content        String
+  extractedClaim String?
+  confidence     Float              @default(0)
+  metadata       Json?
+  createdAt      DateTime           @default(now())
+
+  artifact       ResearchArtifact   @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  claimLinks     ClaimEvidence[]
+
+  @@index([artifactId])
+  @@index([sourceType])
+}
+
+model BlogClaim {
+  id            String          @id @default(cuid())
+  blogId        String
+  text          String
+  type          BlogClaimType
+  status        BlogClaimStatus @default(PENDING)
+  sectionId     String?
+  position      Int?
+  metadata      Json?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  blog          Blog            @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  evidenceLinks ClaimEvidence[]
+
+  @@index([blogId])
+  @@index([blogId, status])
+  @@index([blogId, type])
+}
+
+model ClaimEvidence {
+  id           String               @id @default(cuid())
+  claimId      String
+  evidenceId   String
+  supportLevel EvidenceSupportLevel
+  reasoning    String?
+  createdAt    DateTime             @default(now())
+
+  claim        BlogClaim            @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  evidence     EvidenceItem         @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([claimId, evidenceId])
+  @@index([claimId])
+  @@index([evidenceId])
 }
 
 model InternalLink {
