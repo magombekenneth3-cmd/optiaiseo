@@ -1263,6 +1263,117 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             }
         });
 
+        const resolvedBlogId = event.data.blogId ?? (
+            await prisma.blog.findUnique({
+                where: { siteId_slug: { siteId, slug: liveBlogPost.slug } },
+                select: { id: true },
+            })
+        )?.id ?? null;
+
+        await step.run("persist-evidence-ledger", async () => {
+            try {
+                const { buildResearchEvidenceLedger } = await import("@/lib/blog/evidence-ledger");
+                const { buildGroundedContext } = await import("@/lib/prompt-context/build-site-context");
+                const { validateGscEvidence } = await import("@/lib/gsc/gsc-evidence");
+
+                const groundedCtx = await buildGroundedContext(siteId);
+                const brandFacts = groundedCtx?.data.brandFacts ?? [];
+
+                const validatedGscEvidence = gscEvidence
+                    ? validateGscEvidence(gscEvidence, "persist-evidence-ledger")
+                    : null;
+
+                const gscOpportunities = (finalPipelineType === "GSC_GAP" || !keyword)
+                    ? (serpContextForGate?.results ?? []).map(r => ({
+                        keyword: liveBlogPost.targetKeywords[0] ?? "",
+                        avgPosition: 0,
+                        impressions: 0,
+                        clicks: 0,
+                        ctr: 0,
+                        opportunityScore: 0,
+                        opportunityType: "unknown",
+                        reason: "",
+                    }))
+                    : [];
+
+                const ledger = buildResearchEvidenceLedger({
+                    topic: keyword ?? liveBlogPost.targetKeywords[0] ?? liveBlogPost.title,
+                    searchIntent: liveBlogPost.intent ?? detectedIntent,
+                    blogId: resolvedBlogId,
+                    researchPacket: liveBlogPost.researchPacket,
+                    serpContext: serpContextForGate,
+                    gscEvidence: validatedGscEvidence,
+                    gscOpportunities,
+                    gscProperty: validatedGscEvidence?.property,
+                    author,
+                    siteContext: null,
+                    brandFacts,
+                });
+
+                if (!resolvedBlogId) {
+                    logger.warn("[Blog/EvidenceLedger] Could not resolve blogId — skipping DB persist", { siteId });
+                    return;
+                }
+
+                await prisma.$transaction(async (tx) => {
+                    const artifact = await tx.researchArtifact.create({
+                        data: {
+                            blogId: resolvedBlogId,
+                            sourceType: "EXTERNAL_SOURCE",
+                            retrievedAt: new Date(ledger.collectedAt),
+                            confidence: 1.0,
+                            metadata: {
+                                ledgerId: ledger.id,
+                                serpObservations: ledger.serpObservations.length,
+                                competitorObservations: ledger.competitorObservations.length,
+                                gscObservations: ledger.gscObservations.length,
+                                evidenceItems: ledger.evidenceItems.length,
+                                topic: ledger.topic,
+                                searchIntent: ledger.searchIntent,
+                                firstPartyContext: JSON.parse(JSON.stringify(ledger.firstPartyContext)),
+                                collectedAt: ledger.collectedAt,
+                            },
+                        },
+                    });
+
+                    if (ledger.evidenceItems.length > 0) {
+                        await tx.evidenceItem.createMany({
+                            data: ledger.evidenceItems.map(item => ({
+                                artifactId: artifact.id,
+                                sourceType: item.provenance.sourceType,
+                                content: item.content,
+                                extractedClaim: item.excerpt,
+                                confidence: item.provenance.confidence,
+                                metadata: {
+                                    category: item.category,
+                                    retrievalMethod: item.provenance.retrievalMethod,
+                                    sourceUrl: item.provenance.sourceUrl,
+                                    sourceTitle: item.provenance.sourceTitle,
+                                    sourcePublisher: item.provenance.sourcePublisher,
+                                    sourcePublishedAt: item.provenance.sourcePublishedAt,
+                                    authorityScore: item.provenance.authorityScore,
+                                    capturedAt: item.provenance.capturedAt,
+                                    ...item.metadata,
+                                },
+                            })),
+                        });
+                    }
+                });
+
+                logger.info("[Blog/EvidenceLedger] Persisted evidence ledger", {
+                    blogId: resolvedBlogId,
+                    evidenceItems: ledger.evidenceItems.length,
+                    gscObservations: ledger.gscObservations.length,
+                    siteId,
+                });
+            } catch (ledgerErr: unknown) {
+                logger.warn("[Blog/EvidenceLedger] persist-evidence-ledger failed — skipping", {
+                    error: (ledgerErr as Error)?.message,
+                    siteId,
+                });
+            }
+        });
+
         await step.run("extract-brand-facts", async () => {
             try {
                 const { extractFactsFromContent } = await import("@/lib/aeo/fact-extractor");

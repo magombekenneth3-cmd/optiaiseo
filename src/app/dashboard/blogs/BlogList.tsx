@@ -39,6 +39,7 @@ import {
     WordPressIcon,
     GhostIcon,
 } from "@/components/icons/platforms";
+import { EvidenceDrawer } from "@/components/blog/EvidenceDrawer";
 
 type BlogStatus =
     | "PUBLISHED"
@@ -321,39 +322,19 @@ function QualityScore({ blog }: { blog: Blog }) {
     );
 }
 
-/**
- * Evidence Coverage Badge — shows how well the blog's claims are sourced.
- * Coverage % is read from blog.evidenceCoverage (0–100).
- * Falls back gracefully for older blogs that predate the evidence pipeline.
- */
-function EvidenceBadge({ blog }: { blog: Blog }) {
-    const [expanded, setExpanded] = useState(false);
-
-    // Derive coverage from stored field or infer from status
+function EvidenceBadgeTrigger({ blog }: { blog: Blog }) {
     const coverage: number | null =
         blog.evidenceCoverage != null
             ? Math.max(0, Math.min(100, Number(blog.evidenceCoverage)))
             : blog.status === "EVIDENCE_REVIEW"
-              ? 35 // evidence gate blocked — coverage was below threshold
+              ? 35
               : null;
-
-    // Unsourced claims — from missingEvidence field or parsed from validationErrors
-    const missing: string[] = (
-        blog.missingEvidence ??
-        (Array.isArray(blog.validationErrors)
-            ? blog.validationErrors.filter((e: string) =>
-                  e.toLowerCase().includes("unsourced") ||
-                  e.toLowerCase().includes("evidence") ||
-                  e.toLowerCase().includes("statistic")
-              )
-            : [])
-    ).slice(0, 5);
 
     if (coverage === null) {
         return (
             <span
                 className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/40"
-                title="Evidence coverage not yet computed"
+                title="Evidence coverage not yet computed — click to inspect"
             >
                 <Shield className="h-3 w-3" />
                 <span className="hidden lg:inline">—</span>
@@ -361,107 +342,37 @@ function EvidenceBadge({ blog }: { blog: Blog }) {
         );
     }
 
-    const tier =
-        coverage >= 80 ? "strong" : coverage >= 42 ? "partial" : "weak";
-
+    const tier = coverage >= 80 ? "strong" : coverage >= 42 ? "partial" : "weak";
     const tierConfig = {
-        strong: {
-            bar: "bg-emerald-500",
-            text: "text-emerald-400",
-            border: "border-emerald-500/30",
-            bg: "bg-emerald-500/10",
-            label: "Sourced",
-        },
-        partial: {
-            bar: "bg-amber-500",
-            text: "text-amber-400",
-            border: "border-amber-500/30",
-            bg: "bg-amber-500/10",
-            label: "Partial",
-        },
-        weak: {
-            bar: "bg-rose-500",
-            text: "text-rose-400",
-            border: "border-rose-500/30",
-            bg: "bg-rose-500/10",
-            label: "Weak",
-        },
+        strong: { bar: "bg-emerald-500", text: "text-emerald-400", border: "border-emerald-500/30", bg: "bg-emerald-500/10" },
+        partial: { bar: "bg-amber-500", text: "text-amber-400", border: "border-amber-500/30", bg: "bg-amber-500/10" },
+        weak: { bar: "bg-rose-500", text: "text-rose-400", border: "border-rose-500/30", bg: "bg-rose-500/10" },
     }[tier];
 
     return (
-        <div className="relative">
-            <button
-                type="button"
-                onClick={() => setExpanded((v) => !v)}
-                title={`Evidence coverage: ${coverage}%`}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-semibold transition-colors hover:opacity-80 ${tierConfig.border} ${tierConfig.bg} ${tierConfig.text}`}
-            >
-                <Shield className="h-3 w-3 shrink-0" />
-                <span>{coverage}%</span>
-                {/* Mini progress bar */}
-                <span className="hidden lg:flex h-1 w-10 overflow-hidden rounded-full bg-white/10">
-                    <span
-                        className={`h-full rounded-full ${tierConfig.bar} transition-all`}
-                        style={{ width: `${coverage}%` }}
-                    />
-                </span>
-            </button>
+        <span
+            title={`Evidence coverage: ${coverage}% — click to inspect`}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-semibold transition-colors hover:opacity-80 ${tierConfig.border} ${tierConfig.bg} ${tierConfig.text}`}
+        >
+            <Shield className="h-3 w-3 shrink-0" />
+            <span>{coverage}%</span>
+            <span className="hidden lg:flex h-1 w-10 overflow-hidden rounded-full bg-white/10">
+                <span
+                    className={`h-full rounded-full ${tierConfig.bar} transition-all`}
+                    style={{ width: `${coverage}%` }}
+                />
+            </span>
+        </span>
+    );
+}
 
-            {/* Expanded popover — unsourced claims list */}
-            {expanded && (
-                <div
-                    className="absolute left-0 top-full z-50 mt-1.5 w-72 overflow-hidden rounded-xl border border-border bg-popover shadow-2xl"
-                    onMouseLeave={() => setExpanded(false)}
-                >
-                    <div className={`flex items-center justify-between border-b border-border px-3 py-2 ${tierConfig.bg}`}>
-                        <div className="flex items-center gap-1.5">
-                            <Shield className={`h-3.5 w-3.5 ${tierConfig.text}`} />
-                            <span className={`text-xs font-bold ${tierConfig.text}`}>
-                                Evidence Coverage · {coverage}%
-                            </span>
-                        </div>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${tierConfig.bg} ${tierConfig.border} border ${tierConfig.text}`}>
-                            {tierConfig.label}
-                        </span>
-                    </div>
-
-                    {/* Coverage bar */}
-                    <div className="px-3 pt-3 pb-1">
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
-                            <div
-                                className={`h-full rounded-full transition-all ${tierConfig.bar}`}
-                                style={{ width: `${coverage}%` }}
-                            />
-                        </div>
-                    </div>
-
-                    {missing.length > 0 ? (
-                        <div className="px-3 py-2">
-                            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                                Unsourced claims
-                            </p>
-                            <ul className="space-y-1">
-                                {missing.map((claim, i) => (
-                                    <li
-                                        key={i}
-                                        className="flex items-start gap-1.5 text-[11px] leading-4 text-muted-foreground"
-                                    >
-                                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-400" />
-                                        <span className="line-clamp-2">{claim}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    ) : (
-                        <p className="px-3 py-2 text-[11px] text-muted-foreground">
-                            {coverage >= 80
-                                ? "All tracked claims are sourced. "
-                                : "No specific unsourced claims recorded."}
-                        </p>
-                    )}
-                </div>
-            )}
-        </div>
+function EvidenceBadge({ blog }: { blog: Blog }) {
+    return (
+        <EvidenceDrawer
+            blogId={blog.id}
+            blogTitle={blog.title}
+            trigger={<EvidenceBadgeTrigger blog={blog} />}
+        />
     );
 }
 
