@@ -1,39 +1,15 @@
-/**
- * Original Value Gate — answers "Why does this page deserve to exist?"
- *
- * Evaluates whether an article has genuine unique value beyond what
- * competitors already cover. This is NOT a score — it's a pass/fail
- * assessment with explicit reasons.
- *
- * Checks:
- * 1. Does the article have at least one unique contribution?
- * 2. Does every H2 section introduce new information?
- * 3. Are there sections that merely paraphrase competitors?
- * 4. Is there internal section-to-section duplication?
- *
- * The gate uses a lightweight Gemini Flash call for semantic comparison
- * against SERP competitor excerpts, plus code-level heuristics for
- * structural checks.
- */
-
 import { logger } from "@/lib/logger";
 import { callGeminiJson } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import type { OriginalValueResult, ResearchPacket } from "./contracts";
 import type { SerpContext } from "./serp";
-
-// ─── Types ────────────────────────────────────────────────────────────────
+import type { GateStatus } from "./publication-gate";
 
 export interface OriginalValueInput {
-    /** The final HTML content */
     content: string;
-    /** The article title */
     title: string;
-    /** Research packet from the pipeline */
     researchPacket: ResearchPacket;
-    /** SERP context with competitor data */
     serpContext: SerpContext | null;
-    /** Target keywords */
     targetKeywords: string[];
 }
 
@@ -49,19 +25,18 @@ interface SectionAnalysis {
     hasPracticalRec: boolean;
 }
 
-// ─── Heuristic section analysis ───────────────────────────────────────────
+export interface OriginalityGateResult {
+    status: GateStatus;
+    result: OriginalValueResult;
+}
 
-/**
- * Analyzes each H2 section for substance signals using code-level
- * heuristics. No LLM call needed for this check.
- */
 function analyzeSection(sectionHtml: string): SectionAnalysis {
     const text = sectionHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     const heading = sectionHtml.match(/^([^<]*)</)?.[1]?.trim().slice(0, 100) ?? "Unknown";
 
     return {
         heading,
-        hasNewInformation: text.length > 100, // Baseline: not empty
+        hasNewInformation: text.length > 100,
         hasEvidence: /(?:according to|source:|study|research|survey|report|data from|published by|found that)/i.test(text),
         hasExample: /(?:for example|for instance|such as|e\.g\.|consider|take the case|one example)/i.test(text),
         hasAnalysis: /(?:this means|the reason|because|this suggests|the implication|as a result|therefore|consequently)/i.test(text),
@@ -72,10 +47,6 @@ function analyzeSection(sectionHtml: string): SectionAnalysis {
     };
 }
 
-/**
- * Counts the substance signals in a section analysis.
- * A section needs at least 1 signal to be considered substantive.
- */
 function countSubstanceSignals(analysis: SectionAnalysis): number {
     let count = 0;
     if (analysis.hasEvidence) count++;
@@ -88,18 +59,12 @@ function countSubstanceSignals(analysis: SectionAnalysis): number {
     return count;
 }
 
-// ─── LLM-based originality check ──────────────────────────────────────────
-
 interface LlmOriginalityResult {
     uniqueContributions: string[];
     paraphrasedSections: string[];
     overallOriginal: boolean;
 }
 
-/**
- * Uses Gemini Flash to compare the article against SERP competitor
- * excerpts and identify unique contributions vs. paraphrased content.
- */
 async function checkOriginalityVsSerp(
     content: string,
     serpContext: SerpContext | null,
@@ -107,15 +72,12 @@ async function checkOriginalityVsSerp(
     const fallback: LlmOriginalityResult = {
         uniqueContributions: [],
         paraphrasedSections: [],
-        // We do not assume originality when external comparison is unavailable.
-        // The deterministic contribution checks below can still establish it.
         overallOriginal: false,
     };
 
     if (!serpContext || serpContext.results.length === 0) return fallback;
     if (!process.env.GEMINI_API_KEY) return fallback;
 
-    // Build competitor content summary (max 3 competitors, 400 chars each)
     const competitorSummary = serpContext.results.slice(0, 3)
         .map(r => {
             const headings = r.scrapedHeadings?.slice(0, 5).join(" | ") ?? "";
@@ -124,7 +86,6 @@ async function checkOriginalityVsSerp(
         })
         .join("\n---\n");
 
-    // Strip HTML and truncate article for analysis
     const plainContent = content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 6000);
 
     const prompt = `You are an editorial originality reviewer. Compare this article against the top SERP competitors and identify:
@@ -159,24 +120,18 @@ Respond with JSON only:
     }
 }
 
-// ─── Main gate ────────────────────────────────────────────────────────────
-
-/**
- * Runs the original value gate. Returns a pass/fail result with
- * explicit reasons.
- *
- * Pass criteria are explicit editorial findings, not ratios or opaque scores:
- * - The article contains a named unique contribution, original method,
- *   comparison, or first-party evidence.
- * - No section is identified as empty of substantive material.
- * - No section is identified as a competitor paraphrase.
- */
 export async function runOriginalValueGate(
     input: OriginalValueInput
 ): Promise<OriginalValueResult> {
+    const { result } = await evaluateOriginality(input);
+    return result;
+}
+
+export async function evaluateOriginality(
+    input: OriginalValueInput
+): Promise<OriginalityGateResult> {
     const { content, serpContext } = input;
 
-    // ── Step 1: Heuristic section analysis ────────────────────────────────
     const sections = content.split(/<h2[\s>]/i).slice(1);
     const sectionAnalyses = sections.map(s => analyzeSection(s));
 
@@ -197,10 +152,8 @@ export async function runOriginalValueGate(
         }
     }
 
-    // ── Step 2: LLM originality check (if SERP data available) ───────────
     const llmResult = await checkOriginalityVsSerp(content, serpContext);
 
-    // ── Step 3: Combine results ──────────────────────────────────────────
     const uniqueContributions = [...llmResult.uniqueContributions];
     const authorEvidence = input.researchPacket.authorEvidence;
     if (authorEvidence.experience || authorEvidence.realNumbers) {
@@ -218,7 +171,6 @@ export async function runOriginalValueGate(
         s => `Section appears to paraphrase competitor content: "${s}"`
     );
 
-    // No numeric cut-offs: each failing finding is directly reviewable.
     const hasUniqueValue = dedupedContributions.length > 0 || llmResult.overallOriginal;
     const hasWeakSection = weakSections.length > 0;
     const hasParaphrasedSection = duplicateSections.length > 0;
@@ -235,8 +187,18 @@ export async function runOriginalValueGate(
             : []),
     ];
 
+    let status: GateStatus;
+    if (!hasUniqueValue && hasParaphrasedSection) {
+        status = "FAIL";
+    } else if (!passed) {
+        status = "REVIEW";
+    } else {
+        status = "PASS";
+    }
+
     if (!passed) {
-        logger.warn("[Original Value Gate] BLOCKED — article lacks original value", {
+        logger.warn("[Original Value Gate] BLOCKED", {
+            status,
             reasons: missingValue,
             uniqueContributions: dedupedContributions.length,
             weakSections: weakSections.length,
@@ -248,7 +210,7 @@ export async function runOriginalValueGate(
         });
     }
 
-    return {
+    const result: OriginalValueResult = {
         passed,
         uniqueContributions: dedupedContributions,
         weakSections,
@@ -256,4 +218,6 @@ export async function runOriginalValueGate(
         missingEvidence,
         missingValue,
     };
+
+    return { status, result };
 }

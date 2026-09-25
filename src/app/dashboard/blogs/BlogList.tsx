@@ -68,15 +68,24 @@ type Blog = {
     validationErrors?: string[] | null;
     citationScore?: number | null;
     citationCriteria?: unknown;
-    /** 0–100 evidence coverage %, populated by evidence-extractor */
     evidenceCoverage?: number | null;
-    /** Unsourced claim descriptions (subset of validationErrors) */
     missingEvidence?: string[] | null;
     hashnodeUrl?: string | null;
     mediumUrl?: string | null;
     wordPressUrl?: string | null;
     ghostUrl?: string | null;
+    publicationGates?: StoredGate[] | null;
     [key: string]: any;
+};
+
+type StoredGateStatus = "PASS" | "REVIEW" | "FAIL";
+
+type StoredGate = {
+    name: string;
+    status: StoredGateStatus;
+    isHard: boolean;
+    issues: string[];
+    warnings: string[];
 };
 
 type FilterStatus =
@@ -385,42 +394,79 @@ function ReadinessPanel({ blog }: { blog: Blog }) {
         ? blog.validationErrors
         : [];
 
-    // Separate blockers (hard issues) from warnings (soft)
-    const blockers = errors.filter((e) =>
-        /fabricat|reject|block|missing.*source|unsourced|evidence.*unavail|product.*claim|superlat/i.test(e)
-    );
-    const warnings = errors.filter((e) => !blockers.includes(e));
+    const rawGates = Array.isArray(blog.publicationGates) ? blog.publicationGates as StoredGate[] : null;
 
-    // Gate-level status flags derived from status + errors
-    const gateChecks = [
-        {
-            label: "Structure",
-            ok: !errors.some((e) => /structure|heading|h2|h3|intro/i.test(e)),
-        },
-        {
-            label: "Evidence",
-            ok: blog.status !== "EVIDENCE_REVIEW" &&
-                !errors.some((e) => /evidence|unsourced|statistic/i.test(e)),
-        },
-        {
-            label: "Originality",
-            ok: !errors.some((e) => /original|plagiar|duplicate/i.test(e)),
-        },
-        {
-            label: "Product claims",
-            ok: !errors.some((e) => /product.*claim|superlat|unverified/i.test(e)),
-        },
-        {
-            label: "SEO / AEO",
-            ok: !errors.some((e) => /keyword|seo|aeo|meta|title/i.test(e)),
-        },
-        {
-            label: "Fact-check",
-            ok: !errors.some((e) => /fabricat|invented|fact.check/i.test(e)),
-        },
+    const gateChecks: { label: string; status: StoredGateStatus; isHard: boolean; issues: string[]; warnings: string[] }[] = rawGates
+        ? rawGates.map(g => ({
+            label: g.name,
+            status: g.status,
+            isHard: g.isHard,
+            issues: g.issues ?? [],
+            warnings: g.warnings ?? [],
+        }))
+        : [
+            {
+                label: "Schema",
+                status: errors.some((e) => /structure|heading|h2|h3|intro/i.test(e)) ? "FAIL" as const : "PASS" as const,
+                isHard: true,
+                issues: errors.filter(e => /structure|heading|h2|h3|intro/i.test(e)),
+                warnings: [],
+            },
+            {
+                label: "Evidence",
+                status: (blog.status === "EVIDENCE_REVIEW" || errors.some((e) => /evidence|unsourced|statistic/i.test(e))) ? "FAIL" as const : "PASS" as const,
+                isHard: true,
+                issues: errors.filter(e => /evidence|unsourced|statistic/i.test(e)),
+                warnings: [],
+            },
+            {
+                label: "Claims",
+                status: errors.some((e) => /fabricat|invented|fact.check/i.test(e)) ? "FAIL" as const : "PASS" as const,
+                isHard: true,
+                issues: errors.filter(e => /fabricat|invented|fact.check/i.test(e)),
+                warnings: [],
+            },
+            {
+                label: "Originality",
+                status: errors.some((e) => /original|plagiar|duplicate/i.test(e)) ? "REVIEW" as const : "PASS" as const,
+                isHard: false,
+                issues: errors.filter(e => /original|plagiar|duplicate/i.test(e)),
+                warnings: [],
+            },
+            {
+                label: "SEO",
+                status: errors.some((e) => /keyword|seo|aeo|meta|title/i.test(e)) ? "REVIEW" as const : "PASS" as const,
+                isHard: false,
+                issues: [],
+                warnings: errors.filter(e => /keyword|seo|aeo|meta|title/i.test(e)),
+            },
+            {
+                label: "Editorial",
+                status: errors.some((e) => /product.*claim|superlat|unverified/i.test(e)) ? "REVIEW" as const : "PASS" as const,
+                isHard: false,
+                issues: errors.filter(e => /product.*claim|superlat|unverified/i.test(e)),
+                warnings: [],
+            },
+        ];
+
+    const hardFailures = gateChecks.filter(g => g.isHard && g.status === "FAIL");
+    const reviewGates = gateChecks.filter(g => g.status === "REVIEW");
+    const allBlockers = hardFailures.flatMap(g => g.issues);
+    const allWarnings = [
+        ...reviewGates.flatMap(g => g.issues),
+        ...gateChecks.flatMap(g => g.warnings),
     ];
+    const allClean = allBlockers.length === 0 && allWarnings.length === 0;
 
-    const allClean = blockers.length === 0 && warnings.length === 0;
+    const statusColor = (s: StoredGateStatus) =>
+        s === "PASS"
+            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+            : s === "FAIL"
+              ? "border-red-500/20 bg-red-500/10 text-red-400"
+              : "border-amber-500/20 bg-amber-500/10 text-amber-400";
+
+    const statusIcon = (s: StoredGateStatus) =>
+        s === "PASS" ? "✓" : s === "FAIL" ? "✗" : "⚠";
 
     return (
         <div className="border-t border-amber-500/10 bg-amber-500/5 px-4 py-3">
@@ -428,18 +474,14 @@ function ReadinessPanel({ blog }: { blog: Blog }) {
                 Publication Readiness
             </p>
 
-            {/* Gate check row */}
             <div className="mb-3 flex flex-wrap gap-1.5">
                 {gateChecks.map((gate) => (
                     <span
                         key={gate.label}
-                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold ${
-                            gate.ok
-                                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                                : "border-red-500/20 bg-red-500/10 text-red-400"
-                        }`}
+                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold ${statusColor(gate.status)}`}
+                        title={gate.isHard ? `Hard gate: ${gate.status}` : `Soft gate: ${gate.status}`}
                     >
-                        {gate.ok ? "✓" : "✗"} {gate.label}
+                        {statusIcon(gate.status)} {gate.label}
                     </span>
                 ))}
             </div>
@@ -450,13 +492,13 @@ function ReadinessPanel({ blog }: { blog: Blog }) {
                 </p>
             )}
 
-            {blockers.length > 0 && (
+            {allBlockers.length > 0 && (
                 <div className="mb-2">
                     <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-red-400">
-                        Blocking issues ({blockers.length})
+                        Blocking issues ({allBlockers.length})
                     </p>
                     <ul className="space-y-0.5">
-                        {blockers.map((issue, i) => (
+                        {allBlockers.map((issue, i) => (
                             <li key={i} className="flex items-start gap-1.5 text-[11px] text-red-300/80">
                                 <span className="mt-0.5 shrink-0">•</span>
                                 <span>{issue}</span>
@@ -466,13 +508,13 @@ function ReadinessPanel({ blog }: { blog: Blog }) {
                 </div>
             )}
 
-            {warnings.length > 0 && (
+            {allWarnings.length > 0 && (
                 <div>
                     <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-amber-400/70">
-                        Warnings ({warnings.length})
+                        Warnings ({allWarnings.length})
                     </p>
                     <ul className="space-y-0.5">
-                        {warnings.slice(0, 4).map((w, i) => (
+                        {allWarnings.slice(0, 6).map((w, i) => (
                             <li key={i} className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
                                 <span className="mt-0.5 shrink-0">⚠</span>
                                 <span>{w}</span>

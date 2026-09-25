@@ -1095,27 +1095,20 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         // ── Publication Gate ──────────────────────────────────────────────
         const publicationGateStep = await step.run("publication-gate", async () => {
             try {
-                const { runPublicationGate } = await import("@/lib/blog/publication-gate");
+                const { evaluatePublicationGate } = await import("@/lib/blog/publication-gate");
                 const { extractEvidencePacket } = await import("@/lib/blog/evidence-extractor");
 
-                // Re-extract from the final post-Claude content. The packet carried
-                // by the draft is the single authoritative research snapshot, but
-                // citations can change during an editorial rewrite.
                 const evidencePacket = extractEvidencePacket(
                     liveBlogPost.researchPacket,
                     liveBlogPost.content,
                 );
-                // Bridge fact-check findings → publication gate.
-                // The Gemini fact-checker and the evidence gate use different truth sources.
-                // Without this wiring, fabrication flags from the fact-checker are only
-                // logged — they never affect the DRAFT / NEEDS_REVIEW decision.
                 const factCheckBlockers = (factCheck.issues ?? [])
                     .filter((issue: string) =>
                         /fabricat|unsourced|statistic|invented|unverifi/i.test(issue)
                     )
                     .slice(0, 5);
 
-                const publicationGate = await runPublicationGate({
+                const decision = await evaluatePublicationGate({
                     content: liveBlogPost.content,
                     title: liveBlogPost.title,
                     metaDescription: liveBlogPost.metaDescription,
@@ -1129,12 +1122,19 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                     factCheckCoverage: factCheck.coverage,
                     additionalOriginalityIssues: factCheckBlockers,
                 });
-                return { evidencePacket, publicationGate };
+                return {
+                    evidencePacket,
+                    publicationGate: decision.legacyResult,
+                    gates: decision.gates.map(g => ({
+                        name: g.name,
+                        status: g.status,
+                        isHard: g.isHard,
+                        issues: g.issues,
+                        warnings: g.warnings,
+                    })),
+                    summary: decision.summary,
+                };
             } catch (gateErr: unknown) {
-                // The publication gate must never crash the Inngest job.
-                // A crash here would trigger onFailure → FAILED even though the
-                // article content is valid and fully generated.
-                // Degrade: route to EVIDENCE_REVIEW so a human can review.
                 logger.error("[Blog/PublicationGate] Gate threw — degrading to EVIDENCE_REVIEW", {
                     error: (gateErr as Error)?.message,
                     siteId,
@@ -1172,7 +1172,21 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                     repetitionIssues: [],
                     fabricationIssues: [],
                 };
-                return { evidencePacket: emptyEvidencePacket, publicationGate: fallbackGate };
+                const fallbackGates = [
+                    { name: "Research", status: "FAIL" as const, isHard: true, issues: ["Gate crashed during validation."], warnings: [] },
+                    { name: "Evidence", status: "FAIL" as const, isHard: true, issues: ["Evidence gate crashed."], warnings: [] },
+                    { name: "Claims", status: "REVIEW" as const, isHard: true, issues: [], warnings: ["Could not evaluate."] },
+                    { name: "Originality", status: "REVIEW" as const, isHard: false, issues: [], warnings: ["Could not evaluate."] },
+                    { name: "SEO", status: "REVIEW" as const, isHard: false, issues: [], warnings: ["Could not evaluate."] },
+                    { name: "Schema", status: "REVIEW" as const, isHard: true, issues: [], warnings: ["Could not evaluate."] },
+                    { name: "Editorial", status: "REVIEW" as const, isHard: false, issues: [], warnings: ["Could not evaluate."] },
+                ];
+                return {
+                    evidencePacket: emptyEvidencePacket,
+                    publicationGate: fallbackGate,
+                    gates: fallbackGates,
+                    summary: "Publication gate crashed — all gates defaulted to REVIEW/FAIL.",
+                };
             }
         });
         liveBlogPost.evidencePacket = publicationGateStep.evidencePacket;
@@ -1248,6 +1262,7 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 // GSC opportunity evidence — immutable provenance snapshot
                 // Null for non-GSC pipelines (USER_KEYWORD, COMPETITOR_GAP, etc.)
                 gscEvidence: gscEvidence ? (gscEvidence as Record<string, string | number | boolean | null>) : undefined,
+                publicationGates: publicationGateStep.gates as any,
             };
             if (event.data.blogId) {
                 await prisma.blog.update({ where: { id: event.data.blogId }, data: blogData });

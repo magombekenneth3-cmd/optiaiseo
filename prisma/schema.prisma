@@ -556,6 +556,9 @@ model Blog {
   /// Null for non-GSC pipelines or blogs generated before this field existed.
   /// Validated via GscOpportunityEvidenceSchema (Zod) before writing.
   gscEvidence          Json?
+  /// Independent gate results from the publication gate architecture.
+  /// Each entry contains name, status (PASS/REVIEW/FAIL), isHard, issues, warnings.
+  publicationGates     Json?
   aeoEvents            AeoEvent[]
   repurposedResult     RepurposedResult?
   sourceLinks          InternalLink[]    @relation("SourceLinks")

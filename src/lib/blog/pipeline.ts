@@ -36,6 +36,8 @@ import {
     getVerifiedCaseStudyAvailability,
     renderSourceContext,
 } from "./research-packet";
+import type { ResearchEvidenceLedger } from "./evidence-ledger";
+import { buildClaimPlan, renderClaimPlanForSection, type ClaimPlan, type SectionClaimPlan } from "./claim-plan";
 
 export interface ResearchBrain {
     intent: string;
@@ -444,6 +446,7 @@ export async function runSectionWriter(
     researchPacket: ResearchPacket,
     sectionResearch: SectionResearch[],
     ctx: PromptContext,
+    claimPlan?: ClaimPlan,
 ): Promise<string> {
     const memory: EditorialMemory = {
         usedEntities: new Set(),
@@ -461,6 +464,7 @@ export async function runSectionWriter(
         if (!research) {
             throw new Error(`[Pipeline] Missing authoritative research for section ${i + 1}.`);
         }
+        const sectionClaimPlan = claimPlan?.sectionPlans[i] ?? null;
         const sectionText = await writeSingleSection(
             section,
             outline,
@@ -468,6 +472,7 @@ export async function runSectionWriter(
             research,
             ctx,
             memory,
+            sectionClaimPlan,
         );
 
         const stripped = sectionText.replace(/\*?\*?\[EDITOR:[^\]]*\]\*?\*?\s*/g, "").trim();
@@ -500,6 +505,7 @@ export async function runSectionWriter(
             const section = outline.sections[idx];
             const research = sectionResearch[idx];
             if (!research) continue;
+            const retrySectionClaimPlan = claimPlan?.sectionPlans[idx] ?? null;
             const retry = await writeSingleSection(
                 section,
                 outline,
@@ -507,6 +513,7 @@ export async function runSectionWriter(
                 research,
                 ctx,
                 memory,
+                retrySectionClaimPlan,
             );
             const stripped = retry.replace(/\*?\*?\[EDITOR:[^\]]*\]\*?\*?\s*/g, "").trim();
             if (!stripped.includes("[Section generation failed")) {
@@ -546,6 +553,7 @@ async function writeSingleSection(
     sectionResearch: SectionResearch,
     ctx: PromptContext,
     memory: EditorialMemory,
+    sectionClaimPlan: SectionClaimPlan | null,
 ): Promise<string> {
     const brain = researchPacket.brain;
     const isIntro = section.isIntro ?? false;
@@ -626,6 +634,10 @@ ${relevantPAA.length > 0 ? `PAA questions to answer in this section:\n${relevant
         faq:        "5-7 Q&A pairs. Each answer MUST open with: Yes / No / a number / a tool name / a time frame. Max 3 sentences.",
     };
 
+    const claimPlanBlock = sectionClaimPlan
+        ? renderClaimPlanForSection(sectionClaimPlan)
+        : "";
+
     const prompt = `You are a senior editor writing one section of an article. Write ONLY this section.
 
 ARTICLE TITLE: "${outline.title}"
@@ -640,15 +652,18 @@ Word target: ${section.wordTarget} words (\u00b120%)
 ${section.keyEntities.length > 0 ? `Key entities: ${section.keyEntities.join(", ")}` : ""}
 ${serpNote}
 
+${claimPlanBlock}
+
 AUTHORITATIVE RESEARCH SNAPSHOT (the only external evidence you may use):
 ${sourceContext}
 ${sectionResearch.warnings.length > 0 ? `RESEARCH WARNINGS:\n${sectionResearch.warnings.map(warning => `- ${warning}`).join("\n")}` : ""}
 ${caseStudyEvidenceNote}
 
 EVIDENCE CITATION RULES:
-- Use a concrete external fact, statistic, or case-study outcome only when it is supported by a source above.
+- Use a concrete external fact, statistic, or case-study outcome only when it is supported by a source above or appears in the CLAIM PLAN.
 - Preserve provenance by linking the sentence to that exact source: [Source: source title](source URL).
 - If no supplied source supports a number, write the point qualitatively instead. Never invent a source, metric, or company result.
+- Your own reasoning or training data is NOT evidence. Only the supplied sources and claim plan entries count.
 
 EDITORIAL MEMORY:
 ${memoryNote}
@@ -1005,8 +1020,8 @@ export interface PipelineResult {
     markdownContent: string;
     brain: ResearchBrain;
     outline: OutlinePlan;
-    /** One immutable-in-practice snapshot used by writer and publication gate. */
     researchPacket: ResearchPacket;
+    claimPlan: ClaimPlan | null;
 }
 
 /**
@@ -1021,8 +1036,9 @@ export async function runFullPipeline(params: {
     author: AuthorProfile;
     tone?: string;
     groundedCtx?: GroundedSiteContext;
+    ledger?: ResearchEvidenceLedger | null;
 }): Promise<PipelineResult> {
-    const { keyword, serpContext, ctx, author, tone, groundedCtx } = params;
+    const { keyword, serpContext, ctx, author, tone, groundedCtx, ledger } = params;
 
     logger.debug("[Pipeline] Stage 1 — Research Brain", { keyword });
     const brain = await runResearchBrain(keyword, serpContext, ctx);
@@ -1030,9 +1046,6 @@ export async function runFullPipeline(params: {
     logger.debug("[Pipeline] Stage 2 — Outline Planner", { keyword });
     const outline = await runOutlinePlanner(keyword, brain, serpContext, ctx, tone);
 
-    // Build exactly one authoritative research packet after the outline tells
-    // us which evidence-intensive sections need source deepening. The writer,
-    // evidence extractor, and publication gate all receive this same object.
     logger.debug("[Pipeline] Research packet — collecting authoritative sources", {
         keyword,
         sections: outline.sections.length,
@@ -1046,8 +1059,23 @@ export async function runFullPipeline(params: {
     });
     const sectionResearch = await buildSectionResearchMap(outline.sections, researchPacket);
 
+    let claimPlan: ClaimPlan | null = null;
+    try {
+        claimPlan = buildClaimPlan(outline.sections, researchPacket, ledger ?? null, keyword);
+        logger.info("[Pipeline] Claim plan built", {
+            keyword,
+            totalClaims: claimPlan.totalPlannedClaims,
+            evidenceBacked: claimPlan.evidenceBackedCount,
+            firstParty: claimPlan.firstPartyCount,
+        });
+    } catch (e) {
+        logger.warn("[Pipeline] Claim plan failed — proceeding without", {
+            error: (e as Error).message,
+        });
+    }
+
     logger.debug("[Pipeline] Stage 3 — Section Writer", { keyword, sections: outline.sections.length });
-    const rawDraft = await runSectionWriter(outline, researchPacket, sectionResearch, ctx);
+    const rawDraft = await runSectionWriter(outline, researchPacket, sectionResearch, ctx, claimPlan ?? undefined);
 
     logger.debug("[Pipeline] Stage 4 — Editorial Rewrite", { keyword, chunks: Math.ceil(rawDraft.length / 18000) });
     const { content: polishedMarkdown, truncated } = await runEditorialRewrite(rawDraft, ctx, groundedCtx);
@@ -1066,5 +1094,6 @@ export async function runFullPipeline(params: {
         brain,
         outline,
         researchPacket,
+        claimPlan,
     };
 }
