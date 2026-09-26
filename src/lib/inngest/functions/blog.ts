@@ -201,19 +201,7 @@ Return ONLY the HTML starting with <div id="blog-interactive-widget">`,
         return null;
     }
 }
-function extractFaqsForSchema(content: string): { question: string; answer: string }[] {
-    const items: { question: string; answer: string }[] = [];
-    const faqSection = content.match(/<h2[^>]*id=["']frequently-asked-questions["'][^>]*>[\s\S]*?<\/section>/i)?.[0] ?? "";
-    if (!faqSection) return items;
-    const pattern = /<h3[^>]*>([\s\S]*?)<\/h3>\s*<p[^>]*>([\s\S]*?)<\/p>/gi;
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(faqSection)) !== null && items.length < 7) {
-        const question = match[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-        const answer = match[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-        if (question.length >= 8 && answer.length >= 2) items.push({ question, answer });
-    }
-    return items;
-}
+
 
 function buildSchemaScript(value: Record<string, unknown>): string {
     return `<script type="application/ld+json">${JSON.stringify(value).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026")}</script>`;
@@ -222,18 +210,18 @@ function buildSchemaScript(value: Record<string, unknown>): string {
 async function generateSchemaMarkup(params: {
     title: string;
     keyword: string;
-    content: string;
     slug: string;
     siteDomain: string;
     author: AuthorProfile;
     description?: string;
+    faqs: { question: string; answer: string }[];
 }): Promise<string | null> {
     try {
-        const now = new Date().toISOString();
         const normalizedDomain = params.siteDomain.replace(/^https?:\/\//, "").replace(/\/$/, "");
         const siteUrl = normalizedDomain ? `https://${normalizedDomain}` : "https://example.com";
         const articleUrl = `${siteUrl}/blog/${params.slug}`;
-        const faqItems = extractFaqsForSchema(params.content);
+        const { buildFaqJsonLd } = await import("@/lib/blog/faq");
+        const faqSchema = buildFaqJsonLd(params.faqs);
         const scripts = [
             buildSchemaScript({
                 "@context": "https://schema.org",
@@ -245,25 +233,10 @@ async function generateSchemaMarkup(params: {
                     name: params.author.name,
                     ...(params.author.role ? { jobTitle: params.author.role } : {}),
                 },
-                datePublished: now,
-                dateModified: now,
                 mainEntityOfPage: { "@type": "WebPage", "@id": articleUrl },
                 publisher: { "@type": "Organization", name: params.siteDomain },
             }),
-            ...(faqItems.length > 0
-                ? [buildSchemaScript({
-                    "@context": "https://schema.org",
-                    "@type": "FAQPage",
-                    mainEntity: faqItems.map(item => ({
-                        "@type": "Question",
-                        name: item.question,
-                        acceptedAnswer: {
-                            "@type": "Answer",
-                            text: item.answer,
-                        },
-                    })),
-                })]
-                : []),
+            ...(faqSchema ? [buildSchemaScript(faqSchema)] : []),
             buildSchemaScript({
                 "@context": "https://schema.org",
                 "@type": "BreadcrumbList",
@@ -1013,11 +986,11 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             return await generateSchemaMarkup({
                 title: liveBlogPost.title,
                 keyword: keyword || liveBlogPost.targetKeywords[0] || "",
-                content: liveBlogPost.content,
                 slug: liveBlogPost.slug,
                 siteDomain: site.domain,
                 author,
                 description: liveBlogPost.metaDescription,
+                faqs: [],
             });
         });
 

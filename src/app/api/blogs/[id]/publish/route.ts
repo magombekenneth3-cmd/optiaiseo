@@ -46,7 +46,7 @@ async function checkOriginality(text: string): Promise<{ isOriginal: boolean, co
         .trim();
     const sentences = plainText.match(/[^.!?]+[.!?]+/g) || [plainText];
     const sample = sentences.sort((a, b) => b.length - a.length).slice(0, 3).join(' ');
-    
+
     try {
         const res = await fetch('https://google.serper.dev/search', {
             method: 'POST',
@@ -55,7 +55,7 @@ async function checkOriginality(text: string): Promise<{ isOriginal: boolean, co
             signal: AbortSignal.timeout(6000)
         });
         const data = await res.json();
-         
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const dupes = data.organic?.filter((r: any) => r.snippet?.includes(sample.trim().substring(0, 40))) || [];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -128,10 +128,10 @@ async function publishToHashnode(
             logger.error("[Hashnode] Syndication failed:", { error: result.error });
             return null;
         }
-  
+
 
         return { url: result.postUrl };
-     
+
     } catch (err: unknown) {
         logger.error("[Hashnode] Error during publish:", { error: (err as Error)?.message || String(err) });
         return null;
@@ -160,10 +160,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // FIX #5: Pre-publish Duplicate Check
         const originality = await checkOriginality(blog.content);
         if (!originality.isOriginal) {
-            return NextResponse.json({ 
-                error: 'Duplicate content detected. Rewrite the flagged sections before publishing.', 
-                conflictingUrls: originality.conflictingUrls, 
-                hint: 'Your content closely matches existing pages. Add original insight before publishing.' 
+            return NextResponse.json({
+                error: 'Duplicate content detected. Rewrite the flagged sections before publishing.',
+                conflictingUrls: originality.conflictingUrls,
+                hint: 'Your content closely matches existing pages. Add original insight before publishing.'
             }, { status: 409 });
         }
 
@@ -248,12 +248,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
                         logger.debug(`[Medium] Cross-posted blog ${blog.id} → ${mediumUrl}`);
                     } else {
                         logger.error(`[Medium] Failed to create post:`, { error: await postRes.text() });
-                     
+
                     }
                 } else {
                     logger.error(`[Medium] Failed to fetch profile. Token may be invalid.`);
                 }
-             
+
             } catch (mediumErr: unknown) {
                 logger.error("[Medium] Error during cross-posting:", { error: (mediumErr as Error)?.message || String(mediumErr) });
             }
@@ -280,18 +280,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
                 } else {
                     logger.warn("[Hashnode] Could not resolve a publication ID — skipping.");
                 }
-             
+
             } catch (hashnodeErr: unknown) {
                 logger.error("[Hashnode] Error during syndication:", { error: (hashnodeErr as Error)?.message || String(hashnodeErr) });
             }
         } else {
             logger.debug("[Hashnode] No token configured — skipping syndication.");
-         
+
         }
 
-        // 3. Mark as PUBLISHED now that syndication has completed (success or not).
-        // The blog is always published to the user's own site regardless of syndication outcome.
-        // We persist syndication URLs in the same update so they appear immediately in the UI.
+
         await prisma.blog.update({
             where: { id: blog.id },
             data: {
@@ -301,6 +299,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
                 ...(hashnodeUrl ? { hashnodeUrl } : {}),
             },
         });
+
+        if (blog.schemaMarkup) {
+            const { validateAndSaveSchema } = await import("@/lib/blog/validate-schema");
+            await validateAndSaveSchema(blog.id, blog.schemaMarkup);
+        }
 
         revalidatePath("/dashboard/blogs");
         revalidatePath(`/dashboard/blogs/${blog.id}`);
@@ -337,7 +340,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             ((blog.site.hashnodeToken || process.env.HASHNODE_TOKEN) && !hashnodeUrl);
 
         return NextResponse.json({ success: true, mediumUrl, hashnodeUrl, syndicationPartial: !!syndicationPartial });
-     
+
     } catch (error: unknown) {
         logger.error("Failed to publish blog:", { error: (error as Error)?.message || String(error) });
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

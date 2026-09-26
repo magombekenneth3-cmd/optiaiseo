@@ -1,4 +1,4 @@
-import { logger } from "@/lib/logger";
+import { logger, formatError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
 const ARTICLE_SCHEMA = {
@@ -16,6 +16,34 @@ const ARTICLE_SCHEMA = {
 function isIso8601(value: unknown): boolean {
     if (typeof value !== "string") return true;
     return !Number.isNaN(Date.parse(value));
+}
+
+function isArticleTyped(node: unknown): node is Record<string, unknown> {
+    if (typeof node !== "object" || node === null) return false;
+    const type = (node as Record<string, unknown>)["@type"];
+    if (Array.isArray(type)) return type.some(t => t === "Article" || t === "BlogPosting");
+    return type === "Article" || type === "BlogPosting";
+}
+
+function locateArticleNode(parsed: unknown): Record<string, unknown> | null {
+    if (Array.isArray(parsed)) {
+        const typed = parsed.find(isArticleTyped);
+        if (typed) return typed;
+        return typeof parsed[0] === "object" && parsed[0] !== null
+            ? parsed[0] as Record<string, unknown>
+            : null;
+    }
+
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const obj = parsed as Record<string, unknown>;
+
+    if (Array.isArray(obj["@graph"])) {
+        const graph = obj["@graph"] as unknown[];
+        const typed = graph.find(isArticleTyped);
+        return typed ?? null;
+    }
+
+    return obj;
 }
 
 function validateArticleSchema(parsed: unknown): string[] {
@@ -53,10 +81,6 @@ function validateArticleSchema(parsed: unknown): string[] {
     return errors;
 }
 
-/**
- * Synchronous, DB-free validation — use this when the Blog record does not yet
- * exist (e.g. during blog generation before the save step).
- */
 export function validateSchemaOnly(schemaJson: string): boolean {
     let parsed: unknown;
     try {
@@ -65,8 +89,9 @@ export function validateSchemaOnly(schemaJson: string): boolean {
         logger.warn("[SchemaValidation] Malformed JSON — discarding");
         return false;
     }
-    const root = Array.isArray(parsed) ? parsed[0] : parsed;
-    const errors = validateArticleSchema(root);
+
+    const articleNode = locateArticleNode(parsed);
+    const errors = validateArticleSchema(articleNode);
     if (errors.length > 0) {
         logger.warn("[SchemaValidation] Invalid schema", { errors });
         return false;
@@ -74,10 +99,6 @@ export function validateSchemaOnly(schemaJson: string): boolean {
     return true;
 }
 
-/**
- * Async variant that also clears schemaMarkup on the Blog record when invalid.
- * Only call this when the blog already exists in the DB.
- */
 export async function validateAndSaveSchema(blogId: string, schemaJson: string): Promise<boolean> {
     let parsed: unknown;
 
@@ -89,14 +110,44 @@ export async function validateAndSaveSchema(blogId: string, schemaJson: string):
         return false;
     }
 
-    const root = Array.isArray(parsed) ? parsed[0] : parsed;
-    const errors = validateArticleSchema(root);
+    const articleNode = locateArticleNode(parsed);
+
+    if (articleNode) {
+        try {
+            const blog = await prisma.blog.findUnique({
+                where: { id: blogId },
+                select: { publishedAt: true, updatedAt: true, createdAt: true },
+            });
+
+            if (!blog) {
+                logger.warn("[SchemaValidation] Blog record not found — skipping schema save", { blogId });
+                return false;
+            }
+
+            if (!blog.publishedAt) {
+                logger.warn("[SchemaValidation] Blog has no publishedAt yet — using createdAt for datePublished", { blogId });
+            }
+
+            articleNode.datePublished = (blog.publishedAt ?? blog.createdAt).toISOString();
+            articleNode.dateModified = blog.updatedAt.toISOString();
+        } catch (err: unknown) {
+            logger.error("[SchemaValidation] Failed to load blog lifecycle timestamps", { blogId, error: formatError(err) });
+            return false;
+        }
+    }
+
+    const errors = validateArticleSchema(articleNode);
 
     if (errors.length > 0) {
         logger.warn("[SchemaValidation] Invalid schema — clearing", { blogId, errors });
         await prisma.blog.update({ where: { id: blogId }, data: { schemaMarkup: null } });
         return false;
     }
+
+    await prisma.blog.update({
+        where: { id: blogId },
+        data: { schemaMarkup: JSON.stringify(parsed) },
+    });
 
     return true;
 }
