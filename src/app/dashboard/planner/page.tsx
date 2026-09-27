@@ -723,7 +723,6 @@ export default function PlannerPage() {
                         </div>
                     ))}
                 </div>
-            </div>
 
             {/* ── GSC Opportunity suggestions ── */}
             <GscSuggestionsPanel

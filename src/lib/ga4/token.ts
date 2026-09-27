@@ -110,7 +110,7 @@ export async function getUserGa4Token(userId: string): Promise<string> {
         });
         // Guard: the legacy account MUST have analytics.readonly scope.
         // google-gsc accounts without this scope cannot provide GA4 data.
-        acc = legacyAcc as typeof acc;
+        acc = legacyAcc;
         if (acc && !acc.scope?.includes("analytics.readonly")) {
             acc = null; // reject google-gsc accounts without analytics.readonly
         }
