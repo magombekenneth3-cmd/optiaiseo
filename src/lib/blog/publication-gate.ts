@@ -18,7 +18,20 @@ import {
 import type { ResearchEvidenceLedger } from "./evidence-ledger";
 import type { ClaimPlan } from "./claim-plan";
 
-export type GateStatus = "PASS" | "REVIEW" | "FAIL";
+/**
+ * PASS       — gate fully passed.
+ * FAIL       — gate detected a genuine content problem (fabrication, bad structure, etc.).
+ * REVIEW     — gate detected a potential issue that requires human editorial review.
+ * UNAVAILABLE — gate could NOT run because an infrastructure dependency failed
+ *               (AI provider, Redis, external API). This is NOT a content failure.
+ *               Publication route: REVIEW (not FAIL, not REJECT).
+ *
+ * This distinction is critical:
+ *   FAIL       = "the content is bad"
+ *   UNAVAILABLE = "we could not verify the content"
+ * Never conflate these two states.
+ */
+export type GateStatus = "PASS" | "REVIEW" | "FAIL" | "UNAVAILABLE";
 
 export interface IndependentGateResult {
     name: string;
@@ -49,8 +62,15 @@ export interface PublicationDecision {
     canPublish: boolean;
     status: "DRAFT" | "NEEDS_REVIEW" | "EVIDENCE_REVIEW" | "REJECTED";
     gates: IndependentGateResult[];
+    /** Hard content failures that block publication (fabrication, bad metadata, etc.). */
     blockers: string[];
+    /** Soft issues that require human editorial review before publication. */
     reviewReasons: string[];
+    /**
+     * Infrastructure/dependency failures that prevented a gate from running.
+     * These route to REVIEW, not REJECT. The content may be fine; we just couldn't verify it.
+     */
+    systemFailures: string[];
     summary: string;
     legacyResult: PublicationGateResult;
 }
@@ -186,6 +206,18 @@ async function evaluateOriginalityGate(input: PublicationGateInput): Promise<Ind
             targetKeywords: input.targetKeywords,
         });
 
+        if (origStatus === "UNAVAILABLE") {
+            // AI provider was unavailable — this is NOT a content failure.
+            // Return UNAVAILABLE so buildPublicationDecision routes to REVIEW not FAIL.
+            return {
+                name: "Originality",
+                status: "UNAVAILABLE",
+                isHard: false,
+                issues: ["Originality check unavailable: AI provider failed. Human review required before publication."],
+                warnings: [],
+            };
+        }
+
         if (!result.passed) {
             issues.push(...result.missingValue);
             if (result.weakSections.length > 0) {
@@ -199,11 +231,12 @@ async function evaluateOriginalityGate(input: PublicationGateInput): Promise<Ind
         return { name: "Originality", status: origStatus, isHard: false, issues, warnings };
     } catch (err) {
         logger.error("[Publication Gate] Originality gate threw", { error: (err as Error)?.message });
+        // Infrastructure crash — return UNAVAILABLE, not REVIEW/FAIL
         return {
             name: "Originality",
-            status: "REVIEW",
+            status: "UNAVAILABLE",
             isHard: false,
-            issues: ["Originality validation failed; human editorial review is required."],
+            issues: ["Originality validation threw an unexpected error; human editorial review is required."],
             warnings: [],
         };
     }
@@ -353,7 +386,15 @@ export function getPublicationBlockers(gates: IndependentGateResult[]): string[]
         .flatMap(g => g.issues.map(issue => `[${g.name}] ${issue}`));
 }
 
+/** Returns structured reasons for gates in UNAVAILABLE state (infrastructure/dependency failures). */
+export function getSystemFailures(gates: IndependentGateResult[]): string[] {
+    return gates
+        .filter(g => g.status === "UNAVAILABLE")
+        .flatMap(g => g.issues.map(issue => `[${g.name}/UNAVAILABLE] ${issue}`));
+}
+
 export function canPublishBlog(gates: IndependentGateResult[]): boolean {
+    // UNAVAILABLE is not a blocker — it routes to REVIEW, not FAIL.
     return gates.filter(g => g.isHard).every(g => g.status !== "FAIL");
 }
 
@@ -362,9 +403,16 @@ export function buildPublicationDecision(
     evidenceAvailability: string,
 ): PublicationDecision {
     const blockers = getPublicationBlockers(gates);
+    const systemFailures = getSystemFailures(gates);
     const reviewReasons = gates
         .filter(g => g.status === "REVIEW")
         .flatMap(g => g.issues.map(issue => `[${g.name}] ${issue}`));
+
+    // UNAVAILABLE gates always force REVIEW — never REJECT.
+    // "The AI couldn't verify this" is fundamentally different from "the content is bad".
+    const unavailableReasons = gates
+        .filter(g => g.status === "UNAVAILABLE")
+        .flatMap(g => g.issues.map(issue => `[${g.name}/UNAVAILABLE] ${issue}`));
 
     const hasFabrication = gates.some(
         g => g.name === "Claims" && g.status === "FAIL" && g.issues.some(i => /fabrication/i.test(i)),
@@ -374,13 +422,15 @@ export function buildPublicationDecision(
 
     let status: "DRAFT" | "NEEDS_REVIEW" | "EVIDENCE_REVIEW" | "REJECTED";
     if (hasFabrication) {
+        // Hard content failure — fabrication is always REJECTED regardless of infra state.
         status = "REJECTED";
     } else if (blockers.length > 0) {
         const hasEvidenceBlocker = gates.some(g =>
             (g.name === "Research" || g.name === "Evidence") && g.status === "FAIL",
         );
         status = hasEvidenceBlocker ? "EVIDENCE_REVIEW" : "NEEDS_REVIEW";
-    } else if (reviewReasons.length > 0) {
+    } else if (reviewReasons.length > 0 || unavailableReasons.length > 0 || systemFailures.length > 0) {
+        // Mix of REVIEW and UNAVAILABLE — both route to NEEDS_REVIEW.
         status = "NEEDS_REVIEW";
     } else {
         status = "DRAFT";
@@ -393,14 +443,17 @@ export function buildPublicationDecision(
 
     const passed = status === "DRAFT";
 
-    const allBlockingIssues = gates.flatMap(g => g.issues);
+    const allBlockingIssues = gates.filter(g => g.status === "FAIL").flatMap(g => g.issues);
     const allWarnings = gates.flatMap(g => g.warnings);
     const evidenceIssues = gates
         .filter(g => g.name === "Research" || g.name === "Evidence")
         .flatMap(g => g.issues);
-    const originalityIssues = gates
-        .filter(g => g.name === "Originality" || g.name === "Editorial")
-        .flatMap(g => g.issues);
+    const originalityIssues = [
+        ...gates
+            .filter(g => g.name === "Originality" || g.name === "Editorial")
+            .flatMap(g => g.issues),
+        ...unavailableReasons, // surface UNAVAILABLE as originality issues for visibility
+    ];
     const fabricationIssues = gates
         .filter(g => g.name === "Claims" || g.name === "Evidence")
         .flatMap(g => g.issues.filter(i => /fabricat/i.test(i)));
@@ -413,7 +466,7 @@ export function buildPublicationDecision(
         status,
         evidenceAvailability: evidenceAvailability as PublicationGateResult["evidenceAvailability"],
         blockingIssues: uniqueIssues(allBlockingIssues, 50),
-        warnings: uniqueIssues(allWarnings, 50),
+        warnings: uniqueIssues([...allWarnings, ...systemFailures], 50),
         evidenceIssues: uniqueIssues(evidenceIssues, 30),
         originalityIssues: uniqueIssues(originalityIssues, 20),
         repetitionIssues: uniqueIssues(repetitionIssues, 20),
@@ -425,7 +478,9 @@ export function buildPublicationDecision(
         ? `All gates passed (${gateStatusSummary}). Ready for publication.`
         : blockers.length > 0
           ? `Publication blocked by ${blockers.length} hard gate failure(s): ${blockers.slice(0, 3).join("; ")}. Gate states: ${gateStatusSummary}.`
-          : `Requires review: ${reviewReasons.slice(0, 3).join("; ")}. Gate states: ${gateStatusSummary}.`;
+          : systemFailures.length > 0
+            ? `Requires review: ${systemFailures.length} gate(s) UNAVAILABLE due to infrastructure failures. Human review required. Gate states: ${gateStatusSummary}.`
+            : `Requires review: ${reviewReasons.slice(0, 3).join("; ")}. Gate states: ${gateStatusSummary}.`;
 
     return {
         canPublish: passed,
@@ -433,6 +488,7 @@ export function buildPublicationDecision(
         gates,
         blockers,
         reviewReasons,
+        systemFailures,
         summary,
         legacyResult,
     };
@@ -459,6 +515,9 @@ export async function evaluatePublicationGate(
         gateStates: Object.fromEntries(gates.map(g => [g.name, g.status])),
         blockerCount: decision.blockers.length,
         reviewCount: decision.reviewReasons.length,
+        // systemFailureCount > 0 means infra failed, not content — critical for alerting
+        systemFailureCount: decision.systemFailures.length,
+        systemFailures: decision.systemFailures.slice(0, 3),
     });
 
     return decision;

@@ -1,8 +1,12 @@
 import { createHmac } from "crypto";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const { update, send } = vi.hoisted(() => ({ update: vi.fn(), send: vi.fn() }));
-vi.mock("@/lib/prisma", () => ({ prisma: { seoFixProposal: { update } } }));
+const { update, send, findUnique } = vi.hoisted(() => ({
+  update: vi.fn(),
+  send: vi.fn(),
+  findUnique: vi.fn(),
+}));
+vi.mock("@/lib/prisma", () => ({ prisma: { seoFixProposal: { update, findUnique } } }));
 vi.mock("@/lib/inngest/client", () => ({ inngest: { send } }));
 
 import { POST } from "@/app/api/seo-fix/deployment/route";
@@ -10,6 +14,7 @@ import { POST } from "@/app/api/seo-fix/deployment/route";
 describe("SEO deployment webhook", () => {
   beforeEach(() => {
     process.env.DEPLOYMENT_WEBHOOK_SECRET = "test-secret";
+    findUnique.mockReset().mockResolvedValue({ id: "proposal_1", mergeCommitSha: null, status: "MERGED" });
     update.mockReset().mockResolvedValue({ id: "proposal_1" });
     send.mockReset().mockResolvedValue({});
   });
@@ -30,6 +35,9 @@ describe("SEO deployment webhook", () => {
     }) as never);
     expect(response.status).toBe(200);
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "proposal_1" } }));
-    expect(send).toHaveBeenCalledWith({ name: "seo-fix/deployed", data: { proposalId: "proposal_1" } });
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({
+      name: "seo-fix/deployed",
+      data: expect.objectContaining({ proposalId: "proposal_1" }),
+    }));
   });
 });

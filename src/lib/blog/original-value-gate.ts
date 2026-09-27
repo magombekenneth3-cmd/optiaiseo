@@ -63,20 +63,26 @@ interface LlmOriginalityResult {
     uniqueContributions: string[];
     paraphrasedSections: string[];
     overallOriginal: boolean;
+    /** True when the LLM was available and produced a result. False when it failed or was skipped. */
+    llmAvailable: boolean;
 }
 
 async function checkOriginalityVsSerp(
     content: string,
     serpContext: SerpContext | null,
 ): Promise<LlmOriginalityResult> {
-    const fallback: LlmOriginalityResult = {
+    const unavailableFallback: LlmOriginalityResult = {
         uniqueContributions: [],
         paraphrasedSections: [],
         overallOriginal: false,
+        llmAvailable: false,
     };
 
-    if (!serpContext || serpContext.results.length === 0) return fallback;
-    if (!process.env.GEMINI_API_KEY) return fallback;
+    // SERP data is absent — skip LLM check, but this is not a failure.
+    if (!serpContext || serpContext.results.length === 0) {
+        return { ...unavailableFallback, llmAvailable: true }; // no SERP ≠ LLM failure
+    }
+    if (!process.env.GEMINI_API_KEY) return unavailableFallback;
 
     const competitorSummary = serpContext.results.slice(0, 3)
         .map(r => {
@@ -107,16 +113,17 @@ Respond with JSON only:
 }`;
 
     try {
-        return await callGeminiJson<LlmOriginalityResult>(prompt, {
+        const result = await callGeminiJson<LlmOriginalityResult>(prompt, {
             model: AI_MODELS.GEMINI_FLASH,
             temperature: 0.1,
             maxOutputTokens: 800,
         });
+        return { ...result, llmAvailable: true };
     } catch (err) {
-        logger.warn("[Original Value Gate] LLM originality check failed — using heuristics only", {
+        logger.warn("[Original Value Gate] LLM originality check failed — using heuristics only; gate will return UNAVAILABLE, not FAIL", {
             error: (err as Error)?.message,
         });
-        return fallback;
+        return unavailableFallback;
     }
 }
 
@@ -153,6 +160,34 @@ export async function evaluateOriginality(
     }
 
     const llmResult = await checkOriginalityVsSerp(content, serpContext);
+
+    // ── Critical architectural rule ───────────────────────────────────────────
+    // When the LLM check was UNAVAILABLE (provider failure, rate-limit, no API key),
+    // we must NOT treat the content as having failed originality.
+    // Return UNAVAILABLE so the Publication Gate can route to REVIEW rather than FAIL.
+    //
+    // We only use the heuristic analysis when the LLM was unavailable, and only
+    // for REVIEW routing — never for hard FAIL routing without LLM confirmation.
+    // ─────────────────────────────────────────────────────────────────────────
+    if (!llmResult.llmAvailable && serpContext && serpContext.results.length > 0) {
+        // LLM was available (SERP data present, API key set) but the call failed.
+        // Return UNAVAILABLE so the gate degrades to REVIEW, not FAIL.
+        logger.warn("[Original Value Gate] LLM unavailable — returning UNAVAILABLE status (not FAIL)", {
+            weakSections: weakSections.length,
+            totalSections: sectionAnalyses.length,
+        });
+        return {
+            status: "UNAVAILABLE" as GateStatus,
+            result: {
+                passed: false,
+                uniqueContributions: [],
+                weakSections,
+                duplicateSections: [],
+                missingEvidence,
+                missingValue: ["Originality check unavailable: AI provider failed. Human editorial review required."],
+            },
+        };
+    }
 
     const uniqueContributions = [...llmResult.uniqueContributions];
     const authorEvidence = input.researchPacket.authorEvidence;

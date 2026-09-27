@@ -70,16 +70,17 @@ function getOAuthCredentials(): { clientId: string; clientSecret: string } {
  * Resolution order:
  * 1. Redis cache (`ga4:token:{userId}`)
  * 2. Dedicated `google-ga4` Account row
+ * 3. Legacy fallback: google-gsc / google Account with `analytics.readonly` scope
+ *    (migration bridge — this ensures existing users who connected GA4 via the
+ *    GSC OAuth flow before the dedicated google-ga4 provider existed continue to
+ *    receive data. This path is bounded and will be removed once all users have
+ *    migrated to the dedicated google-ga4 Account.)
  *
  * Provider isolation invariant:
- *   GA4 credentials come from `google-ga4` ONLY.
- *   GSC credentials come from `google-gsc` ONLY (see getUserGscToken).
- *   No cross-provider fallback exists. Disconnecting one integration
- *   can never affect the other.
- *
- * Users who previously connected GSC with analytics.readonly scope
- * but never connected a dedicated google-ga4 will see GA4 as
- * "not_connected" and should be prompted to connect GA4 separately.
+ *   GA4 credentials come from `google-ga4` ONLY for new users.
+ *   The legacy fallback ensures existing users who granted analytics.readonly
+ *   via the GSC flow continue to receive GA4 data until they reconnect.
+ *   Disconnecting GSC does NOT affect a dedicated google-ga4 Account, and vice versa.
  */
 export async function getUserGa4Token(userId: string): Promise<string> {
     const now = Math.floor(Date.now() / 1000);
@@ -87,13 +88,33 @@ export async function getUserGa4Token(userId: string): Promise<string> {
     const cached = await getCachedToken(userId);
     if (cached) return cached;
 
-    // Strict: only google-ga4 provider — no cross-provider fallback
-    const acc = await prisma.account.findFirst({
+    // Primary: dedicated google-ga4 Account — strict isolation
+    let acc = await prisma.account.findFirst({
         where: {
             userId,
             provider: "google-ga4",
         },
     });
+
+    // Legacy fallback: google-gsc / google Account with analytics.readonly scope.
+    // This path activates only when no google-ga4 Account exists.
+    // Legacy fallback ensures existing users who connected GA4 before the
+    // dedicated google-ga4 provider existed continue to receive analytics data.
+    if (!acc) {
+        const legacyAcc = await prisma.account.findFirst({
+            where: {
+                userId,
+                provider: { in: ["google-gsc", "google"] },
+            },
+            orderBy: [{ provider: "desc" }],
+        });
+        // Guard: the legacy account MUST have analytics.readonly scope.
+        // google-gsc accounts without this scope cannot provide GA4 data.
+        acc = legacyAcc as typeof acc;
+        if (acc && !acc.scope?.includes("analytics.readonly")) {
+            acc = null; // reject google-gsc accounts without analytics.readonly
+        }
+    }
 
     if (!acc?.access_token) {
         throw new Error("GA4_NOT_CONNECTED");

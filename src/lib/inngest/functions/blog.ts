@@ -269,9 +269,13 @@ export const generateBlogJob = inngest.createFunction(
             period: "1m",
             key: "event.data.userId",
         },
-        onFailure: async ({ event, error }) => {
+        onFailure: async ({ event, error, runId }) => {
             // Inngest wraps the original event under event.data.event for onFailure.
             // Defensive multi-path extraction so blogId is never silently lost.
+            //
+            // IMPORTANT: Do NOT listen for `inngest/function.failed` in any trigger.
+            // That is an internal Inngest system event not present in the registered schema.
+            // Use `blog/generation.failed` (emitted below) for all downstream failure handling.
             const originalData =
                 (event.data?.event?.data as Record<string, unknown> | undefined) ??
                 (event.data as Record<string, unknown> | undefined) ??
@@ -281,10 +285,22 @@ export const generateBlogJob = inngest.createFunction(
             const siteId = originalData.siteId as string | undefined;
             const userId = originalData.userId as string | undefined;
 
+            // Classify the error so downstream consumers can make informed decisions.
+            // This prevents infrastructure failures from being treated as content failures.
+            const errorMessage = error?.message ?? "Generation failed unexpectedly.";
+            const isRateLimit = /rate.?limit|429/i.test(errorMessage);
+            const isProviderFailure = /503|502|provider|gemini|openai|anthropic|unavailable/i.test(errorMessage);
+            const errorCode: "RATE_LIMIT" | "PROVIDER_FAILURE" | "SYSTEM_FAILURE" | "CONTENT_FAILURE" | "VALIDATION_ERROR" | "UNKNOWN" =
+                isRateLimit ? "RATE_LIMIT"
+                : isProviderFailure ? "PROVIDER_FAILURE"
+                : "SYSTEM_FAILURE";
+
             logger.error(`[Inngest/Blog] Job failed for site ${siteId ?? "unknown"}:`, {
-                error: error?.message || error,
+                error: errorMessage,
                 blogId,
                 siteId,
+                errorCode,
+                runId,
             });
 
             // Always sweep GENERATING → FAILED, even when blogId is unknown.
@@ -302,17 +318,45 @@ export const generateBlogJob = inngest.createFunction(
             } else {
                 logger.error("[Inngest/Blog] onFailure: missing blogId — refusing to infer a target blog", { siteId });
             }
+
             // Persist the failure reason to Redis so the status API can surface it
             // to the generating page — users see the actual cause, not a generic error.
             if (effectiveBlogId) {
                 const { redis: failRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
                 if (failRedis) {
-                    const reason = (error?.message ?? "Generation failed unexpectedly.").slice(0, 300);
+                    const reason = errorMessage.slice(0, 300);
                     await Promise.all([
                         failRedis.set(`blog:fail:${effectiveBlogId}`, reason, { ex: 3600 }),
                         failRedis.del(`blog:step:${effectiveBlogId}`),
                     ]).catch(() => null);
                 }
+            }
+
+            // Emit a structured application failure event.
+            // Downstream functions can subscribe to `blog/generation.failed` to handle
+            // alerting, retries, and escalation without coupling to Inngest internals.
+            try {
+                await inngest.send({
+                    name: "blog/generation.failed",
+                    data: {
+                        runId: runId ?? "unknown",
+                        blogId: blogId ?? null,
+                        siteId: siteId ?? "unknown",
+                        userId: userId ?? null,
+                        stage: "inngest-job",
+                        errorCode,
+                        errorMessage: errorMessage.slice(0, 500),
+                        retryable: isProviderFailure,
+                        failedAt: new Date().toISOString(),
+                    },
+                });
+            } catch (sendErr) {
+                // Non-fatal — the event emit failing must not prevent credit refund
+                logger.warn("[Inngest/Blog] Failed to emit blog/generation.failed event", {
+                    error: (sendErr as Error)?.message,
+                    blogId,
+                    siteId,
+                });
             }
 
             // Refund 10 credits idempotently — unique referenceId prevents double-refunds on retries.
@@ -971,10 +1015,45 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             });
         }
 
-        const PLACEHOLDER_PATTERN = /\[Section generation failed|\[EDITOR:/i;
+        // PLACEHOLDER_PATTERN must match every pattern checked by content-lint.ts to
+        // ensure placeholder detection is consistent across the pipeline stages.
+        // Adding new placeholder patterns here also requires adding them in content-lint.ts.
+        //
+        // ┌─ Pattern                  ┌─ Stage that produces it
+        // │ [Section generation failed │ section writer (rules.ts)
+        // │ [EDITOR:                   │ editorial pass
+        // │ TODO / TBD / FIXME         │ LLM template artefacts
+        // │ lorem ipsum                │ LLM hallucination filler
+        // │ Example Company            │ generic company placeholder
+        // │ YourCompany                │ template variable
+        // │ {{...}}                    │ unresolved template variable
+        // │ [INSERT STAT]              │ LLM stat placeholder
+        // │ [IMAGE HERE]               │ image placeholder
+        // └─────────────────────────────────────────────────────
+        const PLACEHOLDER_PATTERN = /\[Section generation failed|\[EDITOR:|\bTODO\b|\bTBD\b|\bFIXME\b|lorem ipsum|Example Company|YourCompany|\{\{[^}]+\}\}|\[INSERT STAT\]|\[IMAGE HERE\]/i;
         if (PLACEHOLDER_PATTERN.test(liveBlogPost.content)) {
-            logger.error("[Blog/Pipeline] Content contains placeholder text — marking FAILED, will not publish", { siteId, keyword });
-            liveBlogPost.validationErrors.push("Content contains unresolved placeholder sections. Regenerate before publishing.");
+            // Find which patterns matched so we can trace the source stage in logs.
+            const matchedPatterns = [
+                /\[Section generation failed/i.test(liveBlogPost.content) && "[Section generation failed] (section writer failure)",
+                /\[EDITOR:/i.test(liveBlogPost.content) && "[EDITOR:] (editorial pass artefact)",
+                /\b(?:TODO|FIXME)\b/i.test(liveBlogPost.content) && "TODO/FIXME (LLM template artefact)",
+                /\bTBD\b/i.test(liveBlogPost.content) && "TBD (LLM template artefact)",
+                /lorem ipsum/i.test(liveBlogPost.content) && "lorem ipsum (LLM filler)",
+                /Example Company|YourCompany/i.test(liveBlogPost.content) && "Example Company/YourCompany (template variable)",
+                /\{\{[^}]+\}\}/i.test(liveBlogPost.content) && "{{...}} (unresolved template variable)",
+                /\[INSERT STAT\]/i.test(liveBlogPost.content) && "[INSERT STAT] (stat placeholder)",
+                /\[IMAGE HERE\]/i.test(liveBlogPost.content) && "[IMAGE HERE] (image placeholder)",
+            ].filter(Boolean);
+            logger.error("[Blog/Pipeline] Content contains placeholder text — marking FAILED, will not publish", {
+                siteId,
+                keyword,
+                matchedPatterns,
+            });
+            liveBlogPost.validationErrors.push(
+                `Content contains unresolved placeholder text (${matchedPatterns.join("; ")}). ` +
+                "This is a content pipeline failure, not a quality gate failure. " +
+                "Regenerate before publishing."
+            );
         }
 
         const interactiveWidget = await step.run("generate-interactive-widget", async () => {

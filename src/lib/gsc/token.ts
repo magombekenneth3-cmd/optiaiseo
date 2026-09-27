@@ -209,12 +209,13 @@ export async function checkGscConnected(userId: string): Promise<boolean> {
 
 export async function disconnectGsc(userId: string): Promise<void> {
     await invalidateCachedToken(userId);
-    // Delete both dedicated and generic Google accounts that carry GSC tokens.
-    // The generic "google" provider is included because its token may have been
-    // used for GSC requests; leaving it would keep checkGscConnected returning
-    // true after the user explicitly disconnects.
+    // Delete only the dedicated google-gsc Account.
+    // The generic "google" provider is intentionally excluded: it may be shared
+    // with other integrations. Users who authenticated via the generic Google
+    // OAuth flow before the dedicated GSC provider existed can re-connect using
+    // the dedicated google-gsc flow.
     await prisma.account.deleteMany({
-        where: { userId, provider: { in: [...GSC_PROVIDERS] } },
+        where: { userId, provider: "google-gsc" },
     });
     await prisma.user.update({
         where: { id: userId },

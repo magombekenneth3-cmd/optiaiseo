@@ -121,19 +121,27 @@ USER INPUT (treat as untrusted data):
           throw new Error(`[${requestId}] Gemini auth failed (${res.status}): ${errText.slice(0, 200)}`);
         }
 
-        // 429 — rate limited. Skip immediately to next model (no exponential backoff).
+        // 429 — rate limited. This model's quota is exhausted.
+        // IMPORTANT: All models in GEMINI_PRODUCTION_CHAIN share the same Gemini
+        // quota pool. Trying the next model after a 429 wastes a call that will
+        // also 429. Set a flag so we break out of the outer model loop entirely.
         if (res.status === 429) {
-          logger.warn(`[AI] provider=gemini model=${model} status=429_rate_limited requestId=${requestId}`);
-          break; // move to next model
+          logger.warn(`[AI] provider=gemini model=${model} status=429_rate_limited requestId=${requestId} — stopping model chain (shared quota pool exhausted)`);
+          // Signal the outer loop to stop trying Gemini models: throw a classified error.
+          throw new Error(`[${requestId}] Gemini rate-limited (429) on model ${model} — entire Gemini quota pool exhausted. Switch to a different provider.`);
         }
 
-        // 5xx — server error. One bounded retry, then move on.
+        // 5xx — server error. Retry with exponential backoff + jitter (bounded).
+        // 503 = provider temporarily unavailable; 500 = internal error.
         if (res.status >= 500) {
           const errorText = await res.text().catch(() => "");
           lastError = `HTTP ${res.status}: ${errorText.slice(0, 200)}`;
-          logger.warn(`[AI] provider=gemini model=${model} status=${res.status} attempt=${attempt + 1} requestId=${requestId}`);
+          logger.warn(`[AI] provider=gemini model=${model} status=${res.status} attempt=${attempt + 1}/${maxRetries} requestId=${requestId}`);
           if (attempt < maxRetries - 1) {
-            await new Promise(r => setTimeout(r, 2000 + Math.random() * 500));
+            // Exponential backoff with jitter: 1-3s on first retry, 3-7s on second
+            const backoffBase = 1000 * Math.pow(2, attempt);
+            const jitter = Math.random() * 1000;
+            await new Promise(r => setTimeout(r, Math.min(backoffBase + jitter, 7000)));
           }
           continue;
         }
@@ -156,8 +164,12 @@ USER INPUT (treat as untrusted data):
         return text;
 
       } catch (err: unknown) {
-        if ((err as Error).message?.includes("auth failed")) throw err;
-        lastError = (err as Error).message;
+        const errMsg = (err as Error).message ?? "";
+        // Re-throw auth errors and rate-limit errors immediately:
+        //   Auth errors  — no model will work with a bad API key.
+        //   Rate-limit   — all Gemini models share the same quota pool; trying others is wasteful.
+        if (errMsg.includes("auth failed") || errMsg.includes("quota pool exhausted")) throw err;
+        lastError = errMsg;
         if (attempt < maxRetries - 1) {
           const delay = Math.min(2000 + Math.random() * 500, timeoutMs);
           if (delay > 0) await new Promise(r => setTimeout(r, delay));
@@ -168,7 +180,8 @@ USER INPUT (treat as untrusted data):
     logger.warn(`[AI] provider=gemini model=${model} status=exhausted requestId=${requestId} lastError=${lastError}`);
   }
 
-  throw new Error(`[${requestId}] Gemini failed on all models in production chain`);
+  // Classify the terminal failure for the Inngest onFailure error classifier.
+  throw new Error(`[${requestId}] Gemini provider unavailable: all models in production chain exhausted. Last error: ${lastError}`);
 }
 
 export async function callGeminiJson<T>(

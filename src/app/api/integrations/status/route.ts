@@ -71,15 +71,13 @@ export async function GET(req: NextRequest) {
                 },
             }),
             prisma.account.findFirst({
-                where: { userId, provider: { in: [...GSC_PROVIDERS] } },
+                where: { userId, provider: "google-gsc" },
                 select: { id: true, providerAccountId: true, scope: true, refresh_token: true },
             }),
             prisma.account.findFirst({
                 where: { userId, provider: "google-ga4" },
                 select: { id: true, providerAccountId: true, scope: true, refresh_token: true },
             }),
-            // Site-scoped lookup: if siteId is provided, find that specific site;
-            // otherwise fall back to the user's first site.
             requestedSiteId
                 ? prisma.site.findUnique({
                     where: { id: requestedSiteId },
