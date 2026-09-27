@@ -21,12 +21,7 @@ interface Props {
     siteId: string | null;
 }
 
-/**
- * NextBestActionCard — Compact inline strip
- * ─────────────────────────────────────────────────────────────────────────────
- * Single-row action prompt with left accent border. Replaces the large
- * full-width banner. First unmet condition wins.
- */
+
 export function NextBestActionCard({
     hasSite,
     hasAudit,

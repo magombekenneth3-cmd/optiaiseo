@@ -8,7 +8,7 @@ import { ChatOpsTerminal } from "@/components/dashboard/ChatOps";
 import { OnboardingWizard } from "@/components/dashboard/OnboardingWizard";
 import { CommandPalette } from "@/components/dashboard/CommandPalette";
 
-import { SiteContextCallout } from "@/components/dashboard/SiteContextCallout";
+import { SiteContextBar } from "@/components/dashboard/SiteContextBar";
 import { VoiceDiscoveryButtonClient } from "@/components/dashboard/VoiceDiscoveryButtonClient";
 import type { Metadata } from "next";
 import { getDashboardUser } from "@/lib/auth/dashboard-context";
@@ -143,10 +143,10 @@ export default async function DashboardLayout({
         {/* Trial banner — flush full-width between header and main */}
         {trialBanner}
 
-        {/* Site context callout — shown on site-dependent pages with no active site */}
-        <SiteContextCallout
-          hasSites={userSites.length > 0}
-          hasActiveSite={defaultSiteId !== null}
+        {/* Site context bar — persistent site identity + switcher */}
+        <SiteContextBar
+          sites={userSites}
+          defaultSiteId={defaultSiteId}
         />
 
         {/* Page Content */}

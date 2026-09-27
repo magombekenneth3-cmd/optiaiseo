@@ -423,16 +423,35 @@ export function TopHeader({ mobileSidebar }: { mobileSidebar?: ReactNode }) {
                 </Link>
             );
         }
-        if (pathname === "/dashboard" || pathname.startsWith("/dashboard/sites") || pathname.startsWith("/dashboard/keywords") ||
-            pathname.startsWith("/dashboard/aeo") || pathname.startsWith("/dashboard/blogs") ||
-            pathname.startsWith("/dashboard/content-decay") || pathname.startsWith("/dashboard/recommendations") ||
-            pathname.startsWith("/dashboard/planner") || pathname.startsWith("/dashboard/indexing")) {
+        if (pathname.startsWith("/dashboard/blogs") || pathname.startsWith("/dashboard/editor") || pathname.startsWith("/dashboard/planner")) {
             return (
-                <Link href="/dashboard/audits" className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
-                    <Zap className="w-3.5 h-3.5" /> New Audit
+                <Link href="/dashboard/blogs" className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+                    <Sparkles className="w-3.5 h-3.5" /> Generate content
                 </Link>
             );
         }
+        if (pathname.startsWith("/dashboard/aeo")) {
+            return (
+                <Link href="/dashboard/aeo" className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+                    <Sparkles className="w-3.5 h-3.5" /> Run AEO scan
+                </Link>
+            );
+        }
+        if (pathname.startsWith("/dashboard/keywords")) {
+            return (
+                <Link href="/dashboard/keywords" className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+                    <Zap className="w-3.5 h-3.5" /> Track keywords
+                </Link>
+            );
+        }
+        if (pathname.startsWith("/dashboard/operations") || pathname.startsWith("/dashboard/healing")) {
+            return (
+                <Link href="/dashboard/operations" className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+                    <Zap className="w-3.5 h-3.5" /> Review operations
+                </Link>
+            );
+        }
+        // No CTA for dashboard home, settings, billing, etc. — page headers handle their own actions
         return null;
     })();
 

@@ -34,6 +34,7 @@ import type {
 } from "@/lib/recommendations/engine";
 import { OAuthConnectButton } from "@/components/auth/OAuthConnectButton";
 import { PageHeader } from "@/components/ui/design-system/PageHeader";
+import { OpportunityCard, type OpportunityAction } from "@/components/ui/design-system/OpportunityCard";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Display metadata
@@ -343,126 +344,67 @@ function ReviewModal({
 
 function RecommendationCard({
   rec,
-  onReview,
   onApprove,
   onDismiss,
   actionLoading,
 }: {
   rec: Recommendation;
-  onReview: (rec: Recommendation) => void;
   onApprove: (id: string) => void;
   onDismiss: (id: string) => void;
   actionLoading: string | null;
 }) {
   const CategoryIcon = CATEGORY_ICONS[rec.category] ?? Lightbulb;
-  const effort       = EFFORT_META[rec.effort];
-  const isGsc        = rec.source === "gsc";
+  const isGsc = rec.source === "gsc";
+  const isSetupGsc = rec.id === "setup-gsc";
+  const isPending = actionLoading === rec.opportunityId;
+
+  const badges = (
+    <>
+      {isGsc && <GscSourcePip />}
+      {rec.status && rec.status !== "ACTIVE" && <StatusBadge status={rec.status} />}
+    </>
+  );
+
+  const actions: OpportunityAction[] =
+    isGsc && rec.opportunityId
+      ? [
+          { label: "Review", href: `/dashboard/recommendations/${rec.opportunityId}`, icon: ArrowUpRight },
+          {
+            label: "Approve",
+            onClick: () => onApprove(rec.opportunityId!),
+            disabled: isPending,
+            icon: isPending ? Loader2 : CheckCircle2,
+          },
+          { label: "Dismiss", onClick: () => onDismiss(rec.opportunityId!), disabled: isPending, icon: XCircle },
+        ]
+      : !isSetupGsc && rec.cta
+        ? [{ label: rec.cta.label, href: rec.cta.href, external: rec.cta.external, icon: rec.cta.external ? ExternalLink : ChevronRight }]
+        : [];
 
   return (
-    <article className="card-surface p-5 flex flex-col gap-4 hover:border-border/80 transition-colors group">
-      {/* Header */}
-      <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-xl bg-accent border border-border flex items-center justify-center shrink-0">
-          <CategoryIcon className="w-4 h-4 text-emerald-400" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center flex-wrap gap-2 mb-1">
-            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-              {rec.category}
-            </span>
-            <PriorityBadge priority={rec.priority} />
-            {isGsc && <GscSourcePip />}
-            {rec.status && rec.status !== "ACTIVE" && <StatusBadge status={rec.status} />}
-          </div>
-          <h2 className="text-sm font-semibold text-foreground leading-snug">
-            {rec.title}
-          </h2>
-        </div>
-      </div>
-
-      {/* Description */}
-      <p className="text-[13px] text-muted-foreground leading-relaxed flex-1 line-clamp-3">
-        {rec.description}
-      </p>
-
-      {/* GSC stats grid */}
-      {rec.stats && rec.stats.length > 0 && <StatRow stats={rec.stats} />}
-
-      {/* Impact chip */}
-      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
-        <Rocket className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-        <span className="text-[12px] font-medium text-emerald-300">{rec.impact}</span>
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between gap-2 pt-1">
-        <span className={`text-[11px] font-medium ${effort.cls}`}>
-          {effort.label}
-        </span>
-        <div className="flex flex-wrap gap-1">
-          {rec.tags.slice(0, 2).map((t) => (
-            <span
-              key={t}
-              className="text-[10px] px-1.5 py-0.5 rounded bg-accent/60 text-muted-foreground border border-border"
-            >
-              {t}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* Actions */}
-      {isGsc && rec.opportunityId ? (
-        <div className="flex items-center gap-2 pt-1 border-t border-border/30">
-          <a
-            href={`/dashboard/recommendations/${rec.opportunityId}`}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-lg text-[13px] font-semibold text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-          >
-            <ArrowUpRight className="w-3.5 h-3.5" />
-            Review
-          </a>
-          <button
-            onClick={() => onApprove(rec.opportunityId!)}
-            disabled={actionLoading === rec.opportunityId}
-            className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-[12px] font-semibold text-blue-400 hover:bg-blue-500/10 transition-colors disabled:opacity-50"
-          >
-            {actionLoading === rec.opportunityId ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-            Approve
-          </button>
-          <button
-            onClick={() => onDismiss(rec.opportunityId!)}
-            disabled={actionLoading === rec.opportunityId}
-            className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-[12px] font-semibold text-zinc-500 hover:bg-zinc-500/10 transition-colors disabled:opacity-50"
-          >
-            <XCircle className="w-3 h-3" />
-          </button>
-        </div>
-      ) : rec.cta && rec.id === "setup-gsc" ? (
+    <OpportunityCard
+      icon={CategoryIcon}
+      eyebrow={rec.category}
+      impact={rec.priority}
+      badges={badges}
+      title={rec.title}
+      whyItMatters={rec.description}
+      evidence={rec.impact}
+      tags={rec.tags.slice(0, 2)}
+      effort={rec.effort}
+      actions={actions}
+    >
+      {isSetupGsc && rec.cta && (
         <OAuthConnectButton
           provider="google-gsc"
           callbackUrl="/dashboard"
           className="inline-flex items-center gap-1.5 text-[13px] font-medium text-primary hover:text-emerald-400 transition-colors"
         >
           {rec.cta.label}
-          <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          <ChevronRight className="w-3.5 h-3.5" />
         </OAuthConnectButton>
-      ) : rec.cta ? (
-        <a
-          href={rec.cta.href}
-          {...(rec.cta.external
-            ? { target: "_blank", rel: "noopener noreferrer" }
-            : {})}
-          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-primary hover:text-emerald-400 transition-colors"
-        >
-          {rec.cta.label}
-          {rec.cta.external ? (
-            <ExternalLink className="w-3.5 h-3.5" />
-          ) : (
-            <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-          )}
-        </a>
-      ) : null}
-    </article>
+      )}
+    </OpportunityCard>
   );
 }
 
@@ -730,7 +672,6 @@ export function RecommendationsDashboard({
             <RecommendationCard
               key={rec.id}
               rec={rec}
-              onReview={setReviewRec}
               onApprove={handleApprove}
               onDismiss={handleDismiss}
               actionLoading={actionLoading}

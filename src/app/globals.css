@@ -37,6 +37,21 @@
   --danger: #ef4444;
   --info: #3b82f6;
 
+  /* AI Accent */
+  --ai-accent: #8b5cf6;
+  --ai-accent-bg: rgba(139, 92, 246, 0.08);
+
+  /* Semantic surfaces */
+  --surface-primary: var(--card);
+  --surface-secondary: var(--muted);
+  --surface-elevated: var(--card);
+  --text-primary: var(--foreground);
+  --text-secondary: var(--muted-foreground);
+  --text-tertiary: #a1a1aa;
+  --border-subtle: var(--border);
+  --border-default: var(--border);
+  --border-strong: rgba(0, 0, 0, 0.16);
+
   /* Sidebar */
   --sidebar: #fafafa;
   --sidebar-foreground: #0f0f11;
@@ -56,7 +71,7 @@
 
   /* Lifecycle */
   --lifecycle-detected: var(--info);
-  --lifecycle-analyzing: #8b5cf6;
+  --lifecycle-analyzing: var(--ai-accent);
   --lifecycle-proposed: var(--warning);
   --lifecycle-validated: var(--brand);
   --lifecycle-approved: var(--brand);
@@ -102,13 +117,23 @@
   --danger: #f87171;
   --info: #60a5fa;
 
+  /* Semantic surfaces */
+  --surface-primary: var(--card);
+  --surface-secondary: var(--muted);
+  --surface-elevated: var(--card-elevated, #1c1c20);
+  --text-primary: var(--foreground);
+  --text-secondary: var(--muted-foreground);
+  --text-tertiary: #71717a;
+  --border-subtle: var(--border);
+  --border-default: var(--border);
+
   /* AI Accent */
   --ai-accent: #a78bfa;
   --ai-accent-bg: rgba(167, 139, 250, 0.10);
 
   /* Lifecycle */
   --lifecycle-detected: var(--info);
-  --lifecycle-analyzing: #a78bfa;
+  --lifecycle-analyzing: var(--ai-accent);
   --lifecycle-proposed: var(--warning);
   --lifecycle-validated: var(--brand);
   --lifecycle-approved: var(--brand);
@@ -154,6 +179,17 @@
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-info: var(--info);
+  --color-ai: var(--ai-accent);
+  --color-ai-muted: var(--ai-accent-bg);
+  --color-surface-primary: var(--surface-primary);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);

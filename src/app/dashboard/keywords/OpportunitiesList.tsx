@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { AlertTriangle, TrendingUp, Sparkles, ArrowRight } from "lucide-react";
 import { KeywordDetailDrawer, type DrawerKeyword } from "./KeywordDetailDrawer";
+import { OpportunityCard, type OpportunityImpact } from "@/components/ui/design-system/OpportunityCard";
+import { Badge } from "@/components/ui/Badge";
 
 const CTR_BENCH: Record<number, number> = {
     1: 27.6, 2: 15.8, 3: 11.0, 4: 8.4, 5: 6.3,
@@ -30,16 +32,16 @@ interface GscKeyword {
 interface ActionItem {
     type: "fix_ctr" | "push_page1" | "create_content";
     kw: GscKeyword;
-    detail: string;
+    reason: string;
     impactLabel: string;
     est: number;
 }
 
-const CFG = {
-    fix_ctr: { icon: AlertTriangle, label: "Fix CTR", impact: "High Impact", color: "#f85149", cta: "Review page" },
-    push_page1: { icon: TrendingUp, label: "Push to Page 1", impact: "High Impact", color: "#d29922", cta: "Improve page" },
-    create_content: { icon: Sparkles, label: "Create Supporting Content", impact: "Medium Impact", color: "#388bfd", cta: "Create content" },
-} as const;
+const CFG: Record<ActionItem["type"], { icon: React.ElementType; label: string; impact: OpportunityImpact; cta: string }> = {
+    fix_ctr: { icon: AlertTriangle, label: "Fix CTR", impact: "high", cta: "Review page" },
+    push_page1: { icon: TrendingUp, label: "Push to Page 1", impact: "high", cta: "Improve page" },
+    create_content: { icon: Sparkles, label: "Create Supporting Content", impact: "medium", cta: "Create content" },
+};
 
 function computeActions(keywords: GscKeyword[]): ActionItem[] {
     const actions: ActionItem[] = [];
@@ -58,7 +60,7 @@ function computeActions(keywords: GscKeyword[]): ActionItem[] {
         const est = Math.max(1, Math.round(kw.impressions * b / 100 - kw.clicks));
         actions.push({
             type: "fix_ctr", kw,
-            detail: `${kw.keyword} · Position #${kw.position} · ${kw.ctr}% CTR vs ${b}% benchmark`,
+            reason: `${kw.ctr}% CTR vs ${b}% benchmark for this position`,
             impactLabel: `Est. +${est} clicks/mo`, est,
         });
     }
@@ -72,7 +74,7 @@ function computeActions(keywords: GscKeyword[]): ActionItem[] {
         const est = Math.max(1, Math.round(kw.impressions * 0.278 - kw.clicks));
         actions.push({
             type: "push_page1", kw,
-            detail: `${kw.keyword} · Position #${kw.position} · ${kw.impressions.toLocaleString()} impressions`,
+            reason: `${kw.impressions.toLocaleString()} impressions on page 2`,
             impactLabel: `Est. +${est} clicks/mo`, est,
         });
     }
@@ -86,7 +88,7 @@ function computeActions(keywords: GscKeyword[]): ActionItem[] {
         const est = Math.max(1, Math.round(kw.impressions * 0.15));
         actions.push({
             type: "create_content", kw,
-            detail: `${kw.keyword} · Position #${kw.position} · No relevant page`,
+            reason: "High search interest, no relevant page ranking yet",
             impactLabel: `Est. +${est} clicks/mo`, est,
         });
     }

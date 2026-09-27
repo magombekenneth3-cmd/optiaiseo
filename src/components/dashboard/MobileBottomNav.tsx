@@ -7,17 +7,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Mic, MonitorSmartphone, ClipboardList, MoreHorizontal, X, LogOut } from "lucide-react";
+import { LayoutDashboard, Mic, MonitorSmartphone, ClipboardList, MoreHorizontal, X, LogOut, TrendingUp, Bot, FileText, Activity } from "lucide-react";
 import { useState } from "react";
 import { signOut } from "next-auth/react";
 import { SidebarNav } from "./SidebarNav";
 
 
 const BOTTOM_TABS = [
-    { name: "Home",   href: "/dashboard",       icon: LayoutDashboard, exact: true  },
-    { name: "Audits", href: "/dashboard/audits", icon: ClipboardList,   exact: false },
-    { name: "Aria",   href: "/dashboard/voice",  icon: Mic,             exact: true, isAria: true },
-    { name: "AEO",    href: "/dashboard/aeo",    icon: MonitorSmartphone,exact: true },
+    { name: "Home",     href: "/dashboard",           icon: LayoutDashboard, exact: true  },
+    { name: "Improve",  href: "/dashboard/blogs",     icon: FileText,        exact: false },
+    { name: "Monitor",  href: "/dashboard/keywords",  icon: TrendingUp,      exact: false },
+    { name: "Automate", href: "/dashboard/autopilot", icon: Bot,             exact: false },
 ];
 
 interface MobileBottomNavProps {
@@ -46,25 +46,22 @@ export function MobileBottomNav({
                 {BOTTOM_TABS.map(tab => {
                     const Icon = tab.icon;
                     const isActive = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
-                    const isAria = !!tab.isAria;
                     return (
                         <Link
                             key={tab.name}
                             href={tab.href}
                             id={`mobile-tab-${tab.name.toLowerCase()}`}
                             className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-colors ${
-                                isAria
-                                    ? "text-brand"
-                                    : isActive
-                                        ? "text-foreground"
-                                        : "text-muted-foreground"
+                                isActive
+                                    ? "text-foreground"
+                                    : "text-muted-foreground"
                             }`}
                         >
                             <div className={`relative flex items-center justify-center rounded-xl w-9 h-7 ${
-                                isAria ? "bg-brand/15" : isActive ? "bg-foreground/8" : ""
+                                isActive ? "bg-foreground/8" : ""
                             }`}>
-                                <Icon className={`w-[18px] h-[18px] ${isActive || isAria ? "text-brand" : ""}`} />
-                                {isActive && !isAria && (
+                                <Icon className={`w-[18px] h-[18px] ${isActive ? "text-brand" : ""}`} />
+                                {isActive && (
                                     <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-brand" />
                                 )}
                             </div>

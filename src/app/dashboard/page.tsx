@@ -6,6 +6,7 @@ import {
   ChevronRight,
   CheckCircle2,
   TrendingUp,
+  Zap,
 } from "lucide-react";
 import { extractAuditMetrics } from "@/lib/audit/helpers";
 import { getCachedDashboardMetricsForUser } from "@/lib/cache/dashboard";
@@ -18,7 +19,6 @@ import {
   WinCelebrationToast,
   ReAuditNudge,
 } from "@/components/dashboard/DashboardClientWidgets";
-import { DashboardHeroHeader } from "@/components/dashboard/DashboardHeroHeader";
 import { AutonomousActivity } from "@/components/dashboard/AutonomousActivity";
 import { DashboardAttentionQueue } from "@/components/dashboard/DashboardAttentionQueue";
 import { DashboardRemediationPipeline } from "@/components/dashboard/DashboardRemediationPipeline";
@@ -301,22 +301,79 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   }));
 
   const automationState = primarySiteData?.automationsPaused ? "PAUSED" : primarySiteData?.operatingMode === "AUTOPILOT" ? "AUTOPILOT" : primarySiteData?.operatingMode === "SUPERVISED" ? "SUPERVISED" : "REPORT_ONLY";
+  const lastAuditDate = audits[0]
+    ? new Date(audits[0].runTimestamp).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-      <DashboardHeroHeader
-        domain={primarySiteDomain ?? ""}
-        lastAuditDate={audits[0] ? new Date(audits[0].runTimestamp).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null}
-        seoScore={latestScore ?? 0}
-        aeoScore={aeoScore}
-        clicksDeltaPct={organicClicksDeltaPct}
-        rankDelta={rankMovement}
-        pendingPrsCount={pendingPrsCount}
-        siteId={primarySiteId}
-        statusHeadline={statusHeadline}
-        automationState={automationState}
-      />
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 fade-in-up">
 
+      {/* ── Status summary row ─────────────────────────────────────────────────── */}
+      <section aria-label="Site status" className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand">Mission Control</p>
+          <h1 className="mt-1.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+            {primarySiteDomain || "Your SEO workspace"}
+          </h1>
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">
+            {statusHeadline}
+            {lastAuditDate && (
+              <span className="ml-2 text-muted-foreground/60">
+                · Last audit {lastAuditDate}
+              </span>
+            )}
+          </p>
+          {primarySiteId && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+                automationState === "AUTOPILOT"
+                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                  : automationState === "PAUSED"
+                    ? "border-amber-500/20 bg-amber-500/10 text-amber-300"
+                    : "border-border bg-muted/40 text-muted-foreground"
+              }`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${
+                  automationState === "AUTOPILOT" ? "bg-emerald-400 animate-pulse" : automationState === "PAUSED" ? "bg-amber-400" : "bg-muted-foreground"
+                }`} />
+                {automationState === "AUTOPILOT" ? "Autopilot active" : automationState === "SUPERVISED" ? "Supervised mode" : automationState === "PAUSED" ? "Automation paused" : "Report only"}
+              </span>
+            </div>
+          )}
+        </div>
+        {primarySiteId && (
+          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:pt-1">
+            <Link
+              href={`/dashboard/audits?siteId=${encodeURIComponent(primarySiteId)}`}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand/90"
+            >
+              <Zap className="h-3.5 w-3.5" aria-hidden="true" /> Run audit
+            </Link>
+            <Link
+              href={`/dashboard/autopilot?siteId=${encodeURIComponent(primarySiteId)}`}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" /> Autopilot
+            </Link>
+          </div>
+        )}
+      </section>
+
+      {/* ── Pending fixes alert ──────────────────────────────────────────────── */}
+      {pendingPrsCount > 0 && primarySiteId && (
+        <Link
+          href={`/dashboard/operations?siteId=${encodeURIComponent(primarySiteId)}`}
+          className="flex flex-col gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-sm transition-colors hover:bg-amber-500/10 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span className="font-medium text-amber-200">
+            {pendingPrsCount} proposed fix{pendingPrsCount === 1 ? "" : "es"} awaiting review
+          </span>
+          <span className="inline-flex items-center gap-1 font-semibold text-amber-300">
+            Review fixes <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        </Link>
+      )}
+
+      {/* ── Onboarding / returning user branches ────────────────────────── */}
       {isNewUser ? (
         <>
           <OnboardingProgress steps={onboardingSteps} />
@@ -325,103 +382,174 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       ) : (
         <>
           {!onboardingDone && <OnboardingProgress steps={onboardingSteps} />}
-          {scoreDelta !== null && scoreDelta <= -8 && <ScoreDropAlert delta={Math.abs(scoreDelta)} topIssue={topIssueLabel} auditId={topAudit?.id ?? null} />}
-          {rankWin && <WinCelebrationToast keyword={rankWin.keyword} delta={rankWin.delta} newPosition={rankWin.newPosition} winId={rankWin.winId} />}
-          {daysSinceAudit !== null && daysSinceAudit > 7 && primarySiteId && primarySiteDomain && <ReAuditNudge daysSince={daysSinceAudit} siteId={primarySiteId} siteUrl={"https://" + primarySiteDomain} />}
+          {scoreDelta !== null && scoreDelta <= -8 && (
+            <ScoreDropAlert delta={Math.abs(scoreDelta)} topIssue={topIssueLabel} auditId={topAudit?.id ?? null} />
+          )}
+          {rankWin && (
+            <WinCelebrationToast keyword={rankWin.keyword} delta={rankWin.delta} newPosition={rankWin.newPosition} winId={rankWin.winId} />
+          )}
+          {daysSinceAudit !== null && daysSinceAudit > 7 && primarySiteId && primarySiteDomain && (
+            <ReAuditNudge daysSince={daysSinceAudit} siteId={primarySiteId} siteUrl={"https://" + primarySiteDomain} />
+          )}
 
-          <DashboardAttentionQueue items={attentionItems} />
-
+          {/* ── KPI cards ──────────────────────────────────────────────────── */}
           {hasAudits && (
             <section aria-label="Performance overview" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <div className="kpi-card">
                 <div className="flex items-center gap-3">
                   <ScoreRing score={latestScore ?? 0} color="var(--brand)" size={48} strokeWidth={4} />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs font-medium text-muted-foreground">SEO health</p>
-                    <p className={"mt-1 text-sm font-semibold " + scoreColor(latestScore ?? 0)}>
-                      {scoreDelta !== null && scoreDelta !== 0 ? (scoreDelta > 0 ? "+" : "") + scoreDelta + " since last audit" : "Current score"}
+                    <p className={"mt-0.5 text-sm font-semibold " + scoreColor(latestScore ?? 0)}>
+                      {scoreDelta !== null && scoreDelta !== 0
+                        ? (scoreDelta > 0 ? "+" : "") + scoreDelta + " pts"
+                        : latestScore !== null ? `${latestScore}/100` : "—"}
                     </p>
                   </div>
                 </div>
               </div>
               <div className="kpi-card">
                 <p className="text-2xl font-semibold tracking-tight text-foreground tabular-nums">{aeoScore > 0 ? aeoScore : "—"}</p>
-                <p className="mt-1 text-xs font-medium text-muted-foreground">AI visibility</p>
-                <p className="mt-1 text-xs text-muted-foreground">{aeoScore > 0 ? "out of 100" : "Run an AEO check"}</p>
+                <p className="mt-0.5 text-xs font-medium text-muted-foreground">AI visibility</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{aeoScore > 0 ? "out of 100" : "Run AEO check"}</p>
               </div>
               <div className="kpi-card">
                 <p className="text-2xl font-semibold tracking-tight text-foreground tabular-nums">{organicClicks !== null ? formatCompact(organicClicks) : "—"}</p>
-                <p className="mt-1 text-xs font-medium text-muted-foreground">Organic clicks</p>
-                <p className={"mt-1 text-xs " + (organicClicksDeltaPct !== null && organicClicksDeltaPct < 0 ? "text-rose-400" : "text-emerald-400")}>
-                  {organicClicksDeltaPct !== null ? (organicClicksDeltaPct > 0 ? "+" : "") + organicClicksDeltaPct + "%" : "No trend yet"}
+                <p className="mt-0.5 text-xs font-medium text-muted-foreground">Organic clicks</p>
+                <p className={"mt-0.5 text-xs " + (organicClicksDeltaPct !== null && organicClicksDeltaPct < 0 ? "text-rose-400" : "text-emerald-400")}>
+                  {organicClicksDeltaPct !== null ? (organicClicksDeltaPct > 0 ? "+" : "") + organicClicksDeltaPct + "% MoM" : "No trend yet"}
                 </p>
               </div>
               <div className="kpi-card">
                 <p className={"text-2xl font-semibold tracking-tight tabular-nums " + (rankMovement !== null ? "text-emerald-400" : "text-muted-foreground")}>
                   {rankMovement !== null ? "↑" + rankMovement : "—"}
                 </p>
-                <p className="mt-1 text-xs font-medium text-muted-foreground">Rank movement</p>
-                <p className="mt-1 text-xs text-muted-foreground">{rankMovement !== null ? "positions improved" : "No movement tracked"}</p>
+                <p className="mt-0.5 text-xs font-medium text-muted-foreground">Rank movement</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{rankMovement !== null ? "positions improved" : "No movement tracked"}</p>
               </div>
             </section>
           )}
 
-          {(metricTrend.length > 0 || chartData.length > 0) && <MetricTrendChart data={metricTrend.map((m) => ({ capturedAt: m.capturedAt.toISOString(), overallScore: m.overallScore, aeoScore: m.aeoScore, coreWebVitals: m.coreWebVitals, schemaScore: m.schemaScore, organicTraffic: m.organicTraffic }))} auditData={chartData} className="fade-in-up" />}
+          {/* ── Attention queue ──────────────────────────────────────────────── */}
+          {attentionItems.length > 0 && <DashboardAttentionQueue items={attentionItems} />}
 
-          <DashboardRemediationPipeline proposed={pendingPrsCount} active={0} completed={prsCreatedThisMonth} verified={0} />
+          {/* ── Trend chart ──────────────────────────────────────────────────── */}
+          {(metricTrend.length > 0 || chartData.length > 0) && (
+            <MetricTrendChart
+              data={metricTrend.map((m) => ({
+                capturedAt: m.capturedAt.toISOString(),
+                overallScore: m.overallScore,
+                aeoScore: m.aeoScore,
+                coreWebVitals: m.coreWebVitals,
+                schemaScore: m.schemaScore,
+                organicTraffic: m.organicTraffic,
+              }))}
+              auditData={chartData}
+              className="fade-in-up fade-in-up-2"
+            />
+          )}
 
+          {/* ── At-a-glance ────────────────────────────────────────────────── */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <section className="rounded-2xl border border-border bg-card p-5">
+            <section className="rounded-2xl border border-border bg-card p-5" aria-labelledby="mc-ai-title">
               <div className="flex items-center justify-between gap-4">
-                <div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand">AI search</p><h2 className="mt-1 text-sm font-semibold text-foreground">AI visibility</h2></div>
-                <Link href="/dashboard/aeo" className="text-xs font-semibold text-muted-foreground hover:text-foreground">Open report <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></Link>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand">AI Search</p>
+                  <h2 id="mc-ai-title" className="mt-1 text-sm font-semibold text-foreground">AI visibility</h2>
+                </div>
+                <Link href="/dashboard/aeo" className="text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground">
+                  Open report <ArrowRight className="ml-1 inline h-3.5 w-3.5" />
+                </Link>
               </div>
-              <div className="mt-6 flex items-end gap-6">
-                <div><p className="text-4xl font-semibold tracking-tight text-foreground tabular-nums">{aeoScore > 0 ? aeoScore : "—"}</p><p className="mt-1 text-xs text-muted-foreground">visibility score</p></div>
-                <div className="border-l border-border pl-6"><p className="text-xl font-semibold text-foreground tabular-nums">{aiCitationsThisMonth || "—"}</p><p className="mt-1 text-xs text-muted-foreground">citations this month</p></div>
+              <div className="mt-5 flex items-end gap-6">
+                <div>
+                  <p className="text-4xl font-semibold tracking-tight text-foreground tabular-nums">{aeoScore > 0 ? aeoScore : "—"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">visibility score</p>
+                </div>
+                <div className="border-l border-border pl-6">
+                  <p className="text-xl font-semibold text-foreground tabular-nums">{aiCitationsThisMonth || "—"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">citations this month</p>
+                </div>
               </div>
             </section>
-
-            <section className="rounded-2xl border border-border bg-card p-5">
+            <section className="rounded-2xl border border-border bg-card p-5" aria-labelledby="mc-tech-title">
               <div className="flex items-center justify-between gap-4">
-                <div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand">Technical health</p><h2 className="mt-1 text-sm font-semibold text-foreground">Latest audit health</h2></div>
-                <Link href={topAudit ? "/dashboard/audits/" + topAudit.id : "/dashboard/audits"} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Open audit <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></Link>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand">Technical health</p>
+                  <h2 id="mc-tech-title" className="mt-1 text-sm font-semibold text-foreground">Latest audit</h2>
+                </div>
+                <Link href={topAudit ? "/dashboard/audits/" + topAudit.id : "/dashboard/audits"} className="text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground">
+                  Open audit <ArrowRight className="ml-1 inline h-3.5 w-3.5" />
+                </Link>
               </div>
-              <div className="mt-6 flex items-end gap-6">
-                <div><p className="text-4xl font-semibold tracking-tight text-foreground tabular-nums">{latestIssueCount}</p><p className="mt-1 text-xs text-muted-foreground">issues detected</p></div>
-                <div className="border-l border-border pl-6"><p className="text-xl font-semibold text-foreground tabular-nums">{pendingPrsCount}</p><p className="mt-1 text-xs text-muted-foreground">fixes awaiting review</p></div>
+              <div className="mt-5 flex items-end gap-6">
+                <div>
+                  <p className="text-4xl font-semibold tracking-tight text-foreground tabular-nums">{latestIssueCount}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">issues detected</p>
+                </div>
+                <div className="border-l border-border pl-6">
+                  <p className="text-xl font-semibold text-foreground tabular-nums">{pendingPrsCount}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">fixes awaiting review</p>
+                </div>
               </div>
             </section>
           </div>
 
+          {/* ── Remediation pipeline ───────────────────────────────────────────── */}
+          <DashboardRemediationPipeline proposed={pendingPrsCount} active={0} completed={prsCreatedThisMonth} verified={0} />
+
+          {/* ── Autonomous activity ────────────────────────────────────────────── */}
           {primarySiteId && <AutonomousActivity siteId={primarySiteId} />}
 
+          {/* ── Recent audit history ────────────────────────────────────────────── */}
           {recentAuditRows.length > 0 && (
-            <section className="rounded-2xl border border-border bg-card">
+            <section className="rounded-2xl border border-border bg-card" aria-labelledby="mc-audit-history">
               <div className="flex items-center justify-between border-b border-border px-5 py-4">
-                <div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand">History</p><h2 className="mt-1 text-sm font-semibold text-foreground">Recent audit activity</h2></div>
-                <Link href="/dashboard/audits" className="text-xs font-semibold text-muted-foreground hover:text-foreground">View all <ChevronRight className="ml-1 inline h-3.5 w-3.5" /></Link>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand">History</p>
+                  <h2 id="mc-audit-history" className="mt-1 text-sm font-semibold text-foreground">Recent audit activity</h2>
+                </div>
+                <Link href="/dashboard/audits" className="text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground">
+                  View all <ChevronRight className="ml-1 inline h-3.5 w-3.5" />
+                </Link>
               </div>
               <div className="divide-y divide-border">
                 {recentAuditRows.map((row) => (
-                  <Link key={row.id} href={"/dashboard/audits/" + row.id} className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-accent/20">
-                    <div className="flex min-w-0 items-center gap-3"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" /><div className="min-w-0"><p className="truncate text-sm font-medium text-foreground">SEO audit completed</p><p className="mt-1 text-xs text-muted-foreground">{timeAgo(row.date)} · {row.seoScore}/100</p></div></div>
-                    <span className={"shrink-0 text-xs font-semibold " + (row.change !== null && row.change > 0 ? "text-emerald-400" : row.change !== null && row.change < 0 ? "text-rose-400" : "text-muted-foreground")}>{row.change === null ? "—" : (row.change > 0 ? "+" : "") + row.change}</span>
+                  <Link key={row.id} href={"/dashboard/audits/" + row.id} className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-accent/20">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">SEO audit completed</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{timeAgo(row.date)} · {row.seoScore}/100</p>
+                      </div>
+                    </div>
+                    <span className={"shrink-0 text-xs font-semibold " + (row.change !== null && row.change > 0 ? "text-emerald-400" : row.change !== null && row.change < 0 ? "text-rose-400" : "text-muted-foreground")}>
+                      {row.change === null ? "—" : (row.change > 0 ? "+" : "") + row.change}
+                    </span>
                   </Link>
                 ))}
               </div>
             </section>
           )}
-        </>
-      )}
 
-      {!isNewUser && hasSites && !hasAudits && (
-        <section className="rounded-2xl border border-border bg-card p-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-brand/20 bg-brand/10"><TrendingUp className="h-6 w-6 text-brand" /></div>
-          <h2 className="text-sm font-semibold text-foreground">Run your first audit</h2>
-          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-muted-foreground">Start tracking SEO performance and turn the first findings into verified improvements.</p>
-          {primarySiteId && <Link href={"/dashboard/audits?siteId=" + primarySiteId} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90">Run audit <ArrowRight className="h-3.5 w-3.5" /></Link>}
-        </section>
+          {/* ── Empty: site connected but no audits ─────────────────────────── */}
+          {!isNewUser && hasSites && !hasAudits && (
+            <section className="rounded-2xl border border-border bg-card p-8 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-brand/20 bg-brand/10">
+                <TrendingUp className="h-6 w-6 text-brand" />
+              </div>
+              <h2 className="text-sm font-semibold text-foreground">Run your first audit</h2>
+              <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-muted-foreground">
+                Start tracking SEO performance and turn findings into verified improvements.
+              </p>
+              {primarySiteId && (
+                <Link href={"/dashboard/audits?siteId=" + primarySiteId} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90">
+                  Run audit <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+            </section>
+          )}
+        </>
       )}
     </div>
   );
