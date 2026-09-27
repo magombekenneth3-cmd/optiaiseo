@@ -43,6 +43,8 @@ import { BrandEntityCard } from "@/components/dashboard/aeo/BrandEntityCard";
 import { CitationPerformance } from "@/components/dashboard/aeo/CitationPerformance";
 import { SiteHealthPanel } from "@/components/dashboard/aeo/SiteHealthPanel";
 
+import { PageHeader } from "@/components/ui/design-system/PageHeader";
+
 // ─── Score utilities (shared across inline components) ─────────────────────
 
 function scoreColor(score: number) {
@@ -847,21 +849,17 @@ function AeoRankPageInner() {
     return (
         <div className="flex flex-col gap-6 max-w-[1400px] mx-auto pb-12 fade-in-up">
             {/* Page header */}
-            <div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                    <span>←</span>
-                    <span>AI Visibility</span>
-                </div>
-                <div className="flex items-center gap-2.5 flex-wrap">
-                    <h1 className="text-2xl font-black text-foreground">AI Visibility</h1>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20">AEO</span>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20">GEO</span>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">AIO</span>
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                    Understand how AI search engines discover, cite and recommend your brand.
-                </p>
-            </div>
+            <PageHeader
+                title="AEO & AI Search Visibility"
+                description="Track how ChatGPT, Perplexity, Claude, and Google AI Overview cite, extract, and recommend your brand."
+                category="AI Visibility"
+                currentStep="measure"
+                metrics={[
+                    { label: "AI Citation Score", value: rate !== null ? `${rate}%` : "Unscanned", color: rate && rate >= 65 ? "text-emerald-400" : rate && rate >= 40 ? "text-amber-400" : "text-rose-400" },
+                    { label: "Brand Grade", value: grade ?? "N/A", color: "text-purple-400" },
+                    { label: "Tracked Models", value: models.length || 4, color: "text-foreground" },
+                ]}
+            />
 
             {/* Loading */}
             {loading && <PageSkeleton />}

@@ -13,6 +13,8 @@ import { prisma } from "@/lib/prisma";
 import { OAuthConnectButton } from "@/components/auth/OAuthConnectButton";
 import { GSC_PROVIDERS } from "@/lib/gsc/token";
 
+import { PageHeader } from "@/components/ui/design-system/PageHeader";
+
 export const metadata: Metadata = {
   title: "Audit Reports | OptiAISEO",
   description: "View your OptiAISEO technical audit history. Audits run automatically after site setup or on demand from the dashboard.",
@@ -72,14 +74,22 @@ export default async function AuditsPage({
     <div className="flex flex-col gap-6 w-full max-w-7xl mx-auto pb-8">
       <AuditPoller processingAudits={processingAudits} />
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-2">
-            <AuditSiteSwitcher sites={sites ?? []} selectedSiteId={selectedSite?.id} />
-            {latestAudit && <span>Last completed {new Date(latestAudit.runTimestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Site health</h1>
-          <p className="text-muted-foreground mt-1">See what changed, what matters most, and the next best fix.</p>
+      <PageHeader
+        title="SEO & Technical Audits"
+        description="Continuous technical health monitoring, broken link detection, and automated SEO issue fixes."
+        category="SEO Intelligence"
+        currentStep="discover"
+        metrics={[
+          { label: "SEO Score", value: latestMetrics ? `${latestMetrics.seoScore}/100` : "N/A", color: latestMetrics && latestMetrics.seoScore >= 80 ? "text-emerald-400" : "text-amber-400" },
+          { label: "Issues Discovered", value: latestMetrics ? latestMetrics.issueCount : 0, color: latestMetrics && latestMetrics.issueCount > 0 ? "text-rose-400" : "text-emerald-400" },
+          { label: "Total Audits", value: visibleAudits.length, color: "text-foreground" },
+        ]}
+      />
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between -mt-2">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <AuditSiteSwitcher sites={sites ?? []} selectedSiteId={selectedSite?.id} />
+          {latestAudit && <span>Last completed {new Date(latestAudit.runTimestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
         </div>
         <AuditButton siteId={selectedSite?.id} sites={sites} userTier={userTier} />
       </div>

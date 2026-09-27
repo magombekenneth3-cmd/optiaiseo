@@ -15,35 +15,37 @@ function buildHref(base: string, siteId: string | null) {
   return siteId ? `${base}?siteId=${siteId}` : base;
 }
 
-const DISCOVER_ITEMS = [
-  { name: "Opportunities", href: "/dashboard/recommendations", icon: Lightbulb, context: false },
-  { name: "SEO Audits", href: "/dashboard/audits", icon: ClipboardList, context: true },
-  { name: "AI Visibility", href: "/dashboard/aeo", icon: MonitorSmartphone, context: true },
-];
-
-const IMPROVE_ITEMS = [
+const WORK_ITEMS = [
   { name: "Content", href: "/dashboard/blogs", icon: FileText, context: false },
-  { name: "Autopilot", href: "/dashboard/autopilot", icon: Bot, context: true },
+  { name: "Content Planner", href: "/dashboard/planner", icon: Calendar, context: true },
+  { name: "AI Content Editor", href: "/dashboard/editor", icon: Highlighter, context: false },
+  { name: "Content Refresh", href: "/dashboard/content-decay", icon: TrendingDown, context: true },
 ];
 
-const MONITOR_ITEMS = [
-  { name: "Operations", href: "/dashboard/operations", icon: Activity, context: true },
+const SEO_ITEMS = [
+  { name: "SEO Audits", href: "/dashboard/audits", icon: ClipboardList, context: true },
+  { name: "Recommendations", href: "/dashboard/recommendations", icon: Lightbulb, context: false },
+  { name: "Keyword Research", href: "/dashboard/keywords", icon: TrendingUp, context: true },
+];
+
+const AI_SEARCH_ITEMS = [
+  { name: "AI Visibility", href: "/dashboard/aeo", icon: MonitorSmartphone, context: true },
+  { name: "AEO Proofs", href: "/dashboard/aeo/proofs", icon: History, context: true },
+];
+
+const AUTOMATION_ITEMS = [
+  { name: "Auto Indexer", href: "/dashboard/indexing", icon: Zap, context: false },
+  { name: "Operations & Healing", href: "/dashboard/operations", icon: Activity, context: true },
+  { name: "Autopilot", href: "/dashboard/autopilot", icon: Bot, context: true },
 ];
 
 const MORE_ITEMS = [
   { name: "My Sites", href: "/dashboard/sites", icon: Globe, context: false },
-  { name: "Keywords", href: "/dashboard/keywords", icon: TrendingUp, context: true },
   { name: "Competitors", href: "/dashboard/competitors", icon: Crosshair, context: true },
   { name: "SERP Gap Analysis", href: "/dashboard/serp-gap", icon: BarChart3, context: true },
-  { name: "Content Editor", href: "/dashboard/editor", icon: Highlighter, context: false },
-  { name: "Content Planner", href: "/dashboard/planner", icon: Calendar, context: true },
   { name: "Programmatic SEO", href: "/dashboard/pseo", icon: Zap, context: false },
-  { name: "Re-Optimize", href: "/dashboard/refresh", icon: ClipboardList, context: true },
-  { name: "Content Decay", href: "/dashboard/content-decay", icon: TrendingDown, context: true },
   { name: "Backlinks", href: "/dashboard/backlinks", icon: Link2, context: true },
-  { name: "Auto Indexer", href: "/dashboard/indexing", icon: Zap, context: false },
   { name: "Auto-Heal Log", href: "/dashboard/healing", icon: Shield, context: true },
-  { name: "Citation History", href: "/dashboard/aeo/proofs", icon: History, context: true },
   { name: "Experiments", href: "/dashboard/experiments", icon: FlaskConical, context: true },
   { name: "Campaigns", href: "/dashboard/campaign", icon: Target, context: true },
   { name: "Team", href: "/dashboard/team", icon: Users, context: false },
@@ -121,14 +123,16 @@ function SidebarNavInner({ defaultSiteId, sites, isSuperAdmin, isCollapsed, onTo
     <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="Dashboard navigation">
       {isCollapsed && onToggleCollapse && <button type="button" onClick={onToggleCollapse} aria-label="Expand sidebar" title="Expand sidebar" className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"><PanelLeftOpen className="h-4 w-4" /></button>}
       {!isCollapsed && sites.length > 0 && <SitePicker sites={sites} siteId={siteId} />}
-      <NavLabel collapsed={isCollapsed}>Overview</NavLabel>
+      <NavLabel collapsed={isCollapsed}>Command Center</NavLabel>
       <NavItem item={{ name: "Mission Control", href: "/dashboard", icon: LayoutDashboard, context: false }} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />
-      <NavLabel collapsed={isCollapsed}>Discover</NavLabel>
-      {DISCOVER_ITEMS.map((item) => <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />)}
-      <NavLabel collapsed={isCollapsed}>Improve</NavLabel>
-      {IMPROVE_ITEMS.map((item) => <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />)}
-      <NavLabel collapsed={isCollapsed}>Monitor</NavLabel>
-      {MONITOR_ITEMS.map((item) => <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />)}
+      <NavLabel collapsed={isCollapsed}>Work</NavLabel>
+      {WORK_ITEMS.map((item) => <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />)}
+      <NavLabel collapsed={isCollapsed}>SEO</NavLabel>
+      {SEO_ITEMS.map((item) => <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />)}
+      <NavLabel collapsed={isCollapsed}>AI Search</NavLabel>
+      {AI_SEARCH_ITEMS.map((item) => <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />)}
+      <NavLabel collapsed={isCollapsed}>Automation</NavLabel>
+      {AUTOMATION_ITEMS.map((item) => <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />)}
       <div className={isCollapsed ? "mt-2" : "mt-3"}>
         <button type="button" onClick={() => setMoreOpen((value) => !value)} aria-expanded={moreOpen} className={`relative flex w-full items-center gap-3 rounded-xl text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground ${isCollapsed ? "mx-auto h-10 w-10 justify-center" : "px-3 py-2.5"}`} title={isCollapsed ? "More tools" : undefined}>
           <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${moreOpen ? "rotate-180" : ""}`} />

@@ -33,6 +33,7 @@ import type {
   RecommendationResult,
 } from "@/lib/recommendations/engine";
 import { OAuthConnectButton } from "@/components/auth/OAuthConnectButton";
+import { PageHeader } from "@/components/ui/design-system/PageHeader";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Display metadata
@@ -665,23 +666,21 @@ export function RecommendationsDashboard({
   return (
     <div className="flex flex-col gap-8 w-full max-w-6xl mx-auto">
       {/* Page header */}
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-            <Lightbulb className="w-5 h-5 text-amber-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              SEO Opportunities — {domain}
-            </h1>
-            <p className="text-muted-foreground text-sm">
-              {gscConnected
-                ? `${summary.totalOpportunities} opportunities detected from your GSC data`
-                : "Connect GSC to unlock data-driven recommendations for your keywords"}
-            </p>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title={`Growth Opportunities — ${domain}`}
+        description={
+          gscConnected
+            ? `${summary.totalOpportunities} actionable opportunities detected from your SEO and search performance data`
+            : "Connect Google Search Console to unlock personalized keyword & ranking recommendations"
+        }
+        category="Growth Engine"
+        currentStep="decide"
+        metrics={[
+          { label: "Opportunities", value: summary.totalOpportunities, color: "text-amber-400" },
+          { label: "Critical Actions", value: summary.criticalCount, color: summary.criticalCount > 0 ? "text-rose-400" : "text-emerald-400" },
+          { label: "Est. Missed Clicks", value: summary.estimatedMissedClicks > 0 ? `~${summary.estimatedMissedClicks.toLocaleString()}/mo` : "0", color: "text-emerald-400" },
+        ]}
+      />
 
       {/* GSC disconnected warning */}
       {!gscConnected && <GscDisconnectedBanner domain={domain} />}

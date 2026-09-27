@@ -16,6 +16,7 @@ import {
     FileText,
     Sparkles,
 } from "lucide-react";
+import { PageHeader } from "@/components/ui/design-system/PageHeader";
 
 export const metadata: Metadata = {
     title: "Content | OptiAISEO",
@@ -160,31 +161,32 @@ export default async function BlogsPage({
             {/* BlogPoller disabled — ActiveGenerationCard handles polling every 3s */}
 
             {/* ── ZONE 1: Header ─────────────────────────────────── */}
-            <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                        Content
-                    </h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Create content built for search and AI answers.
-                    </p>
-                </div>
-                <div className="flex items-center gap-3">
-                    {/* Subtle usage indicator */}
-                    {subscriptionTier === "FREE" && (
-                        <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
-                            <span>{postsThisMonth} of 3 used</span>
-                            <Link
-                                href="/dashboard/billing"
-                                className="font-semibold text-emerald-400 transition-colors hover:text-emerald-300"
-                            >
-                                Upgrade →
-                            </Link>
-                        </div>
-                    )}
-                    {generateControl}
-                </div>
-            </section>
+            <PageHeader
+                title="AI Content Engine"
+                description="Create search-ready articles, blog posts, and landing pages using your site's live SEO data."
+                category="Content Creation"
+                currentStep="create"
+                metrics={[
+                    { label: "Total Articles", value: totalCount, color: "text-foreground" },
+                    { label: "Ready to Publish", value: readyCount, color: "text-emerald-400" },
+                    { label: "Published", value: publishedCount, color: "text-blue-400" },
+                    { label: "Action Needed", value: issuesCount, color: issuesCount > 0 ? "text-amber-400" : "text-muted-foreground" },
+                ]}
+            />
+            <div className="flex justify-end items-center gap-3 -mt-2">
+                {subscriptionTier === "FREE" && (
+                    <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
+                        <span>{postsThisMonth} of 3 used</span>
+                        <Link
+                            href="/dashboard/billing"
+                            className="font-semibold text-emerald-400 transition-colors hover:text-emerald-300"
+                        >
+                            Upgrade →
+                        </Link>
+                    </div>
+                )}
+                {generateControl}
+            </div>
 
             {/* ── ZONE 3: Active Generation + AI Visibility ──────── */}
             {(generatingBlogs.length > 0 || aiOpportunityCount > 0) && (

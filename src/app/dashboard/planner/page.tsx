@@ -10,6 +10,7 @@ import {
     ChevronDown, ExternalLink, Hash, Link2, FileText,
     LayoutGrid, ArrowUpRight,
 } from "lucide-react";
+import { PageHeader } from "@/components/ui/design-system/PageHeader";
 
 // ─── Lazy-load detail panels ───────────────────────────────────────────────────
 const RedditPanel = dynamic(() => import("./RedditPanel").then(m => ({ default: m.RedditPanel })));
@@ -661,37 +662,20 @@ export default function PlannerPage() {
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 0 80px" }}>
 
             {/* ── Header ── */}
-            <div style={{
-                display: "flex", flexDirection: "column", gap: 20,
-                padding: "28px 0 24px",
-                borderBottom: "1px solid rgba(255,255,255,.05)",
-                marginBottom: 28,
-            }}>
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
-                    <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                            <div style={{
-                                width: 32, height: 32, borderRadius: 9,
-                                background: "rgba(16,185,129,.1)",
-                                border: "1px solid rgba(16,185,129,.2)",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                            }}>
-                                <CalendarDays size={15} style={{ color: "#34d399" }} />
-                            </div>
-                            <h1 style={{
-                                margin: 0, fontSize: 20, fontWeight: 700,
-                                color: "rgba(255,255,255,.9)",
-                                letterSpacing: "-.02em",
-                            }}>
-                                Content Planner
-                            </h1>
-                        </div>
-                        <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,.3)", letterSpacing: ".01em" }}>
-                            Drag cards between columns · track execution over time
-                        </p>
-                    </div>
-
-                    {selectedItems.size > 0 && (
+            <div className="mb-6 flex flex-col gap-4">
+                <PageHeader
+                    title="Content Planner & Command Center"
+                    description="Turn keyword opportunities into scheduled content, drag cards through your editorial pipeline, and track execution."
+                    category="Workflow Board"
+                    currentStep="publish"
+                    metrics={[
+                        { label: "Total Planned", value: totalItems, color: "text-foreground" },
+                        { label: "In Writing", value: inProgItems, color: "text-amber-400" },
+                        { label: "Published", value: doneItems, color: "text-emerald-400" },
+                    ]}
+                />
+                {selectedItems.size > 0 && (
+                    <div className="flex justify-end">
                         <button onClick={handleBatchGenerate} disabled={isPending}
                             style={{
                                 display: "inline-flex", alignItems: "center", gap: 8,
@@ -713,8 +697,9 @@ export default function PlannerPage() {
                                 {selectedItems.size}
                             </span>
                         </button>
-                    )}
-                </div>
+                    </div>
+                )}
+            </div>
 
                 {/* Stats strip */}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
