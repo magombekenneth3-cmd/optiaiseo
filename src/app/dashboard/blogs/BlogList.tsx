@@ -1554,6 +1554,17 @@ export function BlogList({
                                             </p>
                                             <StatusBadge blog={blog} />
                                         </div>
+                                        {/* Failure reason — mobile */}
+                                        {blog.status === "FAILED" && (
+                                            <div className="flex items-start gap-2 rounded-lg border border-red-500/15 bg-red-500/5 px-3 py-2">
+                                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
+                                                <p className="flex-1 text-[11px] leading-5 text-red-300/80">
+                                                    {Array.isArray(blog.validationErrors) && blog.validationErrors.length > 0
+                                                        ? blog.validationErrors[0]
+                                                        : "Generation failed. Retry to try again."}
+                                                </p>
+                                            </div>
+                                        )}
                                         <div className="flex items-center justify-between">
                                             <span className="max-w-[45%] truncate text-xs text-muted-foreground">
                                                 {blog.targetKeywords?.[0] || "Auto-assigned"}
@@ -1626,6 +1637,10 @@ export function BlogList({
                                         const blogUrl = getBlogUrl(blog);
                                         const healthScore = computeHealthScore(blog);
                                         const showReadiness = isReviewStatus(blog.status) || isEditorialRejection(blog.status) || blog.status === "EVIDENCE_REVIEW";
+                                        const isFailed = blog.status === "FAILED";
+                                        const failureReason = isFailed && Array.isArray(blog.validationErrors) && blog.validationErrors.length > 0
+                                            ? blog.validationErrors[0]
+                                            : isFailed ? "Generation failed. Retry to try again." : null;
                                         const isExpanded = expandedReadiness.has(blog.id);
                                         const toggleReadiness = () =>
                                             setExpandedReadiness((prev) => {
@@ -1755,6 +1770,28 @@ export function BlogList({
                                                 <tr key={`${blog.id}-readiness`}>
                                                     <td colSpan={9} className="p-0">
                                                         <ReadinessPanel blog={blog} />
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            {isFailed && failureReason && (
+                                                <tr key={`${blog.id}-failure`}>
+                                                    <td colSpan={9} className="p-0">
+                                                        <div className="flex items-start justify-between gap-4 border-t border-red-500/10 bg-red-500/5 px-5 py-3">
+                                                            <div className="flex items-start gap-2.5 min-w-0">
+                                                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
+                                                                <p className="text-[11px] leading-5 text-red-300/80 break-words min-w-0">
+                                                                    {failureReason}
+                                                                </p>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRetryFailed(blog.id)}
+                                                                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-300 transition-colors hover:bg-amber-500/15"
+                                                            >
+                                                                <RotateCcw className="h-3 w-3" />
+                                                                Retry
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             )}

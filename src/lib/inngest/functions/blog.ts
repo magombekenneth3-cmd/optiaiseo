@@ -307,8 +307,26 @@ export const generateBlogJob = inngest.createFunction(
             // Without this, orphaned GENERATING rows can never be cleared by the UI.
             const effectiveBlogId = blogId;
             if (blogId) {
+                // Human-readable failure message: prefix with error code so the card
+                // can show a specific reason rather than just a red "Failed" badge.
+                const humanReason =
+                    errorCode === "RATE_LIMIT"
+                        ? `Generation paused: AI quota exceeded. Retry in a few minutes.`
+                        : errorCode === "PROVIDER_FAILURE"
+                          ? `Generation failed: AI provider unavailable (${errorMessage.slice(0, 120)}).`
+                          : `Generation failed: ${errorMessage.slice(0, 200)}`;
+
                 await prisma.blog
-                    .updateMany({ where: { id: blogId }, data: { status: "FAILED" } })
+                    .updateMany({
+                        where: { id: blogId },
+                        data: {
+                            status: "FAILED",
+                            // Persist failure reason so the list card can display it
+                            // without polling the status API. Redis key expires in 1h;
+                            // the DB entry is permanent and survives Redis eviction.
+                            validationErrors: [humanReason],
+                        },
+                    })
                     .catch((e: unknown) =>
                         logger.error("[Inngest/Blog] onFailure DB write failed", {
                             blogId,
