@@ -15,6 +15,7 @@ import { detectGscAnomalies, generateGscHealingPlan } from "@/lib/self-healing/g
 import { writeMetricSnapshot } from "@/lib/metrics/metric-snapshot";
 import { releaseAuditLease } from "@/lib/audit-lock";
 import { fireWhiteLabelWebhook } from "@/lib/webhooks/white-label";
+import { persistFindingAndScheduleVerification } from "./diagnostic-verification";
 
 function resolveFixStatus(
     d: { fixed: unknown[]; newIssues?: unknown[] } | null,
@@ -108,6 +109,37 @@ export const processManualAuditJob = inngest.createFunction(
                 inp: null,
             }).catch(() => {});
         });
+
+        // Persist diagnostic findings (non-fatal if tables don't exist)
+        await step.run("persist-diagnostic-findings", async () => {
+            const dr = auditResult.diagnosticResult;
+            if (!dr?.findings?.length) return { persisted: 0 };
+            let persisted = 0;
+            for (const finding of dr.findings) {
+                try {
+                    await persistFindingAndScheduleVerification({
+                        siteId,
+                        findingId: finding.id,
+                        fingerprint: finding.fingerprint,
+                        issueType: finding.issueType,
+                        status: finding.status,
+                        severity: finding.severity,
+                        scopeType: finding.scope.type,
+                        scopeUrls: finding.scope.urls,
+                        rootCause: finding.rootCause,
+                        confidence: finding.confidence,
+                        expectedOutcome: finding.expectedOutcome,
+                        remediationType: finding.remediationType,
+                        verificationCriteria: finding.verificationCriteria,
+                        dependencies: finding.dependencies ?? [],
+                        url: domain.startsWith("http") ? domain : `https://${domain}`,
+                    });
+                    persisted++;
+                } catch { /* non-fatal */ }
+            }
+            return { persisted };
+        });
+
         // A full-site audit retains its lease through page fan-out. The final
         // page worker (or coordinator failure handler) releases it with the
         // audit ID token once the parent has a terminal state.
@@ -279,6 +311,37 @@ export const runWeeklyAuditJob = inngest.createFunction(
 
             return { score: auditResult.overallScore, diff: diff?.summary, auditId: created.id };
 
+        });
+
+        // Persist diagnostic findings (non-fatal if tables don't exist)
+        await step.run("persist-diagnostic-findings", async () => {
+            const dr = auditResult.diagnosticResult;
+            if (!dr?.findings?.length) return { persisted: 0 };
+            let persisted = 0;
+            const url = site.domain.startsWith("http") ? site.domain : `https://${site.domain}`;
+            for (const finding of dr.findings) {
+                try {
+                    await persistFindingAndScheduleVerification({
+                        siteId: site.id,
+                        findingId: finding.id,
+                        fingerprint: finding.fingerprint,
+                        issueType: finding.issueType,
+                        status: finding.status,
+                        severity: finding.severity,
+                        scopeType: finding.scope.type,
+                        scopeUrls: finding.scope.urls,
+                        rootCause: finding.rootCause,
+                        confidence: finding.confidence,
+                        expectedOutcome: finding.expectedOutcome,
+                        remediationType: finding.remediationType,
+                        verificationCriteria: finding.verificationCriteria,
+                        dependencies: finding.dependencies ?? [],
+                        url,
+                    });
+                    persisted++;
+                } catch { /* non-fatal */ }
+            }
+            return { persisted };
         });
 
         await step.run("maybe-trigger-healing", async () => {

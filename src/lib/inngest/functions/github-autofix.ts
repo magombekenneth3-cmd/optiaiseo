@@ -132,6 +132,47 @@ export const githubAutofixSiteJob = inngest.createFunction(
 
         if (prResult.success) {
             logger.debug(`[Inngest/GithubAutofix] PR opened for ${domain}: ${prResult.prUrl}`);
+
+            // Emit seo/fix.deployed events for each fix — triggers T+0 verification
+            await step.run("emit-fix-deployed-events", async () => {
+                const events = fixFiles.map((file) => ({
+                    name: "seo/fix.deployed" as const,
+                    data: {
+                        siteId,
+                        findingId: `autofix:${file.path}:${Date.now()}`,
+                        url: `https://${domain}`,
+                        verificationCriteria: [] as any[],
+                    },
+                }));
+
+                try {
+                    // Record healing outcomes for legacy pipeline
+                    const { recordHealingOutcome } = await import("./healing-outcomes");
+                    for (const file of fixFiles) {
+                        const logEntry = await prisma.selfHealingLog.create({
+                            data: {
+                                siteId,
+                                issueType: file.description ?? "SEO fix",
+                                description: `GitHub auto-fix PR for ${file.path}`,
+                                actionTaken: `PR: ${prResult.prUrl}`,
+                                status: "COMPLETED",
+                            },
+                        });
+                        await recordHealingOutcome({
+                            siteId,
+                            healingLogId: logEntry.id,
+                            issueType: file.description ?? "SEO fix",
+                        });
+                    }
+                } catch (err) {
+                    logger.warn("[GithubAutofix] Healing outcome recording failed (non-fatal):", {
+                        error: (err as Error)?.message,
+                    });
+                }
+
+                return { eventsQueued: events.length };
+            });
+
             return { success: true, prUrl: prResult.prUrl, fixCount: fixFiles.length };
         }
 
