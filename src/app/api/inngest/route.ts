@@ -45,6 +45,7 @@ import { runSerpGapAnalysisJob } from "@/lib/inngest/functions/serp-gap-analysis
 import { runKeywordSerpAnalysisJob } from "@/lib/inngest/functions/keyword-serp-analysis";
 import { purgeExpiredSerpCache } from "@/lib/inngest/functions/serp-cache-purge";
 import { weeklyGscAlerts } from "@/lib/inngest/functions/gsc-alerts";
+import { verifyFixT0Job, verifyFixT7Job } from "@/lib/inngest/functions/diagnostic-verification";
 
 // These were exported but never registered → their schedules never fired.
 import {
@@ -234,5 +235,9 @@ export const { GET, POST, PUT } = serve({
         purgeExpiredSerpAnalysisJob,
         repurposeBlogFn,
         socialRepurposeJob,
+
+        // Evidence-driven diagnostic verification (T+0, T+7)
+        verifyFixT0Job,              // event: seo/fix.deployed → T+0 technical verification
+        verifyFixT7Job,              // event: seo/fix.t0-verified → T+7 search verification
     ],
 });

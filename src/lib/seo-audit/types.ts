@@ -129,6 +129,8 @@ export interface FullAuditReport {
     recommendations: NormalizedRecommendation[];
     /** Per-module timing telemetry (Phase 3.1) */
     moduleTelemetry?: ModulePerfEntry[];
+    /** Evidence-driven diagnostic findings and remediation plan (Phase P1) */
+    diagnosticResult?: import('./diagnostic-engine').DiagnosticPipelineResult;
 }
 
 export interface ModulePerfEntry {

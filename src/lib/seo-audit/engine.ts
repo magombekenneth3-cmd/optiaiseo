@@ -1,6 +1,7 @@
 import { logger } from "@/lib/logger";
 import { AuditModule, AuditModuleContext, FullAuditReport, NormalizedRecommendation, ModulePerfEntry, AeoScoreBreakdown, AuditCategoryResult } from './types';
 import { fetchHtml } from './utils/fetch-html';
+import { runDiagnosticPipeline, type DiagnosticPipelineResult } from './diagnostic-engine';
 
 export const SCORING_WEIGHTS = {
     ROI_IMPACT: 0.6,
@@ -221,6 +222,36 @@ export class AuditEngine {
             aeoBreakdown = breakdown;
         }
 
+        // ── Diagnostic Pipeline (evidence-driven) ─────────────────────────
+        // Run the diagnostic pipeline to produce fingerprinted findings,
+        // root-cause analysis, and a prioritised remediation plan.
+        // This is non-blocking — if it fails, the legacy report is still valid.
+        let diagnosticResult: DiagnosticPipelineResult | undefined;
+        try {
+            const domain = (() => {
+                try { return new URL(url).hostname; }
+                catch { return url; }
+            })();
+
+            diagnosticResult = runDiagnosticPipeline({
+                siteId: opts?.siteId ?? 'unknown',
+                url,
+                domain,
+                totalPages: 50, // estimate; refined by crawler in full audit
+                categoryResults,
+            });
+
+            logger.info(
+                `[DiagnosticEngine] ${diagnosticResult.meta.findingsCount} findings, ` +
+                `${diagnosticResult.meta.deterministicFixCount} deterministic fixes, ` +
+                `${diagnosticResult.meta.durationMs}ms`,
+            );
+        } catch (err) {
+            logger.warn('[DiagnosticEngine] Pipeline failed (non-fatal):', {
+                error: (err as Error)?.message,
+            });
+        }
+
         return {
             url,
             timestamp: new Date().toISOString(),
@@ -236,6 +267,7 @@ export class AuditEngine {
             categories: categoryResults,
             recommendations: allRecommendations,
             moduleTelemetry,
+            diagnosticResult,
         };
     }
 }
