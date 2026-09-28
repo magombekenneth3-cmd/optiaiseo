@@ -104,7 +104,10 @@ export async function GET(
             categoryScores = (audit.categoryScores as Record<string, number>) ?? {};
             overallScore = parsed.overallScore ?? 0;
             if (!overallScore && Object.keys(categoryScores).length > 0) {
-                const vals = Object.values(categoryScores).filter(v => typeof v === "number") as number[];
+                // Exclude 'seo' key — old records stored the overall score circularly.
+                const vals = Object.entries(categoryScores)
+                    .filter(([k, v]) => k !== "seo" && typeof v === "number")
+                    .map(([, v]) => v as number);
                 if (vals.length > 0) overallScore = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
             }
             vitals = {

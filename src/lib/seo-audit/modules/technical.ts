@@ -224,7 +224,7 @@ export const TechnicalModule: AuditModule = {
         const hasMicrodata = (html || '').includes('itemtype=');
         const hasSomeSchema = schemaElements.length > 0 || hasMicrodata;
         items.push({
-            id: 'schema-presence',
+            id: 'technical.schema-quick-check',
             label: 'Schema Markup (Structured Data)',
             status: hasSomeSchema ? 'Pass' : 'Warning',
             finding: hasSomeSchema
@@ -251,30 +251,10 @@ export const TechnicalModule: AuditModule = {
             details: { count: hreflangTags.length },
         });
 
-        // 7. Render-Blocking Scripts (non-tracking)
-        const headEl = root.querySelector('head');
-        const headScripts = headEl ? headEl.querySelectorAll('script[src]') : [];
-        const renderBlockingScripts = headScripts.filter(s => {
-            const hasAsync = s.hasAttribute('async');
-            const hasDefer = s.hasAttribute('defer');
-            return !hasAsync && !hasDefer;
-        });
-
-        items.push({
-            id: 'render-blocking-scripts',
-            label: 'Render-Blocking Scripts',
-            status: renderBlockingScripts.length === 0 ? 'Pass' : 'Warning',
-            finding: renderBlockingScripts.length === 0
-                ? 'No render-blocking <script> tags found in <head>.'
-                : `${renderBlockingScripts.length} render-blocking <script> tag(s) in <head> without async/defer. These delay First Contentful Paint.`,
-            recommendation: renderBlockingScripts.length > 0 ? {
-                text: 'Add async (for independent scripts) or defer (for DOM-dependent scripts) to all <script src="..."> tags in <head>. Move scripts to <body> end where possible.',
-                priority: 'Medium',
-            } : undefined,
-            roiImpact: 80,
-            aiVisibilityImpact: 40,
-            details: renderBlockingScripts.length > 0 ? { count: renderBlockingScripts.length, scripts: renderBlockingScripts.slice(0, 3).map(s => s.getAttribute('src') || '').join(', ') } : undefined,
-        });
+        // 7. Render-Blocking Scripts — REMOVED from Technical.
+        // Performance module is the canonical owner of render-blocking checks.
+        // Having it in both modules caused the same concept to be double-weighted
+        // in the overall score (Technical + Performance both contribute equally).
 
         const domNodeCount = root.querySelectorAll('*').length;
         items.push({
@@ -338,28 +318,10 @@ export const TechnicalModule: AuditModule = {
             });
         }
 
-        // 9. Resource Hints (preload / prefetch / preconnect / dns-prefetch)
-        const preloadLinks = root.querySelectorAll('link[rel="preload"]').length;
-        const prefetchLinks = root.querySelectorAll('link[rel="prefetch"]').length;
-        const preconnectLinks = root.querySelectorAll('link[rel="preconnect"]').length;
-        const dnsPrefetch = root.querySelectorAll('link[rel="dns-prefetch"]').length;
-        const totalHints = preloadLinks + prefetchLinks + preconnectLinks + dnsPrefetch;
-
-        items.push({
-            id: 'resource-hints',
-            label: 'Resource Hints',
-            status: totalHints > 0 ? 'Pass' : 'Warning',
-            finding: totalHints > 0
-                ? `Resource hints: ${preloadLinks} preload, ${prefetchLinks} prefetch, ${preconnectLinks} preconnect, ${dnsPrefetch} dns-prefetch.`
-                : 'No resource hints found (preload, prefetch, preconnect, dns-prefetch). These significantly improve LCP.',
-            recommendation: totalHints === 0 ? {
-                text: 'Add <link rel="preload"> for your LCP image and critical fonts. Add <link rel="preconnect"> for third-party origins (CDNs, analytics). Add <link rel="dns-prefetch"> for less-critical origins.',
-                priority: 'Medium',
-            } : undefined,
-            roiImpact: 70,
-            aiVisibilityImpact: 35,
-            details: { preload: preloadLinks, prefetch: prefetchLinks, preconnect: preconnectLinks, dnsPrefetch },
-        });
+        // 9. Resource Hints — REMOVED from Technical.
+        // Performance module is the canonical owner of resource-hint checks.
+        // Having it in both modules caused the same concept to be double-weighted
+        // in the overall score (Technical + Performance both contribute equally).
 
         // 10. Image CLS Risk (missing width/height attributes)
         const allImages = root.querySelectorAll('img');
@@ -868,14 +830,11 @@ export const TechnicalModule: AuditModule = {
         if (gzipStatus === 'Fail') {
             speedFindings.push({ issue: 'Enable Gzip/Brotli compression', estimatedSavingMs: 350, effort: 'Low' });
         }
-        if (renderBlockingScripts.length > 0) {
-            speedFindings.push({ issue: `Defer/async ${renderBlockingScripts.length} render-blocking script(s)`, estimatedSavingMs: renderBlockingScripts.length * 100, effort: 'Low' });
-        }
+        // NOTE: render-blocking-scripts and resource-hints checks moved to
+        // Performance module to eliminate double-counting. Their speed forecast
+        // contribution now lives in the Performance module's own forecast.
         if (imgsWithoutDimensions.length > 0) {
             speedFindings.push({ issue: `Add dimensions to ${imgsWithoutDimensions.length} image(s) (CLS fix)`, estimatedSavingMs: 80, effort: 'Low' });
-        }
-        if (totalHints === 0) {
-            speedFindings.push({ issue: 'Add preload/preconnect resource hints', estimatedSavingMs: 200, effort: 'Medium' });
         }
         if (hasGoogleFontsLink && !hasNextFont && (!hasGoogleFontsPreconnect || !hasFontDisplaySwap)) {
             speedFindings.push({ issue: 'Optimise Google Fonts (preconnect + font-display:swap)', estimatedSavingMs: 150, effort: 'Low' });

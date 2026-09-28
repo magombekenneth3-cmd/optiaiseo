@@ -16,9 +16,11 @@ export const metadata: Metadata = {
 
 function deriveScore(categoryScores: unknown): number | null {
   if (!categoryScores || typeof categoryScores !== "object") return null;
-  const vals = Object.values(categoryScores as Record<string, unknown>).map((v) =>
-    typeof v === "number" ? v : 0,
-  );
+  // Exclude 'seo' key — old audit records stored the overall score as
+  // categoryScores.seo which would be circularly re-averaged.
+  const vals = Object.entries(categoryScores as Record<string, unknown>)
+    .filter(([k, v]) => k !== "seo" && typeof v === "number")
+    .map(([, v]) => v as number);
   if (!vals.length) return null;
   return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
 }

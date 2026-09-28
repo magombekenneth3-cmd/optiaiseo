@@ -11,8 +11,11 @@ export const maxDuration = 300;
 
 function deriveScore(categoryScores: unknown): number {
     if (!categoryScores || typeof categoryScores !== "object") return 0;
-    const vals = Object.values(categoryScores as Record<string, unknown>)
-        .map((v) => (typeof v === "number" ? v : 0));
+    // Exclude 'seo' key — old audit records stored the overall score as
+    // categoryScores.seo which would be circularly re-averaged.
+    const vals = Object.entries(categoryScores as Record<string, unknown>)
+        .filter(([k, v]) => k !== "seo" && typeof v === "number")
+        .map(([, v]) => v as number);
     if (!vals.length) return 0;
     return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
 }

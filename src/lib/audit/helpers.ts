@@ -28,21 +28,20 @@ export function extractAuditMetrics(audit: AuditRecord): AuditMetrics {
         issueCount = (issueList.recommendations as unknown[]).length;
     }
 
-    // Priority 1: explicit `seo` key in categoryScores
-    let seoScore = typeof scores?.seo === "number" ? (scores.seo as number) : null;
+    let seoScore: number | null = null;
 
-    if (seoScore === null) {
-        // Priority 2: overallScore stored on the issueList object
-        if (issueList && typeof issueList.overallScore === "number") {
-            seoScore = issueList.overallScore as number;
-        } else if (scores && Object.keys(scores).length > 0) {
-            // Priority 3: average of all numeric category scores
-            const vals = Object.values(scores).filter(
-                (v): v is number => typeof v === "number"
-            );
-            if (vals.length > 0) {
-                seoScore = Math.round(vals.reduce((sum, v) => sum + v, 0) / vals.length);
-            }
+    // Priority 1: overallScore stored on the issueList object (engine canonical)
+    if (issueList && typeof issueList.overallScore === "number") {
+        seoScore = issueList.overallScore as number;
+    } else if (scores && Object.keys(scores).length > 0) {
+        // Priority 2: average of numeric category scores, EXCLUDING 'seo'
+        // to prevent the circular scoring bug (old records stored
+        // overallScore as categoryScores.seo, then re-averaged it).
+        const vals = Object.entries(scores)
+            .filter(([k, v]) => k !== "seo" && typeof v === "number")
+            .map(([, v]) => v as number);
+        if (vals.length > 0) {
+            seoScore = Math.round(vals.reduce((sum, v) => sum + v, 0) / vals.length);
         }
     }
 

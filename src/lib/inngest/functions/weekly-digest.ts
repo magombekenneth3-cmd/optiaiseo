@@ -395,14 +395,16 @@ export const weeklyDigestJob = inngest.createFunction(
               }).catch(() => 0),
             ]);
 
-            // Score delta
             let scoreDelta: number | null = null;
             let latestScore: number | null = null;
             if (audits.length >= 1) {
               const scores = audits.map((a: { categoryScores: unknown }) => {
                 const cats = a.categoryScores as Record<string, number> | null;
                 if (!cats) return 0;
-                const vals = Object.values(cats).filter((v) => typeof v === "number");
+                // Exclude 'seo' key — old records stored the overall score circularly.
+                const vals = Object.entries(cats)
+                  .filter(([k, v]) => k !== "seo" && typeof v === "number")
+                  .map(([, v]) => v as number);
                 return vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : 0;
               });
               latestScore = scores[0];

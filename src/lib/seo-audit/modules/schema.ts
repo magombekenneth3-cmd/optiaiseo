@@ -4,9 +4,12 @@ import { parse } from 'node-html-parser';
 
 const MAX_HTML_BYTES = 10 * 1024 * 1024;
 
+// Rich result types that Google currently supports for general sites.
+// NOTE: FAQPage was restricted to .gov/.health Aug 2023. HowTo was removed from Search.
+// These are excluded from the eligible set so they don't inflate schema opportunity scores.
 const RICH_RESULT_ELIGIBLE = new Set([
-    'Article', 'BlogPosting', 'NewsArticle', 'FAQPage', 'Product',
-    'BreadcrumbList', 'LocalBusiness', 'HowTo', 'Review', 'Event',
+    'Article', 'BlogPosting', 'NewsArticle', 'Product',
+    'BreadcrumbList', 'LocalBusiness', 'Review', 'Event',
     'VideoObject', 'JobPosting', 'Course', 'Recipe',
 ]);
 
@@ -296,9 +299,12 @@ export const SchemaModule: AuditModule = {
                 id: 'schema-missing-website',
                 label: 'Schema: WebSite (Missing)',
                 status: 'Warning',
-                finding: 'No WebSite schema detected. This enables the Google Sitelinks Search Box and establishes site identity for AI/LLM citation.',
+                finding: 'No WebSite schema detected. WebSite schema establishes site identity and helps Google understand the site name for search results.',
                 recommendation: {
-                    text: 'Add WebSite schema with name, url, and a SearchAction potentialAction for sitelinks search box eligibility.',
+                    // NOTE: Google retired the sitelinks search box globally Nov 21, 2024.
+                    // SearchAction in WebSite schema no longer triggers it.
+                    // WebSite schema is still valuable for site-name understanding.
+                    text: 'Add WebSite schema with name and url properties to establish site identity for search results.',
                     priority: 'Medium',
                 },
                 roiImpact: 65,
@@ -343,15 +349,17 @@ export const SchemaModule: AuditModule = {
         if (hasFaqPattern && !detectedTypeNames.has('FAQPage')) {
             items.push({
                 id: 'schema-missing-faq',
-                label: 'Schema: FAQPage (Missing)',
-                status: 'Warning',
-                finding: 'FAQ or accordion content pattern detected in HTML but no FAQPage schema found. This content is eligible for PAA and FAQ rich results.',
+                label: 'Schema: FAQPage (Restricted)',
+                // Downgraded from Warning to Info because FAQPage rich results
+                // were restricted to well-known .gov/.health sites in Aug 2023.
+                status: 'Info',
+                finding: 'FAQ or accordion content pattern detected in HTML but no FAQPage schema found. Note: Since August 2023, Google restricts FAQ rich results to well-known authoritative government and health sites. FAQPage schema may still help AI engines understand Q&A content structure.',
                 recommendation: {
-                    text: 'Add FAQPage JSON-LD with mainEntity Question/Answer pairs to win People Also Ask placement.',
-                    priority: 'Medium',
+                    text: 'If your site is an authoritative government or health resource, add FAQPage JSON-LD. For other sites, FAQPage schema can still help AI citation engines extract Q&A pairs, but it will not produce Google rich results.',
+                    priority: 'Low',
                 },
-                roiImpact: 70,
-                aiVisibilityImpact: 85,
+                roiImpact: 30,
+                aiVisibilityImpact: 60,
             });
         }
 

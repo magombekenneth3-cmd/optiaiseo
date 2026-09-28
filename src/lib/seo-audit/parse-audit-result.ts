@@ -200,7 +200,9 @@ function normCategory(raw: RawCategory): AuditCategoryResult {
     const warnings = analyzable.filter(i => i.status === "Warning").length;
     const score    = raw.score ?? (analyzable.length > 0
         ? Math.round(((passed + warnings * 0.5) / analyzable.length) * 100)
-        : 100);
+        // No analyzable items → unavailable score, NOT perfect.
+        // A missing test result is not a passing test result.
+        : 0);
 
     return {
         id:       raw.id ?? "general",
@@ -239,7 +241,9 @@ function extractRecommendations(categories: AuditCategoryResult[]): NormalizedRe
 
 function computeOverallScore(categories: AuditCategoryResult[]): number {
     const scored = categories.filter(c => !(c as { crashed?: boolean }).crashed);
-    if (scored.length === 0) return 100;
+    // No usable categories → score is 0 (unavailable), NOT 100.
+    // A production system must never turn absence of evidence into a positive result.
+    if (scored.length === 0) return 0;
     return Math.round(scored.reduce((s, c) => s + c.score, 0) / scored.length);
 }
 
@@ -283,19 +287,35 @@ export function toNormalisedIssues(parsed: ParsedAuditResult): NormalisedIssue[]
     // Prefer recommendations[] (already priority-sorted with real scores)
     if (parsed.recommendations.length > 0) {
         return parsed.recommendations.map(
-            (rec): NormalisedIssue => ({
-                id:                 rec.itemId,
-                title:              rec.itemId,
-                description:        rec.finding,
-                severity:           rec.priority === "High" ? "critical" : rec.priority === "Medium" ? "high" : "medium",
-                category:           rec.categoryId,
-                recommendation:     rec.recommendation,
-                roiImpact:          rec.roiImpact,
-                aiVisibilityImpact: rec.aiVisibilityImpact,
-                priorityScore:      rec.priorityScore,
-                finding:            rec.finding,
-                details:            detailsByItemId.get(rec.itemId),
-            })
+            (rec): NormalisedIssue => {
+                // Derive severity from the actual finding status, NOT from
+                // recommendation priority. Severity ≠ priority:
+                //   Fail   → critical (a real SEO failure)
+                //   Warning → high    (needs attention but not broken)
+                //   other  → medium   (informational / opportunity)
+                const item = parsed.categories
+                    .flatMap(c => c.items)
+                    .find(i => i.id === rec.itemId);
+                const status = item?.status ?? 'Warning';
+                const severity: NormalisedIssue['severity'] =
+                    status === 'Fail' ? 'critical'
+                    : status === 'Warning' ? 'high'
+                    : 'medium';
+
+                return {
+                    id:                 rec.itemId,
+                    title:              rec.itemId,
+                    description:        rec.finding,
+                    severity,
+                    category:           rec.categoryId,
+                    recommendation:     rec.recommendation,
+                    roiImpact:          rec.roiImpact,
+                    aiVisibilityImpact: rec.aiVisibilityImpact,
+                    priorityScore:      rec.priorityScore,
+                    finding:            rec.finding,
+                    details:            detailsByItemId.get(rec.itemId),
+                };
+            }
         );
     }
 

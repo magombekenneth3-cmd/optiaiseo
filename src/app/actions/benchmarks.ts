@@ -343,8 +343,11 @@ export async function getSiteBenchmarkContext(
             if (!audit?.categoryScores) return null;
             const cats = audit.categoryScores;
             if (!cats || typeof cats !== "object") return null;
-            const vals = Object.values(cats as Record<string, unknown>)
-                .filter((v): v is number => typeof v === "number");
+            // Exclude 'seo' key — old audit records stored the overall score as
+            // categoryScores.seo which would be circularly re-averaged.
+            const vals = Object.entries(cats as Record<string, unknown>)
+                .filter(([k, v]) => k !== "seo" && typeof v === "number")
+                .map(([, v]) => v as number);
             return vals.length > 0
                 ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
                 : null;

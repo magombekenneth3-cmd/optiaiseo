@@ -126,7 +126,9 @@ export async function executeTool(name: string, args: Record<string, any>): Prom
                 return {
                     domain: domain,
                     overallScore: result.score || 0,
-                    seoScore: result.categoryScores?.seo || 0,
+                    // Use the engine's canonical overallScore, not the old circular
+                    // categoryScores.seo key which was the overall re-inserted.
+                    seoScore: result.score || 0,
                     performanceScore: result.categoryScores?.performance || 0,
                     status: "Audit complete. Summarize these scores for the user and tell them what to focus on.",
                 };

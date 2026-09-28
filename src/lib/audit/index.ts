@@ -20,8 +20,10 @@ export async function runSiteAudit(domain: string, opts?: { targetKeyword?: stri
         categoryScores[cat.id] = cat.score;
     });
 
-    // Ensure 'seo' key explicitly exists for legacy UI components
-    categoryScores['seo'] = report.overallScore;
+    // NOTE: Do NOT insert report.overallScore into categoryScores.
+    // Previously this was `categoryScores['seo'] = report.overallScore;`
+    // which caused the overall score to be re-averaged with its own
+    // components downstream — a circular scoring bug.
 
     logger.debug(`[Audit Engine] Scan complete for ${domain}. Overall Score: ${report.overallScore}. Categories: ${report.categories.length}`);
 

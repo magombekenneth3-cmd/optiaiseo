@@ -23,10 +23,18 @@ const JWT_SECRET = process.env.NEXTAUTH_SECRET ?? "change-me";
 function blendedScore(categoryScores: unknown): number {
     if (!categoryScores || typeof categoryScores !== "object") return 0;
     const s = categoryScores as Record<string, unknown>;
+    // Do NOT use s.seo — that was the old circular overall-score key.
+    // Use the actual individual category scores instead.
+    // Weights: technical 30%, on-page 30%, content 20%, performance 20%
+    const technical   = Number(s.technical   ?? s['on-page'] ?? 0);
+    const onPage      = Number(s['on-page']  ?? s.technical  ?? 0);
+    const content     = Number(s.content     ?? 0);
+    const performance = Number(s.performance ?? 0);
     return Math.round(
-        (Number(s.seo          ?? 0) * 0.5) +
-        (Number(s.performance  ?? 0) * 0.3) +
-        (Number(s.accessibility ?? 0) * 0.2)
+        (technical   * 0.3) +
+        (onPage      * 0.3) +
+        (content     * 0.2) +
+        (performance * 0.2)
     );
 }
 
