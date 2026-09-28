@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { PipelineHealthPanel, type PipelineHealth } from "./PipelineHealthPanel";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/ui/design-system/PageHeader";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -255,25 +256,18 @@ export default function OperationsPage() {
 
     return (
         <div className="flex flex-col gap-6 w-full max-w-6xl mx-auto">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
-                        <Activity className="w-6 h-6 text-emerald-400" />
-                        Operations
-                    </h1>
-                    <p className="text-muted-foreground text-sm mt-1">
-                        Mutation lifecycle: operation → target → actor → status → risk → effects
-                    </p>
-                </div>
-                <button
-                    onClick={handleRefresh}
-                    disabled={refreshing || loading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-                >
-                    <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
-                    Refresh
-                </button>
-            </div>
+            <PageHeader
+                title="Operations"
+                description="Mutation lifecycle: operation → target → actor → status → risk → effects"
+                category="Automate"
+                metrics={[
+                    { label: "Total",     value: totalOps,                           color: "text-foreground" },
+                    { label: "Active",    value: activeOps,                          color: activeOps > 0 ? "text-info" : "text-muted-foreground" },
+                    { label: "Completed", value: statusCounts["COMPLETED"] ?? 0,     color: "text-brand" },
+                    { label: "Failed",    value: failedOps,                          color: failedOps > 0 ? "text-destructive" : "text-muted-foreground" },
+                ]}
+                secondaryAction={{ label: "Refresh", onClick: handleRefresh }}
+            />
 
             {/* Summary cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

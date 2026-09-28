@@ -1,4 +1,4 @@
-import type { Metadata, } from "next";
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { getKeywordRankingsFast, getKeywordRankingsByDateRange } from "@/app/actions/keywords";
 import { AlertCircle, Search, BarChart3, TrendingUp, AlertTriangle, Target, Eye } from "lucide-react";
@@ -19,6 +19,7 @@ import { CollapsibleAnalytics } from "./CollapsibleAnalytics";
 import { PriorityActions } from "./OpportunitiesList";
 import { GscDateRangePicker } from "./components/GscDateRangePicker";
 import { normalizeKeywordDateRange, isDefaultRange } from "@/lib/gsc/gsc-date-range";
+import { PageHeader } from "@/components/ui/design-system/PageHeader";
 
 export const metadata: Metadata = {
     title: "Keywords | OptiAISEO",
@@ -41,50 +42,51 @@ function KpiCard({ label, value, sub, warn, children }: {
     label: string; value: string; sub: string; warn?: boolean; children?: ReactNode;
 }) {
     return (
-        <div className={`rounded-xl border px-4 py-3.5 ${warn ? "border-[#f85149]/20 bg-[#f85149]/5" : "border-[#21262d] bg-[#0d1117]"}`}>
+        <div className={`rounded-xl border px-4 py-3.5 ${warn ? "border-destructive/20 bg-destructive/5" : "border-border bg-card"}`}>
             <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-medium text-[#8b949e]">{label}</span>
+                <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
                 {children}
             </div>
-            <p className={`text-[26px] font-black tabular-nums leading-none ${warn ? "text-[#f85149]" : "text-[#e6edf3]"}`}>
+            <p className={`text-[26px] font-black tabular-nums leading-none ${warn ? "text-destructive" : "text-foreground"}`}>
                 {value}
             </p>
-            <p className="text-[11px] text-[#6e7681] mt-1.5">{sub}</p>
+            <p className="text-[11px] text-muted-foreground mt-1.5">{sub}</p>
         </div>
     );
 }
 
+const HEALTH_BUCKETS = [
+    { label: "Critical", key: "criticalCount" as const, color: "var(--destructive)" },
+    { label: "Weak",     key: "weakCount"    as const, color: "var(--warning)" },
+    { label: "Improving",key: "improvingCount" as const, color: "var(--info)" },
+    { label: "Strong",  key: "strongCount"   as const, color: "var(--brand)" },
+];
+
 function HealthBar({ summary }: {
     summary: { criticalCount: number; weakCount: number; improvingCount: number; strongCount: number };
 }) {
-    const buckets = [
-        { label: "Critical", count: summary.criticalCount, color: "#f85149" },
-        { label: "Weak", count: summary.weakCount, color: "#d29922" },
-        { label: "Improving", count: summary.improvingCount, color: "#388bfd" },
-        { label: "Strong", count: summary.strongCount, color: "#2ea043" },
-    ];
-    const total = buckets.reduce((s, b) => s + b.count, 0) || 1;
+    const total = HEALTH_BUCKETS.reduce((s, b) => s + summary[b.key], 0) || 1;
 
     return (
-        <div className="flex items-center gap-4 px-4 py-2.5 rounded-xl border border-[#21262d] bg-[#0d1117] flex-wrap">
-            <span className="text-[12px] font-semibold text-[#e6edf3] shrink-0">Keyword Health</span>
+        <div className="flex items-center gap-4 px-4 py-2.5 rounded-xl border border-border bg-card flex-wrap">
+            <span className="text-[12px] font-semibold text-foreground shrink-0">Keyword Health</span>
             <div className="flex-1 flex h-[5px] rounded-full overflow-hidden gap-[1px] min-w-[80px]">
-                {buckets.filter(b => b.count > 0).map(b => (
-                    <div key={b.label} className="h-full rounded-full" style={{ width: `${(b.count / total) * 100}%`, background: b.color }} />
+                {HEALTH_BUCKETS.filter(b => summary[b.key] > 0).map(b => (
+                    <div key={b.label} className="h-full rounded-full" style={{ width: `${(summary[b.key] / total) * 100}%`, background: b.color }} />
                 ))}
             </div>
             <div className="flex items-center gap-3 flex-wrap">
-                {buckets.map(b => (
+                {HEALTH_BUCKETS.map(b => (
                     <div key={b.label} className="flex items-center gap-1">
                         <div className="w-1.5 h-1.5 rounded-full" style={{ background: b.color }} />
-                        <span className="text-[10px] text-[#6e7681]">
-                            {b.label} <span className="font-semibold" style={{ color: b.color }}>{b.count}</span>
+                        <span className="text-[10px] text-muted-foreground">
+                            {b.label} <span className="font-semibold" style={{ color: b.color }}>{summary[b.key]}</span>
                         </span>
                     </div>
                 ))}
             </div>
             {summary.criticalCount > 0 && (
-                <a href="#workspace" className="shrink-0 text-[10px] font-semibold text-[#388bfd] hover:text-[#58a6ff] transition-colors">
+                <a href="#workspace" className="shrink-0 text-[10px] font-semibold text-info hover:opacity-80 transition-colors">
                     View critical keywords →
                 </a>
             )}
@@ -97,40 +99,40 @@ function TrafficMini({ summary, visibilityScore }: {
     visibilityScore: VisibilityRow;
 }) {
     return (
-        <div className="rounded-xl border border-[#21262d] bg-[#0d1117] overflow-hidden h-full flex flex-col">
-            <div className="px-5 py-3 border-b border-[#161b22]">
+        <div className="rounded-xl border border-border bg-card overflow-hidden h-full flex flex-col">
+            <div className="px-5 py-3 border-b border-border/60">
                 <h2 className="text-[14px] font-semibold text-[#e6edf3]">Traffic & Search Performance</h2>
                 <p className="text-[10px] text-[#6e7681] mt-0.5">Google Search Console + GA4</p>
             </div>
             <div className="flex-1 px-5 py-4">
                 <div className="mb-1">
-                    <span className="text-[10px] font-medium text-[#6e7681] uppercase tracking-[0.06em]">Organic clicks</span>
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-[0.06em]">Organic clicks</span>
                 </div>
                 <div className="flex items-baseline gap-2 mb-4">
-                    <span className="text-[28px] font-black text-[#e6edf3] tabular-nums">{fmt(summary.totalClicks)}</span>
+                    <span className="text-[28px] font-black text-foreground tabular-nums">{fmt(summary.totalClicks)}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                     <div>
-                        <p className="text-[16px] font-bold text-[#c9d1d9] tabular-nums">{fmt(summary.totalImpressions)}</p>
-                        <p className="text-[10px] text-[#6e7681]">Impressions</p>
+                        <p className="text-[16px] font-bold text-foreground/80 tabular-nums">{fmt(summary.totalImpressions)}</p>
+                        <p className="text-[10px] text-muted-foreground">Impressions</p>
                     </div>
                     <div>
-                        <p className="text-[16px] font-bold text-[#c9d1d9] tabular-nums">{summary.page1Pct}%</p>
-                        <p className="text-[10px] text-[#6e7681]">Page 1 rate</p>
+                        <p className="text-[16px] font-bold text-foreground/80 tabular-nums">{summary.page1Pct}%</p>
+                        <p className="text-[10px] text-muted-foreground">Page 1 rate</p>
                     </div>
                 </div>
                 {visibilityScore && (
-                    <div className="mt-4 pt-3 border-t border-[#161b22]">
+                    <div className="mt-4 pt-3 border-t border-border/60">
                         <div className="flex items-center gap-2">
-                            <Eye className="w-3.5 h-3.5 text-[#6e7681]" />
-                            <span className="text-[10px] text-[#6e7681]">Visibility</span>
-                            <span className="text-[14px] font-bold text-[#e6edf3] ml-auto tabular-nums">{visibilityScore.score}</span>
+                            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                            <span className="text-[10px] text-muted-foreground">Visibility</span>
+                            <span className="text-[14px] font-bold text-foreground ml-auto tabular-nums">{visibilityScore.score}</span>
                         </div>
-                        <p className="text-[10px] text-[#6e7681] mt-0.5 text-right">{visibilityScore.top10Pct}% in top 10</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 text-right">{visibilityScore.top10Pct}% in top 10</p>
                     </div>
                 )}
             </div>
-            <a href="#analytics" className="flex items-center justify-center gap-1 px-5 py-2 border-t border-[#161b22] text-[11px] font-semibold text-[#388bfd] hover:bg-[#0f1318] transition-colors">
+            <a href="#analytics" className="flex items-center justify-center gap-1 px-5 py-2 border-t border-border/60 text-[11px] font-semibold text-brand hover:bg-accent transition-colors">
                 View full analytics ↓
             </a>
         </div>
@@ -262,22 +264,20 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
     return (
         <div className="flex flex-col gap-5 w-full max-w-6xl mx-auto">
 
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div>
-                    <h1 className="text-[22px] font-bold tracking-[-0.4px] text-[#e6edf3] mb-1">Keyword Performance</h1>
-                    <p className="text-[13px] text-[#8b949e] mb-1.5">Track rankings, find opportunities and grow organic traffic.</p>
-                    <div className="flex items-center gap-1.5 text-[11px] text-[#6e7681] flex-wrap">
-                        <span>{"dateLabel" in (rankingsRes.data ?? {}) ? (rankingsRes.data as { dateLabel?: string }).dateLabel ?? dateLabel : dateLabel}</span>
-                        <span className="text-[#30363d]">·</span>
-                        <span>Google Search Console + GA4</span>
-                        {activeSite && (
-                            <>
-                                <span className="text-[#30363d]">·</span>
-                                <span className="text-[#c9d1d9] font-medium">{activeSite.domain}</span>
-                            </>
-                        )}
-                    </div>
-                </div>
+            <PageHeader
+                title="Keyword Rankings"
+                description={`Track rankings, find opportunities and grow organic traffic · ${("dateLabel" in (rankingsRes.data ?? {}) ? (rankingsRes.data as { dateLabel?: string }).dateLabel : null) ?? dateLabel} · GSC + GA4`}
+                category="Monitor"
+                metrics={[
+                    { label: "Tracked", value: fmt(summary.total), color: "text-foreground" },
+                    { label: "Page 1", value: String(summary.page1Count), color: "text-brand" },
+                    { label: "Need Attention", value: String(needAttention), color: needAttention > 0 ? "text-destructive" : "text-muted-foreground" },
+                    { label: "Clicks", value: fmt(summary.totalClicks), color: "text-foreground" },
+                ]}
+            />
+
+            <div className="flex items-center justify-between gap-3 flex-wrap -mt-2">
+                <GscDateRangePicker activeLabel={dateLabel} siteId={activeSiteId} />
                 {userSites.length > 0 && (
                     <KeywordSiteSwitcher
                         sites={userSites.map(s => ({ id: s.id, domain: s.domain }))}
@@ -285,8 +285,6 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
                     />
                 )}
             </div>
-
-            <GscDateRangePicker activeLabel={dateLabel} siteId={activeSiteId} />
 
             {summary.total === 0 && <GscConnectCard siteDomain={activeSite?.domain} />}
 
