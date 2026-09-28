@@ -212,7 +212,67 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   const priorityActions: { id: string; impact: "critical" | "high" | "medium" | "low"; title: string; subtitle: string; reason?: string; confidence?: string; href: string; ctaLabel: string }[] = [];
 
-  if (topAudit) {
+  // ── Diagnostic-aware priority actions ──────────────────────────────────────
+  // Try to pull evidence-driven findings from the diagnostic engine.
+  // If the migration hasn't been run yet, fall back to legacy checklist items.
+  let diagnosticFindingCount = 0;
+  let diagnosticVerifiedCount = 0;
+  let diagnosticDeterministicCount = 0;
+  try {
+    const diagnosticFindings = await (prisma as any).diagnosticFindingRecord?.findMany?.({
+      where: { siteId: primarySiteId ?? "", status: { in: ["FAIL", "WARNING"] } },
+      orderBy: [{ severity: "asc" }, { priorityScore: "desc" }],
+      take: 5,
+      select: {
+        id: true,
+        fingerprint: true,
+        issueType: true,
+        status: true,
+        severity: true,
+        rootCause: true,
+        confidence: true,
+        expectedOutcome: true,
+        remediationType: true,
+        priorityScore: true,
+      },
+    });
+
+    if (diagnosticFindings && diagnosticFindings.length > 0) {
+      diagnosticFindingCount = diagnosticFindings.length;
+
+      // Count verified and deterministic
+      const allFindings = await (prisma as any).diagnosticFindingRecord?.count?.({
+        where: { siteId: primarySiteId ?? "" },
+      }) ?? 0;
+      diagnosticVerifiedCount = await (prisma as any).diagnosticFindingRecord?.count?.({
+        where: { siteId: primarySiteId ?? "", status: "PASS", resolvedAt: { not: null } },
+      }) ?? 0;
+      diagnosticDeterministicCount = await (prisma as any).diagnosticFindingRecord?.count?.({
+        where: { siteId: primarySiteId ?? "", remediationType: "DETERMINISTIC" },
+      }) ?? 0;
+
+      // Use diagnostic findings as priority actions (evidence-driven)
+      for (const finding of diagnosticFindings.slice(0, 3)) {
+        const severity = finding.severity as "critical" | "high" | "medium" | "low";
+        const confidencePct = Math.round((finding.confidence ?? 0) * 100);
+        priorityActions.push({
+          id: `diag-${finding.fingerprint}`,
+          impact: severity,
+          title: finding.rootCause ?? finding.issueType,
+          subtitle: finding.expectedOutcome ?? "Fix this to improve SEO performance.",
+          reason: `Root cause identified with ${confidencePct}% confidence. Priority score: ${finding.priorityScore ?? "—"}/100.`,
+          confidence: `${confidencePct}% confidence`,
+          href: topAudit ? `/dashboard/audits/${topAudit.id}` : "/dashboard/audits",
+          ctaLabel: finding.remediationType === "DETERMINISTIC" ? "Auto-fix" : finding.remediationType === "AI_PATCH" ? "Generate fix" : "Review",
+        });
+      }
+    }
+  } catch {
+    // Table doesn't exist yet (migration not run) — fall through to legacy
+  }
+
+  // Legacy fallback: use checklist items if no diagnostic findings available
+  if (priorityActions.length === 0 && topAudit) {
     type IssueItem = { status: string; label?: string; title?: string; id?: string };
     type IssueCategory = { items?: IssueItem[] };
     const rawList = topAudit.issueList as IssueCategory[] | null;
@@ -496,7 +556,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </div>
 
           {/* ── Remediation pipeline ───────────────────────────────────────────── */}
-          <DashboardRemediationPipeline proposed={pendingPrsCount} active={0} completed={prsCreatedThisMonth} verified={0} />
+          <DashboardRemediationPipeline
+            proposed={diagnosticFindingCount > 0 ? diagnosticFindingCount : pendingPrsCount}
+            active={diagnosticDeterministicCount}
+            completed={prsCreatedThisMonth}
+            verified={diagnosticVerifiedCount}
+          />
 
           {/* ── Autonomous activity ────────────────────────────────────────────── */}
           {primarySiteId && <AutonomousActivity siteId={primarySiteId} />}
