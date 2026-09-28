@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 
 export type ConfidenceLabel = "High confidence" | "Medium confidence" | "Low confidence" | "Estimated";
 
@@ -7,17 +8,29 @@ export interface RecommendationConfidence {
     rate: number;        
     sampleSize: number;
     description: string;
+    /** Breakdown of outcome sources feeding this confidence score */
+    sources: {
+        healingOutcomes: number;
+        diagnosticVerifications: number;
+    };
 }
 
 /**
  * Returns confidence data for a given issueType + optional niche.
- * Falls back to estimated 0.7 if fewer than 5 outcomes exist.
+ *
+ * Blends two outcome sources:
+ *   1. HealingOutcome records (legacy pipeline) — equal weight
+ *   2. DiagnosticFindingRecord T+28 evidence (evidence-driven pipeline) — 1.2× weight
+ *      because diagnostic outcomes carry richer multi-window verification evidence.
+ *
+ * Falls back to estimated 0.7 if fewer than 5 total outcomes exist.
  */
 export async function getRecommendationConfidence(
     issueType: string,
     siteNiche?: string | null
 ): Promise<RecommendationConfidence> {
-    const outcomes = await prisma.healingOutcome.findMany({
+    // ── Source 1: Legacy HealingOutcome pipeline ──────────────────────────
+    const healingOutcomes = await prisma.healingOutcome.findMany({
         where: {
             issueType,
             measuredAt: { not: null },
@@ -30,32 +43,107 @@ export async function getRecommendationConfidence(
         take: 200,
     });
 
-    if (outcomes.length < 5) {
+    // ── Source 2: T+28 diagnostic verification evidence ──────────────────
+    let diagnosticOutcomes: { outcome: string }[] = [];
+    try {
+        const findings = await (prisma as any).diagnosticFindingRecord.findMany({
+            where: {
+                issueType,
+                status: { in: ["PASS", "FAIL"] },
+                resolvedAt: { not: null },
+                ...(siteNiche
+                    ? { site: { niche: siteNiche } }
+                    : {}),
+            },
+            select: { id: true, status: true },
+            take: 200,
+        });
+
+        // Enrich with T+28 evidence records to get actual outcome
+        for (const finding of findings) {
+            const evidence = await (prisma as any).sEOEvidenceRecord.findFirst({
+                where: {
+                    findingId: finding.id,
+                    observedValue: {
+                        path: ["verificationType"],
+                        equals: "T28_BUSINESS",
+                    },
+                },
+                select: { observedValue: true },
+                orderBy: { observedAt: "desc" },
+            });
+
+            if (evidence?.observedValue?.outcome) {
+                diagnosticOutcomes.push({ outcome: evidence.observedValue.outcome });
+            } else {
+                // Fall back to finding status: PASS → improved, FAIL → degraded
+                diagnosticOutcomes.push({
+                    outcome: finding.status === "PASS" ? "improved" : "degraded",
+                });
+            }
+        }
+    } catch (err) {
+        // DiagnosticFindingRecord table may not exist yet — silently degrade
+        logger.debug("[Confidence] Diagnostic findings query failed (table may not exist):", {
+            error: (err as Error)?.message,
+        });
+    }
+
+    const totalHealingSamples = healingOutcomes.length;
+    const totalDiagnosticSamples = diagnosticOutcomes.length;
+    const totalSamples = totalHealingSamples + totalDiagnosticSamples;
+
+    if (totalSamples < 5) {
         return {
             label: "Estimated",
             rate: 0.7,
-            sampleSize: outcomes.length,
+            sampleSize: totalSamples,
             description: "Estimated 70% success rate (fewer than 5 measured outcomes for this fix type)",
+            sources: {
+                healingOutcomes: totalHealingSamples,
+                diagnosticVerifications: totalDiagnosticSamples,
+            },
         };
     }
 
-    const improved = outcomes.filter(o => o.outcome === "improved").length;
-    const rate = improved / outcomes.length;
+    // Weighted blending: diagnostic outcomes get 1.2× weight because they
+    // carry richer multi-window verification evidence (T+0, T+7, T+28).
+    const DIAGNOSTIC_WEIGHT = 1.2;
+    const healingImproved = healingOutcomes.filter(o => o.outcome === "improved").length;
+    const diagnosticImproved = diagnosticOutcomes.filter(o => o.outcome === "improved").length;
+
+    const weightedImproved = healingImproved + (diagnosticImproved * DIAGNOSTIC_WEIGHT);
+    const weightedTotal = totalHealingSamples + (totalDiagnosticSamples * DIAGNOSTIC_WEIGHT);
+    const rate = weightedTotal > 0 ? weightedImproved / weightedTotal : 0;
 
     let label: ConfidenceLabel;
     let description: string;
+    const pct = Math.round(rate * 100);
+    const sourceNote = totalDiagnosticSamples > 0
+        ? ` (${totalHealingSamples} healing + ${totalDiagnosticSamples} diagnostic outcomes)`
+        : "";
+
     if (rate >= 0.8) {
         label = "High confidence";
-        description = `${Math.round(rate * 100)}% success rate across ${outcomes.length} similar sites — strong evidence this fix works`;
+        description = `${pct}% success rate across ${totalSamples} outcomes${sourceNote} — strong evidence this fix works`;
     } else if (rate >= 0.6) {
         label = "Medium confidence";
-        description = `${Math.round(rate * 100)}% success rate across ${outcomes.length} sites — likely to improve rankings`;
+        description = `${pct}% success rate across ${totalSamples} outcomes${sourceNote} — likely to improve rankings`;
     } else {
         label = "Low confidence";
-        description = `${Math.round(rate * 100)}% success rate across ${outcomes.length} sites — results vary significantly`;
+        description = `${pct}% success rate across ${totalSamples} outcomes${sourceNote} — results vary significantly`;
     }
 
-    return { label, rate, sampleSize: outcomes.length, description };
+    return {
+        label,
+        rate,
+        sampleSize: totalSamples,
+        description,
+        sources: {
+            healingOutcomes: totalHealingSamples,
+            diagnosticVerifications: totalDiagnosticSamples,
+        },
+    };
 }
 
 /**

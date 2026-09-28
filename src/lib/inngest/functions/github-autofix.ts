@@ -170,6 +170,16 @@ export const githubAutofixSiteJob = inngest.createFunction(
                     });
                 }
 
+                // Actually emit the seo/fix.deployed events to trigger T+0 verification
+                try {
+                    await inngest.send(events);
+                    logger.info(`[GithubAutofix] Emitted ${events.length} seo/fix.deployed events for ${domain}`);
+                } catch (err) {
+                    logger.warn("[GithubAutofix] Failed to emit seo/fix.deployed events (non-fatal):", {
+                        error: (err as Error)?.message,
+                    });
+                }
+
                 return { eventsQueued: events.length };
             });
 

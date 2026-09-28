@@ -372,6 +372,7 @@ const PAGE_TITLE_PREFIX: Array<[string, string]> = [
     ["/dashboard/refresh", "Content Refresh"],
     ["/dashboard/content-decay", "Content Decay"],
     ["/dashboard/healing", "Self-Healing Log"],
+    ["/dashboard/diagnostics", "Diagnostic Findings"],
 ];
 
 function getTitle(path: string): string {
@@ -444,7 +445,7 @@ export function TopHeader({ mobileSidebar }: { mobileSidebar?: ReactNode }) {
                 </Link>
             );
         }
-        if (pathname.startsWith("/dashboard/operations") || pathname.startsWith("/dashboard/healing")) {
+        if (pathname.startsWith("/dashboard/operations") || pathname.startsWith("/dashboard/healing") || pathname.startsWith("/dashboard/diagnostics")) {
             return (
                 <Link href="/dashboard/operations" className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
                     <Zap className="w-3.5 h-3.5" /> Review operations

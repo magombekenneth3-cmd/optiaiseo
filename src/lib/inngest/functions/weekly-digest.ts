@@ -79,6 +79,8 @@ interface DigestData {
   experimentsCompleted: number;
   avgPositionGain: number;
   experimentRevenueLift: number;
+  // Diagnostic engine findings
+  diagnosticFindings: number;   // active FAIL/WARNING findings from diagnostic engine
 }
 
 
@@ -171,6 +173,15 @@ function buildEmailHtml(
        </tr>`
     : "";
 
+  const diagnosticRow = data.diagnosticFindings > 0
+    ? `<tr>
+        <td style="padding:8px 0;color:#a1a1aa;font-size:13px">🔬 Diagnostic findings</td>
+        <td style="padding:8px 0;font-size:13px;font-weight:600;color:#f472b6;text-align:right">
+          ${data.diagnosticFindings} active issue${data.diagnosticFindings !== 1 ? "s" : ""} diagnosed with root cause
+        </td>
+       </tr>`
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -217,7 +228,7 @@ function buildEmailHtml(
         </tr>
         <tr><td style="padding:0 20px">
           <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #27272a">
-            ${winRow}${dropRow}${blogRow}${issueRow}${competitorRow}${dropCountRow}${opportunityRow}${experimentRow}
+            ${winRow}${dropRow}${blogRow}${issueRow}${competitorRow}${dropCountRow}${opportunityRow}${experimentRow}${diagnosticRow}
           </table>
         </td></tr>
       </table>
@@ -272,6 +283,7 @@ function buildEmailText(displayName: string, data: DigestData, userId: string): 
   if (positionDropCount > 0) lines.push(`📉 ${positionDropCount} keyword${positionDropCount !== 1 ? "s" : ""} fell in rankings this week`);
   if (bestOpportunityKw) lines.push(`💡 Best opportunity: "${bestOpportunityKw}" — ${bestOpportunityImpr.toLocaleString()} impressions on page 2`);
   if (data.experimentsExecuted > 0) lines.push(`🧪 Experiments: ${data.experimentsExecuted} running${data.experimentsCompleted > 0 ? `, ${data.experimentsCompleted} evaluated` : ""}${data.avgPositionGain > 0 ? `, avg +${data.avgPositionGain} positions` : ""}`);
+  if (data.diagnosticFindings > 0) lines.push(`🔬 Diagnostic findings: ${data.diagnosticFindings} active issue${data.diagnosticFindings !== 1 ? "s" : ""} with root cause analysis`);
   lines.push(`\n${actionLabel}: ${base}${actionHref}`);
   lines.push(`\nUnsubscribe: ${unsub}`);
   return lines.join("\n");
@@ -337,7 +349,7 @@ export const weeklyDigestJob = inngest.createFunction(
           try {
             const { getSiteExperimentSummary } = await import("@/lib/experiments/tracker");
 
-            const [audits, rankSnaps7d, pendingBlogs, newIssues, competitorGapCount, positionDrops, page2Snaps, experimentSummary] = await Promise.all([
+            const [audits, rankSnaps7d, pendingBlogs, newIssues, competitorGapCount, positionDrops, page2Snaps, experimentSummary, diagnosticFindings] = await Promise.all([
               // Last 2 audits for score delta
               prisma.audit.findMany({
                 where: { siteId: site.id },
@@ -377,6 +389,10 @@ export const weeklyDigestJob = inngest.createFunction(
               }).catch(() => []),
               // Experiment summary
               getSiteExperimentSummary(site.id).catch(() => ({ totalExperimentsExecuted: 0, completedExperiments: 0, averagePositionGain: 0, totalRevenueGenerated: 0 })),
+              // Active diagnostic findings (evidence-driven engine)
+              (prisma as any).diagnosticFindingRecord.count({
+                where: { siteId: site.id, status: { in: ["FAIL", "WARNING"] } },
+              }).catch(() => 0),
             ]);
 
             // Score delta
@@ -452,6 +468,7 @@ export const weeklyDigestJob = inngest.createFunction(
               experimentsCompleted: (experimentSummary as any).completedExperiments ?? 0,
               avgPositionGain: (experimentSummary as any).averagePositionGain ?? 0,
               experimentRevenueLift: (experimentSummary as any).totalRevenueGenerated ?? 0,
+              diagnosticFindings: (diagnosticFindings as number) ?? 0,
             };
 
             await resend.emails.send({
