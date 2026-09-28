@@ -37,10 +37,10 @@ interface ActionItem {
     est: number;
 }
 
-const CFG: Record<ActionItem["type"], { icon: React.ElementType; label: string; impact: OpportunityImpact; cta: string }> = {
-    fix_ctr: { icon: AlertTriangle, label: "Fix CTR", impact: "high", cta: "Review page" },
-    push_page1: { icon: TrendingUp, label: "Push to Page 1", impact: "high", cta: "Improve page" },
-    create_content: { icon: Sparkles, label: "Create Supporting Content", impact: "medium", cta: "Create content" },
+const CFG: Record<ActionItem["type"], { icon: React.ElementType; label: string; impact: OpportunityImpact; cta: string; color: string }> = {
+    fix_ctr: { icon: AlertTriangle, label: "Fix CTR", impact: "high", cta: "Review page", color: "#d29922" },
+    push_page1: { icon: TrendingUp, label: "Push to Page 1", impact: "high", cta: "Improve page", color: "#3fb950" },
+    create_content: { icon: Sparkles, label: "Create Supporting Content", impact: "medium", cta: "Create content", color: "#58a6ff" },
 };
 
 function computeActions(keywords: GscKeyword[]): ActionItem[] {
@@ -137,7 +137,7 @@ export function PriorityActions({ keywords, siteId }: { keywords: GscKeyword[]; 
                                             {c.impact}
                                         </span>
                                     </div>
-                                    <p className="text-[11px] text-[#6e7681] truncate">{a.detail}</p>
+                                    <p className="text-[11px] text-[#6e7681] truncate">{a.reason}</p>
                                 </div>
                                 <span className="hidden sm:block shrink-0 text-[11px] font-medium text-[#2ea043]">
                                     {a.impactLabel}
