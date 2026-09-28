@@ -241,16 +241,23 @@ export const OnPageModule: AuditModule = {
         if (!title) {
             titleStatus = 'Fail';
             titleFinding = 'No title tag found. This is a critical SEO error.';
-            titleRec = { text: 'Add a descriptive <title> tag (50–60 characters) containing your primary keyword.', priority: 'High' };
-        } else if (title.length > 60) {
+            titleRec = { text: 'Add a descriptive <title> tag (50–65 characters) containing your primary keyword.', priority: 'High' };
+        } else if (title.length > 70) {
+            // Google measures display width in pixels (~580px), not characters.
+            // Titles >70 chars are very likely to be truncated regardless of letter width.
             titleStatus = 'Warning';
-            titleFinding = `Title too long (${title.length} chars, max 60): "${title}". Google will truncate in SERPs.`;
-            titleRec = { text: 'Shorten the title to 50–60 characters. Lead with the primary keyword.', priority: 'Medium' };
-        } else if (title.length < 50) {
+            titleFinding = `Title likely truncated (${title.length} chars): "${title}". Google typically displays ~55-65 characters depending on letter width (measured in pixels, not characters).`;
+            titleRec = { text: 'Shorten the title to ~60 characters. Lead with the primary keyword. Note: Google measures in pixels (~580px), so narrow letters (i, l, t) allow more characters.', priority: 'Medium' };
+        } else if (title.length < 30) {
+            // Very short titles waste SERP real estate
             titleStatus = 'Warning';
-            titleFinding = `Title too short (${title.length} chars, ideal 50–60): "${title}". Wasted keyword real estate.`;
-            titleRec = { text: 'Expand the title to 50–60 characters with your primary keyword and a qualifier.', priority: 'Medium' };
+            titleFinding = `Title very short (${title.length} chars): "${title}". Wasted SERP real estate — you could fit more keywords.`;
+            titleRec = { text: 'Expand the title to ~50-65 characters. Add your primary keyword and a qualifier or brand name.', priority: 'Medium' };
         }
+        // Titles between 30-70 chars are considered acceptable. The "ideal" range
+        // of 50-65 chars is a guideline, not a hard rule. We do not flag titles
+        // of 45 or 48 chars as warnings — that's misleading precision for a
+        // pixel-based measurement.
 
         items.push({
             id: 'title-tag',
@@ -273,15 +280,22 @@ export const OnPageModule: AuditModule = {
             descStatus = 'Fail';
             descFinding = 'No meta description found. Google will auto-generate one, which is usually suboptimal.';
             descRec = { text: 'Write a compelling meta description (120–160 chars) with your primary keyword and a clear CTA.', priority: 'High' };
-        } else if (metaDesc.length > 160) {
+        } else if (metaDesc.length > 170) {
+            // Google shows ~155-170 chars on desktop, ~120 on mobile.
+            // Only flag clearly over-long descriptions.
             descStatus = 'Warning';
-            descFinding = `Meta description too long (${metaDesc.length} chars, max 160). Will be truncated in SERPs.`;
-            descRec = { text: 'Trim to 120–160 characters. End with a CTA.', priority: 'Medium' };
-        } else if (metaDesc.length < 120) {
+            descFinding = `Meta description long (${metaDesc.length} chars). Google typically shows ~155 chars on desktop, ~120 on mobile. The end may be truncated.`;
+            descRec = { text: 'Trim to ~150 characters. Put the most compelling content and keywords in the first 120 characters (mobile cutoff).', priority: 'Medium' };
+        } else if (metaDesc.length < 70) {
+            // Very short descriptions waste SERP real estate
             descStatus = 'Warning';
-            descFinding = `Meta description too short (${metaDesc.length} chars, ideal 120–160). Opportunity for more keyword coverage.`;
-            descRec = { text: 'Expand to 120–160 characters with targeted keywords and a CTA.', priority: 'Medium' };
+            descFinding = `Meta description short (${metaDesc.length} chars). Missed opportunity for keyword coverage and click-through optimization.`;
+            descRec = { text: 'Expand to ~120-155 characters with targeted keywords and a CTA. Google may ignore very short descriptions and auto-generate one instead.', priority: 'Medium' };
         }
+        // Descriptions between 70-170 chars are considered acceptable.
+        // The "ideal" of 120-155 is a guideline. Google may rewrite the
+        // description entirely regardless of length, so this check is
+        // informational, not a hard SEO requirement.
 
         items.push({
             id: 'meta-description',
@@ -553,7 +567,7 @@ export const OnPageModule: AuditModule = {
             const urlIssues: string[] = [];
 
             if (urlLength > 115) urlIssues.push(`URL too long (${urlLength} chars, max 115)`);
-            if (hasParams) urlIssues.push('URL contains query parameters — prefer clean slugs');
+            if (hasParams) urlIssues.push('URL contains query parameters — ensure canonical tags prevent duplicate indexing');
             if (isDeep) urlIssues.push(`URL is ${pathParts.length} levels deep (max 3 recommended)`);
 
             items.push({

@@ -44,22 +44,37 @@ export interface AuditIssue {
     recommendation: string
 }
 
-export const PRIORITIZATION_POLICY_VERSION = "priority-v3";
+/**
+ * @deprecated Use PRIORITIZATION_POLICY_VERSION from prioritization.ts instead.
+ * Kept for backward compatibility with existing code that imports from types.ts.
+ */
+export { PRIORITIZATION_POLICY_VERSION } from './prioritization';
 
+/**
+ * @deprecated Legacy weights from v3. The v4 system uses 7-component weights.
+ * Kept for backward compatibility — actual computation now routes through v4.
+ */
 export const PRIORITIZATION_WEIGHTS = {
     impact: 0.5,
     ease: 0.3,
     confidence: 0.2,
 } as const;
 
+/**
+ * Compute priority for an AuditIssue.
+ *
+ * @deprecated This now delegates to computePriorityLegacy() which maps the
+ * old (impact, ease, confidence) signature to the canonical v4 model.
+ * New code should use computePriorityV4() from prioritization.ts directly.
+ */
 export function computePriority(issue: AuditIssue): number {
-    const impact = Math.max(0, Math.min(10, issue.estimatedTrafficImpact)) / 10;
-    const ease = 1 - Math.max(0, Math.min(10, issue.fixDifficulty)) / 10;
-    const confidence = Math.max(0, Math.min(1, issue.confidence));
-    return Math.round(
-        (impact * PRIORITIZATION_WEIGHTS.impact +
-            ease * PRIORITIZATION_WEIGHTS.ease +
-            confidence * PRIORITIZATION_WEIGHTS.confidence) * 100
+    // Route through the v4 legacy bridge to eliminate the duplicate priority model.
+    // This ensures all callers get consistent v4 scores.
+    const { computePriorityLegacy } = require('./prioritization');
+    return computePriorityLegacy(
+        issue.estimatedTrafficImpact,
+        issue.fixDifficulty,
+        issue.confidence,
     );
 }
 

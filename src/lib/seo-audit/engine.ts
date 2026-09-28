@@ -3,6 +3,11 @@ import { AuditModule, AuditModuleContext, FullAuditReport, NormalizedRecommendat
 import { fetchHtml } from './utils/fetch-html';
 import { runDiagnosticPipeline, type DiagnosticPipelineResult } from './diagnostic-engine';
 
+/**
+ * @deprecated Use computePriorityV4() from prioritization.ts for new code.
+ * This flat ROI(60%)+AI(40%) formula is the third competing priority model.
+ * Kept for backward compatibility in the engine's recommendation extraction.
+ */
 export const SCORING_WEIGHTS = {
     ROI_IMPACT: 0.6,
     AI_VISIBILITY: 0.4

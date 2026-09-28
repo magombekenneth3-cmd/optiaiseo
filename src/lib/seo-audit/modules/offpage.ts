@@ -502,7 +502,12 @@ export const OffPageModule: AuditModule = {
             })
         }
 
-        // ── Competitor Link Intersection (Link Gap) ──────────────────────
+        // ── Competitor Content Gap (Keyword Gap) ──────────────────────────
+        // NOTE: getCompetitorTopPages returns the competitor's top RANKING PAGES,
+        // NOT their backlink sources. A proper "link gap" would require fetching
+        // backlinks per competitor domain, which we don't have an API for yet.
+        // What we CAN do here is a "content/keyword gap": pages competitors rank
+        // for that you may not cover, giving you content ideas for link-worthy pages.
         if (primaryKeyword && (process.env.DATAFORSEO_LOGIN || process.env.SERPER_API_KEY)) {
             const competitors = await getAhrefsCompetitors(domain, 5).catch(() => [])
             const competitorDomains = competitors.map(c => c.domain).filter(Boolean)
@@ -514,60 +519,57 @@ export const OffPageModule: AuditModule = {
                     )
                 )
 
-                const myDomainSet = new Set(backlinks.map(l => l.sourceDomain.toLowerCase()))
-                const competitorLinkSites = new Map<string, string[]>()
-
+                // Collect competitor top-ranking page paths to identify content gaps
+                const competitorTopContent = new Map<string, { domain: string; volume: number; keywords: string[] }>()
                 competitorPages.forEach((pages, idx) => {
                     const cd = competitorDomains[idx] ?? ''
                     pages.forEach(page => {
-                        const linkDomain = (() => {
-                            try { return new URL(page.url.startsWith('http') ? page.url : `https://${cd}${page.url}`).hostname.replace(/^www\./, '') } catch { return '' }
-                        })()
-                        if (linkDomain && !myDomainSet.has(linkDomain) && linkDomain !== domain) {
-                            const existing = competitorLinkSites.get(linkDomain) ?? []
-                            existing.push(cd)
-                            competitorLinkSites.set(linkDomain, existing)
+                        const path = page.url || ''
+                        if (path && !competitorTopContent.has(path)) {
+                            competitorTopContent.set(path, {
+                                domain: cd,
+                                volume: page.totalVolume,
+                                keywords: page.keywords.slice(0, 3),
+                            })
                         }
                     })
                 })
 
-                const multiCompetitorLinks = [...competitorLinkSites.entries()]
-                    .filter(([, cds]) => cds.length >= 2)
+                const totalGapPages = competitorTopContent.size
+                const highVolumeGaps = [...competitorTopContent.values()]
+                    .filter(p => p.volume > 100)
+                    .sort((a, b) => b.volume - a.volume)
                     .slice(0, 10)
 
-                const totalGapSites = competitorLinkSites.size
-                const highValueGaps = multiCompetitorLinks.length
-
                 items.push({
-                    id: 'competitor-link-gap',
-                    label: 'Competitor Link Intersection (Link Gap)',
-                    status: highValueGaps === 0 && totalGapSites === 0 ? 'Pass'
-                        : highValueGaps > 5 ? 'Warning'
+                    id: 'competitor-content-gap',
+                    label: 'Competitor Content Gap (Keyword Gap)',
+                    status: highVolumeGaps.length === 0 && totalGapPages === 0 ? 'Pass'
+                        : highVolumeGaps.length > 5 ? 'Warning'
                             : 'Info',
-                    finding: highValueGaps > 0
-                        ? `Found ${totalGapSites} domains linking to competitors [${competitorDomains.slice(0, 3).join(', ')}] but NOT to you. ${highValueGaps} of these link to 2+ competitors — highest-priority outreach targets.`
-                        : `Competitor link analysis complete. ${totalGapSites} unearned link opportunities identified across ${competitorDomains.length} competitor(s).`,
-                    recommendation: totalGapSites > 0 ? {
+                    finding: highVolumeGaps.length > 0
+                        ? `Found ${totalGapPages} pages that competitors [${competitorDomains.slice(0, 3).join(', ')}] rank for with significant search volume. ${highVolumeGaps.length} have >100 monthly searches — potential content opportunities.`
+                        : `Competitor content analysis complete. ${totalGapPages} competitor ranking pages identified across ${competitorDomains.length} competitor(s).`,
+                    recommendation: totalGapPages > 0 ? {
                         text: [
-                            `Link gap opportunities vs. competitors [${competitorDomains.slice(0, 3).join(', ')}]:`,
-                            multiCompetitorLinks.length > 0
-                                ? `Priority targets (link to 2+ competitors):\n${multiCompetitorLinks.slice(0, 5).map(([site, cds]) => `  • ${site} (links to: ${cds.join(', ')})`).join('\n')}`
+                            `Content gap vs. competitors [${competitorDomains.slice(0, 3).join(', ')}]:`,
+                            highVolumeGaps.length > 0
+                                ? `High-volume competitor pages:\n${highVolumeGaps.slice(0, 5).map(p => `  • ${p.domain}${p.keywords.length > 0 ? ` — keywords: ${p.keywords.join(', ')}` : ''} (${p.volume} mo. volume)`).join('\n')}`
                                 : '',
                             ``,
-                            `Outreach playbook:`,
-                            `• Sites that link to 2+ competitors are highest-intent — they cover your category and may add you.`,
-                            `• Find the exact linking page on each site, identify the content manager, and pitch why your tool/content belongs there.`,
-                            `• Use a broken link angle if the competitor page they link to is outdated or removed.`,
-                            `• Create content that is directly comparable to what competitors rank for on those linking pages.`,
+                            `Content gap playbook:`,
+                            `• Create link-worthy content covering topics your competitors rank for but you don't.`,
+                            `• Target the same keywords with better, more comprehensive content (Skyscraper Technique).`,
+                            `• Each new ranking page becomes a potential link-earning asset.`,
                         ].filter(Boolean).join('\n'),
-                        priority: highValueGaps > 3 ? 'High' : 'Medium',
+                        priority: highVolumeGaps.length > 3 ? 'High' : 'Medium',
                     } : undefined,
                     roiImpact: 90,
                     aiVisibilityImpact: 55,
                     details: {
                         competitorDomains: competitorDomains.slice(0, 3).join(', '),
-                        totalGapSites,
-                        highPriorityTargets: highValueGaps,
+                        totalGapPages,
+                        highVolumeGaps: highVolumeGaps.length,
                     } as Record<string, string | number | boolean>,
                 })
             }

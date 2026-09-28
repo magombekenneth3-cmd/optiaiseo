@@ -262,9 +262,13 @@ export const KeywordsModule: AuditModule = {
                 urlStatus = "Warning"
                 urlFinding = "Could not detect a primary keyword."
             } else if (hasQueryParams) {
-                urlStatus = "Fail"
-                urlFinding = "URL contains query parameters instead of a clean, static slug. This reduces indexing efficiency."
-                urlRec = { text: "Configure clean routing (e.g., /category/shoes instead of /products?cat=shoes).", priority: "High" }
+                // Query params are NOT inherently bad. Legitimate uses include:
+                // pagination (?page=2), variants (?color=red), language (?lang=fr),
+                // SPA routing, API-driven content. Only truly problematic patterns
+                // are session IDs, sort/filter creating crawlable duplicates.
+                urlStatus = "Warning"
+                urlFinding = "URL contains query parameters. This is acceptable for pagination, variants, or filters, but ensure canonical tags prevent duplicate crawling of parameter combinations."
+                urlRec = { text: "If this page is the canonical version, add a self-referencing canonical tag. If parameters create duplicate content (e.g., ?sort=price), use canonical to point to the clean URL, or add these parameters to Google Search Console's URL Parameters tool.", priority: "Medium" }
             } else if (!inUrl) {
                 urlStatus = "Warning"
                 urlFinding = `URL slug does not contain primary keyword ${pkLabel}. Current path: "${urlSlug}".`
