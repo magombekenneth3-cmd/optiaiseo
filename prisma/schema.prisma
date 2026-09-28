@@ -291,6 +291,10 @@ model Site {
   autonomousExecutionClaims   AutonomousExecutionClaim[]
   executionTraces             ExecutionTrace[]
 
+  // Evidence-driven diagnostic engine (Phase P0.6)
+  diagnosticFindings          DiagnosticFindingRecord[]
+  seoEvidenceRecords          SEOEvidenceRecord[]
+
   @@index([userId])
   @@index([niche, operatingMode])
 }
@@ -1278,6 +1282,76 @@ model HealingOutcome {
   @@index([siteId, issueType])
   @@index([fixAppliedAt])
   @@index([measuredAt])
+}
+
+/// A single piece of SEO evidence collected during an audit or re-crawl.
+/// Immutable — rows are never updated, only new evidence is appended.
+/// This creates an audit trail: "evidence at diagnosis" vs "evidence at verification".
+model SEOEvidenceRecord {
+  id            String                   @id @default(cuid())
+  siteId        String
+  findingId     String?
+  /// EvidenceSource enum value: HTML | HTTP_HEADERS | ROBOTS | SITEMAP | GSC | GA4 | CRUX | LINK_GRAPH | SCHEMA | DNS
+  source        String
+  url           String?
+  observedAt    DateTime                 @default(now())
+  observedValue Json?
+  expectedValue Json?
+  httpStatus    Int?
+  confidence    Float                    @default(0)
+  /// SHA-256 prefix of source+url+observedValue for dedup
+  evidenceHash  String
+
+  site    Site                          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  finding DiagnosticFindingRecord?      @relation(fields: [findingId], references: [id], onDelete: SetNull)
+
+  @@index([siteId, observedAt(sort: Desc)])
+  @@index([findingId])
+  @@index([evidenceHash])
+}
+
+/// A diagnosed SEO issue with root cause, evidence chain, and verification contract.
+/// Fingerprinted for dedup across audit runs — the same issue on the same URL
+/// with the same root cause produces the same fingerprint.
+model DiagnosticFindingRecord {
+  id                   String              @id @default(cuid())
+  siteId               String
+  /// Stable dedup key: sha256(siteId|issueType|url|rootCause)
+  fingerprint          String
+  issueType            String
+  /// DiagnosticStatus: PASS | FAIL | WARNING | UNKNOWN | NOT_APPLICABLE | BLOCKED
+  status               String              @default("FAIL")
+  /// FindingSeverity: critical | high | medium | low
+  severity             String              @default("medium")
+  /// SITE | PAGE | URL_PATTERN
+  scopeType            String              @default("PAGE")
+  scopeUrls            String[]            @default([])
+  rootCause            String
+  confidence           Float               @default(0)
+  expectedOutcome      String
+  /// DETERMINISTIC | AI_PATCH | MANUAL | EXPERIMENT
+  remediationType      String              @default("MANUAL")
+  /// VerificationCriterion[] — how to prove the fix worked
+  verificationCriteria Json?
+  /// Fingerprints of blocking issues that must be resolved first
+  dependencies         String[]            @default([])
+  /// Explainable priority score (0–100)
+  priorityScore        Int?
+  /// PriorityComponents JSON — individual scoring factors
+  priorityComponents   Json?
+  /// Policy version used to compute priority (e.g. "priority-v4")
+  policyVersion        String?
+  resolvedAt           DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  site     Site                           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  evidence SEOEvidenceRecord[]
+
+  @@unique([siteId, fingerprint])
+  @@index([siteId, status])
+  @@index([siteId, issueType])
+  @@index([siteId, severity, createdAt(sort: Desc)])
 }
 
 model SerpFeature {

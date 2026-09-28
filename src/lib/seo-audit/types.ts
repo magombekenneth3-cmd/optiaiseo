@@ -1,6 +1,30 @@
 export type AuditStatus = 'Pass' | 'Fail' | 'Warning' | 'Error' | 'Skipped' | 'Info';
 export type RecommendationPriority = 'High' | 'Medium' | 'Low';
 
+// Re-export the evidence-aware diagnostic status from the canonical location.
+// New code should prefer DiagnosticStatus; AuditStatus stays for backward compat.
+export type { DiagnosticStatus } from './diagnostic-types';
+
+/**
+ * Map a legacy AuditStatus to the evidence-aware DiagnosticStatus.
+ *
+ *   Pass    → PASS
+ *   Fail    → FAIL
+ *   Error   → FAIL
+ *   Warning → WARNING
+ *   Skipped → NOT_APPLICABLE
+ *   Info    → UNKNOWN  (insufficient evidence to judge)
+ */
+export function toDiagnosticStatus(
+    status: AuditStatus,
+): import('./diagnostic-types').DiagnosticStatus {
+    if (status === 'Pass') return 'PASS';
+    if (status === 'Fail' || status === 'Error') return 'FAIL';
+    if (status === 'Warning') return 'WARNING';
+    if (status === 'Skipped') return 'NOT_APPLICABLE';
+    return 'UNKNOWN';
+}
+
 export interface AuditRecommendation {
     text: string;
     priority: RecommendationPriority;

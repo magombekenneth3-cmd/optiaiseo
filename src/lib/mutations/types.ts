@@ -152,3 +152,40 @@ export class ExecutionClaimError extends Error {
     this.name = "ExecutionClaimError";
   }
 }
+
+// ── Verification Outcomes ──────────────────────────────────────────────────
+//
+// SEO fixes need multi-stage verification:
+//   T+0   — Technical: HTML/headers/schema confirm the change is live
+//   T+7   — Search: GSC confirms indexing, impressions, position changes
+//   T+28  — Business: Organic traffic, conversions, ranking trend
+//
+// "Fix deployed" ≠ "SEO issue fixed."
+
+export type VerificationOutcome =
+  | "PENDING"                  // No verification attempted yet
+  | "TECHNICALLY_VERIFIED"     // T+0: HTML/headers confirm fix is applied
+  | "PARTIALLY_VERIFIED"       // Some verification criteria pass, some fail
+  | "SEARCH_VERIFIED"          // T+7–14: GSC confirms indexing/impressions
+  | "OUTCOME_MEASURED"         // T+28: Business metrics improved
+  | "INEFFECTIVE"              // Fix applied but no SEO improvement observed
+  | "REGRESSED"                // Metrics worsened after the fix
+  | "UNKNOWN";                 // Insufficient data to determine outcome
+
+export type VerificationWindow =
+  | "T0_TECHNICAL"             // Immediately post-deploy
+  | "T7_SEARCH"               // 7–14 days post-deploy
+  | "T28_BUSINESS";           // 28+ days post-deploy
+
+/** Valid verification state transitions */
+export const VALID_VERIFICATION_TRANSITIONS: Record<VerificationOutcome, VerificationOutcome[]> = {
+  PENDING:                ["TECHNICALLY_VERIFIED", "PARTIALLY_VERIFIED", "UNKNOWN"],
+  TECHNICALLY_VERIFIED:   ["SEARCH_VERIFIED", "INEFFECTIVE", "REGRESSED", "UNKNOWN"],
+  PARTIALLY_VERIFIED:     ["TECHNICALLY_VERIFIED", "SEARCH_VERIFIED", "INEFFECTIVE", "UNKNOWN"],
+  SEARCH_VERIFIED:        ["OUTCOME_MEASURED", "INEFFECTIVE", "REGRESSED"],
+  OUTCOME_MEASURED:       ["REGRESSED"],  // can regress even after initial success
+  INEFFECTIVE:            [],              // terminal
+  REGRESSED:              [],              // terminal
+  UNKNOWN:                ["TECHNICALLY_VERIFIED", "PARTIALLY_VERIFIED", "INEFFECTIVE"],
+};
+
