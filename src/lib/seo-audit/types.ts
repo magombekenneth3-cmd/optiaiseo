@@ -1,4 +1,4 @@
-export type AuditStatus = 'Pass' | 'Fail' | 'Warning' | 'Error' | 'Skipped' | 'Info';
+export type AuditStatus = 'Pass' | 'Fail' | 'Warning' | 'Error' | 'Skipped' | 'Info' | 'NotApplicable';
 export type RecommendationPriority = 'High' | 'Medium' | 'Low';
 
 // Re-export the evidence-aware diagnostic status from the canonical location.
@@ -8,12 +8,13 @@ export type { DiagnosticStatus } from './diagnostic-types';
 /**
  * Map a legacy AuditStatus to the evidence-aware DiagnosticStatus.
  *
- *   Pass    → PASS
- *   Fail    → FAIL
- *   Error   → FAIL
- *   Warning → WARNING
- *   Skipped → NOT_APPLICABLE
- *   Info    → UNKNOWN  (insufficient evidence to judge)
+ *   Pass           → PASS
+ *   Fail           → FAIL
+ *   Error          → FAIL
+ *   Warning        → WARNING
+ *   Skipped        → NOT_APPLICABLE
+ *   NotApplicable  → NOT_APPLICABLE
+ *   Info           → UNKNOWN  (insufficient evidence to judge)
  */
 export function toDiagnosticStatus(
     status: AuditStatus,
@@ -21,7 +22,7 @@ export function toDiagnosticStatus(
     if (status === 'Pass') return 'PASS';
     if (status === 'Fail' || status === 'Error') return 'FAIL';
     if (status === 'Warning') return 'WARNING';
-    if (status === 'Skipped') return 'NOT_APPLICABLE';
+    if (status === 'Skipped' || status === 'NotApplicable') return 'NOT_APPLICABLE';
     return 'UNKNOWN';
 }
 
@@ -162,7 +163,7 @@ export interface AuditModuleContext {
     /** Modules append detected framework hints; engine resolves consensus after Promise.all */
     readonly frameworkHints: string[];
     readonly pageType?: string;
-    /** Target keyword from site settings — used by KeywordOptimisationModule and ImageSeoModule */
+    /** Target keyword from site settings — used by KeywordsModule and ImageSeoModule */
     readonly targetKeyword?: string;
     /** Authenticated user ID — passed to Moz client for per-user API token lookup */
     readonly userId?: string;

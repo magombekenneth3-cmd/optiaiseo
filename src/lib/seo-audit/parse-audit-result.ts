@@ -240,7 +240,11 @@ function extractRecommendations(categories: AuditCategoryResult[]): NormalizedRe
 }
 
 function computeOverallScore(categories: AuditCategoryResult[]): number {
-    const scored = categories.filter(c => !(c as { crashed?: boolean }).crashed);
+    // Fix 2.5: Supplementary modules don't count toward the core SEO health score.
+    const SUPPLEMENTARY_MODULES = new Set(['social-branding']);
+    const scored = categories.filter(c =>
+        !(c as { crashed?: boolean }).crashed && !SUPPLEMENTARY_MODULES.has(c.id)
+    );
     // No usable categories → score is 0 (unavailable), NOT 100.
     // A production system must never turn absence of evidence into a positive result.
     if (scored.length === 0) return 0;

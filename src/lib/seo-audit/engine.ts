@@ -155,9 +155,14 @@ export class AuditEngine {
         // A module that ran successfully and found no issues returns score=0, passed=0,
         // failed=0, warnings=0 AND crashed=undefined — include it in the average.
         // A crashed module returns score=0 with crashed=true — exclude it.
+        //
+        // Fix 2.5: Supplementary modules (social-branding) are excluded from the
+        // core SEO health score. They are reported separately in the UI but should
+        // not dilute or inflate the primary score that drives recommendations.
+        const SUPPLEMENTARY_MODULES = new Set(['social-branding']);
         const scoredCategories = categoryResults.filter(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (c) => !(c as any).crashed
+            (c) => !(c as any).crashed && !SUPPLEMENTARY_MODULES.has(c.id)
         );
         const unblockedScore = scoredCategories.length > 0
             ? Math.round(scoredCategories.reduce((sum, c) => sum + c.score, 0) / scoredCategories.length)

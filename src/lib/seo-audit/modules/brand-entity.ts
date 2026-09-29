@@ -537,6 +537,8 @@ function calcScore(items: ChecklistItem[]): number {
     let totalWeight = 0;
     let earned = 0;
     for (const item of items) {
+        // Info and NotApplicable items don't contribute to score
+        if (item.status === 'Info' || item.status === 'NotApplicable' || item.status === 'Skipped') continue;
         const w = weights[item.id] ?? 5;
         totalWeight += w;
         if (item.status === 'Pass') earned += w;

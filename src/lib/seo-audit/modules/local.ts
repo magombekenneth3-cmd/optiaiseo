@@ -178,7 +178,7 @@ function hasPhoneNumber(pageText: string, links: HTMLElement[]): boolean {
 // Score calculation
 
 function calculateScore(items: ChecklistItem[]): { score: number; passed: number; failed: number; warnings: number } {
-    const analyzable = items.filter(i => i.status !== 'Skipped' && i.status !== 'Info');
+    const analyzable = items.filter(i => i.status !== 'Skipped' && i.status !== 'Info' && i.status !== 'NotApplicable');
     const passed = analyzable.filter(i => i.status === 'Pass').length;
     const failed = analyzable.filter(i => i.status === 'Fail').length;
     const warnings = analyzable.filter(i => i.status === 'Warning').length;
@@ -220,13 +220,60 @@ export const LocalModule: AuditModule = {
 
         const root = parse(html);
 
-        // Collect links once; reused by multiple checks
-        const links = root.querySelectorAll('a[href]');
+        // ── Fix 2.2: Local Business Gating ──────────────────────────────────
+        // Detect whether this site is actually a local business before penalizing
+        // for missing GMB profiles, map embeds, phone numbers, etc.
+        // A SaaS site should not lose 50+ points for not having a Google Maps embed.
+        const schemaElements = root.querySelectorAll('script[type="application/ld+json"]');
+        const { hasLocalBusinessSchema, hasValidNap, hasReviewSchema } = checkSchemas(schemaElements);
 
+        const links = root.querySelectorAll('a[href]');
         const directoryLinksFound = links.reduce((count, a) => {
             const href = a.getAttribute('href') ?? '';
             return count + (LOCAL_DIRECTORY_PATTERNS.some(pattern => href.includes(pattern)) ? 1 : 0);
         }, 0);
+
+        const hasMapEmbed = root.querySelectorAll('iframe').some(iframe =>
+            (iframe.getAttribute('src') ?? '').includes('google.com/maps/embed')
+        );
+
+        const pageText = root.querySelector('body')?.textContent ?? '';
+        const hasPhysicalAddress =
+            /\d{1,5}\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Way|Place|Pl)\b/i.test(pageText);
+
+        // Count local signals to determine if this site is a local business
+        const localSignals = [
+            hasLocalBusinessSchema,
+            directoryLinksFound > 0,
+            hasMapEmbed,
+            hasPhysicalAddress,
+        ].filter(Boolean).length;
+
+        // If zero local signals found, this is likely not a local business.
+        // Return NotApplicable so the score is excluded from the overall average.
+        if (localSignals === 0) {
+            return {
+                id: LocalModule.id,
+                label: LocalModule.label,
+                items: [{
+                    id: 'local-not-applicable',
+                    label: 'Local SEO Applicability',
+                    status: 'NotApplicable' as const,
+                    finding: 'No local business signals detected (no LocalBusiness schema, physical address, map embed, or local directory links). Local SEO checks are not applicable to this site type.',
+                    recommendation: {
+                        text: 'If this IS a local business, add LocalBusiness JSON-LD schema with name, address, and telephone to enable local SEO scoring.',
+                        priority: 'Low' as const,
+                    },
+                    roiImpact: 0,
+                    aiVisibilityImpact: 0,
+                }],
+                score: 0,
+                passed: 0,
+                failed: 0,
+                warnings: 0,
+            };
+        }
+        // ── End gating ──────────────────────────────────────────────────────
 
         items.push({
             id: 'local-directories',
@@ -246,9 +293,7 @@ export const LocalModule: AuditModule = {
         // NOTE: Map embeds typically live on /contact pages rather than the
         // homepage. A Warning here is expected for non-contact pages — filter
         // by audit URL before acting on this signal.
-        const hasMapEmbed = root.querySelectorAll('iframe').some(iframe =>
-            (iframe.getAttribute('src') ?? '').includes('google.com/maps/embed')
-        );
+        // hasMapEmbed already computed in the gating section above.
 
         items.push({
             id: 'map-embed',
@@ -265,8 +310,7 @@ export const LocalModule: AuditModule = {
             aiVisibilityImpact: 60,
         });
 
-        const schemaElements = root.querySelectorAll('script[type="application/ld+json"]');
-        const { hasLocalBusinessSchema, hasValidNap, hasReviewSchema } = checkSchemas(schemaElements);
+        // schemaElements + checkSchemas already computed in the gating section above.
 
         items.push({
             id: 'nap-schema',
@@ -302,7 +346,7 @@ export const LocalModule: AuditModule = {
             aiVisibilityImpact: 70,
         });
 
-        const pageText = root.querySelector('body')?.textContent ?? '';
+        // pageText already computed in the gating section above.
         const phoneVisible = hasPhoneNumber(pageText, links);
 
         items.push({

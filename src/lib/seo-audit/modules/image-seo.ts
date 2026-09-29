@@ -8,11 +8,11 @@ import { parse } from "node-html-parser";
 import type { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem } from "../types";
 
 function score(items: ChecklistItem[]): AuditCategoryResult {
-    const passed   = items.filter(i => i.status === "Pass" || i.status === "Info").length;
-    const failed   = items.filter(i => i.status === "Fail").length;
-    const warnings = items.filter(i => i.status === "Warning").length;
-    const total    = passed + failed + warnings;
-    const s        = total > 0 ? Math.round(((passed + warnings * 0.5) / total) * 100) : 100;
+    const analyzable = items.filter(i => i.status !== "Skipped" && i.status !== "Info" && i.status !== "NotApplicable");
+    const passed   = analyzable.filter(i => i.status === "Pass").length;
+    const failed   = analyzable.filter(i => i.status === "Fail").length;
+    const warnings = analyzable.filter(i => i.status === "Warning").length;
+    const s        = analyzable.length > 0 ? Math.round(((passed + warnings * 0.5) / analyzable.length) * 100) : 0;
     return { id: ImageSeoModule.id, label: ImageSeoModule.label, items, score: s, passed, failed, warnings };
 }
 

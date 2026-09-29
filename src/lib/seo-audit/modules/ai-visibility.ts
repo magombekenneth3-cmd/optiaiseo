@@ -632,7 +632,7 @@ export const AiVisibilityModule: AuditModule = {
             });
         }
 
-        const analyzable = items.filter(i => i.status !== 'Skipped' && i.status !== 'Info');
+        const analyzable = items.filter(i => i.status !== 'Skipped' && i.status !== 'Info' && i.status !== 'NotApplicable');
         const passed = analyzable.filter(i => i.status === 'Pass').length;
         const failed = analyzable.filter(i => i.status === 'Fail').length;
         const warnings = analyzable.filter(i => i.status === 'Warning').length;

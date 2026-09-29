@@ -9,7 +9,7 @@ type SeverityFilter = "all" | "critical" | "high" | "medium" | "low";
 
 const CATEGORY_ORDER = [
     "basics", "basics-analytics", "on-page", "onpage", "technical", "technical-seo",
-    "content-quality", "keyword-optimisation", "keywords", "keyword-optimization",
+    "content-quality", "keywords", "keyword-optimisation", "keyword-optimization",
     "off-page", "offpage", "schema", "schema-markup",
     "performance", "accessibility", "social", "social-branding",
     "local", "local-seo",

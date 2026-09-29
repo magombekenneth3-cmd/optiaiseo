@@ -126,11 +126,17 @@ function assertMaxHtmlSize(html: string, url: string): void {
 }
 
 function calculateScore(items: ChecklistItem[]): AuditCategoryResult {
-    const passed = items.filter(i => i.status === 'Pass' || i.status === 'Info').length;
-    const failed = items.filter(i => i.status === 'Fail').length;
-    const warnings = items.filter(i => i.status === 'Warning').length;
-    const total = passed + failed + warnings;
-    const score = total > 0 ? Math.round(((passed + warnings * 0.5) / total) * 100) : 100;
+    // Exclude Info, NotApplicable, and Skipped from scoring — they represent
+    // missing data or irrelevant checks and should NOT inflate the score.
+    const NON_SCORING: Set<string> = new Set(['Info', 'NotApplicable', 'Skipped']);
+    const analyzable = items.filter(i => !NON_SCORING.has(i.status));
+    const passed = analyzable.filter(i => i.status === 'Pass').length;
+    const failed = analyzable.filter(i => i.status === 'Fail').length;
+    const warnings = analyzable.filter(i => i.status === 'Warning').length;
+    // Empty → 0 (not 100). Absence of evidence ≠ perfect. (Phase 1.2 principle)
+    const score = analyzable.length > 0
+        ? Math.round(((passed + warnings * 0.5) / analyzable.length) * 100)
+        : 0;
     return {
         id: PerformanceModule.id,
         label: PerformanceModule.label,
@@ -420,6 +426,7 @@ export const PerformanceModule: AuditModule = {
                         roiImpact: 97,
                         aiVisibilityImpact: 80,
                         details: {
+                            dataSource: cruxLcpMs != null ? 'lab+field' : 'lab',
                             labLcpMs: lcpAudit.numericValue,
                             ...(cruxLcpMs != null ? { cruxMobileLcpP75Ms: cruxLcpMs } : {}),
                         } as Record<string, string | number | boolean>,
@@ -449,6 +456,7 @@ export const PerformanceModule: AuditModule = {
                         roiImpact: 95,
                         aiVisibilityImpact: 75,
                         details: {
+                            dataSource: cruxClsVal != null ? 'lab+field' : 'lab',
                             labCls: val,
                             ...(cruxClsVal != null ? { cruxMobileClsP75: cruxClsVal } : {}),
                         } as Record<string, string | number | boolean>,
@@ -478,6 +486,7 @@ export const PerformanceModule: AuditModule = {
                         roiImpact: 90,
                         aiVisibilityImpact: 70,
                         details: {
+                            dataSource: cruxInpVal != null ? 'lab+field' : 'lab',
                             labInpMs: val,
                             ...(cruxInpVal != null ? { cruxMobileInpP75Ms: cruxInpVal } : {}),
                         } as Record<string, string | number | boolean>,
@@ -499,7 +508,7 @@ export const PerformanceModule: AuditModule = {
                         } : undefined,
                         roiImpact: 88,
                         aiVisibilityImpact: 65,
-                        details: { labTbtMs: val } as Record<string, string | number | boolean>,
+                        details: { dataSource: 'lab', labTbtMs: val } as Record<string, string | number | boolean>,
                     });
                 }
 
@@ -524,6 +533,7 @@ export const PerformanceModule: AuditModule = {
                         roiImpact: 90,
                         aiVisibilityImpact: 55,
                         details: {
+                            dataSource: cruxTtfbVal != null ? 'lab+field' : 'lab',
                             labTtfbMs: val,
                             ...(cruxTtfbVal != null ? { cruxMobileTtfbP75Ms: cruxTtfbVal } : {}),
                         } as Record<string, string | number | boolean>,
@@ -545,7 +555,7 @@ export const PerformanceModule: AuditModule = {
                         } : undefined,
                         roiImpact: 75,
                         aiVisibilityImpact: 50,
-                        details: { speedIndexSecs: siSecs } as Record<string, string | number | boolean>,
+                        details: { dataSource: 'lab', speedIndexSecs: siSecs } as Record<string, string | number | boolean>,
                     });
                 }
             }
@@ -578,6 +588,7 @@ export const PerformanceModule: AuditModule = {
                         roiImpact: 90,
                         aiVisibilityImpact: 70,
                         details: {
+                            dataSource: cruxLcpMs != null ? 'lab+field' : 'lab',
                             desktopLabLcpMs: dLcp.numericValue,
                             ...(cruxLcpMs != null ? { cruxDesktopLcpP75Ms: cruxLcpMs } : {}),
                         } as Record<string, string | number | boolean>,
@@ -607,6 +618,7 @@ export const PerformanceModule: AuditModule = {
                         roiImpact: 88,
                         aiVisibilityImpact: 68,
                         details: {
+                            dataSource: cruxClsVal != null ? 'lab+field' : 'lab',
                             desktopLabCls: val,
                             ...(cruxClsVal != null ? { cruxDesktopClsP75: cruxClsVal } : {}),
                         } as Record<string, string | number | boolean>,
@@ -636,6 +648,7 @@ export const PerformanceModule: AuditModule = {
                         roiImpact: 88,
                         aiVisibilityImpact: 68,
                         details: {
+                            dataSource: cruxInpVal != null ? 'lab+field' : 'lab',
                             desktopLabInpMs: val,
                             ...(cruxInpVal != null ? { cruxDesktopInpP75Ms: cruxInpVal } : {}),
                         } as Record<string, string | number | boolean>,
@@ -657,7 +670,7 @@ export const PerformanceModule: AuditModule = {
                         } : undefined,
                         roiImpact: 82,
                         aiVisibilityImpact: 60,
-                        details: { desktopLabTbtMs: val } as Record<string, string | number | boolean>,
+                        details: { dataSource: 'lab', desktopLabTbtMs: val } as Record<string, string | number | boolean>,
                     });
                 }
             }
@@ -720,6 +733,7 @@ export const PerformanceModule: AuditModule = {
                         roiImpact: 99,
                         aiVisibilityImpact: 85,
                         details: {
+                            dataSource: 'field',
                             ...(mLcp != null ? { cruxMobileLcpP75Ms: mLcp } : {}),
                             ...(dLcp != null ? { cruxDesktopLcpP75Ms: dLcp } : {}),
                             ...(mInp != null ? { cruxMobileInpP75Ms: mInp } : {}),

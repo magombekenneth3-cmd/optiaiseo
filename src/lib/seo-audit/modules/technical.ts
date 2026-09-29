@@ -1464,7 +1464,7 @@ export const TechnicalModule: AuditModule = {
         }
 
         // Score
-        const analyzableItems = items.filter(i => i.status !== 'Skipped' && i.status !== 'Info');
+        const analyzableItems = items.filter(i => i.status !== 'Skipped' && i.status !== 'Info' && i.status !== 'NotApplicable');
         const passed = analyzableItems.filter(i => i.status === 'Pass').length;
         const failed = analyzableItems.filter(i => i.status === 'Fail').length;
         const warnings = analyzableItems.filter(i => i.status === 'Warning').length;

@@ -12,7 +12,9 @@ import { PerformanceModule } from './modules/performance';
 import { ContentQualityModule } from './modules/content-quality';
 import { SchemaModule } from './modules/schema';
 import { AiVisibilityModule } from './modules/ai-visibility';
-import { KeywordOptimisationModule } from './modules/keyword-optimisation';
+// Fix 2.4: KeywordOptimisationModule merged into KeywordsModule — import kept
+// as comment for reference. See keyword-optimisation.ts for deprecation notice.
+// import { KeywordOptimisationModule } from './modules/keyword-optimisation';
 import { ImageSeoModule } from './modules/image-seo';
 import { BrandEntityModule } from './modules/brand-entity';
 
@@ -28,7 +30,8 @@ const FULL_MODULES: AuditModule[] = [
     OnPageModule,
     KeywordsModule,
     ContentQualityModule,
-    KeywordOptimisationModule,
+    // Fix 2.4: KeywordOptimisationModule merged into KeywordsModule
+    // KeywordOptimisationModule,
     ImageSeoModule,
     OffPageModule,
     LocalModule,
@@ -50,7 +53,7 @@ const PAGE_MODULES: AuditModule[] = [
     OnPageModule,
     ContentQualityModule,
     AccessibilityModule,
-    KeywordOptimisationModule,
+    KeywordsModule,  // Fix 2.4: was KeywordOptimisationModule, now merged
     ImageSeoModule,
     SchemaModule,
     AiVisibilityModule,

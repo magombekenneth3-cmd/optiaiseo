@@ -217,7 +217,7 @@ function buildBacklinkRecommendationText(pageType: PageType, hasApiKey: boolean)
 }
 
 function calculateScore(items: ChecklistItem[]): { score: number; passed: number; failed: number; warnings: number } {
-    const analyzable = items.filter(i => i.status !== 'Skipped');
+    const analyzable = items.filter(i => i.status !== 'Skipped' && i.status !== 'Info' && i.status !== 'NotApplicable');
     const passed = analyzable.filter(i => i.status === 'Pass').length;
     const failed = analyzable.filter(i => i.status === 'Fail').length;
     const warnings = analyzable.filter(i => i.status === 'Warning').length;

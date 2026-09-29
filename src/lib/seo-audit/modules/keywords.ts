@@ -300,7 +300,11 @@ export const KeywordsModule: AuditModule = {
             })
         }
 
-        // 6. Keyword Density
+        // 6. Keyword Density (informational)
+        // Fix 2.3/2.4: Keyword density is NOT a modern ranking signal. Google has
+        // explicitly stated they don't use density as a ranking factor.
+        // We report it as Info (informational) so it doesn't affect the score.
+        // Exception: stuffing (>4%) stays Warning, zero-occurrence stays Warning.
         {
             const totalWordCount = bodyWords.length
             const keywordOccurrences = primaryKeyword ? countOccurrences(cleanBodyText, primaryKeyword) : 0
@@ -310,45 +314,67 @@ export const KeywordsModule: AuditModule = {
                     ? parseFloat(((keywordOccurrences * phraseWordCount) / totalWordCount * 100).toFixed(2))
                     : 0
 
-            let densityStatus: AuditStatus = "Pass"
-            let densityFinding = ""
+            let densityStatus: AuditStatus = "Info"
+            let densityFinding = `Keyword density: ${pkLabel} appears ${keywordOccurrences} time(s) in ${totalWordCount} words (${density}%). Note: Google does not use keyword density as a ranking factor.`
             let densityRec: ChecklistItem["recommendation"] = undefined
 
             if (!primaryKeyword || totalWordCount < 100) {
-                densityStatus = "Warning"
+                densityStatus = "Info"
                 densityFinding = `Not enough body text (${totalWordCount} words) to calculate meaningful keyword density.`
-                densityRec = { text: "Write at least 300 words of substantive content to allow accurate keyword density analysis.", priority: "Medium" }
-            } else if (density < 0.5) {
+            } else if (density === 0) {
                 densityStatus = "Warning"
-                densityFinding = `[Under-optimized] Keyword density too low: ${pkLabel} appears ${keywordOccurrences} time(s) in ${totalWordCount} words (${density}%).`
+                densityFinding = `Primary keyword ${pkLabel} does not appear in the body text at all. While density itself isn't a ranking factor, complete absence of the target keyword is a relevance problem.`
+                densityRec = { text: `Use ${pkLabel} naturally in the page body — at least a few times. Don't chase a specific density number.`, priority: "Medium" }
+            } else if (density > 4.0) {
+                densityStatus = "Warning"
+                densityFinding = `[Keyword Stuffing Risk] ${pkLabel} appears ${keywordOccurrences} time(s) (${density}% density). Google penalises unnatural repetition.`
                 densityRec = {
-                    text: `Increase natural usage of ${pkLabel} — aim for 0.5%–1.5% density. Add it to subheadings, image alt text, and the conclusion.`,
+                    text: `Reduce ${pkLabel} usage and replace with synonyms or related terms.`,
                     priority: "Medium",
                 }
-            } else if (density > 4.0) {
-                densityStatus = "Fail"
-                densityFinding = `[Keyword Stuffing] ${pkLabel} appears ${keywordOccurrences} time(s) (${density}% density). Google penalises over-optimised content.`
-                densityRec = {
-                    text: `Reduce ${pkLabel} usage to 1–1.5% density. Use semantic variations and related terms instead of repeating the exact phrase.`,
-                    priority: "High",
-                }
-            } else if (density > 2.0) {
-                densityStatus = "Warning"
-                densityFinding = `[Over-optimized] Keyword density is high: ${pkLabel} appears ${keywordOccurrences} time(s) (${density}%). You are risking a penalty.`
-                densityRec = { text: `Reduce ${pkLabel} usage slightly. Target 1–1.5% density.`, priority: "Medium" }
-            } else {
-                densityFinding = `[Ideal] Keyword density is healthy: ${pkLabel} appears ${keywordOccurrences} time(s) (${density}% — ideal range: 0.5%–1.5%).`
             }
 
             items.push({
                 id: "keyword-density",
-                label: "Keyword Density",
+                label: "Keyword Density (informational)",
                 status: densityStatus,
                 finding: densityFinding,
                 recommendation: densityRec,
+                roiImpact: 30,
+                aiVisibilityImpact: 20,
+                details: { primaryKeyword, occurrences: keywordOccurrences, totalWords: totalWordCount, density },
+            })
+        }
+
+        // 6b. Keyword in Subheadings (H2/H3)
+        // Merged from keyword-optimisation.ts — checks explicit keyword presence
+        // in at least one subheading, which is a separate signal from LSI variety.
+        {
+            const h2h3Texts = Array.from(root.querySelectorAll("h2, h3")).map(el => el.textContent.trim().toLowerCase())
+            const matchingSubheadings = primaryKeyword
+                ? h2h3Texts.filter(h => h.includes(primaryKeyword.toLowerCase()))
+                : []
+            const kwWords = primaryKeyword ? primaryKeyword.toLowerCase().split(/\s+/) : []
+            const partialMatches = h2h3Texts.filter(h => kwWords.every(w => h.includes(w)))
+
+            items.push({
+                id: "keyword-in-subheadings",
+                label: "Keyword in Subheadings (H2/H3)",
+                status: matchingSubheadings.length >= 1 ? "Pass" : partialMatches.length >= 1 ? "Warning" : h2h3Texts.length === 0 ? "Warning" : "Fail",
+                finding: matchingSubheadings.length >= 1
+                    ? `Primary keyword ${pkLabel} found in ${matchingSubheadings.length} H2/H3 subheading(s).`
+                    : partialMatches.length >= 1
+                        ? `Keyword words found spread across headings but not as a complete phrase. Consider tighter alignment.`
+                        : h2h3Texts.length === 0
+                            ? "No H2/H3 subheadings found on this page."
+                            : `Primary keyword ${pkLabel} not found in any of ${h2h3Texts.length} H2/H3 headings.`,
+                recommendation: matchingSubheadings.length === 0 ? {
+                    text: `Include ${pkLabel} (or a natural variation) in at least one H2 or H3. Variations like "${primaryKeyword} tips", "best ${primaryKeyword}", "how to use ${primaryKeyword}" are all valid.`,
+                    priority: "Medium",
+                } : undefined,
                 roiImpact: 75,
                 aiVisibilityImpact: 70,
-                details: { primaryKeyword, occurrences: keywordOccurrences, totalWords: totalWordCount, density },
+                details: { primaryKeyword, h2h3Count: h2h3Texts.length, matchingCount: matchingSubheadings.length },
             })
         }
 
@@ -634,7 +660,7 @@ export const KeywordsModule: AuditModule = {
             })
         }
 
-        const analyzable = items.filter((i) => i.status !== "Skipped" && i.status !== "Info")
+        const analyzable = items.filter((i) => i.status !== "Skipped" && i.status !== "Info" && i.status !== "NotApplicable")
         const passed = analyzable.filter((i) => i.status === "Pass").length
         const failed = analyzable.filter((i) => i.status === "Fail").length
         const warnings = analyzable.filter((i) => i.status === "Warning").length
