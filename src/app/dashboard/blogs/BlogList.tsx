@@ -205,21 +205,21 @@ function getStatusConfig(blog: Blog) {
     }
     if (blog.status === "DRAFT") {
         return {
-            label: "Draft",
+            label: "Ready",
             className: "border-amber-500/20 bg-amber-500/10 text-amber-400",
             dot: "bg-amber-400",
         };
     }
     if (blog.status === "EVIDENCE_REVIEW") {
         return {
-            label: "Evidence review",
+            label: "Evidence",
             className: "border-violet-500/20 bg-violet-500/10 text-violet-400",
             dot: "bg-violet-400",
         };
     }
     if (isEditorialRejection(blog.status)) {
         return {
-            label: "Rejected",
+            label: "Needs attention",
             className: "border-red-500/20 bg-red-500/10 text-red-400",
             dot: "bg-red-400",
         };
@@ -233,7 +233,7 @@ function getStatusConfig(blog: Blog) {
     }
     if (blog.status === "FAILED") {
         return {
-            label: "Failed",
+            label: "Needs attention",
             className: "border-red-500/20 bg-red-500/10 text-red-400",
             dot: "bg-red-400",
         };
