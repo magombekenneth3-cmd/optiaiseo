@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-import { checkSerpAnalysisLimit } from "@/lib/rate-limit";
+// Monthly SERP analysis count limit removed — credits are the single gate.
 import { consumeCredits } from "@/lib/credits";
 import { inngest } from "@/lib/inngest/client";
 
@@ -127,15 +127,6 @@ export async function analyseKeywordVsSerp(
         if (existing.status === "PENDING" || existing.status === "SCRAPING" || existing.status === "PLANNING") {
             return { pending: true, analysisId: existing.id, error: null };
         }
-    }
-
-    const tier = user.subscriptionTier ?? "FREE";
-    const limitRes = await checkSerpAnalysisLimit(user.id, tier);
-    if (!limitRes.allowed) {
-        return {
-            data: null,
-            error: `Monthly SERP analysis limit reached. Resets ${limitRes.resetAt.toLocaleDateString()}. Upgrade your plan for more analyses.`,
-        };
     }
 
     const creditResult = await consumeCredits(user.id, "serp_analysis");

@@ -3,7 +3,7 @@ import { inngest } from "../client";
 import { NonRetriableError } from "inngest";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
-import { checkAeoLimit } from "@/lib/rate-limit";
+// Monthly AEO count limit removed — credits are the single gate.
 import { runAeoAudit, runAeoAuditLite } from "@/lib/aeo";
 import { CREDIT_COSTS } from "@/lib/credits";
 import { CONCURRENCY } from "../concurrency";
@@ -62,16 +62,6 @@ export const runAeoAuditJob = inngest.createFunction(
             if (!s) throw new Error("Site not found");
             return s;
         });
-
-        const allowed = await step.run("check-rate-limit", async () => {
-            const result = await checkAeoLimit(site.user.id, site.user?.subscriptionTier ?? "FREE");
-            if (!result.allowed) {
-                await prisma.aeoReport.updateMany({ where: { id: reportId }, data: { status: "FAILED" } });
-                return false;
-            }
-            return true;
-        });
-        if (!allowed) return { skipped: true, reason: "rate_limit" };
 
         const result = await step.run("run-audit", async () => await runAeoAudit(site.domain, site.coreServices, false, site.brandName ?? null, reportId)) as any;
 

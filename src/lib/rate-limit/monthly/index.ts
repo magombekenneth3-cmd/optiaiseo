@@ -15,7 +15,6 @@
  *     cache, etc. No separate Redis client created here.
  */
 import { logger } from "@/lib/logger";
-import { getPlan } from "@/lib/stripe/plans";
 import { redis as _sharedRedis } from "@/lib/redis";
 
 export type RateLimitResult = {
@@ -114,53 +113,55 @@ export const checkRateLimit = async (
 };
 
 // ─── Per-feature quota helpers ────────────────────────────────────────────────
+//
+// Monthly count-based limits have been removed. Credits are the single gate for
+// all compute-heavy actions (blogs, audits, AEO, fixes, SERP analysis).
+// These functions are retained as no-op stubs so existing call sites continue to
+// compile without changes. They always return allowed: true.
+//
+// Tier feature gates (requireFeature) and resource caps (sites, keywordsTracked,
+// competitorsPerSite) are NOT affected — those remain enforced.
 
-export const checkBlogLimit = (userId: string, tier: string): Promise<RateLimitResult> => {
-    const { monthKey, resetAt } = getCalendarMonthWindow();
-    return checkRateLimit(`blog:${userId}:${monthKey}`, getPlan(tier).limits.blogsPerMonth, resetAt);
-};
+const _unlimitedResult = (): RateLimitResult => ({
+    allowed:   true,
+    remaining: 9999,
+    resetAt:   new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+});
 
-export const checkAuditLimit = (userId: string, tier: string): Promise<RateLimitResult> => {
-    const { monthKey, resetAt } = getCalendarMonthWindow();
-    return checkRateLimit(`audit:${userId}:${monthKey}`, getPlan(tier).limits.auditsPerMonth, resetAt);
-};
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const checkBlogLimit = (_userId: string, _tier: string): Promise<RateLimitResult> =>
+    Promise.resolve(_unlimitedResult());
 
-export const checkAeoLimit = (userId: string, tier: string): Promise<RateLimitResult> => {
-    const { monthKey, resetAt } = getCalendarMonthWindow();
-    return checkRateLimit(`aeo:${userId}:${monthKey}`, getPlan(tier).limits.aeoAuditsPerMonth, resetAt);
-};
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const checkAuditLimit = (_userId: string, _tier: string): Promise<RateLimitResult> =>
+    Promise.resolve(_unlimitedResult());
 
-export const checkVerificationLimit = (userId: string, tier: string): Promise<RateLimitResult> => {
-    const limits: Record<string, number> = { FREE: 10, STARTER: 40, PRO: 100, AGENCY: 1000 };
-    const { monthKey, resetAt } = getCalendarMonthWindow();
-    return checkRateLimit(`verify:${userId}:${monthKey}`, limits[tier] ?? 10, resetAt);
-};
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const checkAeoLimit = (_userId: string, _tier: string): Promise<RateLimitResult> =>
+    Promise.resolve(_unlimitedResult());
 
-export const checkKgFeedLimit = (userId: string, tier: string): Promise<RateLimitResult> => {
-    const limits: Record<string, number> = { FREE: 5, STARTER: 30, PRO: 100, AGENCY: 500 };
-    const { monthKey, resetAt } = getCalendarMonthWindow();
-    return checkRateLimit(`kgfeed:${userId}:${monthKey}`, limits[tier] ?? 5, resetAt);
-};
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const checkVerificationLimit = (_userId: string, _tier: string): Promise<RateLimitResult> =>
+    Promise.resolve(_unlimitedResult());
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const checkKgFeedLimit = (_userId: string, _tier: string): Promise<RateLimitResult> =>
+    Promise.resolve(_unlimitedResult());
+
+/** Anti-abuse daily cap for competitor refreshes — retained as a genuine limiter. */
 export const checkCompetitorRefreshLimit = (userId: string): Promise<RateLimitResult> => {
     const { dayKey, resetAt } = getUtcDayWindow();
     return checkRateLimit(`competitor-refresh:${userId}:${dayKey}`, 10, resetAt);
 };
 
-export const checkAeoVerifyLimit = (userId: string): Promise<RateLimitResult> => {
-    const { monthKey, resetAt } = getCalendarMonthWindow();
-    return checkRateLimit(`aeo-verify:${userId}:${monthKey}`, 20, resetAt);
-};
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const checkAeoVerifyLimit = (_userId: string): Promise<RateLimitResult> =>
+    Promise.resolve(_unlimitedResult());
 
-export const checkFixLimit = (userId: string, tier: string): Promise<RateLimitResult> => {
-    const limits: Record<string, number> = { FREE: 20, STARTER: 100, PRO: 300, AGENCY: 1000 };
-    const { monthKey, resetAt } = getCalendarMonthWindow();
-    return checkRateLimit(`fix:${userId}:${monthKey}`, limits[tier?.toUpperCase()] ?? 20, resetAt);
-};
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const checkFixLimit = (_userId: string, _tier: string): Promise<RateLimitResult> =>
+    Promise.resolve(_unlimitedResult());
 
-export const checkSerpAnalysisLimit = (userId: string, tier: string): Promise<RateLimitResult> => {
-    const limits: Record<string, number> = { FREE: 0, STARTER: 5, PRO: 30, AGENCY: 200 };
-    const { monthKey, resetAt } = getCalendarMonthWindow();
-    const cap = limits[tier?.toUpperCase()] ?? 0;
-    return checkRateLimit(`serp-analysis:${userId}:${monthKey}`, cap, resetAt);
-};
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const checkSerpAnalysisLimit = (_userId: string, _tier: string): Promise<RateLimitResult> =>
+    Promise.resolve(_unlimitedResult());

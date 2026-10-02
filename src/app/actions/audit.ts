@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { runSiteAudit } from "@/lib/audit";
 import { clearSessionCaches } from "@/lib/seo/ai";
-import { checkAuditLimit } from "@/lib/rate-limit";
+// Monthly audit count limit removed — credits are the single gate.
 import { getEffectiveTier, guardErrorToResult } from "@/lib/stripe/guards";
 import { consumeCredits } from "@/lib/credits";
 import { redis } from "@/lib/redis";
@@ -136,13 +136,6 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
     }
 
     const effectiveTier = await getEffectiveTier(user.id);
-    const rateCheck = await checkAuditLimit(user.id, effectiveTier);
-    if (!rateCheck.allowed) {
-      return {
-        success: false,
-        error: `You have reached your audit limit for this month. Upgrade to Pro for unlimited audits. Resets on ${rateCheck.resetAt.toLocaleDateString()}.`,
-      };
-    }
 
     clearSessionCaches();
 

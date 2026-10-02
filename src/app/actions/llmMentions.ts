@@ -9,7 +9,7 @@ import { callGemini } from "@/lib/gemini";
 import { GoogleGenAI } from "@google/genai";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { inngest } from "@/lib/inngest/client";
-import { checkRateLimit, checkAeoLimit } from "@/lib/rate-limit";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { getEffectiveTier } from "@/lib/stripe/guards";
 import { extractBrandIdentity, type BrandIdentity } from "@/lib/aeo/brand-utils";
 import { z } from "zod";
@@ -408,15 +408,6 @@ export async function checkLlmMentions(
 
         if (!process.env.GEMINI_API_KEY) {
             return { success: false, error: "GEMINI_API_KEY is not configured." };
-        }
-
-        const effectiveTier = await getEffectiveTier(user.id);
-        const tierCheck = await checkAeoLimit(user.id, effectiveTier);
-        if (!tierCheck.allowed) {
-            return {
-                success: false,
-                error: `Monthly AEO scan limit reached. Resets on ${tierCheck.resetAt.toLocaleDateString()}.`,
-            };
         }
 
         const recentReport = await prisma.aeoReport.findFirst({

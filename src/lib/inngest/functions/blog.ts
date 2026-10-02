@@ -17,8 +17,8 @@ import { gateCitationScore } from "@/lib/blog/ai-citation-template";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { getSerpContextForKeyword, type SerpContext, type SerpFormatSignal } from "@/lib/blog/serp";
 
-import { getEffectiveTier } from "@/lib/stripe/guards";
-import { getPlan } from "@/lib/stripe/plans";
+// getEffectiveTier / getPlan removed — monthly blog count limit no longer enforced.
+
 
 function buildAuthorFromSite(site: {
     id: string;
@@ -445,81 +445,6 @@ export const generateBlogJob = inngest.createFunction(
 
         const author = buildAuthorFromSite(site);
         const displayName = cleanDomainToDisplayName(site.domain);
-
-        const allowed = await step.run("check-blog-rate-limit", async () => {
-            // IMPORTANT: use getEffectiveTier — not raw subscriptionTier from DB.
-            // Raw tier ignores active trials and promo overrides.
-            const effectiveTier = await getEffectiveTier(site.userId);
-            const plan = getPlan(effectiveTier);
-            const limitPerMonth = plan.limits.blogsPerMonth;
-
-            // AGENCY = unlimited
-            if (limitPerMonth === -1) return true;
-
-            // The server action (generateBlog) already called checkBlogLimit() which
-            // incremented the Redis counter via INCR. Calling checkBlogLimit() again
-            // here would INCR a second time — double-counting — causing FREE users
-            // (limit=3) to be blocked after their 2nd blog, STARTER after their 30th.
-            //
-            // Fix: read the current counter value with GET (no INCR) and compare.
-            // Redis key format mirrors the monthly/index.ts pattern: blog:{userId}:{YYYY-MM}
-            const now = new Date();
-            const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-            const redisKey = `blog:${site.userId}:${monthKey}`;
-
-            try {
-                // Use the shared redis instance — GET is read-only, no INCR
-                const { redis } = await import("@/lib/redis");
-                const currentCount = await redis.get<number>(redisKey);
-                const count = typeof currentCount === "number" ? currentCount : parseInt(String(currentCount ?? "0"), 10) || 0;
-                const isAllowed = count <= limitPerMonth;
-
-                logger.info("[Inngest/Blog] Read-only rate limit check", {
-                    effectiveTier,
-                    limitPerMonth,
-                    currentCount: count,
-                    allowed: isAllowed,
-                    userId: site.userId,
-                });
-
-                return isAllowed;
-            } catch (err: unknown) {
-                // Fail-open: Redis error should never block blog generation
-                logger.warn("[Inngest/Blog] Rate limit read failed — failing open", {
-                    error: (err as Error)?.message,
-                    userId: site.userId,
-                });
-                return true;
-            }
-        });
-        if (!allowed) {
-            // Blog stub is already in DB with status GENERATING — mark it FAILED
-            // so the user sees the real state and can retry, not a perpetual spinner.
-            const blogId = event.data.blogId as string | undefined;
-            const userId = event.data.userId as string | undefined;
-            if (blogId) {
-                await step.run("mark-rate-limited-blog-failed", async () => {
-                    await prisma.blog
-                        .updateMany({ where: { id: blogId }, data: { status: "FAILED" } })
-                        .catch((e: unknown) =>
-                            logger.warn("[Inngest/Blog] Failed to mark rate-limited blog as FAILED", {
-                                blogId,
-                                error: (e as Error)?.message,
-                            })
-                        );
-                    // Refund the 10 credits that were deducted pre-dispatch
-                    if (userId) {
-                        await prisma.$executeRaw`
-                            UPDATE "User" SET credits = credits + 10 WHERE id = ${userId}
-                        `.catch(() => null);
-                        logger.info("[Inngest/Blog] Rate-limit skip: refunded 10 credits", { userId, blogId });
-                    }
-                });
-            }
-            logger.warn("[Inngest/Blog] Skipped — rate limit reached", { blogId, userId });
-            return { skipped: true, reason: "rate_limit" };
-        }
-
 
         const detectedIntent = detectIntent(keyword ?? "");
         // Runs before generation so the writer knows the competitive landscape.

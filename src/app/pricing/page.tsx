@@ -36,9 +36,9 @@ const PRICING_PLANS = [
         features: [
             `${PLANS.FREE.monthlyCredits} credits / month`,
             "1 website",
-            `${PLANS.FREE.limits.auditsPerMonth} audits / month`,
-            `${PLANS.FREE.limits.blogsPerMonth} AI blog posts / month`,
-            `${PLANS.FREE.limits.aeoAuditsPerMonth} AEO checks / month`,
+            "Unlimited audits (credit-gated)",
+            "Unlimited AI blog posts (credit-gated)",
+            "Unlimited AEO checks (credit-gated)",
             "Google Search Console",
             "Basic AI visibility check",
         ],
@@ -56,9 +56,9 @@ const PRICING_PLANS = [
         features: [
             `${PLANS.STARTER.monthlyCredits} credits / month`,
             "3 websites",
-            `${PLANS.STARTER.limits.auditsPerMonth} audits / month`,
-            `${PLANS.STARTER.limits.blogsPerMonth} AI blog posts / month`,
-            `${PLANS.STARTER.limits.aeoAuditsPerMonth} AEO checks / month`,
+            "Unlimited audits (credit-gated)",
+            "Unlimited AI blog posts (credit-gated)",
+            "Unlimited AEO checks (credit-gated)",
             "Google Search Console",
             "Ubersuggest keyword data",
             "On-page optimisation",
@@ -79,9 +79,9 @@ const PRICING_PLANS = [
         features: [
             `${PLANS.PRO.monthlyCredits} credits / month`,
             "10 websites",
-            `${PLANS.PRO.limits.auditsPerMonth} audits / month`,
+            "Unlimited audits",
             "Unlimited AI blog posts",
-            `${PLANS.PRO.limits.aeoAuditsPerMonth} AEO checks / month`,
+            "Unlimited AEO checks",
             "Everything in Starter",
             "Ahrefs backlink data",
             "GitHub auto-fix PRs",
@@ -124,9 +124,9 @@ const PRICING_PLANS = [
 const FEATURE_ROWS = [
     { label: "Monthly credits",        free: String(PLANS.FREE.monthlyCredits),        starter: String(PLANS.STARTER.monthlyCredits),       pro: String(PLANS.PRO.monthlyCredits),        agency: String(PLANS.AGENCY.monthlyCredits) },
     { label: "Websites",               free: String(PLANS.FREE.limits.sites),         starter: String(PLANS.STARTER.limits.sites),         pro: String(PLANS.PRO.limits.sites),         agency: "Unlimited" },
-    { label: "Audits / month",         free: String(PLANS.FREE.limits.auditsPerMonth),         starter: String(PLANS.STARTER.limits.auditsPerMonth),        pro: String(PLANS.PRO.limits.auditsPerMonth),        agency: "Unlimited" },
-    { label: "AI blog posts / month",  free: String(PLANS.FREE.limits.blogsPerMonth),         starter: String(PLANS.STARTER.limits.blogsPerMonth),        pro: "Unlimited",  agency: "Unlimited" },
-    { label: "AEO checks / month",     free: String(PLANS.FREE.limits.aeoAuditsPerMonth),         starter: String(PLANS.STARTER.limits.aeoAuditsPerMonth),        pro: String(PLANS.PRO.limits.aeoAuditsPerMonth),        agency: "Unlimited" },
+    { label: "Audits",                 free: "Unlimited",  starter: "Unlimited",  pro: "Unlimited",  agency: "Unlimited" },
+    { label: "AI blog posts",          free: "Unlimited",  starter: "Unlimited",  pro: "Unlimited",  agency: "Unlimited" },
+    { label: "AEO checks",             free: "Unlimited",  starter: "Unlimited",  pro: "Unlimited",  agency: "Unlimited" },
     { label: "Keyword tracking",       free: String(PLANS.FREE.limits.keywordsTracked),        starter: String(PLANS.STARTER.limits.keywordsTracked),       pro: String(PLANS.PRO.limits.keywordsTracked),        agency: "Unlimited" },
     { label: "Competitors per site",   free: false,       starter: String(PLANS.STARTER.limits.competitorsPerSite),         pro: String(PLANS.PRO.limits.competitorsPerSite),          agency: "Unlimited" },
     { label: "Google Search Console",  free: true,        starter: true,        pro: true,         agency: true },
@@ -212,7 +212,7 @@ export default function PublicPricingPage() {
                         Simple, transparent SEO tool pricing
                     </h1>
                     <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
-                        Start free with 5 SEO audits per month. Upgrade only when you need more automation, sites, or scale.
+                        Start free. Every plan gets unlimited audits, blog posts, and AEO checks — gated only by your monthly credits.
                     </p>
                 </section>
 

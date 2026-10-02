@@ -9,7 +9,7 @@ import { getEffectiveTier, guardErrorToResult } from "@/lib/stripe/guards";
 import { consumeCredits } from "@/lib/credits";
 import { redis } from "@/lib/redis";
 import { inngest } from "@/lib/inngest/client";
-import { checkAeoLimit } from "@/lib/rate-limit";
+// Monthly AEO count limit removed — credits are the single gate.
 import { extractBrandIdentity, isBrandCited } from "@/lib/aeo/brand-utils";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -109,15 +109,6 @@ export async function runAeoReport(siteId: string): Promise<RunAeoReportResult> 
         if (burstLimited) {
             const body = await burstLimited.json();
             return { success: false, error: body.error ?? "Too many requests. Please wait a moment." };
-        }
-
-        const effectiveTier = await getEffectiveTier(user.id);
-        const limitRes = await checkAeoLimit(user.id, effectiveTier);
-        if (!limitRes.allowed) {
-            return {
-                success: false,
-                error: `AEO Audit limit reached for this period. Limits reset at ${limitRes.resetAt.toLocaleDateString()}.`,
-            };
         }
 
         // --- Site ownership check ---
