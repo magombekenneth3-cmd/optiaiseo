@@ -164,13 +164,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const primarySiteDomain = primarySiteData?.domain ?? null;
 
   const [
-    _aiCitationsThisMonth,
     prsCreatedThisMonth,
     metricSnapshots,
   ] = await Promise.all([
-    primarySiteId
-      ? prisma.aeoEvent.count({ where: { siteId: primarySiteId, eventType: "CITED", createdAt: { gte: startOfMonth } } }).catch(() => 0)
-      : Promise.resolve(0),
     primarySiteId
       ? prisma.selfHealingLog.count({ where: { siteId: primarySiteId, createdAt: { gte: startOfMonth } } }).catch(() => 0)
       : Promise.resolve(0),
@@ -243,16 +239,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     if (diagnosticFindings && diagnosticFindings.length > 0) {
       diagnosticFindingCount = diagnosticFindings.length;
 
-      // Count verified and deterministic
-      const allFindings = await prisma.diagnosticFindingRecord.count({
-        where: { siteId: primarySiteId ?? "" },
-      }) ?? 0;
-      diagnosticVerifiedCount = await prisma.diagnosticFindingRecord.count({
-        where: { siteId: primarySiteId ?? "", status: "PASS", resolvedAt: { not: null } },
-      }) ?? 0;
-      diagnosticDeterministicCount = await prisma.diagnosticFindingRecord.count({
-        where: { siteId: primarySiteId ?? "", remediationType: "DETERMINISTIC" },
-      }) ?? 0;
+      // Count verified and deterministic (parallelized — independent queries)
+      const [verifiedCount, deterministicCount] = await Promise.all([
+        prisma.diagnosticFindingRecord.count({
+          where: { siteId: primarySiteId ?? "", status: "PASS", resolvedAt: { not: null } },
+        }),
+        prisma.diagnosticFindingRecord.count({
+          where: { siteId: primarySiteId ?? "", remediationType: "DETERMINISTIC" },
+        }),
+      ]);
+      diagnosticVerifiedCount = verifiedCount;
+      diagnosticDeterministicCount = deterministicCount;
 
 
     }

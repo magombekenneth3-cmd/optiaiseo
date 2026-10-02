@@ -237,7 +237,8 @@ describe("§8 Compensation contract", () => {
 
 describe("§9 Lifecycle centralization — file content audit", () => {
   const fs = require("fs");
-  const routeBase = "/Users/extremesales/Downloads/aiseo2_fixed 3/src/app/api/proposals/[id]";
+  const path = require("path");
+  const routeBase = path.join(process.cwd(), "src/app/api/proposals/[id]");
 
   it("reject/route.ts uses transitionOpportunity, not raw updateMany", () => {
     const content = fs.readFileSync(`${routeBase}/reject/route.ts`, "utf-8");
