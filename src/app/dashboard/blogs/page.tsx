@@ -162,8 +162,8 @@ export default async function BlogsPage({
 
             {/* ── ZONE 1: Header ─────────────────────────────────── */}
             <PageHeader
-                title="AI Content Engine"
-                description="Create search-ready articles, blog posts, and landing pages using your site's live SEO data."
+                title="Articles"
+                description="Create, review, and publish search-ready content."
                 category="Content Creation"
                 currentStep="create"
                 metrics={[
@@ -198,19 +198,18 @@ export default async function BlogsPage({
                     )}
 
                     {aiOpportunityCount > 0 && (
-                        <div className="relative overflow-hidden rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-500/[0.08] via-card to-card p-5">
-                            <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-purple-500/10 blur-3xl" />
-                            <div className="relative flex h-full flex-col">
+                        <div className="rounded-xl border border-border bg-card p-5">
+                            <div className="flex h-full flex-col">
                                 <div className="flex items-center justify-between gap-3">
                                     <div className="flex items-center gap-2">
-                                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/15 text-purple-300">
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
                                             <Sparkles className="h-3.5 w-3.5" />
                                         </div>
                                         <span className="text-xs font-semibold text-foreground">
-                                            AI Visibility Opportunity
+                                            AI visibility opportunity
                                         </span>
                                     </div>
-                                    <span className="rounded-full border border-purple-500/20 bg-purple-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-purple-300">
+                                    <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-400">
                                         Insight
                                     </span>
                                 </div>
@@ -224,7 +223,7 @@ export default async function BlogsPage({
                                 <ul className="mt-3 space-y-1">
                                     {["Improve answer structure", "Add entity coverage", "Strengthen supporting evidence"].map((item) => (
                                         <li key={item} className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                                            <span className="h-1 w-1 rounded-full bg-purple-400" />
+                                            <span className="h-1 w-1 rounded-full bg-emerald-400" />
                                             {item}
                                         </li>
                                     ))}
@@ -232,9 +231,9 @@ export default async function BlogsPage({
 
                                 <Link
                                     href="/dashboard/aeo"
-                                    className="mt-4 inline-flex w-fit items-center gap-1.5 text-xs font-semibold text-purple-300 transition-colors hover:text-purple-200"
+                                    className="mt-4 inline-flex w-fit items-center gap-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:text-emerald-300"
                                 >
-                                    Review {aiOpportunityCount} opportunities
+                                    Review opportunities
                                     <ArrowRight className="h-3 w-3" />
                                 </Link>
                             </div>
