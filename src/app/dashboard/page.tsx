@@ -21,6 +21,9 @@ import {
 } from "@/components/dashboard/DashboardClientWidgets";
 import { AutonomousActivity } from "@/components/dashboard/AutonomousActivity";
 import { DashboardAttentionQueue } from "@/components/dashboard/DashboardAttentionQueue";
+import { DiagnosticPriorityQueue } from "@/components/dashboard/DiagnosticPriorityQueue";
+import { DiagnosticHealthSummary } from "@/components/dashboard/DiagnosticHealthSummary";
+import { AiReadinessPanel } from "@/components/dashboard/AiReadinessPanel";
 import { DashboardRemediationPipeline } from "@/components/dashboard/DashboardRemediationPipeline";
 import { getDashboardUser } from "@/lib/auth/dashboard-context";
 
@@ -161,7 +164,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const primarySiteDomain = primarySiteData?.domain ?? null;
 
   const [
-    aiCitationsThisMonth,
+    _aiCitationsThisMonth,
     prsCreatedThisMonth,
     metricSnapshots,
   ] = await Promise.all([
@@ -190,7 +193,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     ? Math.round((organicTrafficDelta / (organicClicks - organicTrafficDelta)) * 100)
     : null;
   const rankMovement = rankWin ? rankWin.delta : null;
-  const latestIssueCount = chartData.length > 0 ? chartData[chartData.length - 1].issues ?? 0 : 0;
+
   function formatCompact(n: number): string {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
     if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
@@ -219,7 +222,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   let diagnosticVerifiedCount = 0;
   let diagnosticDeterministicCount = 0;
   try {
-    const diagnosticFindings = await (prisma as any).diagnosticFindingRecord?.findMany?.({
+    const diagnosticFindings = await prisma.diagnosticFindingRecord.findMany({
       where: { siteId: primarySiteId ?? "", status: { in: ["FAIL", "WARNING"] } },
       orderBy: [{ severity: "asc" }, { priorityScore: "desc" }],
       take: 5,
@@ -241,31 +244,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       diagnosticFindingCount = diagnosticFindings.length;
 
       // Count verified and deterministic
-      const allFindings = await (prisma as any).diagnosticFindingRecord?.count?.({
+      const allFindings = await prisma.diagnosticFindingRecord.count({
         where: { siteId: primarySiteId ?? "" },
       }) ?? 0;
-      diagnosticVerifiedCount = await (prisma as any).diagnosticFindingRecord?.count?.({
+      diagnosticVerifiedCount = await prisma.diagnosticFindingRecord.count({
         where: { siteId: primarySiteId ?? "", status: "PASS", resolvedAt: { not: null } },
       }) ?? 0;
-      diagnosticDeterministicCount = await (prisma as any).diagnosticFindingRecord?.count?.({
+      diagnosticDeterministicCount = await prisma.diagnosticFindingRecord.count({
         where: { siteId: primarySiteId ?? "", remediationType: "DETERMINISTIC" },
       }) ?? 0;
 
-      // Use diagnostic findings as priority actions (evidence-driven)
-      for (const finding of diagnosticFindings.slice(0, 3)) {
-        const severity = finding.severity as "critical" | "high" | "medium" | "low";
-        const confidencePct = Math.round((finding.confidence ?? 0) * 100);
-        priorityActions.push({
-          id: `diag-${finding.fingerprint}`,
-          impact: severity,
-          title: finding.rootCause ?? finding.issueType,
-          subtitle: finding.expectedOutcome ?? "Fix this to improve SEO performance.",
-          reason: `Root cause identified with ${confidencePct}% confidence. Priority score: ${finding.priorityScore ?? "—"}/100.`,
-          confidence: `${confidencePct}% confidence`,
-          href: topAudit ? `/dashboard/audits/${topAudit.id}` : "/dashboard/audits",
-          ctaLabel: finding.remediationType === "DETERMINISTIC" ? "Auto-fix" : finding.remediationType === "AI_PATCH" ? "Generate fix" : "Review",
-        });
-      }
+
     }
   } catch {
     // Table doesn't exist yet (migration not run) — fall through to legacy
@@ -293,18 +282,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     }
   }
 
-  if (aeoScore > 0 && aeoScore < 70) {
-    priorityActions.push({
-      id: "aeo-weak",
-      impact: "high",
-      title: "Weak AI search visibility",
-      subtitle: `AEO score is ${aeoScore}/100.`,
-      reason: "AI answer engines are under-citing your brand, which can limit visibility even when your technical SEO is otherwise healthy.",
-      confidence: "Strong signal",
-      href: "/dashboard/aeo",
-      ctaLabel: "Optimize",
-    });
-  }
+
 
   // Derive per-audit rows for the Recent Audits table
   const recentAuditRows = audits.slice(0, 3).map((audit, index) => {
@@ -454,7 +432,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
           {/* ── KPI cards ──────────────────────────────────────────────────── */}
           {hasAudits && (
-            <section aria-label="Performance overview" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <section aria-label="Performance overview" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="kpi-card">
                 <div className="flex items-center gap-3">
                   <ScoreRing score={latestScore ?? 0} color="var(--brand)" size={48} strokeWidth={4} />
@@ -467,11 +445,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     </p>
                   </div>
                 </div>
-              </div>
-              <div className="kpi-card">
-                <p className="text-2xl font-semibold tracking-tight text-foreground tabular-nums">{aeoScore > 0 ? aeoScore : "—"}</p>
-                <p className="mt-0.5 text-xs font-medium text-muted-foreground">AI visibility</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">{aeoScore > 0 ? "out of 100" : "Run AEO check"}</p>
               </div>
               <div className="kpi-card">
                 <p className="text-2xl font-semibold tracking-tight text-foreground tabular-nums">{organicClicks !== null ? formatCompact(organicClicks) : "—"}</p>
@@ -490,10 +463,27 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </section>
           )}
 
-          {/* ── Attention queue ──────────────────────────────────────────────── */}
+          {/* ── Legacy attention queue (audit checklist fallback only) ───── */}
           {attentionItems.length > 0 && <DashboardAttentionQueue items={attentionItems} />}
 
-          {/* ── Trend chart ──────────────────────────────────────────────────── */}
+          {/* ── Diagnostic priority queue ─────────────────────────────────── */}
+          {primarySiteId && <DiagnosticPriorityQueue siteId={primarySiteId} />}
+
+          {/* ── Health + AI readiness ─────────────────────────────────────── */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {primarySiteId && <DiagnosticHealthSummary siteId={primarySiteId} />}
+            {primarySiteId && <AiReadinessPanel siteId={primarySiteId} />}
+          </div>
+
+          {/* ── Remediation pipeline ──────────────────────────────────────── */}
+          <DashboardRemediationPipeline
+            proposed={diagnosticFindingCount > 0 ? diagnosticFindingCount : pendingPrsCount}
+            active={diagnosticDeterministicCount}
+            completed={prsCreatedThisMonth}
+            verified={diagnosticVerifiedCount}
+          />
+
+          {/* ── Trend chart ──────────────────────────────────────────────── */}
           {(metricTrend.length > 0 || chartData.length > 0) && (
             <MetricTrendChart
               data={metricTrend.map((m) => ({
@@ -509,95 +499,41 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             />
           )}
 
-          {/* ── At-a-glance ────────────────────────────────────────────────── */}
+          {/* ── Activity + history ────────────────────────────────────────── */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <section className="rounded-2xl border border-border bg-card p-5" aria-labelledby="mc-ai-title">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand">AI Search</p>
-                  <h2 id="mc-ai-title" className="mt-1 text-sm font-semibold text-foreground">AI visibility</h2>
+            {primarySiteId && <AutonomousActivity siteId={primarySiteId} />}
+            {recentAuditRows.length > 0 && (
+              <section className="rounded-2xl border border-border bg-card" aria-labelledby="mc-audit-history">
+                <div className="flex items-center justify-between border-b border-border px-5 py-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand">History</p>
+                    <h2 id="mc-audit-history" className="mt-1 text-sm font-semibold text-foreground">Recent audit activity</h2>
+                  </div>
+                  <Link href="/dashboard/audits" className="text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground">
+                    View all <ChevronRight className="ml-1 inline h-3.5 w-3.5" />
+                  </Link>
                 </div>
-                <Link href="/dashboard/aeo" className="text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground">
-                  Open report <ArrowRight className="ml-1 inline h-3.5 w-3.5" />
-                </Link>
-              </div>
-              <div className="mt-5 flex items-end gap-6">
-                <div>
-                  <p className="text-4xl font-semibold tracking-tight text-foreground tabular-nums">{aeoScore > 0 ? aeoScore : "—"}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">visibility score</p>
+                <div className="divide-y divide-border">
+                  {recentAuditRows.map((row) => (
+                    <Link key={row.id} href={"/dashboard/audits/" + row.id} className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-accent/20">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">SEO audit completed</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">{timeAgo(row.date)} · {row.seoScore}/100</p>
+                        </div>
+                      </div>
+                      <span className={"shrink-0 text-xs font-semibold " + (row.change !== null && row.change > 0 ? "text-emerald-400" : row.change !== null && row.change < 0 ? "text-rose-400" : "text-muted-foreground")}>
+                        {row.change === null ? "—" : (row.change > 0 ? "+" : "") + row.change}
+                      </span>
+                    </Link>
+                  ))}
                 </div>
-                <div className="border-l border-border pl-6">
-                  <p className="text-xl font-semibold text-foreground tabular-nums">{aiCitationsThisMonth || "—"}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">citations this month</p>
-                </div>
-              </div>
-            </section>
-            <section className="rounded-2xl border border-border bg-card p-5" aria-labelledby="mc-tech-title">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand">Technical health</p>
-                  <h2 id="mc-tech-title" className="mt-1 text-sm font-semibold text-foreground">Latest audit</h2>
-                </div>
-                <Link href={topAudit ? "/dashboard/audits/" + topAudit.id : "/dashboard/audits"} className="text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground">
-                  Open audit <ArrowRight className="ml-1 inline h-3.5 w-3.5" />
-                </Link>
-              </div>
-              <div className="mt-5 flex items-end gap-6">
-                <div>
-                  <p className="text-4xl font-semibold tracking-tight text-foreground tabular-nums">{latestIssueCount}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">issues detected</p>
-                </div>
-                <div className="border-l border-border pl-6">
-                  <p className="text-xl font-semibold text-foreground tabular-nums">{pendingPrsCount}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">fixes awaiting review</p>
-                </div>
-              </div>
-            </section>
+              </section>
+            )}
           </div>
 
-          {/* ── Remediation pipeline ───────────────────────────────────────────── */}
-          <DashboardRemediationPipeline
-            proposed={diagnosticFindingCount > 0 ? diagnosticFindingCount : pendingPrsCount}
-            active={diagnosticDeterministicCount}
-            completed={prsCreatedThisMonth}
-            verified={diagnosticVerifiedCount}
-          />
-
-          {/* ── Autonomous activity ────────────────────────────────────────────── */}
-          {primarySiteId && <AutonomousActivity siteId={primarySiteId} />}
-
-          {/* ── Recent audit history ────────────────────────────────────────────── */}
-          {recentAuditRows.length > 0 && (
-            <section className="rounded-2xl border border-border bg-card" aria-labelledby="mc-audit-history">
-              <div className="flex items-center justify-between border-b border-border px-5 py-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand">History</p>
-                  <h2 id="mc-audit-history" className="mt-1 text-sm font-semibold text-foreground">Recent audit activity</h2>
-                </div>
-                <Link href="/dashboard/audits" className="text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground">
-                  View all <ChevronRight className="ml-1 inline h-3.5 w-3.5" />
-                </Link>
-              </div>
-              <div className="divide-y divide-border">
-                {recentAuditRows.map((row) => (
-                  <Link key={row.id} href={"/dashboard/audits/" + row.id} className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-accent/20">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-foreground">SEO audit completed</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">{timeAgo(row.date)} · {row.seoScore}/100</p>
-                      </div>
-                    </div>
-                    <span className={"shrink-0 text-xs font-semibold " + (row.change !== null && row.change > 0 ? "text-emerald-400" : row.change !== null && row.change < 0 ? "text-rose-400" : "text-muted-foreground")}>
-                      {row.change === null ? "—" : (row.change > 0 ? "+" : "") + row.change}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* ── Empty: site connected but no audits ─────────────────────────── */}
+          {/* ── Empty: site connected but no audits ─────────────────────── */}
           {!isNewUser && hasSites && !hasAudits && (
             <section className="rounded-2xl border border-border bg-card p-8 text-center">
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-brand/20 bg-brand/10">

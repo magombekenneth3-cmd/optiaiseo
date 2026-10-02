@@ -134,19 +134,8 @@ export const githubAutofixSiteJob = inngest.createFunction(
             logger.debug(`[Inngest/GithubAutofix] PR opened for ${domain}: ${prResult.prUrl}`);
 
             // Emit seo/fix.deployed events for each fix — triggers T+0 verification
-            await step.run("emit-fix-deployed-events", async () => {
-                const events = fixFiles.map((file) => ({
-                    name: "seo/fix.deployed" as const,
-                    data: {
-                        siteId,
-                        findingId: `autofix:${file.path}:${Date.now()}`,
-                        url: `https://${domain}`,
-                        verificationCriteria: [] as any[],
-                    },
-                }));
-
+            await step.run("record-healing-logs", async () => {
                 try {
-                    // Record healing outcomes for legacy pipeline
                     const { recordHealingOutcome } = await import("./healing-outcomes");
                     for (const file of fixFiles) {
                         const logEntry = await prisma.selfHealingLog.create({
@@ -155,7 +144,7 @@ export const githubAutofixSiteJob = inngest.createFunction(
                                 issueType: file.description ?? "SEO fix",
                                 description: `GitHub auto-fix PR for ${file.path}`,
                                 actionTaken: `PR: ${prResult.prUrl}`,
-                                status: "COMPLETED",
+                                status: "PROPOSED",
                             },
                         });
                         await recordHealingOutcome({
@@ -170,17 +159,7 @@ export const githubAutofixSiteJob = inngest.createFunction(
                     });
                 }
 
-                // Actually emit the seo/fix.deployed events to trigger T+0 verification
-                try {
-                    await inngest.send(events);
-                    logger.info(`[GithubAutofix] Emitted ${events.length} seo/fix.deployed events for ${domain}`);
-                } catch (err) {
-                    logger.warn("[GithubAutofix] Failed to emit seo/fix.deployed events (non-fatal):", {
-                        error: (err as Error)?.message,
-                    });
-                }
-
-                return { eventsQueued: events.length };
+                return { logsCreated: fixFiles.length };
             });
 
             return { success: true, prUrl: prResult.prUrl, fixCount: fixFiles.length };

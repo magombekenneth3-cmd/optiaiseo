@@ -19,17 +19,33 @@
 
 import type {
   SEOEvidence,
-  DiagnosticFinding,
   DiagnosticStatus,
   FindingSeverity,
   RemediationType,
   VerificationCriterion,
   FindingScope,
-} from "./diagnostic-types";
+} from "./contracts";
 import {
   computeFindingFingerprint,
   aggregateEvidenceConfidence,
-} from "./diagnostic-types";
+} from "./contracts";
+
+export interface DiagnosticFinding {
+  id: string;
+  fingerprint: string;
+  issueType: string;
+  status: DiagnosticStatus;
+  severity: FindingSeverity;
+  scope: FindingScope;
+  rootCause: string;
+  rootCauseId: string;
+  evidence: SEOEvidence[];
+  confidence: number;
+  expectedOutcome: string;
+  remediationType: RemediationType;
+  verificationCriteria: VerificationCriterion[];
+  dependencyFingerprints: string[];
+}
 
 // ── Rule Types ──────────────────────────────────────────────────────────────
 
@@ -488,27 +504,29 @@ export function diagnose(input: DiagnosisInput): DiagnosticFinding[] {
           cause.id,
         );
 
+        const depFingerprints = rule.dependsOn.flatMap(dep => {
+          const depRule = DIAGNOSTIC_RULES[dep];
+          if (!depRule) return [];
+          return depRule.causes.map(depCause =>
+            computeFindingFingerprint(siteId, depRule.issueType, url, depCause.id)
+          );
+        });
+
         findings.push({
-          id: `${ruleKey}:${cause.id}:${now}`,
+          id: fingerprint,
           fingerprint,
           issueType: rule.issueType,
           status: "FAIL",
           severity: cause.severity,
           scope: { type: "PAGE", urls: [url] },
           rootCause: cause.label,
+          rootCauseId: cause.id,
           evidence: relevantEvidence,
           confidence: aggregateEvidenceConfidence(relevantEvidence),
           expectedOutcome: rule.expectedOutcome,
           remediationType: cause.remediationType,
           verificationCriteria: cause.verification,
-          dependencies: rule.dependsOn.length > 0
-            ? rule.dependsOn.map(dep => {
-                const depRule = DIAGNOSTIC_RULES[dep];
-                return depRule
-                  ? computeFindingFingerprint(siteId, depRule.issueType, url, "any")
-                  : dep;
-              })
-            : undefined,
+          dependencyFingerprints: depFingerprints,
         });
 
         matched = true;
@@ -519,12 +537,7 @@ export function diagnose(input: DiagnosisInput): DiagnosticFinding[] {
     // If no root cause matched but we have some evidence for this rule's signals,
     // the issue might exist but we can't determine the cause → UNKNOWN
     if (!matched) {
-      const hasRelevantEvidence = evidence.some(e =>
-        rule.causes.some(c => c.conditions.some(cond => cond.source === e.source))
-      );
-      // Intentionally don't emit UNKNOWN findings — they add noise.
-      // The absence of a finding means "not diagnosed, not necessarily absent."
-      void hasRelevantEvidence;
+      void rule;
     }
   }
 
@@ -536,22 +549,26 @@ export function diagnose(input: DiagnosisInput): DiagnosticFinding[] {
 /**
  * Topological sort of issue types — blockers come first.
  *
- * If issue A depends on issue B, B appears before A in the result.
- * This ensures the fixing engine resolves root blockers first.
+ * Detects circular dependencies and breaks the cycle by skipping revisiting
+ * nodes already on the current DFS stack.
  */
 export function topologicalSort(issueTypes: string[]): string[] {
   const visited = new Set<string>();
+  const onStack = new Set<string>();
   const result: string[] = [];
 
   function visit(type: string) {
     if (visited.has(type)) return;
-    visited.add(type);
+    if (onStack.has(type)) return;
+    onStack.add(type);
     const rule = DIAGNOSTIC_RULES[type];
     if (rule?.dependsOn) {
       for (const dep of rule.dependsOn) {
         visit(dep);
       }
     }
+    onStack.delete(type);
+    visited.add(type);
     result.push(type);
   }
 
@@ -560,13 +577,11 @@ export function topologicalSort(issueTypes: string[]): string[] {
 }
 
 /**
- * Sort findings by their dependency graph, then by severity, then by priority score.
+ * Sort findings by their dependency graph, then by severity, then by confidence.
  * This gives the remediation planner the correct execution order.
  */
 export function sortFindingsForRemediation(findings: DiagnosticFinding[]): DiagnosticFinding[] {
-  // 1. Build dependency order
   const issueTypes = [...new Set(findings.map(f => {
-    // Find the DIAGNOSTIC_RULES key for this finding's issueType
     const ruleEntry = Object.entries(DIAGNOSTIC_RULES).find(([, r]) => r.issueType === f.issueType);
     return ruleEntry?.[0] ?? f.issueType;
   }))];
@@ -574,20 +589,21 @@ export function sortFindingsForRemediation(findings: DiagnosticFinding[]): Diagn
 
   const SEVERITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
+  const allFingerprints = new Set(findings.map(f => f.fingerprint));
+
   return [...findings].sort((a, b) => {
-    // Dependencies first
     const aRuleKey = Object.entries(DIAGNOSTIC_RULES).find(([, r]) => r.issueType === a.issueType)?.[0] ?? a.issueType;
     const bRuleKey = Object.entries(DIAGNOSTIC_RULES).find(([, r]) => r.issueType === b.issueType)?.[0] ?? b.issueType;
     const aOrder = order.indexOf(aRuleKey);
     const bOrder = order.indexOf(bRuleKey);
     if (aOrder !== bOrder) return aOrder - bOrder;
 
-    // Then severity
     const aSev = SEVERITY_ORDER[a.severity] ?? 3;
     const bSev = SEVERITY_ORDER[b.severity] ?? 3;
     if (aSev !== bSev) return aSev - bSev;
 
-    // Then confidence (higher first)
     return b.confidence - a.confidence;
   });
+
+  void allFingerprints;
 }

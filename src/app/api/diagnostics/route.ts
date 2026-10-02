@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
         if (severityFilter.length > 0) where.severity = { in: severityFilter };
 
         const [findings, total, summary] = await Promise.all([
-            (prisma as any).diagnosticFindingRecord.findMany({
+            prisma.diagnosticFindingRecord.findMany({
                 where,
                 orderBy: [
                     { priorityScore: "desc" },
@@ -93,20 +93,19 @@ export async function GET(req: NextRequest) {
                     },
                 },
             }),
-            (prisma as any).diagnosticFindingRecord.count({ where }),
-            // Summary aggregation
+            prisma.diagnosticFindingRecord.count({ where }),
             Promise.all([
-                (prisma as any).diagnosticFindingRecord.groupBy({
+                prisma.diagnosticFindingRecord.groupBy({
                     by: ["status"],
                     where: { siteId: resolvedSiteId },
                     _count: { status: true },
                 }),
-                (prisma as any).diagnosticFindingRecord.groupBy({
+                prisma.diagnosticFindingRecord.groupBy({
                     by: ["severity"],
                     where: { siteId: resolvedSiteId },
                     _count: { severity: true },
                 }),
-                (prisma as any).diagnosticFindingRecord.count({
+                prisma.diagnosticFindingRecord.count({
                     where: { siteId: resolvedSiteId },
                 }),
             ]),

@@ -5,7 +5,7 @@ export type ConfidenceLabel = "High confidence" | "Medium confidence" | "Low con
 
 export interface RecommendationConfidence {
     label: ConfidenceLabel;
-    rate: number;        
+    rate: number;
     sampleSize: number;
     description: string;
     /** Breakdown of outcome sources feeding this confidence score */
@@ -46,7 +46,7 @@ export async function getRecommendationConfidence(
     // ── Source 2: T+28 diagnostic verification evidence ──────────────────
     let diagnosticOutcomes: { outcome: string }[] = [];
     try {
-        const findings = await (prisma as any).diagnosticFindingRecord.findMany({
+        const findings = await prisma.diagnosticFindingRecord.findMany({
             where: {
                 issueType,
                 status: { in: ["PASS", "FAIL"] },
@@ -61,7 +61,7 @@ export async function getRecommendationConfidence(
 
         // Enrich with T+28 evidence records to get actual outcome
         for (const finding of findings) {
-            const evidence = await (prisma as any).sEOEvidenceRecord.findFirst({
+            const evidence = await prisma.sEOEvidenceRecord.findFirst({
                 where: {
                     findingId: finding.id,
                     observedValue: {
@@ -73,17 +73,16 @@ export async function getRecommendationConfidence(
                 orderBy: { observedAt: "desc" },
             });
 
-            if (evidence?.observedValue?.outcome) {
-                diagnosticOutcomes.push({ outcome: evidence.observedValue.outcome });
+            const observed = evidence?.observedValue as Record<string, unknown> | null;
+            if (observed?.outcome) {
+                diagnosticOutcomes.push({ outcome: observed.outcome as string });
             } else {
-                // Fall back to finding status: PASS → improved, FAIL → degraded
                 diagnosticOutcomes.push({
                     outcome: finding.status === "PASS" ? "improved" : "degraded",
                 });
             }
         }
     } catch (err) {
-        // DiagnosticFindingRecord table may not exist yet — silently degrade
         logger.debug("[Confidence] Diagnostic findings query failed (table may not exist):", {
             error: (err as Error)?.message,
         });

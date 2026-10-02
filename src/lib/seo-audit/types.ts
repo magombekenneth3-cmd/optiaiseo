@@ -18,7 +18,7 @@ export type { DiagnosticStatus } from './diagnostic-types';
  */
 export function toDiagnosticStatus(
     status: AuditStatus,
-): import('./diagnostic-types').DiagnosticStatus {
+): import('./contracts').DiagnosticStatus {
     if (status === 'Pass') return 'PASS';
     if (status === 'Fail' || status === 'Error') return 'FAIL';
     if (status === 'Warning') return 'WARNING';

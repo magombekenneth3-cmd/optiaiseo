@@ -1,21 +1,7 @@
-/**
- * src/lib/seo-audit/remediation-planner.ts
- *
- * Routes each DiagnosticFinding to the correct fix strategy:
- *
- *   Level 1 (DETERMINISTIC) → deterministic-fixes.ts
- *   Level 2 (AI_PATCH)      → auditFix.ts (existing)
- *   Level 3 (MANUAL)        → dashboard action item
- *   Level 4 (EXPERIMENT)    → experiments system
- *
- * The planner produces a RemediationPlan — an ordered list of actions
- * that the engine can execute sequentially, respecting dependency order.
- *
- * Design principle: "Use AI only where deterministic logic cannot solve it."
- */
-
-import type { DiagnosticFinding, RemediationType, VerificationCriterion } from "./diagnostic-types";
+import type { SEOEvidence, VerificationCriterion, RemediationType } from "./contracts";
+import type { ExplainablePriority, PriorityComponents } from "./contracts";
 import type { FixResult, FixContext } from "./deterministic-fixes";
+import type { DiagnosticFinding } from "./root-cause-engine";
 import { tryDeterministicFix, hasDeterministicFix } from "./deterministic-fixes";
 import { sortFindingsForRemediation } from "./root-cause-engine";
 import {
@@ -23,11 +9,7 @@ import {
   fixabilityForRemediation,
   recencyScore,
   scopeScore,
-  type PriorityComponents,
-  type ExplainablePriority,
 } from "./prioritization";
-
-// ── Plan Types ──────────────────────────────────────────────────────────────
 
 export type RemediationStatus =
   | "PLANNED"
@@ -39,38 +21,20 @@ export type RemediationStatus =
   | "SKIPPED";
 
 export interface RemediationAction {
-  /** Reference to the DiagnosticFinding that generated this action */
   findingFingerprint: string;
   findingId: string;
   issueType: string;
   rootCause: string;
-
-  /** What level of fix this action uses */
+  rootCauseId: string;
   remediationType: RemediationType;
-
-  /** The generated fix, if deterministic */
   deterministicFix?: FixResult;
-
-  /** Instructions for the AI patch generator (passed to auditFix.ts) */
   aiPatchHint?: string;
-
-  /** Instructions for manual action (displayed in dashboard) */
   manualActionDescription?: string;
-
-  /** Priority and ordering */
   priority: ExplainablePriority;
   executionOrder: number;
-
-  /** Dependencies that must be resolved before this action */
   blockedBy: string[];
-
-  /** Verification contract */
   verificationCriteria: VerificationCriterion[];
-
-  /** Current status */
   status: RemediationStatus;
-
-  /** Expected outcome of this fix */
   expectedOutcome: string;
 }
 
@@ -78,11 +42,8 @@ export interface RemediationPlan {
   siteId: string;
   url: string;
   createdAt: string;
-  /** Total number of findings analysed */
   findingsCount: number;
-  /** Actions in execution order (dependencies first, then by priority) */
   actions: RemediationAction[];
-  /** Summary statistics */
   summary: {
     deterministic: number;
     aiPatch: number;
@@ -92,36 +53,22 @@ export interface RemediationPlan {
   };
 }
 
-// ── Planner ─────────────────────────────────────────────────────────────────
-
 export interface PlannerContext {
   siteId: string;
   url: string;
   domain: string;
   totalPages: number;
-  /** Additional context for fix generation */
   fixContext?: Partial<FixContext>;
 }
 
-/**
- * Generate a remediation plan from a set of diagnostic findings.
- *
- * 1. Sort findings by dependency order → severity → confidence
- * 2. For each finding, determine the fix strategy
- * 3. Generate deterministic fixes where possible
- * 4. Compute explainable priority for each action
- * 5. Return an ordered plan
- */
 export function buildRemediationPlan(
   findings: DiagnosticFinding[],
   context: PlannerContext,
 ): RemediationPlan {
-  // Only plan for findings that are FAIL or WARNING
   const actionable = findings.filter(
     f => f.status === "FAIL" || f.status === "WARNING",
   );
 
-  // Sort by dependency order, then severity, then confidence
   const sorted = sortFindingsForRemediation(actionable);
 
   const actions: RemediationAction[] = [];
@@ -138,7 +85,6 @@ export function buildRemediationPlan(
     const action = planAction(finding, i, context);
     actions.push(action);
 
-    // Count by type
     switch (action.remediationType) {
       case "DETERMINISTIC":
         summary.deterministic++;
@@ -165,19 +111,11 @@ export function buildRemediationPlan(
   };
 }
 
-/**
- * Plan a single remediation action for a finding.
- */
 function planAction(
   finding: DiagnosticFinding,
   executionOrder: number,
   context: PlannerContext,
 ): RemediationAction {
-  // Extract the root-cause ID from the finding ID
-  // Finding IDs are formatted as "RULE_KEY:cause_id:timestamp"
-  const rootCauseId = finding.id.split(":")[1] ?? finding.issueType;
-
-  // Build fix context
   const fixCtx: FixContext = {
     url: context.url,
     domain: context.domain,
@@ -192,21 +130,18 @@ function planAction(
       : undefined,
   };
 
-  // Try deterministic fix first
   let deterministicFix: FixResult | null = null;
   let effectiveRemediationType = finding.remediationType;
 
-  if (finding.remediationType === "DETERMINISTIC" || hasDeterministicFix(rootCauseId)) {
-    deterministicFix = tryDeterministicFix(rootCauseId, fixCtx);
+  if (finding.remediationType === "DETERMINISTIC" || hasDeterministicFix(finding.rootCauseId)) {
+    deterministicFix = tryDeterministicFix(finding.rootCauseId, fixCtx);
     if (deterministicFix) {
       effectiveRemediationType = "DETERMINISTIC";
     } else {
-      // Deterministic fix failed — escalate to AI
       effectiveRemediationType = "AI_PATCH";
     }
   }
 
-  // Compute priority
   const newestEvidence = finding.evidence.reduce(
     (newest, e) => {
       const t = new Date(e.observedAt).getTime();
@@ -229,22 +164,21 @@ function planAction(
 
   const priority = computePriorityV4(priorityInput);
 
-  // Build the action
   const action: RemediationAction = {
     findingFingerprint: finding.fingerprint,
-    findingId: finding.id,
+    findingId: finding.fingerprint,
     issueType: finding.issueType,
     rootCause: finding.rootCause,
+    rootCauseId: finding.rootCauseId,
     remediationType: effectiveRemediationType,
     priority,
     executionOrder,
-    blockedBy: finding.dependencies ?? [],
+    blockedBy: finding.dependencyFingerprints,
     verificationCriteria: finding.verificationCriteria,
     status: "PLANNED",
     expectedOutcome: finding.expectedOutcome,
   };
 
-  // Add type-specific details
   if (deterministicFix) {
     action.deterministicFix = deterministicFix;
   } else if (effectiveRemediationType === "AI_PATCH") {
@@ -255,8 +189,6 @@ function planAction(
 
   return action;
 }
-
-// ── Severity / Impact Mapping ───────────────────────────────────────────────
 
 function severityToBusinessImpact(severity: string): number {
   switch (severity) {
@@ -269,7 +201,6 @@ function severityToBusinessImpact(severity: string): number {
 }
 
 function issueTypeToSearchImpact(issueType: string): number {
-  // Indexing blockers are the highest search impact
   if (issueType.includes("indexing") || issueType.includes("blocked")) return 1.0;
   if (issueType.includes("canonical")) return 0.85;
   if (issueType.includes("redirect")) return 0.75;
@@ -278,8 +209,6 @@ function issueTypeToSearchImpact(issueType: string): number {
   if (issueType.includes("ssl") || issueType.includes("robots")) return 0.7;
   return 0.5;
 }
-
-// ── AI Patch Hint Builder ───────────────────────────────────────────────────
 
 function buildAiPatchHint(finding: DiagnosticFinding): string {
   const evidenceSummary = finding.evidence
@@ -303,8 +232,6 @@ function buildAiPatchHint(finding: DiagnosticFinding): string {
   ].join("\n");
 }
 
-// ── Manual Description Builder ──────────────────────────────────────────────
-
 function buildManualDescription(finding: DiagnosticFinding): string {
   return [
     `**Root Cause:** ${finding.rootCause}`,
@@ -326,12 +253,6 @@ function buildManualDescription(finding: DiagnosticFinding): string {
   ].join("\n");
 }
 
-// ── Plan Utilities ──────────────────────────────────────────────────────────
-
-/**
- * Filter a remediation plan to only return actions that are currently executable.
- * An action is executable when all its dependencies have been resolved.
- */
 export function getExecutableActions(
   plan: RemediationPlan,
   resolvedFingerprints: Set<string>,
@@ -343,9 +264,6 @@ export function getExecutableActions(
   });
 }
 
-/**
- * Partition a plan's actions by remediation type for dashboard display.
- */
 export function partitionByType(plan: RemediationPlan): {
   deterministic: RemediationAction[];
   aiPatch: RemediationAction[];

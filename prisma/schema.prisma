@@ -898,12 +898,15 @@ model SelfHealingLog {
   metadata    Json?
   fingerprint String?
   dedupeBucket String?
+  diagnosticFindingId String?
   createdAt   DateTime @default(now())
   site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  diagnosticFinding   DiagnosticFindingRecord? @relation(fields: [diagnosticFindingId], references: [id], onDelete: SetNull)
 
   @@index([siteId])
   @@index([createdAt])
   @@index([siteId, status, createdAt])
+  @@index([diagnosticFindingId])
   @@unique([siteId, fingerprint, dedupeBucket])
 }
 
@@ -937,11 +940,14 @@ model SeoFixProposal {
   verificationUrl     String?
   verificationCriteria Json?
   verificationDetails Json?
+  diagnosticFindingId   String?
+  findingFingerprint    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([siteId, userId, status])
   @@index([expiresAt])
+  @@index([diagnosticFindingId])
 }
 
 model CompetitorAlertLog {
@@ -1308,6 +1314,7 @@ model SEOEvidenceRecord {
   @@index([siteId, observedAt(sort: Desc)])
   @@index([findingId])
   @@index([evidenceHash])
+  @@unique([findingId, evidenceHash])
 }
 
 /// A diagnosed SEO issue with root cause, evidence chain, and verification contract.
@@ -1341,17 +1348,22 @@ model DiagnosticFindingRecord {
   priorityComponents   Json?
   /// Policy version used to compute priority (e.g. "priority-v4")
   policyVersion        String?
+  lifecycleState       String              @default("OPEN")
   resolvedAt           DateTime?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
   site     Site                           @relation(fields: [siteId], references: [id], onDelete: Cascade)
   evidence SEOEvidenceRecord[]
+  selfHealingLogs      SelfHealingLog[]
+  mutationOperations   MutationOperation[] @relation("MutationFinding")
+  actionProposals      ActionProposal[]    @relation("ActionFinding")
 
   @@unique([siteId, fingerprint])
   @@index([siteId, status])
   @@index([siteId, issueType])
   @@index([siteId, severity, createdAt(sort: Desc)])
+  @@index([siteId, lifecycleState])
 }
 
 model SerpFeature {
@@ -2132,6 +2144,8 @@ model MutationOperation {
   approvalHash       String?  // SHA-256 of canonical mutation AT approval time
 
   // Metadata
+  diagnosticFindingId String?
+  findingFingerprint  String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   completedAt        DateTime?
@@ -2143,12 +2157,14 @@ model MutationOperation {
   auditEvents        MutationAuditEvent[]
   proposal           ActionProposal?
   verifications       MutationVerification[]
+  diagnosticFinding  DiagnosticFindingRecord? @relation("MutationFinding", fields: [diagnosticFindingId], references: [id], onDelete: SetNull)
 
   @@index([siteId, status])
   @@index([siteId, targetModel, targetId])
   @@index([actorId, createdAt(sort: Desc)])
   @@index([status, createdAt])
   @@index([approvalExpiresAt])
+  @@index([diagnosticFindingId])
 }
 
 model MutationSnapshot {
@@ -2447,6 +2463,8 @@ model ActionProposal {
 
 
   metadata            Json?
+  diagnosticFindingId String?
+  findingFingerprint  String?
 
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -2454,6 +2472,7 @@ model ActionProposal {
   site                Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
   decision            GrowthDecision     @relation(fields: [decisionId], references: [id], onDelete: Cascade)
   operation           MutationOperation? @relation(fields: [operationId], references: [id], onDelete: SetNull)
+  diagnosticFinding   DiagnosticFindingRecord? @relation("ActionFinding", fields: [diagnosticFindingId], references: [id], onDelete: SetNull)
 
   @@index([siteId, status])
   @@index([decisionId])
@@ -2462,6 +2481,7 @@ model ActionProposal {
   @@index([siteId, actionType])
   @@index([approvalExpiresAt])
   @@index([previousProposalId])
+  @@index([diagnosticFindingId])
 }
 
 model BudgetReservation {

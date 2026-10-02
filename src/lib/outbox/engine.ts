@@ -21,7 +21,6 @@ export interface OutboxRecord {
     updatedAt: Date;
 }
 
-// In-memory outbox store backed by UNIQUE(type, deduplicationKey) constraint index
 const outboxStore = new Map<string, OutboxRecord>();
 
 function getDeduplicationIndexKey(type: OutboxType, deduplicationKey: string): string {

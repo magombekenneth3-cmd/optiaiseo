@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import {
     Activity,
@@ -20,6 +20,7 @@ import {
     XCircle,
     Zap,
 } from "lucide-react";
+import { VerificationTimeline } from "@/components/diagnostics/VerificationTimeline";
 import { PageHeader } from "@/components/ui/design-system/PageHeader";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -51,6 +52,7 @@ interface DiagnosticFinding {
     priorityScore: number | null;
     priorityComponents: Record<string, number> | null;
     policyVersion: string | null;
+    lifecycleState: string;
     resolvedAt: string | null;
     createdAt: string;
     updatedAt: string;
@@ -360,8 +362,15 @@ function EvidenceTrail({ evidence }: { evidence: EvidenceItem[] }) {
 
 // ── Finding Row ──────────────────────────────────────────────────────────────
 
-function FindingRow({ finding }: { finding: DiagnosticFinding }) {
-    const [expanded, setExpanded] = useState(false);
+function FindingRow({ finding, initialExpanded = false }: { finding: DiagnosticFinding; initialExpanded?: boolean }) {
+    const [expanded, setExpanded] = useState(initialExpanded);
+    const rowRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (initialExpanded && rowRef.current) {
+            rowRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    }, [initialExpanded]);
 
     const statusCfg = STATUS_CONFIG[finding.status] ?? STATUS_CONFIG.UNKNOWN;
     const severityCfg = SEVERITY_CONFIG[finding.severity] ?? SEVERITY_CONFIG.medium;
@@ -369,6 +378,7 @@ function FindingRow({ finding }: { finding: DiagnosticFinding }) {
 
     return (
         <div
+            ref={rowRef}
             id={`diagnostic-finding-${finding.id}`}
             className={`rounded-xl border transition-all duration-200 ${
                 expanded
@@ -397,6 +407,17 @@ function FindingRow({ finding }: { finding: DiagnosticFinding }) {
                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${statusCfg.bg} ${statusCfg.color}`}>
                             {statusCfg.label}
                         </span>
+                        {finding.lifecycleState && (
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
+                                finding.lifecycleState === "RESOLVED"
+                                    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                                    : finding.lifecycleState === "OPEN"
+                                      ? "text-zinc-400 bg-zinc-500/10 border-zinc-500/20"
+                                      : "text-amber-400 bg-amber-500/10 border-amber-500/20"
+                            }`}>
+                                {finding.lifecycleState}
+                            </span>
+                        )}
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">
                         {truncate(finding.rootCause, 120)}
@@ -530,6 +551,9 @@ function FindingRow({ finding }: { finding: DiagnosticFinding }) {
 
                     {/* Evidence trail */}
                     <EvidenceTrail evidence={finding.evidence} />
+
+                    {/* Verification timeline */}
+                    <VerificationTimeline findingId={finding.id} />
                 </div>
             )}
         </div>
@@ -541,6 +565,7 @@ function FindingRow({ finding }: { finding: DiagnosticFinding }) {
 export default function DiagnosticsPage() {
     const searchParams = useSearchParams();
     const siteIdParam = searchParams?.get("siteId") ?? null;
+    const findingIdParam = searchParams?.get("findingId") ?? null;
 
     const [findings, setFindings] = useState<DiagnosticFinding[]>([]);
     const [summary, setSummary] = useState<DiagnosticsSummary>({ total: 0, byStatus: {}, bySeverity: {} });
@@ -667,7 +692,7 @@ export default function DiagnosticsPage() {
             {!loading && !error && filtered.length > 0 && (
                 <div className="flex flex-col gap-3">
                     {filtered.map(f => (
-                        <FindingRow key={f.id} finding={f} />
+                        <FindingRow key={f.id} finding={f} initialExpanded={f.id === findingIdParam} />
                     ))}
                 </div>
             )}

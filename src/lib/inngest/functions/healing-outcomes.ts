@@ -129,6 +129,35 @@ export const measureHealingOutcomesJob = inngest.createFunction(
                             outcome: computeOutcome(impactScore),
                         },
                     });
+
+                    try {
+                        const healingLog = await prisma.selfHealingLog.findUnique({
+                            where: { id: outcome.healingLogId },
+                            select: { fingerprint: true, diagnosticFindingId: true },
+                        });
+                        const { linkHealingOutcomeToFinding, linkHealingOutcomeToFindingById } = await import("./diagnostic-verification");
+                        if (healingLog?.fingerprint) {
+                            await linkHealingOutcomeToFinding({
+                                siteId: outcome.siteId,
+                                findingFingerprint: healingLog.fingerprint,
+                                impactScore,
+                                outcome: computeOutcome(impactScore),
+                            });
+                        } else if (healingLog?.diagnosticFindingId) {
+                            await linkHealingOutcomeToFindingById({
+                                siteId: outcome.siteId,
+                                findingDbId: healingLog.diagnosticFindingId,
+                                impactScore,
+                                outcome: computeOutcome(impactScore),
+                            });
+                        }
+                    } catch (linkErr) {
+                        logger.warn("[HealingOutcome] Diagnostic lifecycle link failed (non-fatal)", {
+                            outcomeId: outcome.id,
+                            error: (linkErr as Error)?.message,
+                        });
+                    }
+
                     measured++;
                 } catch (e: unknown) {
                     logger.warn(`[HealingOutcome] Failed to measure outcome ${outcomeId}`, {

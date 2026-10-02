@@ -390,7 +390,7 @@ export const weeklyDigestJob = inngest.createFunction(
               // Experiment summary
               getSiteExperimentSummary(site.id).catch(() => ({ totalExperimentsExecuted: 0, completedExperiments: 0, averagePositionGain: 0, totalRevenueGenerated: 0 })),
               // Active diagnostic findings (evidence-driven engine)
-              (prisma as any).diagnosticFindingRecord.count({
+              prisma.diagnosticFindingRecord.count({
                 where: { siteId: site.id, status: { in: ["FAIL", "WARNING"] } },
               }).catch(() => 0),
             ]);
