@@ -341,12 +341,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     : null;
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 fade-in-up">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 fade-in-up">
 
       {/* ── Status summary row ─────────────────────────────────────────────────── */}
       <section aria-label="Site status" className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand">Mission Control</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand">Overview</p>
           <h1 className="mt-1.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
             {primarySiteDomain || "Your SEO workspace"}
           </h1>
@@ -429,7 +429,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
           {/* ── KPI cards ──────────────────────────────────────────────────── */}
           {hasAudits && (
-            <section aria-label="Performance overview" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <section aria-label="Performance overview" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <div className="kpi-card">
                 <div className="flex items-center gap-3">
                   <ScoreRing score={latestScore ?? 0} color="var(--brand)" size={48} strokeWidth={4} />
@@ -456,6 +456,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 </p>
                 <p className="mt-0.5 text-xs font-medium text-muted-foreground">Rank movement</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">{rankMovement !== null ? "positions improved" : "No movement tracked"}</p>
+              </div>
+              <div className="kpi-card">
+                <p className={"text-2xl font-semibold tracking-tight tabular-nums " + scoreColor(aeoScore)}>{aeoScore || "—"}</p>
+                <p className="mt-0.5 text-xs font-medium text-muted-foreground">AI visibility</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{aeoScore > 0 ? `${aeoScore}/100 AEO score` : "Run an AEO check"}</p>
               </div>
             </section>
           )}
@@ -500,7 +505,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {primarySiteId && <AutonomousActivity siteId={primarySiteId} />}
             {recentAuditRows.length > 0 && (
-              <section className="rounded-2xl border border-border bg-card" aria-labelledby="mc-audit-history">
+              <section className="rounded-xl border border-border bg-card" aria-labelledby="mc-audit-history">
                 <div className="flex items-center justify-between border-b border-border px-5 py-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand">History</p>
@@ -532,8 +537,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
           {/* ── Empty: site connected but no audits ─────────────────────── */}
           {!isNewUser && hasSites && !hasAudits && (
-            <section className="rounded-2xl border border-border bg-card p-8 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-brand/20 bg-brand/10">
+            <section className="rounded-xl border border-border bg-card p-8 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-brand/20 bg-brand/10">
                 <TrendingUp className="h-6 w-6 text-brand" />
               </div>
               <h2 className="text-sm font-semibold text-foreground">Run your first audit</h2>
