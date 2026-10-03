@@ -1,16 +1,24 @@
 import { logger, formatError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
+// ─── Provider constants ───────────────────────────────────────────────────────
 /**
- * Canonical list of OAuth providers that may carry a valid GSC access token.
- * The dedicated "google-gsc" provider (with webmasters scope) is preferred,
- * but the generic "google" provider can also carry a valid token when a user
- * authenticated via basic Google OAuth before the dedicated GSC flow existed.
- *
- * Every query that checks GSC connection status MUST use this list to avoid
- * showing "Connect GSC" buttons to users who are already connected.
+ * The canonical OAuth provider ID for Google Search Console.
+ * Only accounts created via the dedicated GSC OAuth flow carry this provider.
  */
-export const GSC_PROVIDERS = ["google-gsc", "google"] as const;
+export const GSC_PROVIDER = "google-gsc" as const;
+
+/**
+ * @deprecated Use GSC_PROVIDER instead. Kept only for backward-compatibility
+ * with legacy import sites. New code MUST NOT treat plain "google" as GSC-connected.
+ */
+export const GSC_PROVIDERS = [GSC_PROVIDER, "google"] as const;
+
+/**
+ * The OAuth scope that proves an account has Search Console access.
+ * Used as a guard when falling back to legacy "google" accounts.
+ */
+const WEBMASTERS_SCOPE = "webmasters";
 
 const TOKEN_CACHE_PREFIX = "gsc:token:";
 const TOKEN_CACHE_TTL_SECONDS = 3500;
@@ -75,21 +83,57 @@ function getOAuthCredentials(): { clientId: string; clientSecret: string } {
     return { clientId, clientSecret };
 }
 
+// ─── Scope-aware account resolution ───────────────────────────────────────────
+/**
+ * Finds the best GSC-capable Account for a user.
+ *
+ * Resolution priority:
+ * 1. Dedicated `google-gsc` account (always has webmasters scope)
+ * 2. Legacy `google` account IF its stored scope includes the webmasters scope
+ *    (this handles users who connected before the dedicated GSC provider existed)
+ *
+ * An account is rejected if it lacks a refresh_token — that's an unusable credential.
+ */
+async function findGscAccount(userId: string) {
+    // 1. Preferred: dedicated GSC provider
+    const dedicated = await prisma.account.findFirst({
+        where: { userId, provider: GSC_PROVIDER },
+    });
+    if (dedicated?.refresh_token) return dedicated;
+
+    // 2. Legacy fallback: plain google with webmasters scope
+    const legacy = await prisma.account.findFirst({
+        where: {
+            userId,
+            provider: "google",
+        },
+    });
+
+    // Only accept if scope includes webmasters AND has a refresh_token
+    if (legacy?.refresh_token && legacy.scope?.includes(WEBMASTERS_SCOPE)) {
+        return legacy;
+    }
+
+    // Dedicated account exists but has no refresh_token → reauth required
+    if (dedicated) return dedicated;
+
+    return null;
+}
+
+// ─── Main token retrieval ─────────────────────────────────────────────────────
 export async function getUserGscToken(userId: string): Promise<string> {
     const now = Math.floor(Date.now() / 1000);
 
     const cached = await getCachedToken(userId);
     if (cached) return cached;
 
-    const acc = await prisma.account.findFirst({
-        where: {
-            userId,
-            provider: { in: ["google-gsc", "google"] },
-        },
-        orderBy: [{ provider: "desc" }],
-    });
+    const acc = await findGscAccount(userId);
 
-    if (!acc?.access_token) {
+    if (!acc) {
+        throw new Error("GSC_NOT_CONNECTED");
+    }
+
+    if (!acc.access_token) {
         throw new Error("GSC_NOT_CONNECTED");
     }
 
@@ -199,23 +243,39 @@ export async function getUserGscToken(userId: string): Promise<string> {
     return credentials.access_token;
 }
 
+// ─── Connection check ─────────────────────────────────────────────────────────
+/**
+ * Bug #4 fix: Checks whether a user has *usable* GSC credentials.
+ * Previously this only checked Account row existence, which could return true
+ * even when refresh_token was null, scopes were wrong, or credentials expired.
+ *
+ * Now uses the same scope-aware resolver as getUserGscToken().
+ */
 export async function checkGscConnected(userId: string): Promise<boolean> {
-    const account = await prisma.account.findFirst({
-        where: { userId, provider: { in: [...GSC_PROVIDERS] } },
-        select: { id: true },
-    });
-    return !!account;
+    const acc = await findGscAccount(userId);
+    // Account must exist AND have a refresh token to be considered "connected"
+    return !!acc?.refresh_token;
 }
 
+// ─── Disconnect ───────────────────────────────────────────────────────────────
 export async function disconnectGsc(userId: string): Promise<void> {
+    // Invalidate all caches: access token + property resolution
     await invalidateCachedToken(userId);
+
+    try {
+        const { invalidatePropertyCacheForUser } = await import("@/lib/gsc/property-resolver");
+        await invalidatePropertyCacheForUser(userId);
+    } catch {
+        // Non-fatal — cache will expire naturally
+    }
+
     // Delete only the dedicated google-gsc Account.
     // The generic "google" provider is intentionally excluded: it may be shared
     // with other integrations. Users who authenticated via the generic Google
     // OAuth flow before the dedicated GSC provider existed can re-connect using
     // the dedicated google-gsc flow.
     await prisma.account.deleteMany({
-        where: { userId, provider: "google-gsc" },
+        where: { userId, provider: GSC_PROVIDER },
     });
     await prisma.user.update({
         where: { id: userId },

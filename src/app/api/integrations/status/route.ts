@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { GSC_PROVIDERS } from "@/lib/gsc/token";
+import { GSC_PROVIDER } from "@/lib/gsc/token";
 
 export type IntegrationStatusState =
     | "connected"
@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
                 },
             }),
             prisma.account.findFirst({
-                where: { userId, provider: "google-gsc" },
+                where: { userId, provider: GSC_PROVIDER },
                 select: { id: true, providerAccountId: true, scope: true, refresh_token: true },
             }),
             prisma.account.findFirst({
@@ -135,13 +135,16 @@ export async function GET(req: NextRequest) {
             gscLastSync = lastPerf?.fetchedAt?.toISOString() ?? null;
         }
 
-        const gscConnected = (user.gscConnected || !!gscAccount);
-
         // ── GSC status state machine ──
+        // Bug #10 fix: Derives status from credential validity, not just row existence.
+        // A google-gsc Account row without a refresh_token is unusable.
         let gscStatus: IntegrationStatusState;
         if (!gscAccount) {
             gscStatus = "not_connected";
         } else if (!gscAccount.refresh_token) {
+            gscStatus = "reauthorization_required";
+        } else if (!gscAccount.scope?.includes("webmasters")) {
+            // Account exists with refresh_token but wrong scope — needs re-auth
             gscStatus = "reauthorization_required";
         } else {
             gscStatus = "connected";

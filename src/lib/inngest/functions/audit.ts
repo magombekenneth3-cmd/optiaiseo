@@ -7,8 +7,7 @@ import { getFullAuditEngine } from "@/lib/seo-audit";
 import { diffAuditSnapshots } from "@/lib/seo-audit/audit-diff";
 import { sendSEODigest, sendAuditCompleteEmail } from "@/lib/email";
 import { notifyAuditComplete } from "@/lib/notifications";
-import { fetchGSCKeywords, findOpportunities, normaliseSiteUrl } from "@/lib/gsc";
-import { GSC_PROVIDERS } from "@/lib/gsc/token";
+import { fetchGSCKeywords, findOpportunities } from "@/lib/gsc";
 import { detectGsovDrop, generateHealingPlan } from "@/lib/self-healing/engine";
 import { executeHealingWithConfidenceGate } from "@/lib/self-healing/confidence";
 import { detectGscAnomalies, generateGscHealingPlan } from "@/lib/self-healing/gsc";
@@ -497,22 +496,22 @@ export const sendWeeklyDigestJob = inngest.createFunction(
         }
 
         const topOpportunities = await step.run("fetch-gsc-opportunities", async () => {
-            const gscAccount = await prisma.account.findFirst({
-                where: { userId: user.id, provider: { in: [...GSC_PROVIDERS] } },
-                select: { access_token: true },
-            });
-            if (gscAccount?.access_token) {
-                try {
-                    const siteUrl = normaliseSiteUrl(site.domain);
-                    const keywords = await fetchGSCKeywords(gscAccount.access_token, siteUrl, 90, 50);
-                    return findOpportunities(keywords, 5).map((o) => ({
-                        keyword: o.keyword,
-                        position: Math.round(o.avgPosition),
-                        impressions: o.impressions,
-                    }));
-                } catch (err: unknown) {
-                    logger.warn(`[Inngest/EmailDigest] GSC fetch failed for ${user.email}:`, { error: err instanceof Error ? err.message : String(err) });
-                }
+            try {
+                // Bug #8 fix: Use the central token system instead of raw Account queries.
+                // This ensures token refresh, scope validation, and property resolution
+                // all go through getUserGscToken() → getAuthorizedGscProperty().
+                const { getUserGscToken } = await import("@/lib/gsc/token");
+                const { getAuthorizedGscProperty } = await import("@/lib/gsc/property-resolver");
+                const token = await getUserGscToken(user.id);
+                const siteUrl = await getAuthorizedGscProperty(user.id, token, site.domain);
+                const keywords = await fetchGSCKeywords(token, siteUrl, 90, 50);
+                return findOpportunities(keywords, 5).map((o) => ({
+                    keyword: o.keyword,
+                    position: Math.round(o.avgPosition),
+                    impressions: o.impressions,
+                }));
+            } catch (err: unknown) {
+                logger.warn(`[Inngest/EmailDigest] GSC fetch failed for ${user.email}:`, { error: err instanceof Error ? err.message : String(err) });
             }
             return [];
         });

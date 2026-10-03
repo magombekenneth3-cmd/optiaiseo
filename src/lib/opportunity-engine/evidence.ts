@@ -216,7 +216,7 @@ async function fetchEvidenceFromLiveApi(
         return [];
     }
 
-    const siteUrl = await getAuthorizedGscProperty(accessToken, site.domain);
+    const siteUrl = await getAuthorizedGscProperty(site.userId, accessToken, site.domain);
     const keywordRows = await fetchGSCKeywords(accessToken, siteUrl, 90, 3600);
 
     // Aggregate by URL (preserved from original implementation)

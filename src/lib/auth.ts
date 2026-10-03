@@ -306,9 +306,14 @@ export const authOptions: NextAuthOptions = {
                             },
                             update: {
                                 access_token: tokenFields.access_token,
-                                refresh_token: tokenFields.refresh_token,
                                 expires_at: tokenFields.expires_at,
                                 scope: tokenFields.scope,
+                                // P0 FIX: Never overwrite an existing refresh_token with null.
+                                // Google may not return a new refresh_token on every OAuth authorization.
+                                // Writing null here would silently destroy the user's GSC connection.
+                                ...(tokenFields.refresh_token
+                                    ? { refresh_token: tokenFields.refresh_token }
+                                    : {}),
                             },
                         });
 
@@ -320,6 +325,23 @@ export const authOptions: NextAuthOptions = {
                                 where: { id: dbUser.id },
                                 data: { gscConnected: true },
                             });
+
+                            // Bug #6 fix: Invalidate GSC property cache on reconnect
+                            // so stale cached resolutions don't persist after the user
+                            // changes their Search Console property or reconnects.
+                            try {
+                                const { invalidatePropertyCacheForUser } = await import("@/lib/gsc/property-resolver");
+                                await invalidatePropertyCacheForUser(dbUser.id);
+                            } catch {
+                                // Non-fatal — cache will expire naturally
+                            }
+
+                            // Also bust the JWT cache so the session picks up gscConnected=true immediately
+                            try {
+                                await redis.del(jwtCacheKey(user.email));
+                            } catch {
+                                // Non-fatal
+                            }
                         }
 
                         // GA4 uses a dedicated provider — no user flag needed;

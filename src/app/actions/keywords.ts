@@ -83,7 +83,7 @@ function getCachedGscKeywords(userId: string, siteId: string, domain: string) {
             // property up front, instead of guessing with normaliseSiteUrl()
             // and recovering from 403 errors.
             const { resolveGscProperty } = await import("@/lib/gsc/property-resolver");
-            const resolution = await resolveGscProperty(tokenResult.token, domain);
+            const resolution = await resolveGscProperty(userId, tokenResult.token, domain);
 
             if (!resolution) {
                 throw new Error(
@@ -564,7 +564,7 @@ export async function getKeywordsComparison(
         if ("error" in tokenResult) return { success: false, error: tokenResult.error };
 
         const { resolveGscProperty } = await import("@/lib/gsc/property-resolver");
-        const resolution = await resolveGscProperty(tokenResult.token, site.domain);
+        const resolution = await resolveGscProperty(userId, tokenResult.token, site.domain);
         if (!resolution) return { success: false, error: "No verified GSC property found for this domain." };
         const primaryUrl = resolution.property;
         const today = new Date();
@@ -685,7 +685,7 @@ export async function getDeviceBreakdown(siteId: string): Promise<{
 
         const token = await getUserGscToken(userId);
         const { resolveGscProperty } = await import("@/lib/gsc/property-resolver");
-        const resolution = await resolveGscProperty(token, site.domain);
+        const resolution = await resolveGscProperty(userId, token, site.domain);
         if (!resolution) return { success: false, error: "No verified GSC property found for this domain." };
         const rows = await fetchGSCKeywordsByDevice(token, resolution.property, 90);
         const deviceMetrics = aggregateDeviceMetrics(rows);
@@ -749,7 +749,7 @@ export async function getKeywordRankingsByDateRange(
 
         // Use centralized property resolver instead of normaliseSiteUrl() + 403 fallback
         const { resolveGscProperty } = await import("@/lib/gsc/property-resolver");
-        const resolution = await resolveGscProperty(tokenResult.token, site.domain);
+        const resolution = await resolveGscProperty(userId, tokenResult.token, site.domain);
         if (!resolution) {
             return {
                 success: false,
@@ -928,7 +928,7 @@ export async function getKeywordComparisonByDateRange(
         if ("error" in tokenResult) return { success: false, error: tokenResult.error };
 
         const { resolveGscProperty } = await import("@/lib/gsc/property-resolver");
-        const resolution = await resolveGscProperty(tokenResult.token, site.domain);
+        const resolution = await resolveGscProperty(userId, tokenResult.token, site.domain);
         if (!resolution) return { success: false, error: "No verified GSC property found for this domain." };
         const primaryUrl = resolution.property;
 

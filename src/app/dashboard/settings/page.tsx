@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getPlan } from "@/lib/stripe/plans";
 import { SettingsTabs } from "./SettingsTabs";
-import { GSC_PROVIDERS } from "@/lib/gsc/token";
+import { checkGscConnected } from "@/lib/gsc/token";
 
 export const metadata: Metadata = {
     title: 'Settings | OptiAISEO',
@@ -26,11 +26,12 @@ export default async function SettingsPage() {
             id: true,
             whiteLabel: true,
             preferences: true,
-            accounts: { where: { provider: { in: [...GSC_PROVIDERS] } }, select: { id: true } },
         },
     });
 
-    const gscConnected = (dbUser?.accounts?.length ?? 0) > 0;
+    // Bug #3 fix: Use the central scope-aware connection check
+    // instead of raw Account row existence.
+    const gscConnected = dbUser?.id ? await checkGscConnected(dbUser.id) : false;
 
     const firstSite = await prisma.site.findFirst({
         where:   { userId: dbUser?.id ?? "" },

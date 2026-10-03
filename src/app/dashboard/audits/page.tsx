@@ -11,7 +11,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { OAuthConnectButton } from "@/components/auth/OAuthConnectButton";
-import { GSC_PROVIDERS } from "@/lib/gsc/token";
+import { checkGscConnected } from "@/lib/gsc/token";
 
 import { PageHeader } from "@/components/ui/design-system/PageHeader";
 
@@ -36,13 +36,14 @@ export default async function AuditsPage({
     userEmail ? prisma.user.findUnique({
       where: { email: userEmail },
       select: {
+        id: true,
         subscriptionTier: true,
-        accounts: { where: { provider: { in: [...GSC_PROVIDERS] } }, select: { id: true } },
       },
     }) : null,
   ]);
   const userTier       = dbUser?.subscriptionTier ?? "FREE";
-  const gscConnected   = (dbUser?.accounts?.length ?? 0) > 0;
+  // Bug #3 fix: Use the central scope-aware connection check
+  const gscConnected   = dbUser?.id ? await checkGscConnected(dbUser.id) : false;
   const allAudits = audits ?? [];
   const selectedSite = siteId ? sites?.find((site) => site.id === siteId) : undefined;
   const visibleAudits = selectedSite ? allAudits.filter((audit) => audit.site.id === selectedSite.id) : allAudits;

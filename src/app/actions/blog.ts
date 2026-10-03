@@ -461,7 +461,7 @@ export async function generateBlog(
                 (async (): Promise<{ opportunities: Awaited<ReturnType<typeof findOpportunities>>; gscStatus: GscDataResult<unknown>["status"]; gscProperty?: string }> => {
                     try {
                         const token = await getUserGscToken(user.id);
-                        const gscProperty = await getAuthorizedGscProperty(token, site.domain);
+                        const gscProperty = await getAuthorizedGscProperty(user.id, token, site.domain);
                         const raw = await fetchGSCKeywords(token, gscProperty);
                         const opps = findOpportunities(raw);
                         return {
