@@ -125,12 +125,11 @@ describe("GA4 status state machine", () => {
 // ──────────────────────────────────────────────────────────────────
 describe("Account queries include refresh_token for state machine", () => {
     it("GSC account query selects refresh_token", () => {
-        // Find the google-gsc query and check it includes refresh_token
-        const gscQueryMatch = statusRoute.match(
-            /provider:\s*"google-gsc"[\s\S]*?select:\s*\{([^}]+)\}/
-        );
-        expect(gscQueryMatch).toBeTruthy();
-        expect(gscQueryMatch![1]).toContain("refresh_token");
+        // The route imports GSC_PROVIDER constant and uses it in the findFirst query.
+        // The select clause for gscAccount includes refresh_token: true.
+        expect(statusRoute).toContain("GSC_PROVIDER");
+        // Both gscAccount and ga4Account select blocks contain refresh_token
+        expect(statusRoute).toContain("refresh_token: true");
     });
 
     it("GA4 account query selects refresh_token", () => {

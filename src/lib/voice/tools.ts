@@ -4,9 +4,11 @@ import { runSiteAudit } from "@/lib/audit";
 import { auditMultiModelMentions } from "@/lib/aeo/multi-model";
 import { type AeoCheck } from "@/lib/aeo";
 import { generateAeoFixInternal } from "@/lib/aeo/fix-engine";
+import { aeoCheckToFinding } from "@/lib/aeo/fix-adapter";
 import { pushFixToGitHub } from "@/app/actions/aeoFix";
 import { prisma } from "@/lib/prisma";
 import { AI_MODELS } from "@/lib/constants/ai-models";
+
 
 // Module-level singleton — avoids re-instantiating the SDK on every tool call
 const _visionAI = process.env.GEMINI_API_KEY
@@ -238,6 +240,29 @@ Keep your response under 150 words — it will be read aloud to the user.`,
                     recommendation: args.issueDetail || `Fix the ${args.issueType} issue on ${domain}`,
                 };
 
+                // ── Safety gate: classify the check before generating a fix ──────────
+                // Voice is an entry point — it must not have a separate fix architecture.
+                // Convert the AeoCheck to a canonical DiagnosticFinding and inspect
+                // its evidence confidence. Only technical issues with schema/structural
+                // cause proceed to PR generation. Content experiments are returned as
+                // recommendations only — they do not create repository mutations.
+                const canonicalFinding = aeoCheckToFinding(check, domain);
+
+                // Content experiments: never produce a repository mutation from a
+                // single voice invocation — the voice tool is a single AI interaction.
+                const isContentExperiment =
+                    canonicalFinding.remediationType === "EXPERIMENT" ||
+                    canonicalFinding.remediationType === "MANUAL";
+
+                if (isContentExperiment) {
+                    return {
+                        status: "content_experiment",
+                        message: `The issue "${check.label}" is a content or authority gap that cannot be resolved through an automatic code change. Tell the user this requires a content improvement, not a code fix. Recommend they review the AEO diagnosis for specific action steps.`,
+                    };
+                }
+
+                // Technical fix: generate via canonical engine, route through reviewable PR.
+                // pushFixToGitHub creates a branch + PR — never a direct commit to main.
                 const fixResult = await generateAeoFixInternal(check, domain, site.githubRepoUrl);
 
                 if (!fixResult.success) {

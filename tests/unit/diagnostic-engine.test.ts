@@ -180,6 +180,7 @@ describe("sortFindingsForRemediation", () => {
     return {
       id: "fp-1",
       fingerprint: "fp-1",
+      domain: "TECHNICAL",
       issueType: "TEST",
       status: "FAIL",
       severity: "medium",

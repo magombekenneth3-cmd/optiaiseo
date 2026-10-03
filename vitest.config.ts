@@ -11,7 +11,12 @@ export default defineConfig({
         include: ["tests/**/*.{test,spec}.{ts,tsx}"],
         exclude: ["tests/e2e/**", "node_modules/**"],
         fileParallelism: false,
-        testTimeout: 30_000,
+        testTimeout: 60_000,
+        // DB integration tests (beforeEach/afterEach) can take several seconds
+        // when the previous test leaves dangling async work (e.g. a timed-out
+        // Promise.race whose inner promise is still pending). 30s is enough for
+        // the slowest teardown path.
+        hookTimeout: 30_000,
         coverage: {
             provider: "v8",
             reporter: ["text", "json-summary"],

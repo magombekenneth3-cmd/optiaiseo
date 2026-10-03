@@ -58,7 +58,9 @@ describe("GSC Disconnect isolation", () => {
         const gscToken = readSrc("lib/gsc/token.ts");
 
         it("only deletes provider: google-gsc", () => {
-            expect(gscToken).toMatch(/deleteMany[\s\S]*?provider:\s*"google-gsc"/);
+            // disconnectGsc uses the GSC_PROVIDER constant (= "google-gsc"), not an inline literal.
+            expect(gscToken).toContain('GSC_PROVIDER = "google-gsc"');
+            expect(gscToken).toMatch(/deleteMany[\s\S]*?provider:\s*GSC_PROVIDER/);
         });
 
         it("does NOT clear ga4PropertyId", () => {

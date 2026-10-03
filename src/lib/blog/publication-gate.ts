@@ -56,6 +56,11 @@ export interface PublicationGateInput {
     additionalOriginalityIssues?: string[];
     ledger?: ResearchEvidenceLedger | null;
     claimPlan?: ClaimPlan | null;
+    /**
+     * True when the article was generated from a degraded (fallback template)
+     * outline. The outline quality gate blocks publication in this case.
+     */
+    outlineDegraded?: boolean;
 }
 
 export interface PublicationDecision {
@@ -494,6 +499,29 @@ export function buildPublicationDecision(
     };
 }
 
+// ── P0-1: Outline Quality Gate ──────────────────────────────────────────────
+//
+// Articles generated from the fallback template outline are blocked from
+// automatic publication. The fallback produces generic, non-research-driven
+// structure that reads as AI-generated boilerplate.
+
+function evaluateOutlineQualityGate(input: PublicationGateInput): IndependentGateResult {
+    const issues: string[] = [];
+    const warnings: string[] = [];
+
+    if (input.outlineDegraded) {
+        issues.push(
+            "DEGRADED_GENERATION: Article was built from the fallback template outline, not a dynamically planned structure. " +
+            "The LLM outline planner likely failed. This article requires human editorial review before publication."
+        );
+    }
+
+    let status: GateStatus = "PASS";
+    if (issues.length > 0) status = "FAIL";
+
+    return { name: "OutlineQuality", status, isHard: true, issues, warnings };
+}
+
 export async function evaluatePublicationGate(
     input: PublicationGateInput,
 ): Promise<PublicationDecision> {
@@ -506,6 +534,7 @@ export async function evaluatePublicationGate(
     gates.push(evaluateSeoGate(input));
     gates.push(evaluateSchemaGate(input));
     gates.push(evaluateEditorialGate(input));
+    gates.push(evaluateOutlineQualityGate(input));
 
     const decision = buildPublicationDecision(gates, input.evidencePacket.availability);
 

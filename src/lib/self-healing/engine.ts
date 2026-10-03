@@ -2,11 +2,13 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
 import { generateAeoFixInternal as generateAeoFix, validateFixInternal as validateFixWithQA } from "@/lib/aeo/fix-engine";
+import { aeoCheckToFinding } from "@/lib/aeo/fix-adapter";
 import { z } from "zod";
 import { scoreHealingActions } from "./confidence";
 import { createHash } from "crypto";
 import { createAutoFixPR } from "@/lib/github";
 import { getGitHubToken } from "@/lib/github/token";
+
 
 const ModelResultSchema = z.object({
     model: z.string(),
@@ -145,6 +147,24 @@ export async function generateHealingPlan(siteId: string, currentGsov: number, p
         if (prev?.passed && !curr.passed) {
             // This is a regression
             if (curr.impact === "high" || curr.impact === "medium") {
+                // ── Canonical safety gate ─────────────────────────────────────
+                // Convert to canonical finding to inspect evidence quality.
+                // AEO checks carry INFERRED evidence by default (Phase 3).
+                // Only AI_PATCH evidence type proceeds to fix generation.
+                // EXPERIMENT / MANUAL evidence stays as ALERT only.
+                const canonicalFinding = aeoCheckToFinding(curr, site.domain);
+                const isFixEligible = canonicalFinding.remediationType === "AI_PATCH" ||
+                    canonicalFinding.remediationType === "DETERMINISTIC";
+
+                if (!isFixEligible) {
+                    actions.push({
+                        type: "ALERT",
+                        description: `AEO check regression: ${curr.label}. Evidence quality is insufficient for automatic fix generation. Manual review required.`,
+                        targetId: curr.id,
+                    });
+                    continue;
+                }
+
                 const fixRes = await generateAeoFix(curr, site.domain, site.githubRepoUrl ?? undefined);
                 if (fixRes.success) {
                     actions.push({
@@ -159,11 +179,15 @@ export async function generateHealingPlan(siteId: string, currentGsov: number, p
         }
     }
 
-    // Default: If GSoV dropped but no technical check failed, it might be competitor movement
+    // Default: If GSoV dropped but no technical check failed, this is a
+    // CitationOpportunity OBSERVATION — not a FIX_CANDIDATE.
+    // GSoV movement is a noisy external signal. It does not independently
+    // authorize a repository mutation. Escalation requires repeated observations
+    // plus verified technical cause (see AI_ESCALATION_POLICY in contracts.ts).
     if (actions.length === 0) {
         actions.push({
             type: "ALERT",
-            description: `Significant GSoV drop from ${prevGsov}% to ${currentGsov}%. No immediate technical regressions found. Recommend reviewing competitor movements.`,
+            description: `Significant GSoV drop from ${prevGsov}% to ${currentGsov}%. No technical regressions detected. This is a CitationOpportunity OBSERVATION — no mutation is authorized. Recommend reviewing competitor movements and citation observations.`,
         });
     }
 

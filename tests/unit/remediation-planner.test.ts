@@ -11,6 +11,7 @@ function makeFinding(overrides: Partial<DiagnosticFinding> = {}): DiagnosticFind
   return {
     id: "fp-test",
     fingerprint: "fp-test",
+    domain: "TECHNICAL",
     issueType: "CANONICAL_ISSUES",
     status: "FAIL",
     severity: "high",

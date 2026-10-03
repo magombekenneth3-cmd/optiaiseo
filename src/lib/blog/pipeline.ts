@@ -72,6 +72,12 @@ export interface OutlinePlan {
     metaDescription: string;
     sections: OutlineSection[];
     estimatedTotal: number;
+    /**
+     * True when the outline was produced by the hardcoded fallback, not by the
+     * LLM planner. A degraded outline MUST NOT be published without explicit
+     * human review — the content-lint and publication gate enforce this.
+     */
+    degraded?: boolean;
 }
 
 /** Tracks editorial state across section iterations to prevent repetition. */
@@ -401,6 +407,11 @@ RULES:
             { heading: `Frequently Asked Questions`, goal: "Answer real searcher questions directly", tone: "direct", evidenceType: "faq", wordTarget: 300, keyEntities: [], isOutro: true },
         ],
         estimatedTotal: targetWords,
+        // ── P0 Safety Flag ──────────────────────────────────────────────────
+        // This outline was NOT generated dynamically. It is a generic fallback
+        // template. The publication gate MUST block articles built from degraded
+        // outlines unless a human explicitly approves them.
+        degraded: true,
     };
 
     try {
@@ -457,6 +468,7 @@ export async function runSectionWriter(
     };
 
     const sections: string[] = [];
+    let visualInjected = false;
 
     for (let i = 0; i < outline.sections.length; i++) {
         const section = outline.sections[i];
@@ -481,8 +493,17 @@ export async function runSectionWriter(
             ? enforceFaqOpeners(stripped)
             : stripped;
 
-        if (i === 1 || section.evidenceType === "data") {
+        // ── P1-3: Visual evidence injection ─────────────────────────────────
+        // Only inject a chart when we have actual research-backed data points.
+        // Never inject fabricated benchmarks. At most one chart per article.
+        // The injectVisualEvidenceIntoBlog function now requires real dataPoints
+        // and sourceAttribution — it returns content unchanged if either is missing.
+        if ((i === 1 || section.evidenceType === "data") && !visualInjected) {
+            const beforeLen = finalText.length;
             finalText = injectVisualEvidenceIntoBlog(finalText, section.heading || ctx.keyword || "Research");
+            if (finalText.length > beforeLen) {
+                visualInjected = true; // Only inject once per article
+            }
         }
 
         sections.push(finalText);
@@ -612,7 +633,15 @@ ${relevantPAA.length > 0 ? `PAA questions to answer in this section:\n${relevant
     const caseStudyEvidenceNote = section.evidenceType === "case_study"
         ? getVerifiedCaseStudyAvailability(sectionResearch.relevantSources)
             ? "Verified case-study evidence is available below. Cite it when using its outcome."
-            : "No verified case-study evidence is available. Use a clearly labelled hypothetical example; do not invent a company, outcome, or metric."
+            : `MANDATORY: No verified case-study evidence is available for this section.
+You MUST follow ALL of these rules:
+1. Open the example with the exact text: "[Hypothetical Example]" or "Consider a hypothetical scenario:"
+2. Do NOT invent a specific company name, brand, person, or organization.
+3. Do NOT invent specific metrics, percentages, dollar amounts, or timeframes.
+4. Use generic descriptors: "a mid-size e-commerce retailer", "a B2B SaaS company", "one agency we spoke with".
+5. Frame outcomes qualitatively: "saw meaningful improvement" NOT "increased by 47%".
+6. If you cannot write a useful hypothetical, skip the case study entirely and write analytical content instead.
+Violating these rules produces fabricated content that will be caught by the publication gate.`
         : "";
 
     const toneInstructions: Record<OutlineSection["tone"], string> = {
@@ -1022,6 +1051,11 @@ export interface PipelineResult {
     outline: OutlinePlan;
     researchPacket: ResearchPacket;
     claimPlan: ClaimPlan | null;
+    /**
+     * True when the LLM outline planner failed and the generic fallback was
+     * used. A degraded pipeline result MUST NOT be auto-published.
+     */
+    degraded: boolean;
 }
 
 /**
@@ -1085,6 +1119,10 @@ export async function runFullPipeline(params: {
 
     const repairedMarkdown = await repairUnsupportedClaims(polishedMarkdown, researchPacket, ctx);
 
+    if (outline.degraded) {
+        logger.warn("[Pipeline] DEGRADED_GENERATION: fallback outline was used — article will require review", { keyword });
+    }
+
     return {
         title: outline.title,
         slug: outline.slug,
@@ -1095,5 +1133,6 @@ export async function runFullPipeline(params: {
         outline,
         researchPacket,
         claimPlan,
+        degraded: outline.degraded === true,
     };
 }

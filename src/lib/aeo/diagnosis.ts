@@ -74,7 +74,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
             title: "Add Organization JSON-LD schema to every page",
             effort: "2 hours",
             what: "Add complete Organization structured data markup to every page on your site.",
-            why: "This is the most direct machine-readable signal telling AI knowledge graphs what your brand is, what industry it serves, and where it operates. When AI engines have no structured entity data, they guess — leading to completely wrong industry associations.",
+            why: "Organization structured data provides a machine-readable description of your entity — including your industry, geography, and official profiles. Without structured entity data, AI systems rely on less reliable signals and may associate your brand with incorrect categories.",
             howSteps: [
                 "Create a script tag with type=\"application/ld+json\" in your site's <head>",
                 'Include: "@type": "Organization", "name": "[Brand]", "description": "[plain language description]"',
@@ -84,7 +84,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
                 "Deploy the schema — validate at schema.org/SchemaApp or Google Rich Results Test",
                 "Verify indexed in Google Search Console > Enhancements > Structured Data",
             ],
-            estimatedImpact: "High — corrects AI entity confusion within 2–4 weeks of re-indexing.",
+            estimatedImpact: "High — structured entity data helps AI knowledge graphs associate your brand with the correct industry. Monitor subsequent crawls and citation observations after deployment.",
         });
 
         items.push({
@@ -93,7 +93,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
             title: "Get cited on authoritative regional tech and business publications",
             effort: "1 week",
             what: "Secure brand mentions with backlinks on African tech publications and ISP directories.",
-            why: "AI engines learn brand-industry associations primarily from citation patterns across trusted web sources. Without external citations, the AI has no corroborating evidence to link your brand to its industry.",
+            why: "AI systems learn brand-industry associations from citation patterns across trusted web sources. External citations from authoritative sources can strengthen your brand's presence in the sources AI systems draw on.",
             howSteps: [
                 "Submit a press release or pitch to techcabal.com — Africa's leading tech publication",
                 "Submit to disrupt-africa.com — startup and tech news for African markets",
@@ -103,7 +103,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
                 "Submit to Cable.co.uk's global ISP listing database",
                 "Ensure each listing uses identical brand name, address, and phone (NAP consistency)",
             ],
-            estimatedImpact: "Very high — citation pattern is the primary AI training signal for entity-industry association.",
+            estimatedImpact: "Potentially high — external citations on authoritative sources can strengthen brand-industry associations in AI training data. Results depend on publication reach and indexing timelines.",
         });
     }
 
@@ -114,7 +114,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
             title: "Create dedicated landing pages for each failed query phrase",
             effort: "1 day",
             what: "Build a dedicated optimized page for each specific query phrase that failed to cite your brand.",
-            why: "AI engines extract answers from pages structured to directly answer the searched question. A generic homepage cannot compete with a page whose entire content is designed to answer one specific query.",
+            why: "AI systems extract answers from pages structured to directly address the searched question. A page whose content is focused on a specific query phrase is better positioned to answer that question than a generic homepage.",
             howSteps: [
                 "Identify the exact query phrases from your AEO tracking that showed 0% mention rate",
                 "Create one page per failing query (e.g. /fiber-internet-uganda, /cheapest-internet-uganda)",
@@ -124,7 +124,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
                 "Target 800–1,200 words with direct, factual answers — no marketing fluff",
                 "Internally link these pages from the homepage and main navigation",
             ],
-            estimatedImpact: "High — directly targets the query phrases you're failing. Results typically visible in 4–8 weeks.",
+            estimatedImpact: "High — directly targets the query phrases where your brand is not appearing. Monitor citation observations after publishing.",
         });
     }
 
@@ -134,7 +134,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
         title: "Add FAQPage schema to homepage and main service pages",
         effort: "2 hours",
         what: "Add FAQPage structured data with 5 specific questions and direct answers on your key pages.",
-        why: "FAQPage schema maps directly to the format AI engines use when generating responses. AI systems preferentially extract from pages that structure data in Q&A format matching their own output format.",
+        why: "FAQPage schema can help search and AI systems identify Q&A content on qualifying pages. Pages with explicit question-and-answer markup are structured in a format that can be more readily extracted for answer-type queries.",
         howSteps: [
             'Add a script[type="application/ld+json"] block to homepage and service pages',
             'Use "@type": "FAQPage" with "mainEntity" array of Question/Answer pairs',
@@ -143,7 +143,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
             "Validate at Google Rich Results Test before publishing",
             "Check Google Search Console for FAQ eligibility after 2 weeks",
         ],
-        estimatedImpact: "Medium-high — FAQ schema directly feeds AI response generation. Effect visible in 3–6 weeks.",
+        estimatedImpact: "Medium-high — FAQ structured data can help search and AI systems identify question-and-answer content on qualifying pages. Monitor indexing and subsequent citation observations after deployment.",
     });
 
     items.push({
@@ -152,7 +152,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
         title: "Create or claim a Wikipedia and Wikidata entry",
         effort: "1 day",
         what: "Get the brand listed on Wikipedia and Wikidata with full entity information.",
-        why: "Wikipedia is primary training data for every major AI model. A Wikipedia entry directly increases AI mention probability for branded queries because AI systems treat Wikipedia as a ground-truth source for entity-industry associations.",
+        why: "Wikipedia is a widely used reference source for major AI training datasets. A Wikipedia entry with appropriate sourcing and notability can strengthen an entity's presence in sources AI systems draw on.",
         howSteps: [
             "Search Wikipedia to verify no existing article covers the brand",
             "If none exists, draft an article covering: founding year, ownership, headquarters, service areas, notable facts",
@@ -162,7 +162,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
             "Add the Wikipedia URL to the sameAs array in your Organization JSON-LD schema",
             "Note: Wikipedia articles must be neutral and cited — never promotional",
         ],
-        estimatedImpact: "Very high for branded queries — Wikipedia is primary AI training data. Effect is permanent.",
+        estimatedImpact: "Potentially high for branded queries — Wikipedia is a widely used reference source. Notability criteria apply; this is not appropriate for all brands.",
     });
 
     items.push({
@@ -171,7 +171,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
         title: "Add an llms.txt file to the site root",
         effort: "30 minutes",
         what: "Create a plain text file at the domain root that tells AI crawlers what your site is about.",
-        why: "llms.txt is an emerging standard (similar to robots.txt) that gives AI content crawlers machine-readable context about the site. It helps AI systems ingest your brand information correctly.",
+        why: "llms.txt is an emerging convention (similar to robots.txt) that provides machine-readable site context to AI crawlers. It can help AI systems ingest brand information during crawling.",
         howSteps: [
             "Create a file at /llms.txt (or update the existing llms-txt route if it exists)",
             "Start with: # [Brand Name]",
@@ -181,7 +181,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
             "Add a ## Contact section with website URL",
             "Test by visiting yourdomain.com/llms.txt — should return plain text",
         ],
-        estimatedImpact: "Medium — helps AI crawlers at initial index time. Low effort, high signal density.",
+        estimatedImpact: "Medium — can help AI crawlers understand site content at index time. Low effort, useful as a supplementary signal.",
     });
 
     items.push({
@@ -190,7 +190,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
         title: "Standardize NAP (Name, Address, Phone) across all directories",
         effort: "2 hours",
         what: "Ensure Name, Address, and Phone are exactly identical across every online presence.",
-        why: "Inconsistent NAP data (e.g. 'Ltd' vs 'Limited' vs no suffix) degrades AI entity confidence. When data varies across sources, AI systems treat them as different entities, diluting your citation authority.",
+        why: "Inconsistent entity data (e.g. 'Ltd' vs 'Limited' vs no suffix) can reduce AI entity confidence. When data varies across sources, AI systems may treat different representations as separate entities, reducing citation cohesion.",
         howSteps: [
             "Decide on one exact canonical brand name format and never deviate from it",
             "Update Google Business Profile with the canonical NAP",
@@ -200,7 +200,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
             "Use a NAP consistency checker tool (BrightLocal or Moz Local) to find remaining inconsistencies",
             "Document the canonical NAP in an internal brand style guide",
         ],
-        estimatedImpact: "Medium — strengthens entity confidence across training sources. Cumulative effect over time.",
+        estimatedImpact: "Medium — consistent entity data across sources reduces the likelihood of AI systems treating different representations as separate entities. Cumulative effect over time.",
     });
 
     items.push({
@@ -209,7 +209,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
         title: "Add transparent pricing and clear use-case pages",
         effort: "1 day",
         what: "Create a /pricing page and a 'Who it's for' section on your homepage.",
-        why: "GEO is about being chosen, not just cited. AI skips brands with vague pricing or unclear positioning when recommending tools to buyers. Fitness signals — clear pricing, use cases, and reviews — are what make AI feel confident saying your name.",
+        why: "Clear pricing, use-case descriptions, and reviews help AI systems evaluate product fit when generating recommendations in commercial queries. Vague positioning may result in AI choosing more clearly-defined alternatives.",
         howSteps: [
             "Create /pricing with 2–3 named tiers, clear per-tier features, and a free trial or demo CTA",
             "Add a 'Who it's for' or 'Perfect for...' section to your homepage",
@@ -217,7 +217,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
             "Add a '[Your Brand] vs [Competitor]' comparison page targeting a head-to-head keyword",
             "Publish 1–2 case studies with specific numbers (e.g. '30% more leads', '$5k/mo saved')",
         ],
-        estimatedImpact: "High — GEO fixes directly increase your chances of being recommended by AI in commercial queries.",
+        estimatedImpact: "Potentially high — clear pricing, use-case descriptions, and social proof help AI systems evaluate product/service fit when recommending in commercial queries.",
     });
 
     items.push({
@@ -226,7 +226,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
         title: "Fix your brand footprint so AI understands your business",
         effort: "2 hours",
         what: "Enrich your About page, add sameAs schema, and create an llms.txt file.",
-        why: "AIO is about getting your brand understood by AI — not just ranked. If AI knowledge graphs lack reliable data about you (founding year, industry, verified profiles), AI will simply skip you even when you should be cited.",
+        why: "AIO is about getting your brand understood by AI. If AI knowledge graphs lack reliable data about you (founding year, industry, verified profiles), AI may not reference your brand when it should be relevant.",
         howSteps: [
             "Expand /about to include: founding year, team size, location, and mission — at least 400 words",
             "Add sameAs array to your Organization JSON-LD with links to LinkedIn, Twitter/X, Crunchbase, and any Wikipedia entry",
@@ -234,7 +234,7 @@ function buildActionPlan(patterns: AeoDiagnosis["patterns"], score: number): Act
             "Link all social profiles from your site footer with rel=me attributes",
             "Ensure Name/Address/Phone is identical in footer, Contact page, Google Business Profile, and schema",
         ],
-        estimatedImpact: "Very high — AIO fixes teach AI who you are. Without them, AI cannot safely talk about your brand.",
+        estimatedImpact: "Potentially high — enriching entity signals (About page, sameAs, structured identity) can improve how AI knowledge graphs associate your brand. Monitor subsequent citation observations after publishing.",
     });
 
     // Sort: Critical first, then High, then Medium

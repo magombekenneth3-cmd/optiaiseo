@@ -107,16 +107,25 @@ export function generateSvgDataGraphic(spec: EvidenceGraphicSpec): GeneratedImag
     };
 }
 
-export function injectVisualEvidenceIntoBlog(content: string, topic: string, dataPoints?: Array<{ label: string; value: number | string }>): string {
+export function injectVisualEvidenceIntoBlog(content: string, topic: string, dataPoints?: Array<{ label: string; value: number | string; unit?: string }>, sourceAttribution?: string): string {
+    // ── P0 Safety Gate: Never generate a chart from fabricated data ──────────
+    // If no real, research-backed dataPoints are supplied, skip the chart entirely.
+    // A missing chart is always better than a chart with invented numbers.
+    if (!dataPoints || dataPoints.length === 0) {
+        logger.debug("[Image Evidence] No research-backed data points supplied — skipping chart injection", { topic });
+        return content;
+    }
+
+    if (!sourceAttribution) {
+        logger.warn("[Image Evidence] Data points supplied without source attribution — skipping chart injection", { topic });
+        return content;
+    }
+
     const spec: EvidenceGraphicSpec = {
         title: `${topic} Performance & Evidence Benchmark`,
         type: "COMPARISON_BAR",
-        dataPoints: dataPoints && dataPoints.length > 0 ? dataPoints : [
-            { label: "Industry Average", value: 42, unit: "%" },
-            { label: "OptiAISEO Optimized Target", value: 94, unit: "%" },
-            { label: "Generative Citation Rate", value: 88, unit: "%" },
-        ],
-        sourceAttribution: "OptiAISEO AEO Intelligence Index 2026",
+        dataPoints,
+        sourceAttribution,
     };
 
     const evidence = generateSvgDataGraphic(spec);
@@ -130,3 +139,4 @@ export function injectVisualEvidenceIntoBlog(content: string, topic: string, dat
 
     return content + "\n\n" + evidence.figureHtml;
 }
+

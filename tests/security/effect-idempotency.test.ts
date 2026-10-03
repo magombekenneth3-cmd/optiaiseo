@@ -114,7 +114,7 @@ describe("§3 Effect registration idempotency", () => {
     // the second call finds the existing effect and returns it.
     const fs = require("fs");
     const content = fs.readFileSync(
-      "/Users/extremesales/Downloads/aiseo2_fixed 3/src/lib/mutations/operation.ts",
+      "/Users/extremesales/Projects/aiseo2_fixed_3/src/lib/mutations/operation.ts",
       "utf-8"
     );
     expect(content).toContain("findUnique");
@@ -137,7 +137,7 @@ describe("§4 No bypassed external calls in execution engine", () => {
   it("execution-engine.ts does NOT call triggerInstantIndexing directly", () => {
     const fs = require("fs");
     const content = fs.readFileSync(
-      "/Users/extremesales/Downloads/aiseo2_fixed 3/src/lib/growth/execution-engine.ts",
+      "/Users/extremesales/Projects/aiseo2_fixed_3/src/lib/growth/execution-engine.ts",
       "utf-8"
     );
     // Should NOT import or call triggerInstantIndexing
@@ -149,7 +149,7 @@ describe("§4 No bypassed external calls in execution engine", () => {
   it("execution-engine.ts registers INDEXNOW via registerEffect", () => {
     const fs = require("fs");
     const content = fs.readFileSync(
-      "/Users/extremesales/Downloads/aiseo2_fixed 3/src/lib/growth/execution-engine.ts",
+      "/Users/extremesales/Projects/aiseo2_fixed_3/src/lib/growth/execution-engine.ts",
       "utf-8"
     );
     expect(content).toContain('effectType: "INDEXNOW"');
@@ -159,7 +159,7 @@ describe("§4 No bypassed external calls in execution engine", () => {
   it("execution-engine.ts registers GOOGLE_INDEXING via registerEffect", () => {
     const fs = require("fs");
     const content = fs.readFileSync(
-      "/Users/extremesales/Downloads/aiseo2_fixed 3/src/lib/growth/execution-engine.ts",
+      "/Users/extremesales/Projects/aiseo2_fixed_3/src/lib/growth/execution-engine.ts",
       "utf-8"
     );
     expect(content).toContain('effectType: "GOOGLE_INDEXING"');
@@ -170,7 +170,7 @@ describe("§4 No bypassed external calls in execution engine", () => {
     // If executeOperation() returned leaseLost, success = false → effects skipped.
     const fs = require("fs");
     const content = fs.readFileSync(
-      "/Users/extremesales/Downloads/aiseo2_fixed 3/src/lib/growth/execution-engine.ts",
+      "/Users/extremesales/Projects/aiseo2_fixed_3/src/lib/growth/execution-engine.ts",
       "utf-8"
     );
     expect(content).toContain("if (!execResult.success)");
@@ -185,7 +185,7 @@ describe("§5 Effect retry semantics", () => {
   it("markEffectFailed uses exponential backoff: 2^attempts * 5000ms", () => {
     const fs = require("fs");
     const content = fs.readFileSync(
-      "/Users/extremesales/Downloads/aiseo2_fixed 3/src/lib/inngest/functions/mutation-effects.ts",
+      "/Users/extremesales/Projects/aiseo2_fixed_3/src/lib/inngest/functions/mutation-effects.ts",
       "utf-8"
     );
     // Verify the backoff formula exists
@@ -196,7 +196,7 @@ describe("§5 Effect retry semantics", () => {
   it("effect becomes FAILED (terminal) after maxAttempts exceeded", () => {
     const fs = require("fs");
     const content = fs.readFileSync(
-      "/Users/extremesales/Downloads/aiseo2_fixed 3/src/lib/inngest/functions/mutation-effects.ts",
+      "/Users/extremesales/Projects/aiseo2_fixed_3/src/lib/inngest/functions/mutation-effects.ts",
       "utf-8"
     );
     expect(content).toContain("isTerminal");
@@ -207,7 +207,7 @@ describe("§5 Effect retry semantics", () => {
   it("default maxAttempts = 5 (from registerEffect)", () => {
     const fs = require("fs");
     const content = fs.readFileSync(
-      "/Users/extremesales/Downloads/aiseo2_fixed 3/src/lib/mutations/operation.ts",
+      "/Users/extremesales/Projects/aiseo2_fixed_3/src/lib/mutations/operation.ts",
       "utf-8"
     );
     expect(content).toContain("maxAttempts: params.maxAttempts ?? 5");
@@ -222,7 +222,7 @@ describe("§6 Kill switch channel gating", () => {
   it("effect processor checks channel kill switch before dispatching", () => {
     const fs = require("fs");
     const content = fs.readFileSync(
-      "/Users/extremesales/Downloads/aiseo2_fixed 3/src/lib/inngest/functions/mutation-effects.ts",
+      "/Users/extremesales/Projects/aiseo2_fixed_3/src/lib/inngest/functions/mutation-effects.ts",
       "utf-8"
     );
     expect(content).toContain("assertEffectChannelEnabled");
@@ -232,7 +232,7 @@ describe("§6 Kill switch channel gating", () => {
   it("EFFECT_TO_CHANNEL maps all known effect types", () => {
     const fs = require("fs");
     const content = fs.readFileSync(
-      "/Users/extremesales/Downloads/aiseo2_fixed 3/src/lib/inngest/functions/mutation-effects.ts",
+      "/Users/extremesales/Projects/aiseo2_fixed_3/src/lib/inngest/functions/mutation-effects.ts",
       "utf-8"
     );
     expect(content).toContain("CMS_PUBLISH:");
@@ -244,7 +244,7 @@ describe("§6 Kill switch channel gating", () => {
   it("blocked effects are skipped (not failed) — they can retry later", () => {
     const fs = require("fs");
     const content = fs.readFileSync(
-      "/Users/extremesales/Downloads/aiseo2_fixed 3/src/lib/inngest/functions/mutation-effects.ts",
+      "/Users/extremesales/Projects/aiseo2_fixed_3/src/lib/inngest/functions/mutation-effects.ts",
       "utf-8"
     );
     // MutationBlockedError → skip (continue), not mark as failed

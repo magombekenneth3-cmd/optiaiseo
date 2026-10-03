@@ -24,7 +24,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 
-const SRC_ROOT = "/Users/extremesales/Downloads/aiseo2_fixed 3/src";
+const SRC_ROOT = "/Users/extremesales/Projects/aiseo2_fixed_3/src";
 
 function readSrc(relativePath: string): string {
   return readFileSync(join(SRC_ROOT, relativePath), "utf-8");

@@ -197,6 +197,8 @@ export const OutlinePlanSchema = z.object({
     metaDescription: z.string().trim().min(50).max(180),
     sections: z.array(OutlineSectionSchema).min(5).max(8),
     estimatedTotal: z.number().int().min(500).max(8_000),
+    /** True when the outline was produced by the hardcoded fallback template. */
+    degraded: z.boolean().optional(),
 });
 
 export const SectionResearchSchema = z.object({

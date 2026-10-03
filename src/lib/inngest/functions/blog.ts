@@ -1116,6 +1116,7 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                     factCheckComplete: factCheck.complete,
                     factCheckCoverage: factCheck.coverage,
                     additionalOriginalityIssues: factCheckBlockers,
+                    outlineDegraded: liveBlogPost.degraded,
                 });
                 return {
                     evidencePacket,

@@ -62,6 +62,8 @@ export interface BlogPostDraft {
     /** Inputs needed when the final publication gate re-extracts evidence. */
     riskTier: PromptContext["riskTier"];
     hasFirstPartyEvidence: boolean;
+    /** True when the outline planner failed and a fallback template was used. */
+    degraded?: boolean;
 }
 
 export interface AuthorProfile {
@@ -443,6 +445,7 @@ export async function buildPost(
     ctx: PromptContext,
     siteId?: string,
     researchPacket?: ResearchPacket,
+    degraded?: boolean,
 ): Promise<BlogPostDraft> {
     const { title, slug, content, excerpt, metaDescription, targetKeywords, faqs, sections, suggestedImagePrompt } = geminiResponse;
 
@@ -530,6 +533,7 @@ export async function buildPost(
         missingEvidence: evidencePacket.unsourcedStatistics ?? [],
         riskTier: ctx.riskTier,
         hasFirstPartyEvidence: !!(author.realExperience || author.realNumbers),
+        degraded: degraded === true,
     };
 }
 
@@ -604,7 +608,7 @@ export async function generateTrendingPost(
         comparisonTable: [],
     };
 
-    return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket);
+    return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket, pipeline.degraded);
 }
 
 export async function generateEvergreenPost(
@@ -662,7 +666,7 @@ export async function generateEvergreenPost(
         comparisonTable: [],
     };
 
-    return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket);
+    return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket, pipeline.degraded);
 }
 
 export async function generateBlogFromKeywordGap(
@@ -716,7 +720,7 @@ export async function generateBlogFromKeywordGap(
         comparisonTable: [],
     };
 
-    return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket);
+    return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket, pipeline.degraded);
 }
 
 export async function generateBlogFromCompetitorGap(
@@ -768,5 +772,5 @@ export async function generateBlogFromCompetitorGap(
         comparisonTable: [],
     };
 
-    return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket);
+    return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket, pipeline.degraded);
 }

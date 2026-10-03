@@ -30,6 +30,29 @@ export function runContentLint(content: string): ContentLintResult {
         blockingIssues.push("Unresolved generation placeholder detected.");
     }
 
+    // ── P0-1/P1-1: Detect fallback template headings ────────────────────────
+    // These patterns come from the hardcoded fallback outline in pipeline.ts.
+    // If they appear in final content, the LLM outline planner failed silently.
+    const TEMPLATE_HEADING_PATTERNS = [
+        /The Truth About\s/i,
+        /What Most Guides Get Wrong About\s/i,
+        /How .+ Actually Works$/i,
+        /Real Results:\s*A .+ Case Study/i,
+    ];
+    const h2Headings = [...content.matchAll(/<h2\b[^>]*>([\s\S]*?)<\/h2>/gi)].map(m => m[1].replace(/<[^>]+>/g, "").trim());
+    for (const heading of h2Headings) {
+        for (const pattern of TEMPLATE_HEADING_PATTERNS) {
+            if (pattern.test(heading)) {
+                blockingIssues.push(`Template fallback heading detected: "${heading}". Dynamic outline generation likely failed.`);
+            }
+        }
+    }
+
+    // ── P0-2: Detect fabricated visual evidence ─────────────────────────────
+    if (/Industry Average.*42%/i.test(content) && /OptiAISEO.*(?:Target|Optimized).*94%/i.test(content)) {
+        blockingIssues.push("Fabricated visual evidence detected (hardcoded benchmark). Charts must use research-backed data only.");
+    }
+
     const h1s = [...content.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)].map(match => textContent(match[1]));
     const h2s = [...content.matchAll(/<h2\b[^>]*>([\s\S]*?)<\/h2>/gi)].map(match => textContent(match[1]));
     if (h1s.length !== 1) blockingIssues.push(`Article must contain exactly one H1; found ${h1s.length}.`);
