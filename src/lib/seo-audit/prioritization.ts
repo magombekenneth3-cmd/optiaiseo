@@ -1,15 +1,22 @@
 /**
  * src/lib/seo-audit/prioritization.ts
  *
- * Unified Prioritization Policy v4.
+ * Canonical Prioritization Policy v4.
  *
- * Replaces the three competing priority models:
- *   1. computePriority() in types.ts  (impact × ease × confidence)
- *   2. SCORING_WEIGHTS in engine.ts   (ROI 60% + AI Visibility 40%)
- *   3. computeRecommendationPriority() in recommendations.ts
+ * This is the ONLY priority engine in OptiAISEO. All domains (SEO, AEO, AIO,
+ * GEO) feed through computePriorityV4() — there are no domain-specific formulas.
  *
- * Every finding carries an ExplainablePriority so the dashboard can answer:
- *   "Why is this #1?"
+ * Phase 2 converged the three former competing models:
+ *   1. computePriority() in types.ts       → now a deprecated adapter calling computePriorityLegacy()
+ *   2. SCORING_WEIGHTS in engine.ts        → deprecated, engine uses computePriorityV4() directly
+ *   3. computeRecommendationPriority()     → rewritten to call computePriorityV4()
+ *
+ * Architecture:
+ *   Evidence → Finding → Opportunity components → Execution components
+ *   → Canonical priority policy → ExplainablePriority
+ *
+ * Priority determines ORDERING. Risk determines EXECUTION POLICY.
+ * These are separate dimensions — see contracts.ts for FixRisk.
  *
  * Pure functions — no DB calls, no side effects.
  */

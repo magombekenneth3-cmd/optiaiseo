@@ -17,6 +17,33 @@ import type {
     NormalizedRecommendation,
     ChecklistItem,
 } from "./types";
+import { computePriorityV4, fixabilityForRemediation, type PriorityComponents } from "./prioritization";
+
+/**
+ * Compute a priorityScore from legacy roiImpact/aiVisibilityImpact metadata
+ * by routing through the canonical v4 policy.
+ *
+ * This replaces the old `Math.round(roi * 0.6 + aio * 0.4)` formula.
+ * roiImpact maps to businessImpact; aiVisibilityImpact is treated as
+ * a signal contributing to searchImpact, not an independent 40% weight.
+ */
+function computeLegacyPriorityScore(
+    roiImpact: number,
+    aiVisibilityImpact: number,
+    status?: string,
+): number {
+    const severityWeight = status === 'Fail' ? 0.9 : status === 'Warning' ? 0.7 : 0.5;
+    const input: PriorityComponents = {
+        businessImpact:   Math.min(1, roiImpact / 100),
+        searchImpact:     severityWeight,
+        affectedScope:    0.5,
+        confidence:       status === 'Fail' ? 0.9 : 0.7,
+        fixability:       fixabilityForRemediation('MANUAL'),
+        evidenceStrength: 0.5,
+        recency:          0.9,
+    };
+    return computePriorityV4(input).score;
+}
 
 // ─── Internal sub-shapes ────────────────────────────────────────────────────
 
@@ -114,7 +141,7 @@ function parseReportObject(report: RawReport): ParsedAuditResult {
             priority:            (rec.priority as "High" | "Medium" | "Low") ?? "Medium",
             roiImpact:           rec.roiImpact ?? 50,
             aiVisibilityImpact:  rec.aiVisibilityImpact ?? 50,
-            priorityScore:       rec.priorityScore ?? Math.round((rec.roiImpact ?? 50) * 0.6 + (rec.aiVisibilityImpact ?? 50) * 0.4),
+            priorityScore:       rec.priorityScore ?? computeLegacyPriorityScore(rec.roiImpact ?? 50, rec.aiVisibilityImpact ?? 50),
         })
     );
 
@@ -231,7 +258,7 @@ function extractRecommendations(categories: AuditCategoryResult[]): NormalizedRe
                     priority:           item.recommendation.priority,
                     roiImpact:          roi,
                     aiVisibilityImpact: aio,
-                    priorityScore:      Math.round(roi * 0.6 + aio * 0.4),
+                    priorityScore:      computeLegacyPriorityScore(roi, aio, item.status as string),
                 });
             }
         }
@@ -339,7 +366,7 @@ export function toNormalisedIssues(parsed: ParsedAuditResult): NormalisedIssue[]
                     recommendation:     item.recommendation?.text ?? "",
                     roiImpact:          roi,
                     aiVisibilityImpact: aio,
-                    priorityScore:      Math.round(roi * 0.6 + aio * 0.4),
+                    priorityScore:      computeLegacyPriorityScore(roi, aio, item.status as string),
                     status:             item.status,
                     finding:            item.finding,
                     details:            item.details,

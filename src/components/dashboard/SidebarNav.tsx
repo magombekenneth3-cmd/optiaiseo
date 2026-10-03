@@ -142,7 +142,7 @@ function SitePicker({ sites, siteId }: { sites: Site[]; siteId: string | null })
                 onClick={() => switchSite(site.id)}
                 className={`flex w-full items-center gap-2.5 rounded-xl border border-border bg-muted/30 px-2.5 py-2.5 text-left text-xs transition-colors hover:bg-accent ${
                   site.id === siteId ? "bg-accent/60" : ""
-                }}`>
+                }`}>
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-[10px] font-bold text-muted-foreground">
                   {domainInitial(site.domain)}
                 </span>
@@ -163,11 +163,12 @@ function SitePicker({ sites, siteId }: { sites: Site[]; siteId: string | null })
         </>
       )}
     </div>
-  );}
+  );
+}
 
 // ─── Main nav ──────────────────────────────────────────────────────────────────
 
-function SidebarNavInner(p{
+function SidebarNavInner({
   defaultSiteId, sites, isSuperAdmin, isCollapsed, onToggleCollapse,
 }: {
   defaultSiteId?: string | null; sites: Site[]; isSuperAdmin: boolean;
@@ -227,8 +228,7 @@ function SidebarNavInner(p{
         <div className={isCollapsed ? "mt-2" : "mt-3"}>
           <button
             type="button"
-            onClick={() => setOpen(false)}
-            onClick={() => setMoreOpen((v)`=> !v)}
+            onClick={() => setMoreOpen((v) => !v)}
             aria-expanded={moreOpen}
             className={`relative flex w-full items-center gap-3 rounded-xl text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground ${
               isCollapsed ? "mx-auto h-10 w-10 justify-center" : "px-3 py-2"
@@ -317,7 +317,7 @@ export function SidebarNav({
         </nav>
       }
     >
-      <SidebarNavInner r
+      <SidebarNavInner
         defaultSiteId={defaultSiteId}
         sites={sites}
         isSuperAdmin={isSuperAdmin}

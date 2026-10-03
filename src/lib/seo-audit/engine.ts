@@ -2,16 +2,18 @@ import { logger } from "@/lib/logger";
 import { AuditModule, AuditModuleContext, FullAuditReport, NormalizedRecommendation, ModulePerfEntry, AeoScoreBreakdown, AuditCategoryResult } from './types';
 import { fetchHtml } from './utils/fetch-html';
 import { runDiagnosticPipeline, type DiagnosticPipelineResult } from './diagnostic-engine';
+import { computePriorityV4, fixabilityForRemediation, type PriorityComponents } from './prioritization';
 
 /**
- * @deprecated Use computePriorityV4() from prioritization.ts for new code.
- * This flat ROI(60%)+AI(40%) formula is the third competing priority model.
- * Kept for backward compatibility in the engine's recommendation extraction.
+ * @deprecated These weights are NO LONGER the active priority model.
+ * The canonical policy is computePriorityV4() from prioritization.ts.
+ * Retained only for backward compatibility with code that imports the symbol.
+ * roiImpact and aiVisibilityImpact remain as descriptive metadata, not priority inputs.
  */
-export const SCORING_WEIGHTS = {
+export const SCORING_WEIGHTS = Object.freeze({
     ROI_IMPACT: 0.6,
     AI_VISIBILITY: 0.4
-};
+});
 
 // AEO check weights (must sum to 1.0)
 const AEO_WEIGHTS: Record<string, number> = {
@@ -135,6 +137,22 @@ export class AuditEngine {
                 if ((item.status === 'Fail' || item.status === 'Warning') && item.recommendation) {
                     const roiImpact = item.roiImpact ?? 50;
                     const aiVisibilityImpact = item.aiVisibilityImpact ?? 50;
+
+                    // Map legacy metadata to canonical priority components.
+                    // roiImpact and aiVisibilityImpact are preserved as descriptive
+                    // metadata but no longer independently determine priority.
+                    const severityWeight = item.status === 'Fail' ? 0.9 : 0.6;
+                    const priorityInput: PriorityComponents = {
+                        businessImpact:   Math.min(1, roiImpact / 100),
+                        searchImpact:     severityWeight,
+                        affectedScope:    0.5,         // unknown at recommendation level
+                        confidence:       item.status === 'Fail' ? 0.9 : 0.7,
+                        fixability:       fixabilityForRemediation('MANUAL'),
+                        evidenceStrength: 0.5,
+                        recency:          0.9,
+                    };
+                    const priority = computePriorityV4(priorityInput);
+
                     allRecommendations.push({
                         categoryId: category.id,
                         itemId: item.id,
@@ -144,8 +162,7 @@ export class AuditEngine {
                         priority: item.recommendation.priority,
                         roiImpact,
                         aiVisibilityImpact,
-                        // Weighted business impact: ROI 60% + AI Visibility 40%
-                        priorityScore: Math.round(roiImpact * SCORING_WEIGHTS.ROI_IMPACT + aiVisibilityImpact * SCORING_WEIGHTS.AI_VISIBILITY),
+                        priorityScore: priority.score,
                     });
                 }
             });
@@ -180,12 +197,9 @@ export class AuditEngine {
         const overallScore = indexingBlocked ? Math.min(unblockedScore, 20) : unblockedScore;
 
 
-        // God Level Impact Sorting: Weighted blend of ROI and AI Visibility
-        // ROI is weighted 60%, AI Visibility 40%. Use priorityScore for deterministic sort.
+        // Sort by canonical priority score, then by priority label as tiebreaker.
         allRecommendations.sort((a, b) => {
             if (b.priorityScore !== a.priorityScore) return b.priorityScore - a.priorityScore;
-
-            // Fallback to priority label if scores are equal
             const priorityWeight: Record<string, number> = { 'High': 3, 'Medium': 2, 'Low': 1 };
             return priorityWeight[b.priority] - priorityWeight[a.priority];
         });

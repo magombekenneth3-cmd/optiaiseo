@@ -1,6 +1,8 @@
 export type AuditStatus = 'Pass' | 'Fail' | 'Warning' | 'Error' | 'Skipped' | 'Info' | 'NotApplicable';
 export type RecommendationPriority = 'High' | 'Medium' | 'Low';
 
+import { computePriorityLegacy } from './prioritization';
+
 // Re-export the evidence-aware diagnostic status from the canonical location.
 // New code should prefer DiagnosticStatus; AuditStatus stays for backward compat.
 export type { DiagnosticStatus } from './diagnostic-types';
@@ -52,26 +54,26 @@ export interface AuditIssue {
 export { PRIORITIZATION_POLICY_VERSION } from './prioritization';
 
 /**
- * @deprecated Legacy weights from v3. The v4 system uses 7-component weights.
- * Kept for backward compatibility — actual computation now routes through v4.
+ * @deprecated Legacy weights from v3. These are NO LONGER an active priority
+ * model. The canonical policy is computePriorityV4() in prioritization.ts.
+ *
+ * Retained only for backward compatibility with code that imports the symbol.
+ * Do not use these weights to compute priority in new code.
  */
-export const PRIORITIZATION_WEIGHTS = {
+export const PRIORITIZATION_WEIGHTS = Object.freeze({
     impact: 0.5,
     ease: 0.3,
     confidence: 0.2,
-} as const;
+}) as { readonly impact: 0.5; readonly ease: 0.3; readonly confidence: 0.2 };
 
 /**
  * Compute priority for an AuditIssue.
  *
- * @deprecated This now delegates to computePriorityLegacy() which maps the
- * old (impact, ease, confidence) signature to the canonical v4 model.
- * New code should use computePriorityV4() from prioritization.ts directly.
+ * @deprecated Compatibility adapter — routes through the canonical
+ * computePriorityV4() policy. New code should use computePriorityV4()
+ * from prioritization.ts directly.
  */
 export function computePriority(issue: AuditIssue): number {
-    // Route through the v4 legacy bridge to eliminate the duplicate priority model.
-    // This ensures all callers get consistent v4 scores.
-    const { computePriorityLegacy } = require('./prioritization');
     return computePriorityLegacy(
         issue.estimatedTrafficImpact,
         issue.fixDifficulty,
@@ -115,9 +117,11 @@ export interface NormalizedRecommendation {
     finding: string;
     recommendation: string;
     priority: RecommendationPriority;
+    /** @deprecated Descriptive metadata only — does not determine priority */
     roiImpact: number;
+    /** @deprecated Descriptive metadata only — does not determine priority */
     aiVisibilityImpact: number;
-    /** Weighted business impact score: roiImpact×0.6 + aiVisibilityImpact×0.4 (0-100) */
+    /** Canonical priority score (0-100) computed by computePriorityV4() */
     priorityScore: number;
 }
 

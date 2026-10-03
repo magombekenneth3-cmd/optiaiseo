@@ -67,7 +67,7 @@ export const WORKSPACE_ITEMS: NavItem[] = [
 // Legacy backward-compatibility aliases
 export const MISSION_CONTROL_ITEMS = OVERVIEW_ITEMS;
 export const IMPROVE_ITEMS: NavItem[] = INTELLIGENCE_ITEMS;
-export const MONITOR_ITEMS = CONTENT_STDIT_ITEMS;
+export const MONITOR_ITEMS = CONTENT_STUDIO_ITEMS;
 export const AUTOMATE_ITEMS = AUTOPILOT_ITEMS;
 
 export const ALL_NAV_ITEMS: NavItem[] = [

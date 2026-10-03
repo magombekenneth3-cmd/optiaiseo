@@ -1,4 +1,4 @@
-import { computePriority } from "@/lib/seo-audit/types";
+import { computePriorityV4, fixabilityForRemediation, type PriorityComponents } from "@/lib/seo-audit/prioritization";
 /**
  * src/lib/seo/recommendations.ts
  *
@@ -330,27 +330,48 @@ const ISSUE_META: Record<string, IssueMeta> = {
 };
 
 
+/**
+ * @deprecated IMPACT_SCORE, EFFORT_SCORE, UPLIFT_SCORE remain as metadata
+ * lookup tables for enrichment labels. They no longer feed an independent
+ * priority formula — all priority flows through computePriorityV4().
+ */
 const IMPACT_SCORE: Record<ImpactTier, number>   = { critical: 40, high: 30, medium: 20, low: 10 };
 const EFFORT_SCORE: Record<EffortLevel, number>   = { quick_win: 30, medium: 20, complex: 10 };
 const UPLIFT_SCORE: Record<EnrichedRecommendation["trafficUplift"], number> = {
     significant: 30, moderate: 20, minor: 10,
 };
 
+/**
+ * Compute recommendation priority through the canonical v4 policy.
+ *
+ * Maps recommendation metadata (impact tier, effort, autoFixable) to the
+ * same PriorityComponents used by diagnostic findings — ensuring one
+ * priority model across SEO, AEO, AIO, GEO.
+ */
 function computeRecommendationPriority(meta: IssueMeta): number {
-    const impact = IMPACT_SCORE[meta.impact] / 4;
-    const difficulty = meta.effort === "quick_win" ? 1 : meta.effort === "medium" ? 5 : 10;
-    const confidence = meta.autoFixable ? 0.9 : 0.7;
-    return computePriority({
-        id: "recommendation",
-        title: meta.title,
-        description: meta.why,
-        severity: meta.impact,
-        estimatedTrafficImpact: impact,
-        fixDifficulty: difficulty,
-        confidence,
-        category: meta.category,
-        recommendation: meta.action,
-    });
+    const impactToBusinessImpact: Record<ImpactTier, number> = {
+        critical: 1.0, high: 0.8, medium: 0.5, low: 0.25,
+    };
+    const impactToSearchImpact: Record<ImpactTier, number> = {
+        critical: 1.0, high: 0.85, medium: 0.6, low: 0.35,
+    };
+    const effortToFixability: Record<EffortLevel, number> = {
+        quick_win: 1.0, medium: 0.7, complex: 0.4,
+    };
+
+    const priorityInput: PriorityComponents = {
+        businessImpact:   impactToBusinessImpact[meta.impact],
+        searchImpact:     impactToSearchImpact[meta.impact],
+        affectedScope:    0.5,    // unknown at recommendation level
+        confidence:       meta.autoFixable ? 0.9 : 0.7,
+        fixability:       meta.autoFixable
+            ? fixabilityForRemediation('DETERMINISTIC')
+            : effortToFixability[meta.effort],
+        evidenceStrength: 0.5,    // recommendations lack direct evidence
+        recency:          0.8,    // assume reasonably recent
+    };
+
+    return computePriorityV4(priorityInput).score;
 }
 
 function effortToLabel(effort: EffortLevel): EnrichedRecommendation["difficulty"] {
