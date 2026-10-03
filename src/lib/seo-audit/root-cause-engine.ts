@@ -24,6 +24,8 @@ import type {
   RemediationType,
   VerificationCriterion,
   FindingScope,
+  OptimizationDomain,
+  EvidenceRequirement,
 } from "./contracts";
 import {
   computeFindingFingerprint,
@@ -33,6 +35,8 @@ import {
 export interface DiagnosticFinding {
   id: string;
   fingerprint: string;
+  /** Optimization domain this finding belongs to */
+  domain: OptimizationDomain;
   issueType: string;
   status: DiagnosticStatus;
   severity: FindingSeverity;
@@ -62,6 +66,20 @@ export type ConditionOperator =
   | "not_exists"
   | "regex";
 
+/**
+ * Applicability conditions determine whether a rule should even be evaluated
+ * for a given page. This prevents false positives from universal evaluation.
+ *
+ * Examples:
+ *   - FAQ schema → only applicable when page has Q&A content
+ *   - Product schema → only applicable to product pages
+ *   - Speakable → only applicable to article/news content
+ *   - Organization schema → only applicable on home/about context
+ *
+ * Uses the same condition format as evidence conditions for consistency.
+ */
+export type ApplicabilityCondition = EvidenceCondition;
+
 export interface EvidenceCondition {
   /** Which evidence source to evaluate */
   source: string;
@@ -82,6 +100,12 @@ export interface RootCause {
   verification: VerificationCriterion[];
   /** Severity of this particular root cause */
   severity: FindingSeverity;
+  /**
+   * Per-remediation evidence requirements. If specified, the remediation
+   * planner will verify that collected evidence satisfies these before
+   * allowing the specified remediation type.
+   */
+  evidenceRequirements?: EvidenceRequirement[];
 }
 
 export interface DiagnosticRule {
@@ -89,6 +113,16 @@ export interface DiagnosticRule {
   issueType: string;
   /** Human-readable label */
   label: string;
+  /** Optimization domain this rule belongs to */
+  domain: OptimizationDomain;
+  /**
+   * Applicability conditions — when present, the rule is only evaluated if
+   * ALL conditions return true. This prevents false positives from evaluating
+   * every rule against every page.
+   *
+   * If absent, the rule is considered universally applicable.
+   */
+  applicability?: ApplicabilityCondition[];
   /** Evidence signals that indicate this issue may be present */
   signals: string[];
   /** Possible root causes — evaluated in order, first match wins */
@@ -106,6 +140,7 @@ export const DIAGNOSTIC_RULES: Record<string, DiagnosticRule> = {
   INDEXING_BLOCKED: {
     issueType: "indexing_blocked",
     label: "Indexing Blocked",
+    domain: "TECHNICAL",
     signals: ["meta_noindex", "x_robots_noindex", "robots_disallow", "http_4xx", "http_5xx"],
     dependsOn: [],
     expectedOutcome: "Page becomes crawlable and eligible for indexing by search engines.",
@@ -118,6 +153,9 @@ export const DIAGNOSTIC_RULES: Record<string, DiagnosticRule> = {
           { source: "HTML", field: "meta_robots", operator: "contains", value: "noindex" },
         ],
         remediationType: "DETERMINISTIC",
+        evidenceRequirements: [
+          { source: "HTML", minimumConfidence: "DIRECTLY_OBSERVED" },
+        ],
         verification: [
           { type: "HTML_SELECTOR", selector: 'meta[name="robots"]', expected: { not_contains: "noindex" } },
         ],
@@ -177,6 +215,7 @@ export const DIAGNOSTIC_RULES: Record<string, DiagnosticRule> = {
   CANONICAL_CONFLICT: {
     issueType: "canonical_conflict",
     label: "Canonical Tag Conflict",
+    domain: "TECHNICAL",
     signals: ["canonical_mismatch", "canonical_missing", "canonical_to_param_url", "canonical_self_referencing_error"],
     dependsOn: ["INDEXING_BLOCKED"],
     expectedOutcome: "Canonical tag points to the preferred URL, consolidating ranking signals.",
@@ -225,6 +264,7 @@ export const DIAGNOSTIC_RULES: Record<string, DiagnosticRule> = {
   REDIRECT_CHAIN: {
     issueType: "redirect_chain",
     label: "Redirect Chain Detected",
+    domain: "TECHNICAL",
     signals: ["redirect_chain_long", "redirect_loop"],
     dependsOn: ["INDEXING_BLOCKED"],
     expectedOutcome: "URL resolves in ≤1 redirect hop.",
@@ -259,6 +299,7 @@ export const DIAGNOSTIC_RULES: Record<string, DiagnosticRule> = {
   SITEMAP_INCOMPLETE: {
     issueType: "sitemap_incomplete",
     label: "Sitemap Missing or Incomplete",
+    domain: "TECHNICAL",
     signals: ["sitemap_missing", "sitemap_invalid_xml", "url_not_in_sitemap"],
     dependsOn: [],
     expectedOutcome: "Valid XML sitemap at /sitemap.xml listing all indexable pages.",
@@ -295,6 +336,7 @@ export const DIAGNOSTIC_RULES: Record<string, DiagnosticRule> = {
   SCHEMA_MISSING: {
     issueType: "schema_missing",
     label: "Structured Data Missing",
+    domain: "SCHEMA",
     signals: ["no_jsonld", "no_organization", "no_faq", "no_breadcrumb"],
     dependsOn: [],
     expectedOutcome: "Page has appropriate JSON-LD structured data for its type.",
@@ -314,8 +356,9 @@ export const DIAGNOSTIC_RULES: Record<string, DiagnosticRule> = {
       },
       {
         id: "missing_organization",
-        label: "No Organization schema — AI engines can't verify brand identity",
+        label: "No Organization schema — machine-readable brand identity is absent",
         severity: "high",
+        // Only applicable on home, about, or root layout pages
         conditions: [
           { source: "SCHEMA", field: "has_organization", operator: "eq", value: false },
         ],
@@ -326,8 +369,11 @@ export const DIAGNOSTIC_RULES: Record<string, DiagnosticRule> = {
       },
       {
         id: "missing_faq",
-        label: "No FAQPage schema — missed rich result and AI citation opportunity",
-        severity: "medium",
+        label: "No FAQPage schema on page with Q&A content (note: FAQ rich result deprecated May 2026)",
+        // Downgraded from medium → low. FAQ rich results are deprecated.
+        // Only fires when the page genuinely has Q&A content (applicability is
+        // enforced by the has_qa_content condition below).
+        severity: "low",
         conditions: [
           { source: "SCHEMA", field: "has_faq", operator: "eq", value: false },
           { source: "HTML", field: "has_qa_content", operator: "eq", value: true },
@@ -343,6 +389,7 @@ export const DIAGNOSTIC_RULES: Record<string, DiagnosticRule> = {
   ROBOTS_TXT_MISCONFIGURED: {
     issueType: "robots_txt_misconfigured",
     label: "robots.txt Misconfigured",
+    domain: "TECHNICAL",
     signals: ["robots_blocks_root", "robots_blocks_googlebot", "robots_no_sitemap_directive"],
     dependsOn: [],
     expectedOutcome: "robots.txt allows Googlebot access and references the sitemap.",
@@ -377,6 +424,7 @@ export const DIAGNOSTIC_RULES: Record<string, DiagnosticRule> = {
   SSL_MISSING: {
     issueType: "ssl_missing",
     label: "HTTPS / SSL Certificate Missing",
+    domain: "TECHNICAL",
     signals: ["http_only", "mixed_content"],
     dependsOn: [],
     expectedOutcome: "Site is served over HTTPS with no mixed content.",
@@ -480,9 +528,22 @@ export interface DiagnosisInput {
 export function diagnose(input: DiagnosisInput): DiagnosticFinding[] {
   const { siteId, url, evidence } = input;
   const findings: DiagnosticFinding[] = [];
-  const now = new Date().toISOString();
 
   for (const [ruleKey, rule] of Object.entries(DIAGNOSTIC_RULES)) {
+    // ── Applicability gate ──────────────────────────────────────────────
+    // If the rule declares applicability conditions, ALL must pass for
+    // the rule to be evaluated. This prevents false positives from
+    // universal evaluation (e.g., FAQ schema on non-Q&A pages).
+    if (rule.applicability && rule.applicability.length > 0) {
+      const applicable = rule.applicability.every(cond =>
+        evaluateCondition(cond, evidence),
+      );
+      if (!applicable) {
+        continue; // Rule does not apply to this page — skip entirely
+      }
+    }
+
+    // ── Root cause evaluation ──────────────────────────────────────────
     // Try each root cause in priority order — first match wins
     let matched = false;
 
@@ -515,6 +576,7 @@ export function diagnose(input: DiagnosisInput): DiagnosticFinding[] {
         findings.push({
           id: fingerprint,
           fingerprint,
+          domain: rule.domain,
           issueType: rule.issueType,
           status: "FAIL",
           severity: cause.severity,

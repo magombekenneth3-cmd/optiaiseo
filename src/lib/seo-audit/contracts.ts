@@ -1,5 +1,20 @@
 import { createHash } from "crypto";
 
+// ── Optimization Domains ─────────────────────────────────────────────────────
+//
+// SEO, AEO, AIO, and GEO are different evidence/diagnostic domains feeding
+// the same remediation lifecycle — not separate fix engines.
+
+export type OptimizationDomain =
+  | "TECHNICAL"
+  | "CONTENT"
+  | "ENTITY"
+  | "SCHEMA"
+  | "LINKS"
+  | "AEO"
+  | "AIO"
+  | "GEO";
+
 // ── Evidence Confidence Semantics ────────────────────────────────────────────
 
 export type EvidenceConfidenceKind =
@@ -91,7 +106,10 @@ export type CanonicalObservationSource =
   | "LINK_GRAPH"
   | "SCHEMA"
   | "DNS"
-  | "RECONCILIATION";
+  | "RECONCILIATION"
+  | "AI_CITATION"
+  | "AI_VISIBILITY"
+  | "COMPETITOR";
 
 export interface CanonicalObservation {
   source: CanonicalObservationSource;
@@ -121,6 +139,24 @@ export interface SEOEvidence {
   confidence: number;
   confidenceKind: EvidenceConfidenceKind;
   evidenceHash: string;
+
+  // ── AI Evidence Provenance (optional — populated for AI_CITATION / AI_VISIBILITY) ──
+  /** AI provider that generated the response (e.g. "gemini", "chatgpt", "perplexity") */
+  aiProvider?: string;
+  /** Model identifier (e.g. "gemini-2.5-flash", "gpt-4o") */
+  aiModel?: string;
+  /** Model version or checkpoint */
+  aiModelVersion?: string;
+  /** Prompt template version used for the query */
+  aiPromptVersion?: string;
+  /** The query sent to the AI */
+  aiQuery?: string;
+  /** Unique sample identifier for deduplication */
+  aiSampleId?: string;
+  /** Whether the response used live web grounding */
+  aiGroundingUsed?: boolean;
+  /** URLs the AI cited as grounding sources */
+  aiGroundingSources?: string[];
 }
 
 export function computeEvidenceHash(
@@ -192,6 +228,69 @@ export type RemediationType =
   | "AI_PATCH"
   | "MANUAL"
   | "EXPERIMENT";
+
+// ── Fix Risk ─────────────────────────────────────────────────────────────────
+//
+// Controls execution policy, not just display.
+//   SAFE / LOW   → may auto-generate and auto-PR
+//   MEDIUM       → requires explicit approval before PR
+//   HIGH         → requires explicit approval, human review
+//   CRITICAL     → manual workflow only, never auto-applied
+
+export type FixRisk =
+  | "SAFE"
+  | "LOW"
+  | "MEDIUM"
+  | "HIGH"
+  | "CRITICAL";
+
+/** Whether a given risk level requires human approval before execution */
+export function fixRiskRequiresApproval(risk: FixRisk): boolean {
+  return risk === "MEDIUM" || risk === "HIGH" || risk === "CRITICAL";
+}
+
+/** Whether a given risk level forbids automated execution entirely */
+export function fixRiskIsManualOnly(risk: FixRisk): boolean {
+  return risk === "CRITICAL";
+}
+
+// ── Evidence Requirements ────────────────────────────────────────────────────
+//
+// Per-remediation evidence gates. Remediation eligibility depends on the
+// evidence requirements of that specific remediation — not simply the
+// highest-confidence evidence in the finding.
+//
+// Example: removing noindex requires DIRECTLY_OBSERVED evidence from both
+// HTML and HTTP_HEADERS. A meta description fix only needs HTML.
+
+export interface EvidenceRequirement {
+  /** Which evidence source must be present */
+  source: CanonicalObservationSource;
+  /** Minimum confidence kind required */
+  minimumConfidence: EvidenceConfidenceKind;
+}
+
+/** Check whether collected evidence satisfies a set of requirements */
+export function evidenceSatisfiesRequirements(
+  evidence: SEOEvidence[],
+  requirements: EvidenceRequirement[],
+): { satisfied: boolean; missing: EvidenceRequirement[] } {
+  const missing: EvidenceRequirement[] = [];
+  for (const req of requirements) {
+    const matching = evidence.filter(e => e.source === req.source);
+    if (matching.length === 0) {
+      missing.push(req);
+      continue;
+    }
+    const meetsConfidence = matching.some(
+      e => CONFIDENCE_BY_KIND[e.confidenceKind] >= CONFIDENCE_BY_KIND[req.minimumConfidence],
+    );
+    if (!meetsConfidence) {
+      missing.push(req);
+    }
+  }
+  return { satisfied: missing.length === 0, missing };
+}
 
 // ── Verification Contract ────────────────────────────────────────────────────
 
@@ -296,6 +395,8 @@ export interface T28OutcomeRecord {
 // ── Canonical SeoFinding ─────────────────────────────────────────────────────
 
 export interface SeoFinding {
+  /** Optimization domain this finding belongs to */
+  domain: OptimizationDomain;
   fingerprint: string;
   issueType: string;
   rootCauseId: string;

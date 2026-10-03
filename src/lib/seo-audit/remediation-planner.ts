@@ -1,9 +1,20 @@
-import type { SEOEvidence, VerificationCriterion, RemediationType } from "./contracts";
+import type {
+  SEOEvidence,
+  VerificationCriterion,
+  RemediationType,
+  OptimizationDomain,
+  FixRisk,
+  EvidenceRequirement,
+} from "./contracts";
+import {
+  evidenceSatisfiesRequirements,
+  fixRiskRequiresApproval,
+} from "./contracts";
 import type { ExplainablePriority, PriorityComponents } from "./contracts";
 import type { FixResult, FixContext } from "./deterministic-fixes";
 import type { DiagnosticFinding } from "./root-cause-engine";
 import { tryDeterministicFix, hasDeterministicFix } from "./deterministic-fixes";
-import { sortFindingsForRemediation } from "./root-cause-engine";
+import { sortFindingsForRemediation, DIAGNOSTIC_RULES } from "./root-cause-engine";
 import {
   computePriorityV4,
   fixabilityForRemediation,
@@ -23,10 +34,18 @@ export type RemediationStatus =
 export interface RemediationAction {
   findingFingerprint: string;
   findingId: string;
+  /** Optimization domain the finding belongs to */
+  domain: OptimizationDomain;
   issueType: string;
   rootCause: string;
   rootCauseId: string;
   remediationType: RemediationType;
+  /**
+   * Risk level — controls execution policy.
+   * Propagated from the deterministic fix if available,
+   * otherwise inferred from the remediation type.
+   */
+  risk: FixRisk;
   deterministicFix?: FixResult;
   aiPatchHint?: string;
   manualActionDescription?: string;
@@ -36,6 +55,8 @@ export interface RemediationAction {
   verificationCriteria: VerificationCriterion[];
   status: RemediationStatus;
   expectedOutcome: string;
+  /** If evidence requirements were not met, records what was missing */
+  evidenceGapReason?: string;
 }
 
 export interface RemediationPlan {
@@ -132,8 +153,35 @@ function planAction(
 
   let deterministicFix: FixResult | null = null;
   let effectiveRemediationType = finding.remediationType;
+  let evidenceGapReason: string | undefined;
 
-  if (finding.remediationType === "DETERMINISTIC" || hasDeterministicFix(finding.rootCauseId)) {
+  // ── Per-remediation evidence requirements gate ────────────────────────
+  // Look up the root cause's evidence requirements from the diagnostic rule.
+  // If the collected evidence doesn't satisfy them, downgrade to MANUAL.
+  const ruleEntry = Object.values(DIAGNOSTIC_RULES).find(
+    r => r.issueType === finding.issueType,
+  );
+  const matchingCause = ruleEntry?.causes.find(c => c.id === finding.rootCauseId);
+
+  if (matchingCause?.evidenceRequirements && matchingCause.evidenceRequirements.length > 0) {
+    const { satisfied, missing } = evidenceSatisfiesRequirements(
+      finding.evidence,
+      matchingCause.evidenceRequirements,
+    );
+    if (!satisfied) {
+      // Evidence insufficient for the intended remediation type → downgrade
+      const missingDesc = missing
+        .map(r => `${r.source} (min: ${r.minimumConfidence})`)
+        .join(", ");
+      evidenceGapReason = `Insufficient evidence for ${effectiveRemediationType}: missing ${missingDesc}`;
+      effectiveRemediationType = "MANUAL";
+    }
+  }
+
+  if (
+    effectiveRemediationType !== "MANUAL" &&
+    (finding.remediationType === "DETERMINISTIC" || hasDeterministicFix(finding.rootCauseId))
+  ) {
     deterministicFix = tryDeterministicFix(finding.rootCauseId, fixCtx);
     if (deterministicFix) {
       effectiveRemediationType = "DETERMINISTIC";
@@ -141,6 +189,12 @@ function planAction(
       effectiveRemediationType = "AI_PATCH";
     }
   }
+
+  // ── Resolve risk level ────────────────────────────────────────────────
+  // If deterministic fix provides explicit risk, use that.
+  // Otherwise, infer from remediation type.
+  const risk: FixRisk = deterministicFix?.risk
+    ?? remediationTypeToDefaultRisk(effectiveRemediationType);
 
   const newestEvidence = finding.evidence.reduce(
     (newest, e) => {
@@ -167,10 +221,12 @@ function planAction(
   const action: RemediationAction = {
     findingFingerprint: finding.fingerprint,
     findingId: finding.fingerprint,
+    domain: finding.domain,
     issueType: finding.issueType,
     rootCause: finding.rootCause,
     rootCauseId: finding.rootCauseId,
     remediationType: effectiveRemediationType,
+    risk,
     priority,
     executionOrder,
     blockedBy: finding.dependencyFingerprints,
@@ -178,6 +234,10 @@ function planAction(
     status: "PLANNED",
     expectedOutcome: finding.expectedOutcome,
   };
+
+  if (evidenceGapReason) {
+    action.evidenceGapReason = evidenceGapReason;
+  }
 
   if (deterministicFix) {
     action.deterministicFix = deterministicFix;
@@ -188,6 +248,15 @@ function planAction(
   }
 
   return action;
+}
+
+function remediationTypeToDefaultRisk(type: RemediationType): FixRisk {
+  switch (type) {
+    case "DETERMINISTIC": return "LOW";
+    case "AI_PATCH":      return "MEDIUM";
+    case "EXPERIMENT":    return "MEDIUM";
+    case "MANUAL":        return "HIGH";
+  }
 }
 
 function severityToBusinessImpact(severity: string): number {

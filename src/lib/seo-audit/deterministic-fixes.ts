@@ -12,7 +12,7 @@
  *      and the remediation planner escalates to AI_PATCH or MANUAL.
  */
 
-import type { VerificationCriterion, RemediationType } from "./diagnostic-types";
+import type { VerificationCriterion, RemediationType, FixRisk } from "./diagnostic-types";
 
 // ── Fix Result Types ────────────────────────────────────────────────────────
 
@@ -29,6 +29,14 @@ export interface FixResult {
   action: PatchAction;
   /** File path for create_file actions (e.g. "public/sitemap.xml") */
   filePath?: string;
+  /**
+   * Risk level — controls execution policy, not just display.
+   *   SAFE / LOW   → may auto-generate and auto-PR
+   *   MEDIUM       → requires explicit approval before PR
+   *   HIGH         → requires explicit approval + human review
+   *   CRITICAL     → manual workflow only, never auto-applied
+   */
+  risk: FixRisk;
   /** Verification criteria to confirm the fix worked */
   verification: VerificationCriterion[];
   /** Human-readable description of what this fix does */
@@ -72,6 +80,7 @@ const fixCanonicalMissing: FixGenerator = (ctx) => ({
   targetSelector: "head",
   insertPosition: "beforeEnd",
   action: "insert",
+  risk: "MEDIUM",
   verification: [
     { type: "HTML_SELECTOR", selector: 'link[rel="canonical"]', expected: ctx.preferredUrl ?? ctx.url },
   ],
@@ -88,6 +97,7 @@ const fixCanonicalParameterized: FixGenerator = (ctx) => {
     patch: `<link rel="canonical" href="${ctx.preferredUrl}" />`,
     targetSelector: 'link[rel="canonical"]',
     action: "replace",
+    risk: "MEDIUM",
     verification: [
       { type: "HTML_SELECTOR", selector: 'link[rel="canonical"]', expected: ctx.preferredUrl },
     ],
@@ -114,6 +124,7 @@ const fixMetaNoindex: FixGenerator = (ctx) => {
       patch: null,
       targetSelector: 'meta[name="robots"]',
       action: "remove",
+      risk: "HIGH",
       verification: [
         { type: "HTML_SELECTOR", selector: 'meta[name="robots"]', expected: { not_contains: "noindex" } },
       ],
@@ -126,6 +137,7 @@ const fixMetaNoindex: FixGenerator = (ctx) => {
     patch: `<meta name="robots" content="${cleaned}" />`,
     targetSelector: 'meta[name="robots"]',
     action: "replace",
+    risk: "HIGH",
     verification: [
       { type: "HTML_SELECTOR", selector: 'meta[name="robots"]', expected: { not_contains: "noindex" } },
     ],
@@ -142,6 +154,7 @@ const fixViewportMissing: FixGenerator = () => ({
   targetSelector: "head",
   insertPosition: "afterBegin",
   action: "insert",
+  risk: "SAFE",
   verification: [
     { type: "HTML_SELECTOR", selector: 'meta[name="viewport"]', expected: { exists: true } },
   ],
@@ -157,6 +170,7 @@ const fixCharsetMissing: FixGenerator = () => ({
   targetSelector: "head",
   insertPosition: "afterBegin",
   action: "insert",
+  risk: "SAFE",
   verification: [
     { type: "HTML_SELECTOR", selector: 'meta[charset]', expected: { exists: true } },
   ],
@@ -172,6 +186,7 @@ const fixHtmlLangMissing: FixGenerator = () => ({
   targetSelector: "html",
   action: "insert",
   insertPosition: "afterBegin",
+  risk: "SAFE",
   verification: [
     { type: "HTML_SELECTOR", selector: "html[lang]", expected: { exists: true } },
   ],
@@ -200,6 +215,7 @@ const fixOgTagsMissing: FixGenerator = (ctx) => {
     targetSelector: "head",
     insertPosition: "beforeEnd",
     action: "insert",
+    risk: "LOW",
     verification: [
       { type: "HTML_SELECTOR", selector: 'meta[property="og:title"]', expected: { exists: true } },
     ],
@@ -227,6 +243,7 @@ const fixSitemapMissing: FixGenerator = (ctx) => {
     patch: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>`,
     filePath: "public/sitemap.xml",
     action: "create_file",
+    risk: "LOW",
     verification: [
       { type: "HTTP_STATUS", url: "/sitemap.xml", expected: 200 },
       { type: "XML_VALID", url: "/sitemap.xml", expected: true },
@@ -241,6 +258,8 @@ const fixSitemapMissing: FixGenerator = (ctx) => {
  */
 const fixRobotsTxtMissing: FixGenerator = (ctx) => ({
   patch: [
+    "# DRAFT — review before deploying. Sensitive paths (admin, API, auth)",
+    "# may need Disallow rules. See https://developers.google.com/search/docs/crawling-indexing/robots/intro",
     "User-agent: *",
     "Allow: /",
     "",
@@ -249,11 +268,12 @@ const fixRobotsTxtMissing: FixGenerator = (ctx) => ({
   ].join("\n"),
   filePath: "public/robots.txt",
   action: "create_file",
+  risk: "HIGH",
   verification: [
     { type: "HTTP_STATUS", url: "/robots.txt", expected: 200 },
     { type: "ROBOTS_ALLOWED", userAgent: "*", expected: true },
   ],
-  description: "Create robots.txt with permissive crawl policy and sitemap reference",
+  description: "DRAFT robots.txt — requires review before deployment. Sensitive paths may need Disallow rules.",
   impactLabel: "Guides search engine crawlers and references sitemap",
 });
 

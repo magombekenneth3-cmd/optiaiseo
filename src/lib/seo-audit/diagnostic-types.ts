@@ -24,6 +24,10 @@ export type {
   T28OutcomeRecord,
   SearchVerificationOutcome,
   OutcomeAttribution,
+  // Phase 1: Contract convergence
+  OptimizationDomain,
+  FixRisk,
+  EvidenceRequirement,
 } from "./contracts";
 
 export {
@@ -33,4 +37,8 @@ export {
   computeFindingFingerprint,
   aggregateEvidenceConfidence,
   CONFIDENCE_BY_KIND,
+  // Phase 1: Contract convergence
+  evidenceSatisfiesRequirements,
+  fixRiskRequiresApproval,
+  fixRiskIsManualOnly,
 } from "./contracts";

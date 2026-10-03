@@ -75,6 +75,10 @@ export type {
   VerificationCriterion,
   EvidenceConfidenceKind,
   CanonicalObservationSource as EvidenceSource,
+  // Phase 1: Contract convergence
+  OptimizationDomain,
+  FixRisk,
+  EvidenceRequirement,
 } from "./contracts";
 
 export {
@@ -82,6 +86,10 @@ export {
   computeEvidenceHash,
   computeFindingFingerprint,
   aggregateEvidenceConfidence,
+  // Phase 1: Contract convergence
+  evidenceSatisfiesRequirements,
+  fixRiskRequiresApproval,
+  fixRiskIsManualOnly,
 } from "./contracts";
 
 export type { DiagnosticFinding } from "./root-cause-engine";
@@ -97,7 +105,7 @@ export {
 export type { PriorityComponents, ExplainablePriority } from "./prioritization";
 
 export { diagnose, topologicalSort, sortFindingsForRemediation, DIAGNOSTIC_RULES } from "./root-cause-engine";
-export type { DiagnosticRule, RootCause, EvidenceCondition } from "./root-cause-engine";
+export type { DiagnosticRule, RootCause, EvidenceCondition, ApplicabilityCondition } from "./root-cause-engine";
 
 export { EvidenceCollector, extractDiagnosticFindings, checklistItemToEvidence } from "./evidence-collector";
 export type { EvidenceAwareResult } from "./evidence-collector";
