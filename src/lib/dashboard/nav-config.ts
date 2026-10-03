@@ -13,59 +13,70 @@ export interface NavItem {
   context: boolean;
 }
 
-// ─── Task-oriented navigation groups ──────────────────────────────────────────
-// Single source of truth for both SidebarNav and SiteContextBar so the two
-// surfaces never disagree about which routes are site-scoped.
+// ─── 4-Hub Navigation Architecture ────────────────────────────────────────────
+// Single source of truth for SidebarNav, MobileBottomNav, and SiteContextBar.
 
-export const MISSION_CONTROL_ITEMS: NavItem[] = [
+/** Hub 1: Overview & Command Center */
+export const OVERVIEW_ITEMS: NavItem[] = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard, context: false },
   { name: "Opportunities", href: "/dashboard/recommendations", icon: Lightbulb, context: false },
 ];
 
-export const IMPROVE_ITEMS: NavItem[] = [
-  { name: "Content", href: "/dashboard/blogs", icon: FileText, context: false },
-  { name: "SEO Audits", href: "/dashboard/audits", icon: ClipboardList, context: true },
+/** Hub 2: Intelligence & Audits */
+export const INTELLIGENCE_ITEMS: NavItem[] = [
   { name: "AI Search", href: "/dashboard/aeo", icon: MonitorSmartphone, context: true },
-];
-
-// "Site Health" -> content-decay (traffic/content-health signal) and
-// "Operations" -> /dashboard/operations both live where their actual
-// backend destinations match the label. Operations is NOT duplicated here
-// AND under Automate — it lives only in Automate (see below).
-export const MONITOR_ITEMS: NavItem[] = [
+  { name: "SEO Audits", href: "/dashboard/audits", icon: ClipboardList, context: true },
   { name: "Rankings", href: "/dashboard/keywords", icon: TrendingUp, context: true },
-  { name: "Content Health", href: "/dashboard/content-decay", icon: TrendingDown, context: true },
-];
-
-export const AUTOMATE_ITEMS: NavItem[] = [
-  { name: "Autopilot", href: "/dashboard/autopilot", icon: Bot, context: true },
-  { name: "Operations", href: "/dashboard/operations", icon: Activity, context: true },
-];
-
-export const MORE_ITEMS: NavItem[] = [
-  { name: "My Sites", href: "/dashboard/sites", icon: Globe, context: false },
-  { name: "Content Planner", href: "/dashboard/planner", icon: Calendar, context: true },
-  { name: "Content Editor", href: "/dashboard/editor", icon: Highlighter, context: false },
+  { name: "SERP Gaps", href: "/dashboard/serp-gap", icon: BarChart3, context: true },
   { name: "Competitors", href: "/dashboard/competitors", icon: Crosshair, context: true },
-  { name: "SERP Gap", href: "/dashboard/serp-gap", icon: BarChart3, context: true },
   { name: "Backlinks", href: "/dashboard/backlinks", icon: Link2, context: true },
-  { name: "AEO Proofs", href: "/dashboard/aeo/proofs", icon: History, context: true },
+];
+
+/** Hub 3: Content Studio */
+export const CONTENT_STUDIO_ITEMS: NavItem[] = [
+  { name: "Articles", href: "/dashboard/blogs", icon: FileText, context: false },
+  { name: "Content Editor", href: "/dashboard/editor", icon: Highlighter, context: false },
+  { name: "Content Planner", href: "/dashboard/planner", icon: Calendar, context: true },
+  { name: "Content Health", href: "/dashboard/content-decay", icon: TrendingDown, context: true },
+  { name: "Programmatic SEO", href: "/dashboard/pseo", icon: Zap, context: false },
+];
+
+/** Hub 4: Autopilot & Operations */
+export const AUTOPILOT_ITEMS: NavItem[] = [
+  { name: "Autopilot", href: "/dashboard/autopilot", icon: Bot, context: true },
   { name: "Auto Indexer", href: "/dashboard/indexing", icon: Zap, context: false },
   { name: "Auto-Heal Log", href: "/dashboard/healing", icon: Shield, context: true },
-  { name: "Experiments", href: "/dashboard/experiments", icon: FlaskConical, context: true },
+  { name: "Operations", href: "/dashboard/operations", icon: Activity, context: true },
   { name: "Campaigns", href: "/dashboard/campaign", icon: Target, context: true },
-  { name: "Programmatic SEO", href: "/dashboard/pseo", icon: Zap, context: false },
-  { name: "Talk to Aria", href: "/dashboard/voice", icon: Mic, context: false },
+];
+
+/** Secondary utilities & experimental tools */
+export const MORE_ITEMS: NavItem[] = [
+  { name: "AEO Proofs", href: "/dashboard/aeo/proofs", icon: History, context: true },
   { name: "Content Refresh", href: "/dashboard/refresh", icon: TrendingDown, context: true },
+  { name: "Experiments", href: "/dashboard/experiments", icon: FlaskConical, context: true },
+  { name: "Talk to Aria", href: "/dashboard/voice", icon: Mic, context: false },
+];
+
+/** Workspace configuration items */
+export const WORKSPACE_ITEMS: NavItem[] = [
+  { name: "My Sites", href: "/dashboard/sites", icon: Globe, context: false },
   { name: "Team", href: "/dashboard/team", icon: Users, context: false },
 ];
 
+// Legacy backward-compatibility aliases
+export const MISSION_CONTROL_ITEMS = OVERVIEW_ITEMS;
+export const IMPROVE_ITEMS: NavItem[] = INTELLIGENCE_ITEMS;
+export const MONITOR_ITEMS = CONTENT_STDIT_ITEMS;
+export const AUTOMATE_ITEMS = AUTOPILOT_ITEMS;
+
 export const ALL_NAV_ITEMS: NavItem[] = [
-  ...MISSION_CONTROL_ITEMS,
-  ...IMPROVE_ITEMS,
-  ...MONITOR_ITEMS,
-  ...AUTOMATE_ITEMS,
+  ...OVERVIEW_ITEMS,
+  ...INTELLIGENCE_ITEMS,
+  ...CONTENT_STDIT_ITEMS,
+  ...AUTOPILOT_ITEMS,
   ...MORE_ITEMS,
+  ...WORKSPACE_ITEMS,
 ];
 
 /** Routes whose pages actually filter their data by the resolved siteId. */
