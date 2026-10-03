@@ -15,6 +15,22 @@ import { computePriorityV4, fixabilityForRemediation, type PriorityComponents } 
 export type EffortLevel  = "quick_win" | "medium" | "complex";
 export type ImpactTier   = "critical" | "high" | "medium" | "low";
 export type RecommendationCategory = "technical" | "content" | "aeo" | "geo" | "eeat" | "schema";
+
+/**
+ * Source of the claim made in an IssueMeta `why` field.
+ *
+ * - GOOGLE_DOCUMENTATION: The claim is supported by published Google documentation.
+ * - INDUSTRY_STUDY:       The claim is based on a cited third-party study.
+ * - OPTIAISEO_HEURISTIC:  The claim is an OptiAISEO best-practice heuristic.
+ * - OBSERVED_DATA:        The claim is based on measured site-specific data.
+ * - NONE:                 The why text is explanatory guidance, not a sourced empirical claim.
+ */
+export type ClaimSource =
+    | "GOOGLE_DOCUMENTATION"
+    | "INDUSTRY_STUDY"
+    | "OPTIAISEO_HEURISTIC"
+    | "OBSERVED_DATA"
+    | "NONE";
 export type AeoGapType   = "missing_faq_schema" | "answer_too_long" | "no_entity_schema" | "no_speakable" | "topical_gap" | "none";
 
 export interface EnrichedRecommendation {
@@ -48,18 +64,29 @@ export interface EnrichedRecommendation {
     pageUrl:        string | null;
     /** Difficulty label for backward compat with email digest */
     difficulty:     "Easy fix" | "Medium effort" | "Complex";
+    /**
+     * Source of the claim in the `why` field.
+     * NONE = explanatory guidance rather than a sourced empirical claim.
+     */
+    claimSource:    ClaimSource;
+    /** URL of the supporting documentation. Null when claimSource is NONE or OPTIAISEO_HEURISTIC. */
+    claimUrl:       string | null;
 }
 
 export interface GeoBrief {
     /** Recommended page to create or update */
     targetPath:       string;
-    /** Ideal answer length in words for AI citation */
+    /**
+     * Suggested answer length in words for this content brief.
+     * This is an OptiAISEO content recommendation target — not a universally
+     * established AI citation requirement.
+     */
     idealAnswerWords: number;
     /** Schema type to add */
     schemaType:       string;
-    /** Content format that AI engines prefer for this type */
+    /** Content format recommended for this brief type */
     format:           "definition" | "faq" | "how-to" | "comparison" | "statistic";
-    /** Example first sentence optimised for AI citation */
+    /** Example opening sentence for the content */
     starterSentence:  string;
 }
 
@@ -77,20 +104,26 @@ interface IssueMeta {
     autoFixable:    boolean;
     autofixCheckId: string | null;
     geoBrief:       GeoBrief | null;
+    /** Source of the claim in the `why` field. Defaults to NONE. */
+    claimSource?:   ClaimSource;
+    /** Supporting URL. Only set when claimSource is GOOGLE_DOCUMENTATION or INDUSTRY_STUDY. */
+    claimUrl?:      string;
 }
 
 const ISSUE_META: Record<string, IssueMeta> = {
     schema_faq: {
         title:          "FAQ schema missing",
-        why:            "Pages without FAQPage JSON-LD are 3× less likely to be cited by ChatGPT and Perplexity for question-type queries.",
-        action:         "Add FAQPage JSON-LD to your <head>. Include 4–6 real visitor questions answered in ≤60 words each.",
-        impact:         "critical",
+        why:            "FAQPage structured data is appropriate for pages with genuine Q&A content. It can help search systems understand qualifying structured content, but it does not guarantee AI citations. Note: FAQ rich results were deprecated by Google in May 2026.",
+        action:         "Add FAQPage JSON-LD only if this page contains real visitor questions and answers. Include 4–6 questions answered concisely.",
+        impact:         "low",
         effort:         "quick_win",
         category:       "schema",
-        trafficUplift:  "significant",
+        trafficUplift:  "minor",
         aeoGap:         "missing_faq_schema",
         autoFixable:    true,
         autofixCheckId: "schema_faq",
+        claimSource:    "GOOGLE_DOCUMENTATION",
+        claimUrl:       "https://developers.google.com/search/docs/appearance/structured-data/faqpage",
         geoBrief: {
             targetPath:       "/faq",
             idealAnswerWords: 55,
@@ -101,7 +134,7 @@ const ISSUE_META: Record<string, IssueMeta> = {
     },
     schema_organization: {
         title:          "Organization schema missing",
-        why:            "Without Organization JSON-LD, AI engines cannot verify who you are — lowering citation trust scores.",
+        why:            "Organization JSON-LD helps search and AI systems identify your entity — including your name, website, logo, and official social profiles. Without it, automated systems rely on less reliable signals to identify who you are.",
         action:         "Add Organization JSON-LD to your root layout with name, url, logo, and sameAs (LinkedIn, Twitter).",
         impact:         "critical",
         effort:         "quick_win",
@@ -110,6 +143,8 @@ const ISSUE_META: Record<string, IssueMeta> = {
         aeoGap:         "no_entity_schema",
         autoFixable:    true,
         autofixCheckId: "schema_organization",
+        claimSource:    "GOOGLE_DOCUMENTATION",
+        claimUrl:       "https://developers.google.com/search/docs/appearance/structured-data/organization",
         geoBrief: {
             targetPath:       "/about",
             idealAnswerWords: 40,
@@ -120,21 +155,23 @@ const ISSUE_META: Record<string, IssueMeta> = {
     },
     schema_speakable: {
         title:          "Speakable schema missing",
-        why:            "Speakable markup signals which sections of your page AI assistants should read aloud — improving GEO citation quality.",
-        action:         "Add Speakable JSON-LD pointing to your key definition and summary sections.",
-        impact:         "high",
+        why:            "Speakable markup identifies which sections of article or news content are suitable for audio playback by voice assistants. It is only applicable to article and news-oriented pages.",
+        action:         "Add Speakable JSON-LD pointing to your key definition and summary sections. Only apply to pages with article or news content.",
+        impact:         "medium",
         effort:         "quick_win",
         category:       "schema",
-        trafficUplift:  "moderate",
+        trafficUplift:  "minor",
         aeoGap:         "no_speakable",
         autoFixable:    true,
         autofixCheckId: "schema_speakable",
+        claimSource:    "GOOGLE_DOCUMENTATION",
+        claimUrl:       "https://developers.google.com/search/docs/appearance/structured-data/speakable",
         geoBrief:       null,
     },
     schema_howto: {
         title:          "HowTo schema missing",
-        why:            "HowTo schema increases eligibility for rich results and AI-cited step-by-step answers.",
-        action:         "Add HowTo JSON-LD for your primary process/guide page with numbered steps.",
+        why:            "HowTo structured data describes step-by-step processes and increases eligibility for rich results in search. It is most appropriate for pages that already explain a clear procedure.",
+        action:         "Add HowTo JSON-LD for your primary process or guide page with numbered steps.",
         impact:         "high",
         effort:         "quick_win",
         category:       "schema",
@@ -142,6 +179,8 @@ const ISSUE_META: Record<string, IssueMeta> = {
         aeoGap:         "none",
         autoFixable:    true,
         autofixCheckId: "schema_howto",
+        claimSource:    "GOOGLE_DOCUMENTATION",
+        claimUrl:       "https://developers.google.com/search/docs/appearance/structured-data/how-to",
         geoBrief: {
             targetPath:       "/how-it-works",
             idealAnswerWords: 60,
@@ -153,7 +192,7 @@ const ISSUE_META: Record<string, IssueMeta> = {
 
     tech_canonical: {
         title:          "Canonical tag missing",
-        why:            "Without a canonical tag, Google may index duplicate URLs and split your ranking signals.",
+        why:            "Without a canonical tag, search engines may encounter duplicate URLs and split indexing signals across them. Adding a canonical tag identifies the preferred URL for a page.",
         action:         "Add <link rel='canonical' href='https://yourdomain.com/path'> in every page <head>.",
         impact:         "critical",
         effort:         "quick_win",
@@ -162,11 +201,13 @@ const ISSUE_META: Record<string, IssueMeta> = {
         aeoGap:         "none",
         autoFixable:    true,
         autofixCheckId: "tech_canonical",
+        claimSource:    "GOOGLE_DOCUMENTATION",
+        claimUrl:       "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
         geoBrief:       null,
     },
     tech_sitemap: {
         title:          "XML sitemap missing or incomplete",
-        why:            "Crawlers and AI indexer bots discover content via sitemaps. Missing pages will not be indexed.",
+        why:            "Crawlers discover content via sitemaps. Pages not listed in a sitemap may take longer to be crawled and indexed.",
         action:         "Generate a sitemap.xml at /sitemap.xml covering all public pages and submit to Google Search Console.",
         impact:         "high",
         effort:         "quick_win",
@@ -175,24 +216,27 @@ const ISSUE_META: Record<string, IssueMeta> = {
         aeoGap:         "none",
         autoFixable:    true,
         autofixCheckId: "tech_sitemap",
+        claimSource:    "GOOGLE_DOCUMENTATION",
+        claimUrl:       "https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview",
         geoBrief:       null,
     },
     missing_h1: {
         title:          "Missing H1 heading",
-        why:            "H1 is the strongest on-page keyword signal. Pages without one rank 4–5 positions lower on average.",
-        action:         "Add a single <h1> tag at the top of each page containing your primary keyword.",
+        why:            "An H1 heading establishes the primary topic of a page. Pages without a clear H1 may be harder for search and AI systems to categorise accurately.",
+        action:         "Add a single <h1> tag at the top of each page that clearly describes the page's primary topic.",
         impact:         "high",
         effort:         "quick_win",
         category:       "technical",
-        trafficUplift:  "significant",
+        trafficUplift:  "moderate",
         aeoGap:         "none",
         autoFixable:    false,
         autofixCheckId: null,
+        claimSource:    "OPTIAISEO_HEURISTIC",
         geoBrief:       null,
     },
     slow_lcp: {
         title:          "Slow Largest Contentful Paint (LCP)",
-        why:            "LCP > 2.5s is a Core Web Vital failure — directly reduces rankings in Google's page experience signal.",
+        why:            "LCP above 2.5s is a Core Web Vital failure. Google uses page experience signals including Core Web Vitals as a ranking input.",
         action:         "Optimise your hero image (use next/image or <img loading='lazy'>) and defer non-critical JS.",
         impact:         "critical",
         effort:         "medium",
@@ -201,12 +245,14 @@ const ISSUE_META: Record<string, IssueMeta> = {
         aeoGap:         "none",
         autoFixable:    false,
         autofixCheckId: null,
+        claimSource:    "GOOGLE_DOCUMENTATION",
+        claimUrl:       "https://developers.google.com/search/docs/appearance/core-web-vitals",
         geoBrief:       null,
     },
 
     eeat_about: {
         title:          "About page missing or thin",
-        why:            "AI engines use About page content to verify E-E-A-T (Experience, Expertise, Authority, Trust). Thin About pages reduce citation probability.",
+        why:            "Google's quality evaluator guidelines emphasise demonstrating Experience, Expertise, Authoritativeness, and Trustworthiness (E-E-A-T). An About page with team credentials, founding story, and contact information supports these signals.",
         action:         "Create a detailed /about page: team bios, credentials, founding story, and contact details.",
         impact:         "high",
         effort:         "medium",
@@ -215,12 +261,14 @@ const ISSUE_META: Record<string, IssueMeta> = {
         aeoGap:         "none",
         autoFixable:    true,
         autofixCheckId: "eeat_about",
+        claimSource:    "GOOGLE_DOCUMENTATION",
+        claimUrl:       "https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
         geoBrief:       null,
     },
     eeat_contact: {
         title:          "Contact page missing",
-        why:            "A visible contact page is a CAN-SPAM and GDPR requirement and a strong E-E-A-T trust signal.",
-        action:         "Add /contact with email, physical address (required for CAN-SPAM), and a contact form.",
+        why:            "A visible contact page is a trust signal for users and search evaluators. Depending on your jurisdiction and audience, applicable laws may also require contact information to be available. Review what applies to your site.",
+        action:         "Add a /contact page with email and a contact form. Include a physical address if required by the laws applicable to your site.",
         impact:         "high",
         effort:         "quick_win",
         category:       "eeat",
@@ -228,12 +276,13 @@ const ISSUE_META: Record<string, IssueMeta> = {
         aeoGap:         "none",
         autoFixable:    true,
         autofixCheckId: "eeat_contact",
+        claimSource:    "OPTIAISEO_HEURISTIC",
         geoBrief:       null,
     },
     eeat_privacy: {
         title:          "Privacy policy missing",
-        why:            "Required by GDPR, CCPA, and Google's monetisation policies. Missing privacy pages trigger manual review flags.",
-        action:         "Add a /privacy-policy page. Auto-generate a GDPR-compliant template for your jurisdiction.",
+        why:            "Many jurisdictions require a privacy policy for sites that collect personal data. Google's policies also require privacy disclosures for sites using certain monetisation features. Review the requirements applicable to your site and audience.",
+        action:         "Add a /privacy-policy page that accurately describes your data collection and processing practices.",
         impact:         "critical",
         effort:         "quick_win",
         category:       "eeat",
@@ -241,20 +290,22 @@ const ISSUE_META: Record<string, IssueMeta> = {
         aeoGap:         "none",
         autoFixable:    true,
         autofixCheckId: "eeat_privacy",
+        claimSource:    "OPTIAISEO_HEURISTIC",
         geoBrief:       null,
     },
 
     content_faq_section: {
         title:          "No FAQ section on key pages",
-        why:            "Pages with embedded FAQ sections (structured Q&A) are cited 2× more often in AI-generated answers.",
-        action:         "Add a <section> with <details>/<summary> Q&A to your homepage, pricing, and product pages.",
-        impact:         "high",
+        why:            "Structured Q&A content helps search and AI systems identify questions your page answers. Pages with clear question-and-answer sections are easier for systems to extract relevant answers from.",
+        action:         "Add a <section> with <details>/<summary> Q&A markup to pages that address common user questions.",
+        impact:         "medium",
         effort:         "medium",
         category:       "content",
-        trafficUplift:  "significant",
+        trafficUplift:  "moderate",
         aeoGap:         "missing_faq_schema",
         autoFixable:    true,
         autofixCheckId: "content_faq_section",
+        claimSource:    "OPTIAISEO_HEURISTIC",
         geoBrief: {
             targetPath:       "/",
             idealAnswerWords: 55,
@@ -264,16 +315,17 @@ const ISSUE_META: Record<string, IssueMeta> = {
         },
     },
     answer_length: {
-        title:          "Page answers are too long for AI citation",
-        why:            "AI engines prefer concise answers of 40–60 words. Answers over 150 words are rarely cited verbatim.",
-        action:         "Add a TL;DR block (≤60 words) at the top of your key definition and how-to pages.",
-        impact:         "high",
+        title:          "Long answers may reduce extractability",
+        why:            "Concise, directly answerable passages make important information easier to identify and reuse. Evaluate answer completeness and clarity rather than enforcing a universal word-count threshold.",
+        action:         "Add a concise summary or TL;DR at the top of key definition and how-to pages. Aim for clarity over brevity — ensure the summary is complete.",
+        impact:         "medium",
         effort:         "medium",
         category:       "geo",
         trafficUplift:  "moderate",
         aeoGap:         "answer_too_long",
         autoFixable:    false,
         autofixCheckId: null,
+        claimSource:    "OPTIAISEO_HEURISTIC",
         geoBrief: {
             targetPath:       "/",
             idealAnswerWords: 55,
@@ -284,8 +336,8 @@ const ISSUE_META: Record<string, IssueMeta> = {
     },
     topical_gap: {
         title:          "Topical authority gap detected",
-        why:            "AI engines will not cite you as an authority on topics you have no published content for.",
-        action:         "Create a dedicated page for each detected topic gap. Include a 50-word definition, HowTo or FAQ schema, and internal links.",
+        why:            "Search and AI systems are more likely to reference sources with published content on a topic. Pages that address relevant topics help establish your site as a useful source for those subjects.",
+        action:         "Create a dedicated page for each detected topic gap. Include a clear definition, relevant schema, and internal links from related content.",
         impact:         "high",
         effort:         "complex",
         category:       "geo",
@@ -293,6 +345,7 @@ const ISSUE_META: Record<string, IssueMeta> = {
         aeoGap:         "topical_gap",
         autoFixable:    false,
         autofixCheckId: null,
+        claimSource:    "OPTIAISEO_HEURISTIC",
         geoBrief: {
             targetPath:       "/[topic-slug]",
             idealAnswerWords: 60,
@@ -303,8 +356,8 @@ const ISSUE_META: Record<string, IssueMeta> = {
     },
     "content-decay-detector": {
         title:          "Stale content detected",
-        why:            "Content older than 12 months without updates sees a median 30% traffic decline as freshness signals decay.",
-        action:         "Update top-performing pages with current year, refreshed statistics, and new FAQ entries.",
+        why:            "Content can become less useful when important information becomes outdated. Review pages whose facts, products, policies, or other time-sensitive information may have changed.",
+        action:         "Update top-performing pages with current information, refreshed examples, and new FAQ entries where appropriate.",
         impact:         "medium",
         effort:         "medium",
         category:       "content",
@@ -312,12 +365,13 @@ const ISSUE_META: Record<string, IssueMeta> = {
         aeoGap:         "none",
         autoFixable:    true,
         autofixCheckId: "content-decay-detector",
+        claimSource:    "OPTIAISEO_HEURISTIC",
         geoBrief:       null,
     },
     "header-tag-strategy": {
         title:          "Suboptimal heading structure",
-        why:            "H2/H3 headings are the primary signal for AI engines to understand page subtopics and determine citation scope.",
-        action:         "Restructure headings so each major subtopic has its own H2 containing the target keyword phrase.",
+        why:            "Clear heading structure helps organise page content and makes important subtopics easier for users and systems to understand.",
+        action:         "Restructure headings so each major subtopic has its own H2. Use descriptive heading text that reflects the content of that section.",
         impact:         "medium",
         effort:         "medium",
         category:       "content",
@@ -325,6 +379,7 @@ const ISSUE_META: Record<string, IssueMeta> = {
         aeoGap:         "none",
         autoFixable:    true,
         autofixCheckId: "header-tag-strategy",
+        claimSource:    "OPTIAISEO_HEURISTIC",
         geoBrief:       null,
     },
 };
@@ -396,6 +451,8 @@ function defaultMeta(raw: Record<string, unknown>): IssueMeta {
         autoFixable:    false,
         autofixCheckId: null,
         geoBrief:       null,
+        claimSource:    "NONE",
+        claimUrl:       undefined,
     };
 }
 
@@ -449,6 +506,8 @@ export function enrichIssue(raw: RawIssue, pageUrl?: string): EnrichedRecommenda
         geoBrief:       meta.geoBrief,
         pageUrl:        resolvedPageUrl,
         difficulty:     effortToLabel(meta.effort),
+        claimSource:    meta.claimSource ?? "NONE",
+        claimUrl:       meta.claimUrl ?? null,
     };
 }
 
