@@ -375,10 +375,32 @@ function AuthorStep({
     );
 }
 
+const GENERATION_STAGES = [
+    { until: 20,       label: "Researching keywords and search intent…" },
+    { until: 60,       label: "Structuring headings and outline…" },
+    { until: 120,      label: "Writing with your real author details…" },
+    { until: Infinity, label: "Polishing and running quality checks…" },
+] as const;
+
 function GeneratingStep({ pipelineType }: { pipelineType?: string }) {
     const isDataReport = pipelineType === "DATA_REPORT";
+    const [elapsed, setElapsed] = useState(0);
+
+    useEffect(() => {
+        const startedAt = Date.now();
+        const timer = window.setInterval(() => {
+            setElapsed(Math.floor((Date.now() - startedAt) / 1000));
+        }, 1000);
+        return () => window.clearInterval(timer);
+    }, []);
+
+    const stage = GENERATION_STAGES.find(s => elapsed < s.until) ?? GENERATION_STAGES[GENERATION_STAGES.length - 1];
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+    const elapsedLabel = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+
     return (
-        <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
+        <div className="flex flex-col items-center justify-center gap-4 py-12 text-center" aria-live="polite">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10">
                 {isDataReport
                     ? <BarChart className="h-5 w-5 animate-pulse text-emerald-400" />
@@ -390,7 +412,10 @@ function GeneratingStep({ pipelineType }: { pipelineType?: string }) {
                     {isDataReport ? "Building data report…" : "Writing your post…"}
                 </p>
                 <p className="max-w-xs text-xs text-muted-foreground">
-                    Researching keywords, structuring headings, and writing with your real author details. Takes ~30 seconds.
+                    {stage.label}
+                </p>
+                <p className="mx-auto mt-2 max-w-xs text-xs text-muted-foreground">
+                    This usually takes 1–3 minutes. Keep this window open — elapsed {elapsedLabel}.
                 </p>
             </div>
             <Loader2 className="mt-2 h-5 w-5 animate-spin text-emerald-400" />
