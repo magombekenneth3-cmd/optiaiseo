@@ -102,7 +102,13 @@ export const gscSyncSite = inngest.createFunction(
 
         // Step 2: Fetch yesterday's data (accounting for GSC reporting lag)
         const rows = await step.run("fetch-gsc-data", async () => {
-            const siteUrl = normaliseSiteUrl(domain);
+            const { resolveGscProperty } = await import("@/lib/gsc/property-resolver");
+            const resolution = await resolveGscProperty(userId, accessToken, domain);
+            if (!resolution) {
+                logger.warn("[GscSync] No GSC property found for domain", { siteId, domain });
+                return [];
+            }
+            const siteUrl = resolution.property;
 
             // GSC data is delayed by ~3 days. Fetch the most recent reliable day.
             const targetDate = new Date();

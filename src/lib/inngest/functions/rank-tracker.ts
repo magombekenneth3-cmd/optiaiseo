@@ -57,7 +57,10 @@ export const rankTrackerSiteJob = inngest.createFunction(
         });
 
         const keywords = await step.run("fetch-gsc-keywords", async () => {
-            return fetchGSCKeywords(accessToken, normaliseSiteUrl(domain), 90);
+            const { resolveGscProperty } = await import("@/lib/gsc/property-resolver");
+            const resolution = await resolveGscProperty(userId, accessToken, domain);
+            if (!resolution) return [];
+            return fetchGSCKeywords(accessToken, resolution.property, 90);
         });
 
         const top50 = keywords
