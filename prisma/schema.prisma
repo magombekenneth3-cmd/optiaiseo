@@ -142,7 +142,7 @@ model User {
   commissions            Commission[]
   embedLeads             EmbedLead[]
   credits                Int                      @default(50)
-  creditsLockedAt        DateTime?  
+  creditsLockedAt        DateTime?
   voiceSessions          VoiceSession[]
   wpApiKey               String?                  @unique
   apiKeys                ApiKey[]
@@ -165,105 +165,105 @@ model VerificationToken {
 }
 
 model Site {
-  id                      String                   @id @default(cuid())
-  userId                  String
-  viewerId                String?
-  domain                  String
-  brandName               String? 
-  targetKeyword           String?
-  operatingMode           String                   @default("REPORT_ONLY")
-  githubRepoUrl           String?
-  mediumToken             String?
-  hashnodeToken           String?
-  hashnodePublicationId   String?
-  coreServices            String?
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  blogTone                String?                  @default("Authoritative & Professional")
-  techStack               String?                  @default("nextjs")
-  authorName              String?
-  authorRole              String?
-  authorBio               String?
-  realExperience          String?
-  realNumbers             String?
-  localContext            String?
-  plannerState            Json?
-  niche                   String?
-  location                String?
-  targetCustomer          String?
-  wordPressConfig         Json?
-  ghostConfig             Json?
-  hideFromLeaderboard     Boolean                  @default(false)
-  shareToken              String?                  @unique
-  slackWebhookUrl         String?
-  zapierWebhookUrl        String?
-  aeoEvents               AeoEvent[]
-  aeoReports              AeoReport[]
-  ahrefsSnapshots         AhrefsSnapshot[]
-  audits                  Audit[]
-  backlinkAlerts          BacklinkAlert[]
-  backlinkInventory       BacklinkInventory?
+  id                       String                    @id @default(cuid())
+  userId                   String
+  viewerId                 String?
+  domain                   String
+  brandName                String?
+  targetKeyword            String?
+  operatingMode            String                    @default("REPORT_ONLY")
+  githubRepoUrl            String?
+  mediumToken              String?
+  hashnodeToken            String?
+  hashnodePublicationId    String?
+  coreServices             String?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  blogTone                 String?                   @default("Authoritative & Professional")
+  techStack                String?                   @default("nextjs")
+  authorName               String?
+  authorRole               String?
+  authorBio                String?
+  realExperience           String?
+  realNumbers              String?
+  localContext             String?
+  plannerState             Json?
+  niche                    String?
+  location                 String?
+  targetCustomer           String?
+  wordPressConfig          Json?
+  ghostConfig              Json?
+  hideFromLeaderboard      Boolean                   @default(false)
+  shareToken               String?                   @unique
+  slackWebhookUrl          String?
+  zapierWebhookUrl         String?
+  aeoEvents                AeoEvent[]
+  aeoReports               AeoReport[]
+  ahrefsSnapshots          AhrefsSnapshot[]
+  audits                   Audit[]
+  backlinkAlerts           BacklinkAlert[]
+  backlinkInventory        BacklinkInventory?
   backlinkReferringDomains BacklinkReferringDomain[]
-  blogs                   Blog[]
-  competitors             Competitor[]
-  onPageReports           OnPageReport[]
-  rankSnapshots           RankSnapshot[]
-  selfHealingLogs         SelfHealingLog[]
-  aiShareOfVoice          AiShareOfVoice[]
-  indexingLogs            IndexingLog[]
-  user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  viewer                  User?                    @relation("SiteViewers", fields: [viewerId], references: [id])
-  brandFacts              BrandFact[]
-  aeoSnapshots            AeoSnapshot[]
-  plannerItems            PlannerItem[]
-  seedKeywords            SeedKeyword[]
-  competitorPageAnalyses  CompetitorPageAnalysis[]
-  strategyMemories        StrategyMemory[]
-  metricSnapshots         MetricSnapshot[]
-  backlinkDetails         BacklinkDetail[]
-  healingOutcomes         HealingOutcome[]
-  serpFeatures            SerpFeature[]
-  serpFeatureSnapshots    SerpFeatureSnapshot[]
-  uptimeAlerts            UptimeAlert[]
-  voiceSessions           VoiceSession[]
-  detectedServices        DetectedService[]
-  skippedCompetitors      SkippedCompetitor[]
-  indexNowConfig          IndexNowConfig?
-  pageAudits              PageAudit[]
-  repurposedResults       RepurposedResult[]
-  aeoAutopilotEnabled     Boolean                  @default(false)
-  aeoAutopilotSchedule    String                   @default("weekly")
-  rssFeedUrl              String?
-  socialRepurposeEnabled  Boolean                  @default(false)
-  socialRepurposeSchedule String                   @default("weekly")
-  rssSocialPosts          RssSocialPost[]
-  aeoPublicToken          String?                  @unique
-  aeoDigestEnabled        Boolean                  @default(true)
-  aeoProofs               AeoProof[]
-  trackedKeywords         TrackedKeyword[]
-  trackedQueries          TrackedQuery[]
-  aeoQuerySets            AeoQuerySet[]
-  visibilitySnapshots     VisibilitySnapshot[]
-  healingPlans            HealingPlan[]
-  mentionCorrectionLogs   MentionCorrectionLog[]
-  serpGapAnalyses         SerpGapAnalysis[]
-  keywordSerpAnalyses     KeywordSerpAnalysis[]
-  dailyBriefings          DailyBriefing[]
-  competitorAlerts        CompetitorAlert[]
-  campaigns               Campaign[]
-  growthDecisions         GrowthDecision[]
-  experiments             Experiment[]
-  competitorAlertLogs     CompetitorAlertLog[]
-  evidenceSnapshots       EvidenceSnapshot[]
-  gscPerformance          GscDailyPerformance[]
-  mutationOperations      MutationOperation[]
-  mutationVerifications   MutationVerification[]
-  agentRuns               AgentRun[]
-  ga4DailyPerformance     Ga4DailyPerformance[]
-  actionProposals         ActionProposal[]
-  actionPerformances      ActionPerformance[]
-  learnedSignals          LearnedSignal[]
-  portfolioAllocations    PortfolioAllocation[]
+  blogs                    Blog[]
+  competitors              Competitor[]
+  onPageReports            OnPageReport[]
+  rankSnapshots            RankSnapshot[]
+  selfHealingLogs          SelfHealingLog[]
+  aiShareOfVoice           AiShareOfVoice[]
+  indexingLogs             IndexingLog[]
+  user                     User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  viewer                   User?                     @relation("SiteViewers", fields: [viewerId], references: [id])
+  brandFacts               BrandFact[]
+  aeoSnapshots             AeoSnapshot[]
+  plannerItems             PlannerItem[]
+  seedKeywords             SeedKeyword[]
+  competitorPageAnalyses   CompetitorPageAnalysis[]
+  strategyMemories         StrategyMemory[]
+  metricSnapshots          MetricSnapshot[]
+  backlinkDetails          BacklinkDetail[]
+  healingOutcomes          HealingOutcome[]
+  serpFeatures             SerpFeature[]
+  serpFeatureSnapshots     SerpFeatureSnapshot[]
+  uptimeAlerts             UptimeAlert[]
+  voiceSessions            VoiceSession[]
+  detectedServices         DetectedService[]
+  skippedCompetitors       SkippedCompetitor[]
+  indexNowConfig           IndexNowConfig?
+  pageAudits               PageAudit[]
+  repurposedResults        RepurposedResult[]
+  aeoAutopilotEnabled      Boolean                   @default(false)
+  aeoAutopilotSchedule     String                    @default("weekly")
+  rssFeedUrl               String?
+  socialRepurposeEnabled   Boolean                   @default(false)
+  socialRepurposeSchedule  String                    @default("weekly")
+  rssSocialPosts           RssSocialPost[]
+  aeoPublicToken           String?                   @unique
+  aeoDigestEnabled         Boolean                   @default(true)
+  aeoProofs                AeoProof[]
+  trackedKeywords          TrackedKeyword[]
+  trackedQueries           TrackedQuery[]
+  aeoQuerySets             AeoQuerySet[]
+  visibilitySnapshots      VisibilitySnapshot[]
+  healingPlans             HealingPlan[]
+  mentionCorrectionLogs    MentionCorrectionLog[]
+  serpGapAnalyses          SerpGapAnalysis[]
+  keywordSerpAnalyses      KeywordSerpAnalysis[]
+  dailyBriefings           DailyBriefing[]
+  competitorAlerts         CompetitorAlert[]
+  campaigns                Campaign[]
+  growthDecisions          GrowthDecision[]
+  experiments              Experiment[]
+  competitorAlertLogs      CompetitorAlertLog[]
+  evidenceSnapshots        EvidenceSnapshot[]
+  gscPerformance           GscDailyPerformance[]
+  mutationOperations       MutationOperation[]
+  mutationVerifications    MutationVerification[]
+  agentRuns                AgentRun[]
+  ga4DailyPerformance      Ga4DailyPerformance[]
+  actionProposals          ActionProposal[]
+  actionPerformances       ActionPerformance[]
+  learnedSignals           LearnedSignal[]
+  portfolioAllocations     PortfolioAllocation[]
 
   ga4PropertyId String?
 
@@ -274,26 +274,27 @@ model Site {
   pseoPages     PseoPage[]
 
   // Site-level mutation kill switch — pauses all automated mutations for this site
-  automationsPaused     Boolean @default(false)
+  automationsPaused Boolean @default(false)
 
   // Per-channel effect kill switches (default: enabled)
   effectCmsEnabled      Boolean @default(true)
   effectGithubEnabled   Boolean @default(true)
   effectIndexNowEnabled Boolean @default(true)
 
-  
-  dailyMutationLimit      Int      @default(10)    
-  maxConcurrentExecutions Int      @default(2)    
+  dailyMutationLimit      Int @default(10)
+  maxConcurrentExecutions Int @default(2)
 
-  
-  budgetReservations          BudgetReservation[]
-  circuitBreakers             CircuitBreaker[]
-  autonomousExecutionClaims   AutonomousExecutionClaim[]
-  executionTraces             ExecutionTrace[]
+  budgetReservations        BudgetReservation[]
+  circuitBreakers           CircuitBreaker[]
+  autonomousExecutionClaims AutonomousExecutionClaim[]
+  executionTraces           ExecutionTrace[]
 
   // Evidence-driven diagnostic engine (Phase P0.6)
-  diagnosticFindings          DiagnosticFindingRecord[]
-  seoEvidenceRecords          SEOEvidenceRecord[]
+  diagnosticFindings DiagnosticFindingRecord[]
+  seoEvidenceRecords SEOEvidenceRecord[]
+
+  // Keyword evidence database
+  keywordResearchRuns KeywordResearchRun[]
 
   @@index([userId])
   @@index([niche, operatingMode])
@@ -386,18 +387,17 @@ model AiShareOfVoice {
 
   @@index([siteId, keyword])
   @@index([recordedAt])
-  @@index([siteId, mentionConfidence]) 
+  @@index([siteId, mentionConfidence])
   @@index([siteId, modelName, recordedAt(sort: Desc)])
 }
-
 
 model MentionCorrectionLog {
   id           String   @id @default(cuid())
   siteId       String
   keyword      String
   modelName    String
-  correctValue Boolean 
-  rawSnippet   String? 
+  correctValue Boolean
+  rawSnippet   String?
   flaggedAt    DateTime @default(now())
   site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -521,41 +521,41 @@ model PageAudit {
 }
 
 model Blog {
-  id                   String            @id @default(cuid())
+  id                   String             @id @default(cuid())
   siteId               String
   pipelineType         String
   title                String
   slug                 String
   content              String
   metaDescription      String?
-  status               String            @default("DRAFT")
-  isEditorial          Boolean           @default(false)
+  status               String             @default("DRAFT")
+  isEditorial          Boolean            @default(false)
   deletedAt            DateTime?
   targetKeywords       String[]
   hashnodeUrl          String?
   mediumUrl            String?
   wordPressUrl         String?
   ghostUrl             String?
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @default(now()) @updatedAt
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @default(now()) @updatedAt
   publishedAt          DateTime?
   ogImage              String?
-  needsRefresh         Boolean           @default(false)
+  needsRefresh         Boolean            @default(false)
   interactiveWidget    String?
   schemaMarkup         String?
   sourceUrl            String?
   validationScore      Int?
-  validationErrors     String[]          @default([])
-  validationWarnings   String[]          @default([])
-  factCheckIssues      String[]          @default([])
-  factCheckSuggestions String[]          @default([])
+  validationErrors     String[]           @default([])
+  validationWarnings   String[]           @default([])
+  factCheckIssues      String[]           @default([])
+  factCheckSuggestions String[]           @default([])
   citationScore        Int?
   citationCriteria     Json?
   /// Evidence coverage score (0–100) produced by the evidence-extractor pipeline.
   /// Null for blogs generated before the evidence gate was introduced.
   evidenceCoverage     Int?
   /// Descriptions of unsourced claims flagged by the evidence extractor.
-  missingEvidence      String[]          @default([])
+  missingEvidence      String[]           @default([])
   /// GSC opportunity evidence captured at generation time.
   /// Null for non-GSC pipelines or blogs generated before this field existed.
   /// Validated via GscOpportunityEvidenceSchema (Zod) before writing.
@@ -565,12 +565,12 @@ model Blog {
   publicationGates     Json?
   aeoEvents            AeoEvent[]
   repurposedResult     RepurposedResult?
-  sourceLinks          InternalLink[]    @relation("SourceLinks")
-  targetLinks          InternalLink[]    @relation("TargetLinks")
+  sourceLinks          InternalLink[]     @relation("SourceLinks")
+  targetLinks          InternalLink[]     @relation("TargetLinks")
   researchArtifacts    ResearchArtifact[]
   blogClaims           BlogClaim[]
-  site                 Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  version              Int               @default(1) // optimistic concurrency token
+  site                 Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  version              Int                @default(1) // optimistic concurrency token
 
   @@unique([siteId, slug])
   @@index([siteId])
@@ -632,8 +632,8 @@ model ResearchArtifact {
   metadata       Json?
   createdAt      DateTime           @default(now())
 
-  blog           Blog               @relation(fields: [blogId], references: [id], onDelete: Cascade)
-  evidenceItems  EvidenceItem[]
+  blog          Blog           @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  evidenceItems EvidenceItem[]
 
   @@index([blogId])
   @@index([blogId, sourceType])
@@ -649,24 +649,24 @@ model EvidenceItem {
   metadata       Json?
   createdAt      DateTime           @default(now())
 
-  artifact       ResearchArtifact   @relation(fields: [artifactId], references: [id], onDelete: Cascade)
-  claimLinks     ClaimEvidence[]
+  artifact   ResearchArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  claimLinks ClaimEvidence[]
 
   @@index([artifactId])
   @@index([sourceType])
 }
 
 model BlogClaim {
-  id            String          @id @default(cuid())
-  blogId        String
-  text          String
-  type          BlogClaimType
-  status        BlogClaimStatus @default(PENDING)
-  sectionId     String?
-  position      Int?
-  metadata      Json?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id        String          @id @default(cuid())
+  blogId    String
+  text      String
+  type      BlogClaimType
+  status    BlogClaimStatus @default(PENDING)
+  sectionId String?
+  position  Int?
+  metadata  Json?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
 
   blog          Blog            @relation(fields: [blogId], references: [id], onDelete: Cascade)
   evidenceLinks ClaimEvidence[]
@@ -684,8 +684,8 @@ model ClaimEvidence {
   reasoning    String?
   createdAt    DateTime             @default(now())
 
-  claim        BlogClaim            @relation(fields: [claimId], references: [id], onDelete: Cascade)
-  evidence     EvidenceItem         @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  claim    BlogClaim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  evidence EvidenceItem @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
 
   @@unique([claimId, evidenceId])
   @@index([claimId])
@@ -721,7 +721,7 @@ model TrendingTopic {
   expiresAt DateTime @default(dbgenerated("now() + interval '30 days'"))
 
   @@index([fetchedAt(sort: Desc)])
-  @@index([expiresAt]) 
+  @@index([expiresAt])
 }
 
 model MarketCategory {
@@ -854,8 +854,7 @@ model AeoSnapshot {
 
   @@unique([siteId, createdAt])
   @@index([siteId])
-  @@index([siteId, createdAt(sort: Desc)]) 
-  
+  @@index([siteId, createdAt(sort: Desc)])
   @@index([createdAt])
 }
 
@@ -874,7 +873,7 @@ model AeoReport {
   generativeShareOfVoice Int        @default(0)
   multiEngineScore       Json?
   multiModelResults      Json?
-  layerScores            Json? 
+  layerScores            Json?
   diagnosis              Json?
   // Phase 2: Structured dimension + confidence data
   dimensions             Json?
@@ -888,62 +887,62 @@ model AeoReport {
 }
 
 model SelfHealingLog {
-  id          String   @id @default(cuid())
-  siteId      String
-  issueType   String
-  description String
-  actionTaken String
-  impactScore Int?
-  status      String   @default("COMPLETED")
-  metadata    Json?
-  fingerprint String?
-  dedupeBucket String?
+  id                  String                   @id @default(cuid())
+  siteId              String
+  issueType           String
+  description         String
+  actionTaken         String
+  impactScore         Int?
+  status              String                   @default("COMPLETED")
+  metadata            Json?
+  fingerprint         String?
+  dedupeBucket        String?
   diagnosticFindingId String?
-  createdAt   DateTime @default(now())
-  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  createdAt           DateTime                 @default(now())
+  site                Site                     @relation(fields: [siteId], references: [id], onDelete: Cascade)
   diagnosticFinding   DiagnosticFindingRecord? @relation(fields: [diagnosticFindingId], references: [id], onDelete: SetNull)
 
+  @@unique([siteId, fingerprint, dedupeBucket])
   @@index([siteId])
   @@index([createdAt])
   @@index([siteId, status, createdAt])
   @@index([diagnosticFindingId])
-  @@unique([siteId, fingerprint, dedupeBucket])
 }
 
 /// Immutable, server-side authorization record for one reviewable SEO change.
 /// The browser receives only the identifier; GitHub dispatch re-checks every
 /// binding below so edited client payloads cannot change a repository file.
 model SeoFixProposal {
-  id          String   @id @default(cuid())
-  siteId      String
-  userId      String
-  filePath    String
-  content     String   @db.Text
-  contentHash String
-  baseSha     String?
-  issueLabel  String
-  status      String   @default("PENDING_REVIEW")
-  expiresAt   DateTime
-  dispatchedAt DateTime?
-  prUrl              String?
-  prNumber            Int?
+  id                    String    @id @default(cuid())
+  siteId                String
+  userId                String
+  filePath              String
+  content               String    @db.Text
+  contentHash           String
+  baseSha               String?
+  issueLabel            String
+  status                String    @default("PENDING_REVIEW")
+  expiresAt             DateTime
+  dispatchedAt          DateTime?
+  prUrl                 String?
+  prNumber              Int?
   proposalBaseCommitSha String?
   proposalTargetBlobSha String?
-  mergeCommitSha      String?
-  deploymentUrl       String?
-  deploymentId        String?
-  deploymentCommitSha String?
-  deploymentStatus    String   @default("NOT_DEPLOYED")
-  deployedAt          DateTime?
-  measuredAt          DateTime?
-  verificationStatus  String   @default("PENDING")
-  verificationUrl     String?
-  verificationCriteria Json?
-  verificationDetails Json?
+  mergeCommitSha        String?
+  deploymentUrl         String?
+  deploymentId          String?
+  deploymentCommitSha   String?
+  deploymentStatus      String    @default("NOT_DEPLOYED")
+  deployedAt            DateTime?
+  measuredAt            DateTime?
+  verificationStatus    String    @default("PENDING")
+  verificationUrl       String?
+  verificationCriteria  Json?
+  verificationDetails   Json?
   diagnosticFindingId   String?
   findingFingerprint    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   @@index([siteId, userId, status])
   @@index([expiresAt])
@@ -1242,16 +1241,16 @@ model BacklinkDetail {
 /// Domain-level inventory used solely for accurate gained/lost detection.
 /// BacklinkDetail is intentionally link-level and may be a bounded sample.
 model BacklinkReferringDomain {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   siteId       String
   domain       String
   domainRating Float?
-  backlinks    Int      @default(0)
+  backlinks    Int       @default(0)
   spamScore    Float?
   firstSeen    DateTime?
-  lastSeen     DateTime @default(now())
-  status       String   @default("active")
-  site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  lastSeen     DateTime  @default(now())
+  status       String    @default("active")
+  site         Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@unique([siteId, domain])
   @@index([siteId, status])
@@ -1294,70 +1293,70 @@ model HealingOutcome {
 /// Immutable — rows are never updated, only new evidence is appended.
 /// This creates an audit trail: "evidence at diagnosis" vs "evidence at verification".
 model SEOEvidenceRecord {
-  id            String                   @id @default(cuid())
+  id            String   @id @default(cuid())
   siteId        String
   findingId     String?
   /// EvidenceSource enum value: HTML | HTTP_HEADERS | ROBOTS | SITEMAP | GSC | GA4 | CRUX | LINK_GRAPH | SCHEMA | DNS
   source        String
   url           String?
-  observedAt    DateTime                 @default(now())
+  observedAt    DateTime @default(now())
   observedValue Json?
   expectedValue Json?
   httpStatus    Int?
-  confidence    Float                    @default(0)
+  confidence    Float    @default(0)
   /// SHA-256 prefix of source+url+observedValue for dedup
   evidenceHash  String
 
-  site    Site                          @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  finding DiagnosticFindingRecord?      @relation(fields: [findingId], references: [id], onDelete: SetNull)
+  site    Site                     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  finding DiagnosticFindingRecord? @relation(fields: [findingId], references: [id], onDelete: SetNull)
 
+  @@unique([findingId, evidenceHash])
   @@index([siteId, observedAt(sort: Desc)])
   @@index([findingId])
   @@index([evidenceHash])
-  @@unique([findingId, evidenceHash])
 }
 
 /// A diagnosed SEO issue with root cause, evidence chain, and verification contract.
 /// Fingerprinted for dedup across audit runs — the same issue on the same URL
 /// with the same root cause produces the same fingerprint.
 model DiagnosticFindingRecord {
-  id                   String              @id @default(cuid())
+  id                   String    @id @default(cuid())
   siteId               String
   /// Stable dedup key: sha256(siteId|issueType|url|rootCause)
   fingerprint          String
   issueType            String
   /// DiagnosticStatus: PASS | FAIL | WARNING | UNKNOWN | NOT_APPLICABLE | BLOCKED
-  status               String              @default("FAIL")
+  status               String    @default("FAIL")
   /// FindingSeverity: critical | high | medium | low
-  severity             String              @default("medium")
+  severity             String    @default("medium")
   /// SITE | PAGE | URL_PATTERN
-  scopeType            String              @default("PAGE")
-  scopeUrls            String[]            @default([])
+  scopeType            String    @default("PAGE")
+  scopeUrls            String[]  @default([])
   rootCause            String
-  confidence           Float               @default(0)
+  confidence           Float     @default(0)
   expectedOutcome      String
   /// DETERMINISTIC | AI_PATCH | MANUAL | EXPERIMENT
-  remediationType      String              @default("MANUAL")
+  remediationType      String    @default("MANUAL")
   /// VerificationCriterion[] — how to prove the fix worked
   verificationCriteria Json?
   /// Fingerprints of blocking issues that must be resolved first
-  dependencies         String[]            @default([])
+  dependencies         String[]  @default([])
   /// Explainable priority score (0–100)
   priorityScore        Int?
   /// PriorityComponents JSON — individual scoring factors
   priorityComponents   Json?
   /// Policy version used to compute priority (e.g. "priority-v4")
   policyVersion        String?
-  lifecycleState       String              @default("OPEN")
+  lifecycleState       String    @default("OPEN")
   resolvedAt           DateTime?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  site     Site                           @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  evidence SEOEvidenceRecord[]
-  selfHealingLogs      SelfHealingLog[]
-  mutationOperations   MutationOperation[] @relation("MutationFinding")
-  actionProposals      ActionProposal[]    @relation("ActionFinding")
+  site               Site                @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  evidence           SEOEvidenceRecord[]
+  selfHealingLogs    SelfHealingLog[]
+  mutationOperations MutationOperation[] @relation("MutationFinding")
+  actionProposals    ActionProposal[]    @relation("ActionFinding")
 
   @@unique([siteId, fingerprint])
   @@index([siteId, status])
@@ -1551,18 +1550,18 @@ model TrackedQuery {
 // Each set captures the exact queries used in an audit run, so trending
 // comparisons use the same query universe across weeks.
 model AeoQuerySet {
-  id            String         @id @default(cuid())
-  siteId        String
-  version       Int            @default(1)
-  tier          String         @default("standard") // quick | standard | deep
-  queryCount    Int            @default(0)
-  generatedBy   String         @default("auto")     // auto | manual | hybrid
-  fingerprint   String?        // Hash of sorted query texts for dedup
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  expiresAt     DateTime?      // null = never expires
-  site          Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  queries       TrackedQuery[]
+  id          String         @id @default(cuid())
+  siteId      String
+  version     Int            @default(1)
+  tier        String         @default("standard") // quick | standard | deep
+  queryCount  Int            @default(0)
+  generatedBy String         @default("auto") // auto | manual | hybrid
+  fingerprint String? // Hash of sorted query texts for dedup
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  expiresAt   DateTime? // null = never expires
+  site        Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  queries     TrackedQuery[]
 
   @@unique([siteId, fingerprint])
   @@index([siteId, isActive])
@@ -1639,11 +1638,11 @@ model HealingPlan {
 model CreditHistory {
   id           String   @id @default(cuid())
   userId       String
-  action       String 
-  label        String 
-  cost         Int 
-  balanceAfter Int 
-  metadata     Json? 
+  action       String
+  label        String
+  cost         Int
+  balanceAfter Int
+  metadata     Json?
   createdAt    DateTime @default(now())
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1654,9 +1653,9 @@ model CreditHistory {
 model CreditLedger {
   id          String   @id @default(cuid())
   userId      String
-  amount      Int 
-  type        String 
-  referenceId String 
+  amount      Int
+  type        String
+  referenceId String
   reason      String?
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1666,7 +1665,7 @@ model CreditLedger {
 }
 
 model GrowthDecision {
-  id                    String    @id @default(cuid())
+  id                    String @id @default(cuid())
   siteId                String
   url                   String
   primaryKeyword        String
@@ -1677,40 +1676,39 @@ model GrowthDecision {
   whyNow                Json
   impact                Json
   executionPlan         Json
-  status                String    @default("ACTIVE")
-  opportunityStatus     String    @default("OPEN") 
-  engineVersion         String    @default("v2")
+  status                String @default("ACTIVE")
+  opportunityStatus     String @default("OPEN")
+  engineVersion         String @default("v2")
 
-  
-  maxProposalRetries    Int       @default(3)
-  proposalRetryCount    Int       @default(0) 
-  fingerprint           String?   
-  inputPeriodStart      DateTime?
-  inputPeriodEnd        DateTime?
-  generatedAt           DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  maxProposalRetries Int       @default(3)
+  proposalRetryCount Int       @default(0)
+  fingerprint        String?
+  inputPeriodStart   DateTime?
+  inputPeriodEnd     DateTime?
+  generatedAt        DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   // Approval metadata (populated when a human approves this decision)
-  approvedBy            String?
-  approvedAt            DateTime?
-  approvalExpiresAt     DateTime?
-  mutationHash          String?  
+  approvedBy        String?
+  approvedAt        DateTime?
+  approvalExpiresAt DateTime?
+  mutationHash      String?
 
-  site       Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  experiment Experiment?
-  sourceFindings OpportunityFinding[]
-  proposals      ActionProposal[]
-  scoreRecords   OpportunityScoreRecord[]
+  site                 Site                     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  experiment           Experiment?
+  sourceFindings       OpportunityFinding[]
+  proposals            ActionProposal[]
+  scoreRecords         OpportunityScoreRecord[]
   portfolioAllocations PortfolioAllocation[]
 
-  primaryDiscoverySource  String?    
-  discoveredAt            DateTime?  
-  lastRefreshedAt         DateTime?  
-  expiresAt               DateTime?  
-  discoveryConfidence     Float?     
+  primaryDiscoverySource String?
+  discoveredAt           DateTime?
+  lastRefreshedAt        DateTime?
+  expiresAt              DateTime?
+  discoveryConfidence    Float?
 
-  lastScoredAt            DateTime?  
-  scoringVersion          String?    
+  lastScoredAt   DateTime?
+  scoringVersion String?
 
   @@unique([siteId, url, primaryKeyword, action])
   @@index([siteId, status])
@@ -1721,87 +1719,85 @@ model GrowthDecision {
   @@index([siteId, opportunityStatus, expiresAt])
 }
 
-
 model OpportunityScoreRecord {
-  id                   String   @id @default(cuid())
-  opportunityId        String
-  scoringVersion       String   
+  id             String @id @default(cuid())
+  opportunityId  String
+  scoringVersion String
 
   // Score components (all 0–100)
-  impactScore          Float    
-  confidenceScore      Float    
-  evidenceScore        Float    
-  urgencyScore         Float    
-  effortScore          Float    
-  riskScore            Float    
+  impactScore     Float
+  confidenceScore Float
+  evidenceScore   Float
+  urgencyScore    Float
+  effortScore     Float
+  riskScore       Float
 
-  finalScore           Float    
+  finalScore Float
 
-  decision             String   
-  decisionReasons      Json     
+  decision        String
+  decisionReasons Json
 
-  evidenceHash         String   
-  evidenceVerifiedAt   DateTime? 
+  evidenceHash       String
+  evidenceVerifiedAt DateTime?
 
-  weightsUsed          Json     
+  weightsUsed Json
 
-  learningVersion      String?  
+  learningVersion String?
 
-  scoredAt             DateTime @default(now())
+  scoredAt DateTime @default(now())
 
-  opportunity          GrowthDecision @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  opportunity GrowthDecision @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
 
   @@index([opportunityId, scoredAt(sort: Desc)])
   @@index([decision, scoredAt])
 }
 
 model Experiment {
-  id                   String   @id @default(cuid())
-  siteId               String
-  opportunityId        String?
+  id            String  @id @default(cuid())
+  siteId        String
+  opportunityId String?
 
   // Hypothesis
-  hypothesis           String   @db.Text
-  successMetric        String   
-  successThreshold     Float    
+  hypothesis       String @db.Text
+  successMetric    String
+  successThreshold Float
 
   // Lifecycle: DRAFT → RUNNING → COMPLETED | ABORTED | PAUSED
-  status               String   @default("DRAFT")
-  statusReason         String?
+  status       String  @default("DRAFT")
+  statusReason String?
 
   // Immutable config (set at creation, never modified)
-  configVersion        String   @default("d5-v1")
-  configHash           String   // sha256 of canonical config — immutability proof
-  maxDurationDays      Int      @default(28)
-  maxMutationCount     Int      @default(1)
-  maxBudgetUnits       Int      @default(1)
+  configVersion    String @default("d5-v1")
+  configHash       String // sha256 of canonical config — immutability proof
+  maxDurationDays  Int    @default(28)
+  maxMutationCount Int    @default(1)
+  maxBudgetUnits   Int    @default(1)
 
   // Timing
-  startedAt            DateTime?
-  endsAt               DateTime?  
-  completedAt          DateTime?
+  startedAt   DateTime?
+  endsAt      DateTime?
+  completedAt DateTime?
 
   // Outcome (populated on completion)
-  outcome              String?   
-  outcomeConfidence    Float?    
-  outcomeDetails       Json?
+  outcome           String?
+  outcomeConfidence Float?
+  outcomeDetails    Json?
 
-  
-  decisionId           String?   @unique  
-  targetUrl            String?
-  actionExecuted       String?
-  executedAt           DateTime?
-  evaluationDate       DateTime?
-  baseline             Json?
-  lift                 Json?
+  decisionId     String?   @unique
+  targetUrl      String?
+  actionExecuted String?
+  executedAt     DateTime?
+  evaluationDate DateTime?
+  baseline       Json?
+  lift           Json?
 
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  site                 Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  decision             GrowthDecision? @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-  variants             ExperimentVariant[]
-  measurements         ExperimentMeasurement[]
+  site         Site                    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  decision     GrowthDecision?         @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  variants     ExperimentVariant[]
+  measurements ExperimentMeasurement[]
 
   @@unique([siteId, opportunityId])
   @@index([siteId, status])
@@ -1811,35 +1807,30 @@ model Experiment {
 }
 
 model ExperimentVariant {
-  id                   String   @id @default(cuid())
-  experimentId         String
-  variantKey           String   
-  isControl            Boolean  @default(false)
+  id           String  @id @default(cuid())
+  experimentId String
+  variantKey   String
+  isControl    Boolean @default(false)
 
-  
-  targetUrl            String
-  targetKeyword        String?
-  actionType           String?  
-  actionParameters     Json?    
+  targetUrl        String
+  targetKeyword    String?
+  actionType       String?
+  actionParameters Json?
 
-  
-  assignmentHash       String
-  assignedAt           DateTime @default(now())
+  assignmentHash String
+  assignedAt     DateTime @default(now())
 
-  
-  proposalId           String?  @unique
-  operationId          String?  @unique
-  executedAt           DateTime?
+  proposalId  String?   @unique
+  operationId String?   @unique
+  executedAt  DateTime?
 
-  
-  baselineMetrics      Json?    
-  baselineWindow       String?  
+  baselineMetrics Json?
+  baselineWindow  String?
 
-  
-  postMetrics          Json?
-  postWindow           String?
+  postMetrics Json?
+  postWindow  String?
 
-  experiment           Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  experiment Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
 
   @@unique([experimentId, variantKey])
   @@index([experimentId])
@@ -1847,21 +1838,20 @@ model ExperimentVariant {
 }
 
 model ExperimentMeasurement {
-  id                   String   @id @default(cuid())
-  experimentId         String
-  variantKey           String
-  measurementDay       Int      
+  id             String @id @default(cuid())
+  experimentId   String
+  variantKey     String
+  measurementDay Int
 
-  
-  position             Float?
-  clicks               Int?
-  impressions          Int?
-  ctr                  Float?
-  indexedStatus        Boolean?
+  position      Float?
+  clicks        Int?
+  impressions   Int?
+  ctr           Float?
+  indexedStatus Boolean?
 
-  measuredAt           DateTime @default(now())
+  measuredAt DateTime @default(now())
 
-  experiment           Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  experiment Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
 
   @@unique([experimentId, variantKey, measurementDay])
   @@index([experimentId, measuredAt])
@@ -2000,7 +1990,7 @@ model RssSocialPost {
   siteId       String
   articleUrl   String
   articleTitle String
-  posts        Json 
+  posts        Json
   createdAt    DateTime @default(now())
   site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -2041,12 +2031,12 @@ model GscDailyPerformance {
   siteId      String
   url         String
   keyword     String
-  date        String 
+  date        String
   clicks      Int      @default(0)
   impressions Int      @default(0)
   ctr         Float    @default(0)
   position    Float    @default(0)
-  device      String   @default("ALL") 
+  device      String   @default("ALL")
   fetchedAt   DateTime @default(now())
   site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -2100,64 +2090,64 @@ model PseoPage {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model MutationOperation {
-  id                 String   @id @default(cuid())
-  siteId             String
-  idempotencyKey     String   @unique
+  id             String @id @default(cuid())
+  siteId         String
+  idempotencyKey String @unique
 
   // Actor + Authorization snapshot
-  actorId            String   // userId or "system:inngest" or "system:cron"
-  actorType          String   // "USER" | "SYSTEM" | "CRON"
-  authorizedBy       String?  // policy or userId that granted permission
-  authPolicyVersion  String?  // e.g. "rbac-v3" — auditable: "why was this allowed?"
-  authorizedAt       DateTime?
+  actorId           String // userId or "system:inngest" or "system:cron"
+  actorType         String // "USER" | "SYSTEM" | "CRON"
+  authorizedBy      String? // policy or userId that granted permission
+  authPolicyVersion String? // e.g. "rbac-v3" — auditable: "why was this allowed?"
+  authorizedAt      DateTime?
 
   // What
-  mutationType       String   // "BLOG_CONTENT_UPDATE" | "CMS_PUBLISH" | "GITHUB_PR" | ...
-  targetModel        String   // "Blog" | "Site" | "InternalLink"
-  targetId           String   // e.g. blog.id
-  expectedVersion    Int      // optimistic concurrency: version we expect on target
+  mutationType    String // "BLOG_CONTENT_UPDATE" | "CMS_PUBLISH" | "GITHUB_PR" | ...
+  targetModel     String // "Blog" | "Site" | "InternalLink"
+  targetId        String // e.g. blog.id
+  expectedVersion Int // optimistic concurrency: version we expect on target
 
   // Canonical mutation
-  mutationPayload    Json     // The exact executable mutation (patch object)
-  mutationHash       String   // SHA-256 of canonicalized mutationPayload
+  mutationPayload Json // The exact executable mutation (patch object)
+  mutationHash    String // SHA-256 of canonicalized mutationPayload
 
   // Risk
-  riskLevel          String   // "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
-  riskScore          Int      // 0-100
-  affectedFields     String[] // ["content", "schemaMarkup"]
-  diffSizeBytes      Int      @default(0)
+  riskLevel      String // "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+  riskScore      Int // 0-100
+  affectedFields String[] // ["content", "schemaMarkup"]
+  diffSizeBytes  Int      @default(0)
 
   // Lifecycle
   // PROPOSED → PENDING_APPROVAL → APPROVED → EXECUTING → COMMITTED → EFFECTS_PENDING → COMPLETED
   // Terminal: REJECTED | EXPIRED | CANCELLED | FAILED | STALE | COMPLETED_WITH_ERRORS
-  status             String   @default("PROPOSED")
+  status String @default("PROPOSED")
 
   // Execution claim (prevents two workers executing the same operation)
-  executionClaimedBy       String?   // worker/process ID that claimed execution
-  executionClaimedAt       DateTime?
-  executionLeaseExpiresAt  DateTime? // lease expires → another worker can reclaim
+  executionClaimedBy      String? // worker/process ID that claimed execution
+  executionClaimedAt      DateTime?
+  executionLeaseExpiresAt DateTime? // lease expires → another worker can reclaim
 
   // Approval (populated when status reaches APPROVED)
-  approvedBy         String?
-  approvedAt         DateTime?
-  approvalExpiresAt  DateTime?
-  approvalHash       String?  // SHA-256 of canonical mutation AT approval time
+  approvedBy        String?
+  approvedAt        DateTime?
+  approvalExpiresAt DateTime?
+  approvalHash      String? // SHA-256 of canonical mutation AT approval time
 
   // Metadata
   diagnosticFindingId String?
   findingFingerprint  String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  completedAt        DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  completedAt         DateTime?
 
   // Relations — onDelete: Restrict prevents cascade-destroying audit history
-  site               Site              @relation(fields: [siteId], references: [id], onDelete: Restrict)
-  snapshot           MutationSnapshot?
-  effects            MutationEffect[]
-  auditEvents        MutationAuditEvent[]
-  proposal           ActionProposal?
-  verifications       MutationVerification[]
-  diagnosticFinding  DiagnosticFindingRecord? @relation("MutationFinding", fields: [diagnosticFindingId], references: [id], onDelete: SetNull)
+  site              Site                     @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  snapshot          MutationSnapshot?
+  effects           MutationEffect[]
+  auditEvents       MutationAuditEvent[]
+  proposal          ActionProposal?
+  verifications     MutationVerification[]
+  diagnosticFinding DiagnosticFindingRecord? @relation("MutationFinding", fields: [diagnosticFindingId], references: [id], onDelete: SetNull)
 
   @@index([siteId, status])
   @@index([siteId, targetModel, targetId])
@@ -2168,60 +2158,56 @@ model MutationOperation {
 }
 
 model MutationSnapshot {
-  id              String   @id @default(cuid())
-  operationId     String   @unique
-  targetModel     String   // "Blog"
-  targetId        String   // e.g. blog.id
-  targetVersion   Int      // version AT snapshot time (before mutation)
-  beforeState     Json     // full state before mutation
-  afterState      Json?    // full state after (null until COMMITTED)
-  createdAt       DateTime @default(now())
+  id            String   @id @default(cuid())
+  operationId   String   @unique
+  targetModel   String // "Blog"
+  targetId      String // e.g. blog.id
+  targetVersion Int // version AT snapshot time (before mutation)
+  beforeState   Json // full state before mutation
+  afterState    Json? // full state after (null until COMMITTED)
+  createdAt     DateTime @default(now())
 
   // Cascade from operation only (operation itself uses Restrict from Site)
-  operation       MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  operation MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
 
   @@index([targetModel, targetId, targetVersion])
   @@index([targetModel, targetId, createdAt(sort: Desc)])
 }
 
 model MutationEffect {
-  id                 String   @id @default(cuid())
-  operationId        String
-  idempotencyKey     String   @unique
+  id             String @id @default(cuid())
+  operationId    String
+  idempotencyKey String @unique
 
-  
-  effectType         String   
-  platform           String?  
-  payload            Json     
+  effectType String
+  platform   String?
+  payload    Json
 
- 
-  status             String   @default("QUEUED")
+  status String @default("QUEUED")
 
-  
-  confirmationMode   String   @default("POLL")        
-  compensationPolicy String   @default("IRREVERSIBLE") 
+  confirmationMode   String @default("POLL")
+  compensationPolicy String @default("IRREVERSIBLE")
 
-  
-  externalId         String?
-  externalError      String?
-  externalMetadata   Json?
-  verificationStatus String   @default("PENDING")
+  externalId          String?
+  externalError       String?
+  externalMetadata    Json?
+  verificationStatus  String    @default("PENDING")
   verificationDetails Json?
-  verifiedAt         DateTime?
+  verifiedAt          DateTime?
 
   // Retry
-  attempts           Int      @default(0)
-  maxAttempts        Int      @default(5)
-  nextRetryAt        DateTime?
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  nextRetryAt DateTime?
 
   // Timestamps
-  dispatchedAt       DateTime?
-  confirmedAt        DateTime?
-  failedAt           DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  dispatchedAt DateTime?
+  confirmedAt  DateTime?
+  failedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  operation          MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  operation MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
 
   @@index([operationId])
   @@index([status, nextRetryAt])
@@ -2229,22 +2215,22 @@ model MutationEffect {
 }
 
 model MutationVerification {
-  id                 String   @id @default(cuid())
-  operationId        String
-  proposalId         String?
-  siteId             String
-  verificationType   String
-  status             String
-  targetUrl          String?
-  criteria           Json
-  expectedState      Json?
-  observedState      Json?
-  evidence           Json?
-  attempt            Int      @default(1)
-  checkedAt          DateTime @default(now())
+  id               String   @id @default(cuid())
+  operationId      String
+  proposalId       String?
+  siteId           String
+  verificationType String
+  status           String
+  targetUrl        String?
+  criteria         Json
+  expectedState    Json?
+  observedState    Json?
+  evidence         Json?
+  attempt          Int      @default(1)
+  checkedAt        DateTime @default(now())
 
-  operation          MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
-  site               Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  operation MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  site      Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([operationId, checkedAt])
   @@index([siteId, status])
@@ -2252,53 +2238,49 @@ model MutationVerification {
 }
 
 model MutationAuditEvent {
-  id            String   @id @default(cuid())
-  operationId   String
-  eventType     String  
-  actorId       String  
-  details       Json?    
-  createdAt     DateTime @default(now())
+  id          String   @id @default(cuid())
+  operationId String
+  eventType   String
+  actorId     String
+  details     Json?
+  createdAt   DateTime @default(now())
 
-  
-  operation     MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  operation MutationOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
 
   @@index([operationId, createdAt])
   @@index([eventType, createdAt])
   @@index([actorId, createdAt(sort: Desc)])
 }
 
-
-
 model AgentRun {
-  id             String         @id @default(cuid())
-  siteId         String
+  id     String @id @default(cuid())
+  siteId String
 
-  agentType      String         
-  status         AgentRunStatus @default(QUEUED)
+  agentType String
+  status    AgentRunStatus @default(QUEUED)
 
-  
-  parentRunId    String?
-  parentRun      AgentRun?      @relation("AgentRunHierarchy", fields: [parentRunId], references: [id], onDelete: SetNull)
-  childRuns      AgentRun[]     @relation("AgentRunHierarchy")
+  parentRunId String?
+  parentRun   AgentRun?  @relation("AgentRunHierarchy", fields: [parentRunId], references: [id], onDelete: SetNull)
+  childRuns   AgentRun[] @relation("AgentRunHierarchy")
 
-  startedAt      DateTime?
-  completedAt    DateTime?
-  lastHeartbeatAt DateTime?  
+  startedAt       DateTime?
+  completedAt     DateTime?
+  lastHeartbeatAt DateTime?
 
-  itemsProcessed Int            @default(0)
-  findingCount   Int            @default(0)
+  itemsProcessed Int @default(0)
+  findingCount   Int @default(0)
 
-  tokensUsed     Int?
-  costUsd        Decimal?
+  tokensUsed Int?
+  costUsd    Decimal?
 
-  triggerEvent   String?        
-  metadata       Json?          
+  triggerEvent String?
+  metadata     Json?
 
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  site           Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  findings       AgentFinding[]
+  site     Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  findings AgentFinding[]
 
   @@index([siteId, agentType, createdAt(sort: Desc)])
   @@index([siteId, status])
@@ -2307,32 +2289,32 @@ model AgentRun {
 }
 
 model AgentFinding {
-  id             String          @id @default(cuid())
-  agentRunId     String
+  id         String @id @default(cuid())
+  agentRunId String
 
   // Stable identity of the underlying issue.
   // sha256(siteId:type:resourceType:resourceId)
-  fingerprint    String
+  fingerprint String
 
-  type           String          
-  severity       FindingSeverity
-  status         FindingStatus   @default(OPEN)
+  type     String
+  severity FindingSeverity
+  status   FindingStatus   @default(OPEN)
 
-  title          String
-  description    String          @db.Text
+  title       String
+  description String @db.Text
 
   // 0.0–1.0
-  confidence     Float
+  confidence Float
 
-  resourceType   String?         
-  resourceId     String?         
+  resourceType String?
+  resourceId   String?
 
-  recommendation String?         @db.Text
+  recommendation String? @db.Text
 
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  agentRun       AgentRun        @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+  agentRun AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
 
   evidence         FindingEvidence[]
   opportunityLinks OpportunityFinding[]
@@ -2345,134 +2327,120 @@ model AgentFinding {
 }
 
 model FindingEvidence {
-  id          String   @id @default(cuid())
-  findingId   String
+  id        String @id @default(cuid())
+  findingId String
 
-  sourceType  String          
-  sourceId    String?         
+  sourceType String
+  sourceId   String?
 
-  metric      String?         
-  value       String?         
-  metadata    Json?           
+  metric   String?
+  value    String?
+  metadata Json?
 
-  observedAt  DateTime @default(now()) 
+  observedAt DateTime @default(now())
 
-  finding     AgentFinding    @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  finding AgentFinding @relation(fields: [findingId], references: [id], onDelete: Cascade)
 
   @@index([findingId])
   @@index([sourceType, sourceId])
 }
 
-
 model OpportunityFinding {
-  id              String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  decisionId      String
-  findingId       String
+  decisionId String
+  findingId  String
 
-  createdAt       DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  decision        GrowthDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-  finding         AgentFinding   @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  decision GrowthDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  finding  AgentFinding   @relation(fields: [findingId], references: [id], onDelete: Cascade)
 
   @@unique([decisionId, findingId])
   @@index([findingId])
 }
 
 model Ga4DailyPerformance {
-  id              String   @id @default(cuid())
-  siteId          String
-  date            String   
-  landingPage     String
+  id          String @id @default(cuid())
+  siteId      String
+  date        String
+  landingPage String
 
-  sessions        Int      @default(0)
-  users           Int      @default(0)
-  engagedSessions Int      @default(0)
-  conversions     Float    @default(0)
+  sessions        Int    @default(0)
+  users           Int    @default(0)
+  engagedSessions Int    @default(0)
+  conversions     Float  @default(0)
   engagementRate  Float?
-  pageviews       Int      @default(0)
+  pageviews       Int    @default(0)
 
-  fetchedAt       DateTime @default(now())
+  fetchedAt DateTime @default(now())
 
-  site            Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@unique([siteId, date, landingPage])
   @@index([siteId, date(sort: Desc)])
   @@index([siteId, landingPage, date(sort: Desc)])
 }
 
-
 model ActionProposal {
-  id                  String    @id @default(cuid())
-  siteId              String
-  decisionId          String
-  operationId         String?   @unique
-  idempotencyKey      String    @unique
+  id             String  @id @default(cuid())
+  siteId         String
+  decisionId     String
+  operationId    String? @unique
+  idempotencyKey String  @unique
 
-  
-  previousProposalId  String?
-  previousProposal    ActionProposal?  @relation("ProposalRetryChain", fields: [previousProposalId], references: [id])
-  retryProposals      ActionProposal[] @relation("ProposalRetryChain")
+  previousProposalId String?
+  previousProposal   ActionProposal?  @relation("ProposalRetryChain", fields: [previousProposalId], references: [id])
+  retryProposals     ActionProposal[] @relation("ProposalRetryChain")
 
-  
-  actionType          String    
-  targetUrl           String
-  targetModel         String    
-  targetId            String
+  actionType  String
+  targetUrl   String
+  targetModel String
+  targetId    String
 
- 
-  proposedChanges     Json      
-  expectedOutcome     String    @db.Text
+  proposedChanges Json
+  expectedOutcome String @db.Text
 
-  
-  riskLevel           String   
-  safetyTier          Int       @default(1) 
-  confidence          Float
+  riskLevel  String
+  safetyTier Int    @default(1)
+  confidence Float
 
-  
-  status              String    @default("DRAFT")
- 
+  status String @default("DRAFT")
 
- 
-  requiresApproval    Boolean   @default(true)
-  approvedBy          String?
-  approvedAt          DateTime?
-  approvalExpiresAt   DateTime?
-  approvalHash        String? 
+  requiresApproval  Boolean   @default(true)
+  approvedBy        String?
+  approvedAt        DateTime?
+  approvalExpiresAt DateTime?
+  approvalHash      String?
 
-  
-  attemptCount        Int       @default(0)
-  maxAttempts         Int       @default(3)
-  lastAttemptAt       DateTime?
-  lastAttemptError    String?   @db.Text
+  attemptCount     Int       @default(0)
+  maxAttempts      Int       @default(3)
+  lastAttemptAt    DateTime?
+  lastAttemptError String?   @db.Text
 
-  
-  verificationCriteria  Json   
-  verificationUrl       String? 
-  verifiedAt            DateTime?
-  verificationResult    String? 
-  verificationDetails   Json?   
+  verificationCriteria Json
+  verificationUrl      String?
+  verifiedAt           DateTime?
+  verificationResult   String?
+  verificationDetails  Json?
 
-  
-  rolledBackBy        String?   
-  rolledBackAt        DateTime?
-  rollbackReason      String?   
+  rolledBackBy   String?
+  rolledBackAt   DateTime?
+  rollbackReason String?
 
- 
-  generatedBy         String    @default("system:proposal-generator")
-
+  generatedBy String @default("system:proposal-generator")
 
   metadata            Json?
   diagnosticFindingId String?
   findingFingerprint  String?
 
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  completedAt         DateTime?
-  site                Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  decision            GrowthDecision     @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-  operation           MutationOperation? @relation(fields: [operationId], references: [id], onDelete: SetNull)
-  diagnosticFinding   DiagnosticFindingRecord? @relation("ActionFinding", fields: [diagnosticFindingId], references: [id], onDelete: SetNull)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  completedAt       DateTime?
+  site              Site                     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  decision          GrowthDecision           @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  operation         MutationOperation?       @relation(fields: [operationId], references: [id], onDelete: SetNull)
+  diagnosticFinding DiagnosticFindingRecord? @relation("ActionFinding", fields: [diagnosticFindingId], references: [id], onDelete: SetNull)
 
   @@index([siteId, status])
   @@index([decisionId])
@@ -2487,35 +2455,33 @@ model ActionProposal {
 model BudgetReservation {
   id          String    @id @default(cuid())
   siteId      String
-  operationId String?   
-  traceId     String?   
+  operationId String?
+  traceId     String?
   status      String    @default("RESERVED")
   reservedAt  DateTime  @default(now())
   consumedAt  DateTime?
   releasedAt  DateTime?
-  reason      String?   
+  reason      String?
 
-  site        Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId, status, reservedAt])
   @@index([siteId, reservedAt])
 }
 
-
 model CircuitBreaker {
-  id                    String    @id @default(cuid())
-  siteId                String
-  channel               String    
-
+  id      String @id @default(cuid())
+  siteId  String
+  channel String
 
   state                 String    @default("CLOSED")
   consecutiveFailures   Int       @default(0)
-  consecutiveSuccesses  Int       @default(0)  
+  consecutiveSuccesses  Int       @default(0)
   lastFailureAt         DateTime?
   lastSuccessAt         DateTime?
   openedAt              DateTime?
-  nextAttemptAt         DateTime? 
-  halfOpenProbeInFlight Boolean   @default(false) 
+  nextAttemptAt         DateTime?
+  halfOpenProbeInFlight Boolean   @default(false)
   updatedAt             DateTime  @updatedAt
   site                  Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
@@ -2523,21 +2489,20 @@ model CircuitBreaker {
   @@index([state])
 }
 
-
 model AutonomousExecutionClaim {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   siteId        String
-  opportunityId String   @unique  
+  opportunityId String    @unique
   proposalId    String
-  claimedBy     String   
-  claimedAt     DateTime @default(now())
-  generation    Int      @default(1)
-  status        String   @default("ACTIVE")
+  claimedBy     String
+  claimedAt     DateTime  @default(now())
+  generation    Int       @default(1)
+  status        String    @default("ACTIVE")
   completedAt   DateTime?
   releasedAt    DateTime?
   releaseReason String?
 
-  site          Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId, status])
 }
@@ -2545,42 +2510,42 @@ model AutonomousExecutionClaim {
 model ExecutionTrace {
   id                  String    @id @default(cuid())
   siteId              String
-  parentTraceId       String?   
-  triggerType          String   
-  triggerId            String?  
-  findingId            String?
-  findingType          String?
-  opportunityId        String
-  opportunityScore     Float
-  proposalId           String?
-  actionType           String
-  safetyTier           Int
-  riskLevel            String?
-  riskScore            Int?
-  operatingMode        String
-  effectiveTierLimit   Int
-  policyDecision       String   
-  policyReason         String
-  budgetReservationId  String?
-  circuitBreakerState  String? 
-  operationId          String?
-  attemptNumber        Int      @default(1)
-  executionResult      String? 
-  failureClass         String?  
-  retryCount           Int      @default(0)
-  actorType            String   
-  actorId              String?
-  verificationStatus   String?  
-  verificationAt       DateTime?
-  metricsBaseline      Json?
-  metricsAfter         Json?
-  discoveredAt         DateTime
-  authorizedAt         DateTime?
-  executedAt           DateTime?
-  completedAt          DateTime?
-  createdAt            DateTime  @default(now())
+  parentTraceId       String?
+  triggerType         String
+  triggerId           String?
+  findingId           String?
+  findingType         String?
+  opportunityId       String
+  opportunityScore    Float
+  proposalId          String?
+  actionType          String
+  safetyTier          Int
+  riskLevel           String?
+  riskScore           Int?
+  operatingMode       String
+  effectiveTierLimit  Int
+  policyDecision      String
+  policyReason        String
+  budgetReservationId String?
+  circuitBreakerState String?
+  operationId         String?
+  attemptNumber       Int       @default(1)
+  executionResult     String?
+  failureClass        String?
+  retryCount          Int       @default(0)
+  actorType           String
+  actorId             String?
+  verificationStatus  String?
+  verificationAt      DateTime?
+  metricsBaseline     Json?
+  metricsAfter        Json?
+  discoveredAt        DateTime
+  authorizedAt        DateTime?
+  executedAt          DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
 
-  site                 Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId, createdAt(sort: Desc)])
   @@index([opportunityId])
@@ -2590,53 +2555,53 @@ model ExecutionTrace {
 }
 
 model ActionPerformance {
-  id                String   @id @default(cuid())
-  siteId            String
-  actionType        String
-  totalExperiments  Int
-  wins              Int
-  losses            Int
-  inconclusive      Int
-  aborted           Int
-  winRate           Float    
-  avgPositionDelta  Float?
-  avgClicksLift     Float?
-  avgCtrLift        Float?
-  avgConfidence     Float?
+  id               String @id @default(cuid())
+  siteId           String
+  actionType       String
+  totalExperiments Int
+  wins             Int
+  losses           Int
+  inconclusive     Int
+  aborted          Int
+  winRate          Float
+  avgPositionDelta Float?
+  avgClicksLift    Float?
+  avgCtrLift       Float?
+  avgConfidence    Float?
 
-  computedAt        DateTime @default(now())
-  computedVersion   String   @default("d6-v1")
-  experimentCount   Int     
+  computedAt      DateTime @default(now())
+  computedVersion String   @default("d6-v1")
+  experimentCount Int
 
-  site              Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@unique([siteId, actionType])
   @@index([siteId])
 }
 
 model LearnedSignal {
-  id                String   @id @default(cuid())
-  siteId            String
-  signalType        String   
-  actionType        String
+  id         String @id @default(cuid())
+  siteId     String
+  signalType String
+  actionType String
 
-  adjustment        Float    
-  magnitude         String   
+  adjustment Float
+  magnitude  String
 
-  derivedFrom       Int      
-  winRate           Float    
-  reason            String   
+  derivedFrom Int
+  winRate     Float
+  reason      String
 
-  status            String   @default("PROPOSED")
-  version           Int      @default(1)
-  activatedAt       DateTime?
-  supersededAt      DateTime?
-  supersededBy      String?  
+  status       String    @default("PROPOSED")
+  version      Int       @default(1)
+  activatedAt  DateTime?
+  supersededAt DateTime?
+  supersededBy String?
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  site              Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId, status])
   @@index([siteId, actionType])
@@ -2644,35 +2609,134 @@ model LearnedSignal {
 }
 
 model PortfolioAllocation {
-  id                 String   @id @default(cuid())
-  siteId             String
-  opportunityId      String
+  id            String @id @default(cuid())
+  siteId        String
+  opportunityId String
 
-  cycleId            String      
-  optimizerVersion   String      
+  cycleId          String
+  optimizerVersion String
 
-  decision           String      
-  rank               Int?        
-  utilityScore       Float?
+  decision     String
+  rank         Int?
+  utilityScore Float?
 
-  reasonCodes        Json        
+  reasonCodes Json
 
-  scoreRecordId      String
-  evidenceHash       String
-  learningVersion    String?     
+  scoreRecordId   String
+  evidenceHash    String
+  learningVersion String?
 
-  constraintSnapshot Json        
-  candidateSnapshot  Json        
+  constraintSnapshot Json
+  candidateSnapshot  Json
 
-  experimentPreference String?   
+  experimentPreference String?
 
-  allocatedAt        DateTime    @default(now())
-  expiresAt          DateTime     
+  allocatedAt DateTime @default(now())
+  expiresAt   DateTime
 
-  site               Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  opportunity        GrowthDecision @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  site        Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  opportunity GrowthDecision @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
 
   @@unique([cycleId, opportunityId])
   @@index([siteId, decision, expiresAt])
   @@index([siteId, cycleId])
+}
+
+// ── Keyword Evidence Database ─────────────────────────────────────────────────
+// These models store real measured data for every keyword research session.
+// No AI-generated metrics are stored here — only values from real data sources.
+
+model KeywordResearchRun {
+  id            String    @id @default(cuid())
+  siteId        String
+  /// "RUNNING" | "COMPLETED" | "PARTIAL" | "FAILED"
+  status        String    @default("RUNNING")
+  /// Identifies which engine version produced this run
+  sourceVersion String    @default("v2-evidence")
+  locationCode  Int       @default(2840)
+  languageCode  String    @default("en")
+  /// Which data sources were successfully queried
+  dataSources   String[]  @default([])
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  site      Site                       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  metrics   KeywordMetricSnapshot[]
+  serps     KeywordSerpSnapshot[]
+  community KeywordCommunityEvidence[]
+
+  @@index([siteId, startedAt(sort: Desc)])
+  @@index([siteId, status])
+}
+
+model KeywordMetricSnapshot {
+  id                String   @id @default(cuid())
+  runId             String
+  keyword           String
+  /// Monthly search volume from Google Ads. Null = not returned by API.
+  searchVolume      Int?
+  /// Organic SEO ranking difficulty (0-100) from DataForSEO Labs. Null = not fetched.
+  keywordDifficulty Int?
+  /// Paid-search competition index (0-100) from Google Ads. NOT organic difficulty.
+  competitionIndex  Int?
+  /// Cost per click in USD
+  cpc               Float?
+  /// Monthly search volume trend (JSON array of 12 monthly values)
+  trendData         Json?
+  /// Which API endpoint provided these metrics
+  source            String   @default("DataForSEO")
+  locationCode      Int
+  languageCode      String   @default("en")
+  observedAt        DateTime @default(now())
+
+  run KeywordResearchRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, keyword])
+  @@index([keyword, observedAt(sort: Desc)])
+}
+
+model KeywordSerpSnapshot {
+  id           String   @id @default(cuid())
+  runId        String
+  keyword      String
+  locationCode Int
+  languageCode String   @default("en")
+  device       String   @default("desktop")
+  /// Full organic results JSON (array of SerpOrganicResult)
+  results      Json
+  /// Feature types present in SERP (featured_snippet, local_pack, etc.)
+  featureTypes Json
+  /// Deterministic feasibility score 1-10 computed from SERP evidence
+  feasibility  Int
+  /// JSON of SerpFeasibilityResult signals for the evidence drawer
+  signals      Json?
+  observedAt   DateTime @default(now())
+
+  run KeywordResearchRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, keyword])
+  @@index([keyword, observedAt(sort: Desc)])
+}
+
+model KeywordCommunityEvidence {
+  id          String    @id @default(cuid())
+  runId       String
+  keyword     String
+  /// Platform the signal was observed on (e.g. "Reddit")
+  source      String
+  /// Direct URL to the post/thread
+  sourceUrl   String?
+  /// Subreddit, community name, or channel
+  community   String?
+  /// Post title or question text
+  title       String?
+  upvotes     Int?
+  /// When the original post was published
+  publishedAt DateTime?
+  retrievedAt DateTime  @default(now())
+
+  run KeywordResearchRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, keyword])
+  @@index([keyword, retrievedAt(sort: Desc)])
 }

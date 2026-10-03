@@ -9,10 +9,34 @@ interface TrendingKeyword {
 interface NewsItem {
     title?: string;
     snippet?: string;
+    link?: string;
+    source?: string;
+    /** Relative date string from Serper, e.g. "3 hours ago" */
+    date?: string;
 }
 
 interface SerperResponse {
     news?: NewsItem[];
+}
+
+/** A real, citable news headline observed for a niche. */
+export interface NewsHeadline {
+    title: string;
+    snippet: string;
+    url: string | null;
+    /** Publishing outlet, e.g. "TechCrunch" */
+    outlet: string | null;
+    /** Relative publish date as reported by Serper (e.g. "2 days ago") */
+    publishedLabel: string | null;
+}
+
+export interface TrendSignals {
+    /** Where the signal came from */
+    source: "Serper News";
+    observedAt: Date;
+    headlines: NewsHeadline[];
+    /** Most frequent significant terms across the headlines */
+    terms: string[];
 }
 
 const STOP_WORDS = new Set([
@@ -85,15 +109,20 @@ async function upsertTrendingTopic(
     }
 }
 
-export async function fetchTrendingTopics(
+/**
+ * Fetches real news headlines for a niche from Serper News.
+ * Returns null when the API is unavailable — callers must treat that as
+ * "no trend evidence", never as an invitation to fabricate trends.
+ */
+export async function fetchTrendSignals(
     industry: string,
     country: string
-): Promise<TrendingKeyword[]> {
+): Promise<TrendSignals | null> {
     const apiKey = process.env.SERPER_API_KEY;
 
     if (!apiKey) {
         logger.warn("[Trending] SERPER_API_KEY not configured");
-        return [];
+        return null;
     }
 
     const safeIndustry = sanitizeInput(industry);
@@ -101,7 +130,7 @@ export async function fetchTrendingTopics(
 
     if (!safeIndustry || !safeCountry) {
         logger.warn("[Trending] Invalid industry or country input");
-        return [];
+        return null;
     }
 
     const gl = safeCountry.toLowerCase().slice(0, 2);
@@ -127,23 +156,48 @@ export async function fetchTrendingTopics(
 
         const data: SerperResponse = await res.json();
         const newsItems: NewsItem[] = data.news ?? [];
-        const keywords = extractKeywords(newsItems);
+        const terms = extractKeywords(newsItems);
 
-        await upsertTrendingTopic(safeIndustry, safeCountry, keywords, newsItems);
+        await upsertTrendingTopic(safeIndustry, safeCountry, terms, newsItems);
 
-        logger.info("[Trending] Topics fetched", {
+        logger.info("[Trending] Signals fetched", {
             industry: safeIndustry,
             country: safeCountry,
-            count: keywords.length,
+            headlines: newsItems.length,
         });
 
-        return keywords.map((keyword) => ({ keyword }));
+        return {
+            source: "Serper News",
+            observedAt: new Date(),
+            terms,
+            headlines: newsItems
+                .filter((n) => n.title)
+                .map((n) => ({
+                    title: n.title!,
+                    snippet: n.snippet ?? "",
+                    url: n.link ?? null,
+                    outlet: n.source ?? null,
+                    publishedLabel: n.date ?? null,
+                })),
+        };
     } catch (error: unknown) {
-        logger.error("[Trending] Failed to fetch topics", {
+        logger.error("[Trending] Failed to fetch signals", {
             industry: safeIndustry,
             country: safeCountry,
             error: error instanceof Error ? error.message : String(error),
         });
-        return [];
+        return null;
     }
+}
+
+/**
+ * Legacy helper — returns the most frequent terms in recent niche news.
+ * Prefer fetchTrendSignals(), which keeps headline provenance.
+ */
+export async function fetchTrendingTopics(
+    industry: string,
+    country: string
+): Promise<TrendingKeyword[]> {
+    const signals = await fetchTrendSignals(industry, country);
+    return (signals?.terms ?? []).map((keyword) => ({ keyword }));
 }

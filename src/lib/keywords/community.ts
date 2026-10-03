@@ -1,11 +1,24 @@
 import { logger, formatError } from "@/lib/logger";
 
+/**
+ * A keyword signal mined from a community platform.
+ * Only "Reddit" is currently implemented — do not label entries
+ * as "Quora" unless Quora fetching is actually wired up.
+ */
 export interface CommunityKeyword {
   keyword: string;
-  source: "Reddit" | "Quora";
+  /** The actual platform the signal was observed on */
+  source: "Reddit";
   subreddit?: string;
   upvotes: number;
+  /** Original post title that contained this keyword pattern */
   questionPattern: string;
+  /** Direct URL to the source post */
+  postUrl?: string;
+  /** When the post was originally published (Unix timestamp) */
+  postCreatedAt?: Date;
+  /** When we retrieved this signal */
+  retrievedAt: Date;
 }
 
 const FETCH_TIMEOUT_MS = 8000;
@@ -39,14 +52,26 @@ export async function mineRedditKeywords(
 
       const data = await res.json();
       const posts = data.data?.children ?? [];
+      const retrievedAt = new Date();
 
       for (const post of posts) {
         const title: string = post.data?.title ?? "";
         const score: number = post.data?.score ?? 0;
+        const permalink: string = post.data?.permalink ?? "";
+        const createdUtc: number | undefined = post.data?.created_utc;
         if (!isQuestionOrSearch(title)) continue;
         const keyword = extractKeyword(title);
         if (!keyword || keyword.length < 5) continue;
-        results.push({ keyword, source: "Reddit", subreddit: sub, upvotes: score, questionPattern: title });
+        results.push({
+          keyword,
+          source: "Reddit",
+          subreddit: sub,
+          upvotes: score,
+          questionPattern: title,
+          postUrl: permalink ? `https://www.reddit.com${permalink}` : undefined,
+          postCreatedAt: createdUtc ? new Date(createdUtc * 1000) : undefined,
+          retrievedAt,
+        });
       }
     } catch (err: unknown) {
       logger.warn("[community] Reddit fetch failed", { subreddit: sub, error: formatError(err) });

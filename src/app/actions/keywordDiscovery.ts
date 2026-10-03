@@ -564,6 +564,41 @@ export async function runSeoResearch(siteId: string): Promise<
     }
 }
 
+/**
+ * Stage 2 of SEO research: measures every candidate keyword with real data
+ * (DataForSEO, Labs KD, live SERP, GSC, competitors, Reddit, news) and persists
+ * the evidence run. Called by the client right after runSeoResearch.
+ */
+export async function enrichSeoResearch(siteId: string, report: SeoResearchReport): Promise<
+    { success: true; report: SeoResearchReport } | { success: false; error: string }
+> {
+    try {
+        const ctx = await requireSiteAccess(siteId);
+        if (!ctx) return { success: false, error: "Unauthorized" };
+        if (!report || !Array.isArray(report.masterList)) {
+            return { success: false, error: "Invalid report." };
+        }
+
+        const { success: rlSuccess } = await limiters.citationGap.limit(`research-enrich:${ctx.user.id}`);
+        if (!rlSuccess) return { success: false, error: "Too many requests. Please wait before measuring again." };
+
+        // Cap candidate count — client-supplied payload drives paid API calls.
+        const bounded: SeoResearchReport = {
+            ...report,
+            masterList: report.masterList.slice(0, 30),
+            competitorKeywordIdeas: (report.competitorKeywordIdeas ?? []).slice(0, 8),
+        };
+
+        const { enrichSeoResearchReport } = await import("@/lib/keywords/seoResearch");
+        const enriched = await enrichSeoResearchReport(siteId, bounded);
+        return { success: true, report: enriched };
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : "Failed to measure keywords.";
+        logger.error("[SeoResearch] Enrichment error:", { error: msg });
+        return { success: false, error: msg };
+    }
+}
+
 export async function runTrendRefresh(siteId: string): Promise<
     { success: true; trends: TrendRow[] } | { success: false; error: string }
 > {
@@ -571,8 +606,8 @@ export async function runTrendRefresh(siteId: string): Promise<
         const ctx = await requireSiteAccess(siteId);
         if (!ctx) return { success: false, error: "Unauthorized" };
 
-        const { runTrendSimulation } = await import("@/lib/keywords/seoResearch");
-        const trends = await runTrendSimulation(siteId);
+        const { runTrendRefresh: refreshTrends } = await import("@/lib/keywords/seoResearch");
+        const trends = await refreshTrends(siteId);
         return { success: true, trends };
     } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : "Failed to refresh trends.";

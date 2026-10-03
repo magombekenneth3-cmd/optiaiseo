@@ -12,6 +12,21 @@ export interface EnrichedKeyword {
     gscCtr?: number;
     gscUrl?: string;
     searchVolume?: number;
+    /**
+     * Organic SEO difficulty (0-100). Source: DataForSEO Labs.
+     * This is the correct metric for "how hard is it to rank organically".
+     */
+    keywordDifficulty?: number;
+    /**
+     * Paid-search competition index (0-100). Source: Google Ads.
+     * NOT organic difficulty — do not use this to gauge ranking effort.
+     */
+    competitionIndex?: number;
+    /**
+     * @deprecated Use keywordDifficulty instead.
+     * Kept for backward compatibility with existing consumers.
+     * Maps to keywordDifficulty when available.
+     */
     difficulty?: number;
     cpc?: number;
     intent?: string;
@@ -47,18 +62,19 @@ function computeTopicalAuthorityScore(keywords: EnrichedKeyword[]): number {
 }
 
 function buildCluster(topic: string, keywords: EnrichedKeyword[]): KeywordCluster {
-    // searchVolume is only populated after DataForSEO enrichment.  When it is
-    // absent (GSC-only users, enrichment not configured, or quota exceeded) fall
-    // back to gscImpressions so the Revenue Clusters panel shows real numbers
-    // rather than "$0 / 0 search/mo" for every cluster.
+    // IMPORTANT: searchVolume is NOT the same as gscImpressions.
+    // gscImpressions = how many times Google showed you in results (influenced by rankings).
+    // searchVolume = total monthly searches for this keyword (market demand).
+    // Using gscImpressions as volume would severely over/understate demand.
+    // The fallback below is noted as a known approximation limitation in the UI.
     const volumeOf = (k: EnrichedKeyword) =>
-        (k.searchVolume ?? 0) > 0 ? k.searchVolume! : (k.gscImpressions ?? 0);
+        (k.searchVolume ?? 0) > 0 ? k.searchVolume! : 0;
 
     return {
         topic,
         keywords,
         totalVolume: keywords.reduce((sum, k) => sum + volumeOf(k), 0),
-        avgDifficulty: keywords.reduce((sum, k) => sum + (k.difficulty ?? 50), 0) / (keywords.length || 1),
+        avgDifficulty: keywords.reduce((sum, k) => sum + (k.keywordDifficulty ?? k.difficulty ?? 50), 0) / (keywords.length || 1),
         opportunityScore: keywords.reduce((sum, k) => sum + k.opportunityScore, 0),
         topicalAuthorityScore: computeTopicalAuthorityScore(keywords),
         projectedMonthlyRevenue: keywords.reduce(
@@ -107,10 +123,15 @@ export const getEnrichedKeywords = async (opts: {
             for (const [kw, data] of metrics) {
                 const existing = enriched.get(kw);
                 if (!existing) continue;
+                // keywordDifficulty is null from the Ads endpoint — only populated by Labs.
+                // We do NOT map competition_index to difficulty here.
                 enriched.set(kw, {
                     ...existing,
                     searchVolume: data.searchVolume > 0 ? data.searchVolume : existing.searchVolume,
-                    difficulty: data.difficulty > 0 ? data.difficulty : existing.difficulty,
+                    competitionIndex: data.competitionIndex,
+                    // Keep legacy difficulty field pointing at keywordDifficulty for backward compat
+                    difficulty: data.keywordDifficulty ?? existing.difficulty,
+                    keywordDifficulty: data.keywordDifficulty ?? existing.keywordDifficulty,
                     cpc: data.cpc > 0 ? data.cpc : existing.cpc,
                 });
             }
@@ -370,8 +391,12 @@ export function computeOpportunityScore(
     let recommendation = "";
 
     const pos = kw.gscPosition ?? kw.ahrefsPosition ?? 100;
-    const volume = kw.searchVolume ?? kw.gscImpressions ?? 0;
-    const diff = kw.difficulty ?? 50;
+    // IMPORTANT: Use real search volume (market demand) only.
+    // GSC impressions are NOT a substitute for search volume —
+    // they reflect your current visibility, not total market demand.
+    const volume = kw.searchVolume ?? 0;
+    // Use organic KD if available; competitionIndex is paid-search, not organic difficulty
+    const diff = kw.keywordDifficulty ?? kw.difficulty ?? 50;
 
     if (pos > 10 && pos <= 20 && volume > 100) {
         score = Math.round((volume / pos) * 2);
@@ -380,14 +405,20 @@ export function computeOpportunityScore(
         score = Math.round(volume / pos);
         recommendation = `Ranking #${pos} with ${volume} searches/mo. A dedicated page could capture this traffic.`;
     } else if (pos <= 10 && kw.gscCtr && kw.gscCtr < 3 && (kw.gscImpressions ?? 0) > 100) {
+        // CTR optimization — valid use of impressions (not as volume proxy)
         score = Math.round((kw.gscImpressions ?? 0) * 0.5);
         recommendation = `Good position but low CTR (${kw.gscCtr}%). Improve your title and meta description.`;
     } else if (volume > 500 && diff < 40) {
         score = Math.round(volume * (1 - diff / 100));
         recommendation = `High volume (${volume}/mo), low difficulty (${diff}/100) — great keyword to target.`;
-    } else {
+    } else if (volume > 0) {
         score = Math.max(1, Math.round(volume / (diff + 10)));
-        recommendation = `Standard keyword with volume ${volume} and difficulty ${diff}. Maintain optimization.`;
+        recommendation = `Volume ${volume}/mo, difficulty ${diff}/100. Include in your content strategy.`;
+    } else {
+        // No volume data — score based on GSC signal only
+        const gscScore = Math.round((kw.gscClicks ?? 0) * 0.5 + (kw.gscImpressions ?? 0) * 0.01);
+        score = Math.max(1, gscScore);
+        recommendation = `No search volume data. Monitor GSC performance (${kw.gscClicks ?? 0} clicks, ${kw.gscImpressions ?? 0} impressions).`;
     }
 
     if (score > 0 && kw.intent) {

@@ -71,7 +71,7 @@ export const rankTrackerSiteJob = inngest.createFunction(
                 const map = await getKeywordMetricsBatch(
                     top50.map((k) => k.keyword),
                     locationCode
-                ) as Map<string, { searchVolume: number; difficulty: number; cpc: number }>;
+                );
                 return Object.fromEntries(map);
             } catch (err: unknown) {
                 logger.warn("[RankTracker] DataForSEO batch failed", { error: (err as Error)?.message });
@@ -81,7 +81,7 @@ export const rankTrackerSiteJob = inngest.createFunction(
 
         await step.run("write-snapshots", async () => {
             const snapshots = top50.map((kw) => {
-                const metrics = (volumeMap as Record<string, { searchVolume: number; difficulty: number }>)[kw.keyword.toLowerCase()];
+                const metrics = (volumeMap as Record<string, { searchVolume: number; keywordDifficulty: number | null }>)[kw.keyword.toLowerCase()];
                 return {
                     siteId,
                     keyword: kw.keyword,
@@ -89,7 +89,7 @@ export const rankTrackerSiteJob = inngest.createFunction(
                     position: Math.round(kw.position),
                     url: kw.url,
                     device: "desktop",
-                    ...(metrics ? { searchVolume: metrics.searchVolume, difficulty: metrics.difficulty } : {}),
+                    ...(metrics ? { searchVolume: metrics.searchVolume, difficulty: metrics.keywordDifficulty ?? 0 } : {}),
                 };
             });
             await prisma.rankSnapshot.createMany({ data: snapshots });

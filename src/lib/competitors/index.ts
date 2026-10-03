@@ -462,7 +462,7 @@ export async function fetchCompetitorIntelligence(
                 const real = metrics.get(gap.keyword);
                 if (real && real.searchVolume > 0) {
                     gap.searchVolume = real.searchVolume;
-                    gap.difficulty = real.difficulty;
+                    gap.difficulty = real.keywordDifficulty ?? gap.difficulty;
                     gap.estimatedMonthlyVisits = estimateMonthlyVisits(
                         gap.position,
                         real.searchVolume,

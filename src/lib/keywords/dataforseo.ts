@@ -1,12 +1,33 @@
 import { logger, formatError } from "@/lib/logger";
 
+/**
+ * Metrics sourced from DataForSEO Google Ads Search Volume endpoint.
+ * NOTE: competition / competitionIndex are PAID-SEARCH metrics.
+ * keywordDifficulty is the organic ranking difficulty from DataForSEO Labs.
+ */
 export interface KeywordMetrics {
     keyword: string;
+    /** Monthly search volume from Google Ads */
     searchVolume: number;
-    difficulty: number;
-    cpc: number;
+    /** Organic SEO keyword difficulty (0-100). Null when Labs endpoint not called. Source: DataForSEO Labs keyword_difficulty */
+    keywordDifficulty: number | null;
+    /** Paid search competition score (0-1). Source: Google Ads competition */
     competition: number;
+    /** Paid search competition index (0-100). Source: Google Ads competition_index */
+    competitionIndex: number;
+    /** Cost per click in USD. Source: Google Ads */
+    cpc: number;
+    /** Monthly search volume trend (last 12 months) */
     trend: number[];
+}
+
+export interface SerpOrganicResult {
+    url: string;
+    domain: string;
+    rank: number;
+    title: string;
+    /** Approximate referring domains from DataForSEO SERP item (may be absent) */
+    backlinks?: number;
 }
 
 export interface SerpFeatureData {
@@ -14,6 +35,10 @@ export interface SerpFeatureData {
     hasLocalPack: boolean;
     hasShopping: boolean;
     items: Array<{ type: string; url?: string }>;
+    /** Parsed organic results enriched for feasibility scoring */
+    organicResults: SerpOrganicResult[];
+    /** All SERP feature type strings present (for feasibility score deductions) */
+    featureTypes: string[];
 }
 
 export const DATAFORSEO_LOCATION_CODES: Record<string, number> = {
@@ -198,7 +223,7 @@ export async function getKeywordMetricsBatch(
                 competition: number;
                 competition_index: number;
                 cpc: number;
-                monthly_searches: Array<{ search_volume: number }> | null;
+                monthly_searches: Array<{ year?: number; month?: number; search_volume: number }> | null;
             }> = data?.tasks?.[0]?.result ?? [];
 
             for (const item of items) {
@@ -207,16 +232,82 @@ export async function getKeywordMetricsBatch(
                 results.set(kw, {
                     keyword: kw,
                     searchVolume: item.search_volume ?? 0,
-                    difficulty: Math.round(item.competition_index ?? 0),
+                    // keywordDifficulty is intentionally null here — it comes from the Labs endpoint.
+                    // competition_index is PAID-SEARCH competition, NOT organic SEO difficulty.
+                    keywordDifficulty: null,
                     cpc: parseFloat(String(item.cpc ?? 0)),
                     competition: item.competition ?? 0,
-                    trend: (item.monthly_searches ?? [])
-                        .map((m) => m.search_volume)
+                    competitionIndex: Math.round(item.competition_index ?? 0),
+                    // Newest month first — trend direction logic depends on this order.
+                    trend: [...(item.monthly_searches ?? [])]
+                        .sort((a, b) => ((b.year ?? 0) * 12 + (b.month ?? 0)) - ((a.year ?? 0) * 12 + (a.month ?? 0)))
+                        .map((m) => m.search_volume ?? 0)
                         .slice(0, 12),
                 });
             }
         } catch (err: unknown) {
             logger.error("[dataforseo] getKeywordMetricsBatch chunk failed", { error: formatError(err) });
+        }
+    }
+
+    return results;
+}
+
+/**
+ * Fetches organic keyword_difficulty from DataForSEO Labs.
+ * This is the actual SEO ranking difficulty (0-100, logarithmic) based on the
+ * link profiles of the top-10 organic results — NOT the Google Ads competition_index.
+ *
+ * DataForSEO docs: dataforseo_labs/google/bulk_keyword_difficulty/live
+ * Response shape: tasks[0].result[0].items[] = { keyword, keyword_difficulty }
+ */
+export async function getKeywordDifficultyBatch(
+    keywords: string[],
+    locationCode = DATAFORSEO_LOCATION_CODES.us,
+): Promise<Map<string, number>> {
+    const auth = getAuthHeader();
+    const results = new Map<string, number>();
+    if (!auth) return results;
+
+    const chunks = chunkArray(keywords, 1000);
+
+    for (const chunk of chunks) {
+        try {
+            const res = await fetchDataForSeo(
+                "https://api.dataforseo.com/v3/dataforseo_labs/google/bulk_keyword_difficulty/live",
+                {
+                    method: "POST",
+                    headers: { Authorization: auth, "Content-Type": "application/json" },
+                    body: JSON.stringify([{
+                        keywords: chunk,
+                        location_code: locationCode,
+                        language_code: "en",
+                    }]),
+                },
+                30_000
+            );
+
+            if (!res || !res.ok) {
+                if (res) logger.warn("[dataforseo] Labs bulk_keyword_difficulty not ok", { status: res.status });
+                continue;
+            }
+
+            const data = await res.json();
+            const items: Array<{
+                keyword?: string;
+                keyword_difficulty?: number | null;
+            }> = data?.tasks?.[0]?.result?.[0]?.items ?? [];
+
+            for (const item of items) {
+                const kw = item.keyword?.toLowerCase().trim();
+                if (!kw) continue;
+                const kd = item.keyword_difficulty;
+                if (typeof kd === "number") {
+                    results.set(kw, Math.round(kd));
+                }
+            }
+        } catch (err: unknown) {
+            logger.warn("[dataforseo] getKeywordDifficultyBatch chunk failed", { error: formatError(err) });
         }
     }
 
@@ -233,6 +324,8 @@ export async function getSerpData(
         hasLocalPack: false,
         hasShopping: false,
         items: [],
+        organicResults: [],
+        featureTypes: [],
     };
 
     const auth = getAuthHeader();
@@ -264,19 +357,40 @@ export async function getSerpData(
         }
 
         const data = await res.json();
-        const items: Array<{ type: string; url?: string }> =
-            data?.tasks?.[0]?.result?.[0]?.items ?? [];
+        const items: Array<{
+            type: string;
+            url?: string;
+            title?: string;
+            domain?: string;
+            rank_absolute?: number;
+            backlinks_info?: { referring_domains?: number };
+        }> = data?.tasks?.[0]?.result?.[0]?.items ?? [];
 
         const urls = items
             .filter((i) => i.type === "organic" && i.url)
             .map((i) => i.url!)
             .slice(0, Math.min(maxResults, 10));
 
+        const organicItems = items.filter((i) => i.type === "organic" && i.url);
+        const organicResults: SerpOrganicResult[] = organicItems
+            .slice(0, Math.min(maxResults, 10))
+            .map((i, idx) => ({
+                url: i.url!,
+                domain: i.domain ?? new URL(i.url!).hostname.replace(/^www\./, ""),
+                rank: i.rank_absolute ?? idx + 1,
+                title: i.title ?? "",
+                backlinks: i.backlinks_info?.referring_domains,
+            }));
+
+        const featureTypes = [...new Set(items.map((i) => i.type))];
+
         const features: SerpFeatureData = {
             hasAnswerBox: items.some((i) => i.type === "featured_snippet" || i.type === "answer_box"),
             hasLocalPack: items.some((i) => i.type === "local_pack"),
             hasShopping: items.some((i) => i.type === "shopping"),
             items,
+            organicResults,
+            featureTypes,
         };
 
         return { urls, features };
