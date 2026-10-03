@@ -8,8 +8,8 @@ import {
   PanelLeftOpen, Gift, Code, Shield,
 } from "lucide-react";
 import {
-  MISSION_CONTROL_ITEMS, IMPROVE_ITEMS, MONITOR_ITEMS, AUTOMATE_ITEMS,
-  MORE_ITEMS, SITE_SCOPED_ROUTES, extractSiteId, isRouteInList,
+  OVERVIEW_ITEMS, INTELLIGENCE_ITEMS, CONTENT_STUDIO_ITEMS, AUTOPILOT_ITEMS,
+  MORE_ITEMS, WORKSPACE_ITEMS, SITE_SCOPED_ROUTES, extractSiteId, isRouteInList,
 } from "@/lib/dashboard/nav-config";
 
 function buildHref(base: string, siteId: string | null) {
@@ -140,10 +140,9 @@ function SitePicker({ sites, siteId }: { sites: Site[]; siteId: string | null })
                 role="option"
                 aria-selected={site.id === siteId}
                 onClick={() => switchSite(site.id)}
-                className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-xs transition-colors hover:bg-accent ${
+                className={`flex w-full items-center gap-2.5 rounded-xl border border-border bg-muted/30 px-2.5 py-2.5 text-left text-xs transition-colors hover:bg-accent ${
                   site.id === siteId ? "bg-accent/60" : ""
-                }`}
-              >
+                }}`>
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-[10px] font-bold text-muted-foreground">
                   {domainInitial(site.domain)}
                 </span>
@@ -152,7 +151,7 @@ function SitePicker({ sites, siteId }: { sites: Site[]; siteId: string | null })
               </button>
             ))}
             <div className="border-t border-border px-3 py-2">
-              <Link
+              <Link 
                 href="/dashboard/sites/new"
                 onClick={() => setOpen(false)}
                 className="text-xs font-medium text-muted-foreground hover:text-foreground"
@@ -164,12 +163,11 @@ function SitePicker({ sites, siteId }: { sites: Site[]; siteId: string | null })
         </>
       )}
     </div>
-  );
-}
+  );}
 
-// ─── Main nav ─────────────────────────────────────────────────────────────────
+// ─── Main nav ──────────────────────────────────────────────────────────────────
 
-function SidebarNavInner({
+function SidebarNavInner(p{
   defaultSiteId, sites, isSuperAdmin, isCollapsed, onToggleCollapse,
 }: {
   defaultSiteId?: string | null; sites: Site[]; isSuperAdmin: boolean;
@@ -200,65 +198,74 @@ function SidebarNavInner({
 
       {!isCollapsed && sites.length > 0 && <SitePicker sites={sites} siteId={siteId} />}
 
-      {/* ── Mission Control ─────────────────────────────────── */}
-      <NavLabel collapsed={isCollapsed}>Mission Control</NavLabel>
-      {MISSION_CONTROL_ITEMS.map((item) => (
+      {/* ── Hub 1: Overview ──────────────────────────────────── */}
+      <NavLabel collapsed={isCollapsed}>Overview</NavLabel>
+      {OVERVIEW_ITEMS.map((item) => (
         <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />
       ))}
 
-      {/* ── Improve ─────────────────────────────────────────── */}
-      <NavLabel collapsed={isCollapsed}>Improve</NavLabel>
-      {IMPROVE_ITEMS.map((item) => (
+      {/* ── Hub 2: Intelligence ──────────────────────────────── */}
+      <NavLabel collapsed={isCollapsed}>Intelligence</NavLabel>
+      {INTELLIGENCE_ITEMS.map((item) => (
         <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />
       ))}
 
-      {/* ── Monitor ─────────────────────────────────────────── */}
-      <NavLabel collapsed={isCollapsed}>Monitor</NavLabel>
-      {MONITOR_ITEMS.map((item) => (
+      {/* ── Hub 3: Content Studio ────────────────────────────── */}
+      <NavLabel collapsed={isCollapsed}>Content Studio</NavLabel>
+      {CONTENT_STUDIO_ITEMS.map((item) => (
         <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />
       ))}
 
-      {/* ── Automate ────────────────────────────────────────── */}
-      <NavLabel collapsed={isCollapsed}>Automate</NavLabel>
-      {AUTOMATE_ITEMS.map((item) => (
+      {/* ── Hub 4: Autopilot & Ops ───────────────────────────── */}
+      <NavLabel collapsed={isCollapsed}>Autopilot & Ops</NavLabel>
+      {AUTOPILOT_ITEMS.map((item) => (
         <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />
       ))}
 
-      {/* ── More tools (collapsed section) ──────────────────── */}
-      <div className={isCollapsed ? "mt-2" : "mt-3"}>
-        <button
-          type="button"
-          onClick={() => setMoreOpen((v) => !v)}
-          aria-expanded={moreOpen}
-          className={`relative flex w-full items-center gap-3 rounded-xl text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground ${
-            isCollapsed ? "mx-auto h-10 w-10 justify-center" : "px-3 py-2"
-          }`}
-          title={isCollapsed ? "More tools" : undefined}
-        >
-          <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${moreOpen ? "rotate-180" : ""}`} />
-          {!isCollapsed && (
-            <span className="text-xs font-bold uppercase tracking-[0.12em]">More tools</span>
+      {/* ── More tools (collapsible drawer) ──────────────────── */}
+      {MORE_ITEMS.length > 0 && (
+        <div className={isCollapsed ? "mt-2" : "mt-3"}>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            onClick={() => setMoreOpen((v)`=> !v)}
+            aria-expanded={moreOpen}
+            className={`relative flex w-full items-center gap-3 rounded-xl text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground ${
+              isCollapsed ? "mx-auto h-10 w-10 justify-center" : "px-3 py-2"
+            }`}
+            title={isCollapsed ? "More tools" : undefined}
+          >
+            <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${moreOpen ? "rotate-180" : ""}`} />
+            {!isCollapsed && (
+              <span className="text-xs font-bold uppercase tracking-[0.12em]">More tools</span>
+            )}
+            {moreActive && (
+              <span className={`${isCollapsed ? "absolute right-1 top-1" : "ml-auto"} h-1.5 w-1.5 rounded-full bg-brand`} />
+            )}
+          </button>
+          {moreOpen && (
+            <div className="mt-1 space-y-0.5">
+              {MORE_ITEMS.map((item) => (
+                <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />
+              ))}
+            </div>
           )}
-          {moreActive && (
-            <span className={`${isCollapsed ? "absolute right-1 top-1" : "ml-auto"} h-1.5 w-1.5 rounded-full bg-brand`} />
-          )}
-        </button>
-        {moreOpen && (
-          <div className="mt-1 space-y-0.5">
-            {MORE_ITEMS.map((item) => (
-              <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />
-            ))}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* ── Account ─────────────────────────────────────────── */}
+      {/* ── Workspace ────────────────────────────────────────── */}
+      <NavLabel collapsed={isCollapsed}>Workspace</NavLabel>
+      {WORKSPACE_ITEMS.map((item) => (
+        <NavItem key={item.name} item={item} siteId={siteId} pathname={pathname} collapsed={isCollapsed} />
+      ))}
+
+      {/* ── Account ──────────────────────────────────────────── */}
       <NavLabel collapsed={isCollapsed}>Account</NavLabel>
       {ACCOUNT_ITEMS.map((item) => {
         const Icon = item.icon;
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
-          <Link
+          <Link 
             key={item.name}
             href={item.href}
             title={isCollapsed ? item.name : undefined}
@@ -277,11 +284,11 @@ function SidebarNavInner({
         );
       })}
 
-      {/* ── Admin ───────────────────────────────────────────── */}
+      {/* ── Admin ────────────────────────────────────────────── */}
       {isSuperAdmin && !isCollapsed && (
         <div className="mt-3 border-t border-border pt-3">
           <NavLabel collapsed={false}>Admin</NavLabel>
-          <Link
+          <Link 
             href="/admin"
             className="flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium text-violet-400 hover:bg-violet-500/10"
           >
@@ -310,7 +317,7 @@ export function SidebarNav({
         </nav>
       }
     >
-      <SidebarNavInner
+      <SidebarNavInner r
         defaultSiteId={defaultSiteId}
         sites={sites}
         isSuperAdmin={isSuperAdmin}
