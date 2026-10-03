@@ -292,6 +292,103 @@ export function evidenceSatisfiesRequirements(
   return { satisfied: missing.length === 0, missing };
 }
 
+// ── Evidence Quality Gates ───────────────────────────────────────────────────
+//
+// What remediation actions are allowed given the best available evidence?
+//
+//   DIRECTLY_OBSERVED → all types allowed (we saw it in the page/headers)
+//   DERIVED           → AI patches OK, but not deterministic rewrites
+//   INFERRED          → only experiments and manual review
+//   UNAVAILABLE       → NEVER auto-fix — evidence doesn't exist
+//
+// Enforcement: remediation-planner.ts checks these gates before scheduling.
+
+/** Ordinal ranking for evidence confidence comparison */
+export const CONFIDENCE_RANK: Record<EvidenceConfidenceKind, number> = {
+  DIRECTLY_OBSERVED: 4,
+  DERIVED:           3,
+  INFERRED:          2,
+  UNAVAILABLE:       1,
+};
+
+/** Maps evidence confidence to the set of remediation types it permits */
+export const EVIDENCE_QUALITY_GATES: Record<EvidenceConfidenceKind, readonly RemediationType[]> = {
+  DIRECTLY_OBSERVED: ["DETERMINISTIC", "AI_PATCH", "MANUAL", "EXPERIMENT"] as const,
+  DERIVED:           ["AI_PATCH", "MANUAL", "EXPERIMENT"] as const,
+  INFERRED:          ["EXPERIMENT", "MANUAL"] as const,
+  UNAVAILABLE:       [] as const,   // NEVER auto-fix on UNAVAILABLE evidence
+};
+
+/**
+ * Find the best (highest-rank) evidence confidence across a set of evidence.
+ * Returns UNAVAILABLE if no evidence is provided.
+ */
+export function bestEvidenceConfidence(
+  evidence: SEOEvidence[],
+): EvidenceConfidenceKind {
+  if (evidence.length === 0) return "UNAVAILABLE";
+  return evidence.reduce<EvidenceConfidenceKind>(
+    (best, e) =>
+      CONFIDENCE_RANK[e.confidenceKind] > CONFIDENCE_RANK[best]
+        ? e.confidenceKind
+        : best,
+    "UNAVAILABLE",
+  );
+}
+
+/**
+ * Check whether a remediation type is allowed given the best evidence.
+ * If not allowed, returns the highest-privilege allowed type (or null if none).
+ */
+export function gateRemediationType(
+  intended: RemediationType,
+  evidence: SEOEvidence[],
+): { allowed: boolean; effectiveType: RemediationType | null; reason?: string } {
+  const bestConfidence = bestEvidenceConfidence(evidence);
+  const allowed = EVIDENCE_QUALITY_GATES[bestConfidence];
+
+  if (allowed.includes(intended)) {
+    return { allowed: true, effectiveType: intended };
+  }
+
+  const fallback = allowed.length > 0 ? allowed[0] : null;
+  return {
+    allowed: false,
+    effectiveType: fallback,
+    reason: `Evidence confidence is ${bestConfidence} — ${intended} requires higher confidence. Downgraded to ${fallback ?? "NONE (manual review only)"}.`,
+  };
+}
+
+// ── AI Patch Result ──────────────────────────────────────────────────────────
+//
+// Constrained output contract for AI-generated patches.
+// The AEO fix engine (and any future AI patch generators) must return this
+// instead of raw full-file strings. This enables:
+//   1. Diff-based review (not full-file replacement)
+//   2. Blast-radius analysis via the mutation risk engine
+//   3. Routing through the remediation planner
+
+export interface AiPatchResult {
+  /** Fingerprint of the diagnostic finding this patch addresses */
+  findingFingerprint: string;
+  /** Git commit SHA the patch was generated against (if available) */
+  baseCommitSha?: string;
+  /** Target file path (relative to project root) */
+  filePath: string;
+  /** Unified diff or minimal insertion — NOT an entire file */
+  patch: string;
+  /** Human-readable explanation of what this patch does and why */
+  rationale: string;
+  /** Risk classification for this specific patch */
+  risk: FixRisk;
+  /** How to verify the patch was applied correctly */
+  verification: VerificationCriterion[];
+  /** AI model and version that generated this patch */
+  aiModel?: string;
+  /** Domain this patch addresses */
+  domain: OptimizationDomain;
+}
+
 // ── Verification Contract ────────────────────────────────────────────────────
 
 export type VerificationCriterion =

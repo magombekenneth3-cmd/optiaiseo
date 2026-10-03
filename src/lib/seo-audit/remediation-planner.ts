@@ -9,6 +9,7 @@ import type {
 import {
   evidenceSatisfiesRequirements,
   fixRiskRequiresApproval,
+  gateRemediationType,
 } from "./contracts";
 import type { ExplainablePriority, PriorityComponents } from "./contracts";
 import type { FixResult, FixContext } from "./deterministic-fixes";
@@ -154,6 +155,16 @@ function planAction(
   let deterministicFix: FixResult | null = null;
   let effectiveRemediationType = finding.remediationType;
   let evidenceGapReason: string | undefined;
+
+  // ── Global evidence quality gate ──────────────────────────────────────
+  // Before any rule-specific checks, enforce the global evidence quality
+  // gate: the best available evidence confidence determines which
+  // remediation types are permitted at all.
+  const gateResult = gateRemediationType(effectiveRemediationType, finding.evidence);
+  if (!gateResult.allowed) {
+    evidenceGapReason = gateResult.reason;
+    effectiveRemediationType = gateResult.effectiveType ?? "MANUAL";
+  }
 
   // ── Per-remediation evidence requirements gate ────────────────────────
   // Look up the root cause's evidence requirements from the diagnostic rule.
