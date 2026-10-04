@@ -449,5 +449,55 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
     expect(() => applyAstFixPlan(originalHtml, planAmbiguous)).toThrow(/AST_TARGET_AMBIGUOUS/);
   });
+
+  it("aborts execution when expectedCurrentValue is set but property/attribute is missing", () => {
+    const originalTsx = `export const metadata = { title: "Hello" };`;
+
+    const plan: AstFixPlan = {
+      version: 1,
+      findingFingerprint: "fp_missing_expected",
+      filePath: "src/app/layout.tsx",
+      language: "tsx",
+      operations: [
+        {
+          kind: "setObjectProperty",
+          target: "metadata",
+          property: "description",
+          value: "New Description",
+          expectedCurrentValue: "Old Description",
+        },
+      ],
+      rationale: "Expected value missing test",
+      risk: "MEDIUM",
+      verification: [],
+    };
+
+    expect(() => applyAstFixPlan(originalTsx, plan)).toThrow(/STALE_FIX_ABORTED/);
+  });
+
+  it("throws AST_TARGET_AMBIGUOUS when multiple property assignments match op.target", () => {
+    const originalTsx = `const pageA = { settings: { theme: "dark" } };
+const pageB = { settings: { theme: "light" } };`;
+
+    const plan: AstFixPlan = {
+      version: 1,
+      findingFingerprint: "fp_object_ambig",
+      filePath: "src/app/page.tsx",
+      language: "tsx",
+      operations: [
+        {
+          kind: "setObjectProperty",
+          target: "settings",
+          property: "theme",
+          value: "system",
+        },
+      ],
+      rationale: "Object ambiguous test",
+      risk: "HIGH",
+      verification: [],
+    };
+
+    expect(() => applyAstFixPlan(originalTsx, plan)).toThrow(/AST_TARGET_AMBIGUOUS/);
+  });
 });
 

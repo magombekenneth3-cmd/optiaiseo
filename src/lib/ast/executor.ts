@@ -254,6 +254,60 @@ function computeAstFingerprint(code: string, language: string): string {
 
 // ── TypeScript / TSX AST Application ───────────────────────────────────────
 
+function findTargetObjectExpression(
+  sourceFile: import("ts-morph").SourceFile,
+  targetName: string,
+  filePath: string,
+): ObjectLiteralExpression {
+  // Level 1: Enforce top-level exported VariableDeclaration matching target name (e.g. export const metadata = {...})
+  const exportedVarDecls = sourceFile.getVariableDeclarations().filter((v) => {
+    if (v.getName() !== targetName) return false;
+    const stmt = v.getFirstAncestorByKind(SyntaxKind.VariableStatement);
+    const isTopLevel = v.getSourceFile() === sourceFile && (!stmt || stmt.getParent() === sourceFile);
+    return isTopLevel && (v.isExported() || (stmt ? stmt.isExported() : false));
+  });
+
+  if (exportedVarDecls.length === 1) {
+    const init = exportedVarDecls[0].getInitializer();
+    if (Node.isObjectLiteralExpression(init)) return init;
+  } else if (exportedVarDecls.length > 1) {
+    throw new Error(`AST_TARGET_AMBIGUOUS: Ambiguous top-level exported target object '${targetName}' in ${filePath}`);
+  }
+
+  // Level 2: Top-level non-exported VariableDeclaration
+  const topLevelVarDecls = sourceFile.getVariableDeclarations().filter((v) => {
+    if (v.getName() !== targetName) return false;
+    const stmt = v.getFirstAncestorByKind(SyntaxKind.VariableStatement);
+    return v.getSourceFile() === sourceFile && (!stmt || stmt.getParent() === sourceFile);
+  });
+
+  if (topLevelVarDecls.length === 1) {
+    const init = topLevelVarDecls[0].getInitializer();
+    if (Node.isObjectLiteralExpression(init)) return init;
+  } else if (topLevelVarDecls.length > 1) {
+    throw new Error(`AST_TARGET_AMBIGUOUS: Ambiguous top-level target object '${targetName}' in ${filePath}`);
+  }
+
+  // Level 3: Check property assignments across tree
+  const matchingProps: ObjectLiteralExpression[] = [];
+  sourceFile.forEachDescendant((node) => {
+    if (Node.isPropertyAssignment(node) && node.getName() === targetName) {
+      const init = node.getInitializer();
+      if (Node.isObjectLiteralExpression(init)) {
+        matchingProps.push(init);
+      }
+    }
+  });
+
+  if (matchingProps.length === 1) {
+    return matchingProps[0];
+  } else if (matchingProps.length > 1) {
+    throw new Error(`AST_TARGET_AMBIGUOUS: Ambiguous property assignment target object '${targetName}' (${matchingProps.length} matches) in ${filePath}`);
+  }
+
+  throw new Error(`AST_TARGET_NOT_FOUND: Target object '${targetName}' not found in AST of ${filePath}`);
+}
+
 function applyTsxAstOperations(
   sourceCode: string,
   filePath: string,
@@ -271,44 +325,7 @@ function applyTsxAstOperations(
     switch (op.kind) {
       case "setObjectProperty":
       case "insertObjectProperty": {
-        let objExpr: ObjectLiteralExpression | undefined;
-
-        // Semantic lock 1: Enforce top-level exported VariableDeclaration matching target name (e.g. export const metadata = {...})
-        const exportedVarDecls = sourceFile.getVariableDeclarations().filter((v) => {
-          if (v.getName() !== op.target) return false;
-          const stmt = v.getFirstAncestorByKind(SyntaxKind.VariableStatement);
-          const isTopLevel = v.getSourceFile() === sourceFile && (!stmt || stmt.getParent() === sourceFile);
-          return isTopLevel && (v.isExported() || (stmt ? stmt.isExported() : false));
-        });
-
-        if (exportedVarDecls.length === 1) {
-          const init = exportedVarDecls[0].getInitializer();
-          if (Node.isObjectLiteralExpression(init)) {
-            objExpr = init;
-          }
-        } else if (exportedVarDecls.length > 1) {
-          throw new Error(
-            `AST_TARGET_AMBIGUOUS: Ambiguous top-level exported target '${op.target}' in ${filePath}`,
-          );
-        }
-
-        // Semantic lock 2: Target property on top-level object if not matching export directly
-        if (!objExpr && op.target !== "metadata") {
-          sourceFile.forEachDescendant((node) => {
-            if (Node.isPropertyAssignment(node) && node.getName() === op.target) {
-              const init = node.getInitializer();
-              if (Node.isObjectLiteralExpression(init)) {
-                objExpr = init;
-              }
-            }
-          });
-        }
-
-        if (!objExpr) {
-          throw new Error(
-            `AST_TARGET_NOT_FOUND: Semantic target object '${op.target}' not found in AST of ${filePath}`,
-          );
-        }
+        const objExpr = findTargetObjectExpression(sourceFile, op.target, filePath);
 
         // Handle nested properties (e.g. property = "openGraph.title")
         const propParts = op.property.split(".");
@@ -336,11 +353,13 @@ function applyTsxAstOperations(
 
         // Guard: Expected Current Value check
         if (op.expectedCurrentValue !== undefined) {
-          const currentValText = existingProp ? existingProp.getText() : undefined;
-          if (
-            currentValText !== undefined &&
-            !currentValText.includes(String(op.expectedCurrentValue))
-          ) {
+          if (!existingProp) {
+            throw new Error(
+              `STALE_FIX_ABORTED: Current AST value for property '${op.property}' does not match expected value (property missing).`,
+            );
+          }
+          const currentValText = existingProp.getText();
+          if (!currentValText.includes(String(op.expectedCurrentValue))) {
             throw new Error(
               `STALE_FIX_ABORTED: Current AST value for property '${op.property}' does not match expected value.`,
             );
@@ -368,22 +387,36 @@ function applyTsxAstOperations(
       }
 
       case "removeObjectProperty": {
-        let removed = false;
-        sourceFile.getVariableDeclarations().forEach((node) => {
-          if (node.getName() === op.target) {
-            const init = node.getInitializer();
+        const objExpr = findTargetObjectExpression(sourceFile, op.target, filePath);
+        const propParts = op.property.split(".");
+        let currentObj = objExpr;
+        for (let i = 0; i < propParts.length - 1; i++) {
+          const part = propParts[i];
+          const subProp = currentObj.getProperty(part);
+          if (subProp && Node.isPropertyAssignment(subProp)) {
+            const init = subProp.getInitializer();
             if (Node.isObjectLiteralExpression(init)) {
-              const prop = init.getProperty(op.property);
-              if (prop) {
-                prop.remove();
-                removed = true;
-              }
+              currentObj = init;
             }
+          } else {
+            throw new Error(`AST_TARGET_NOT_FOUND: Property '${op.property}' not found on '${op.target}'`);
           }
-        });
-        if (!removed) {
+        }
+
+        const targetPropName = propParts[propParts.length - 1];
+        const prop = currentObj.getProperty(targetPropName);
+        if (!prop) {
           throw new Error(`AST_TARGET_NOT_FOUND: Property '${op.property}' not found on '${op.target}'`);
         }
+
+        if (op.expectedCurrentValue !== undefined) {
+          const curText = prop.getText();
+          if (!curText.includes(String(op.expectedCurrentValue))) {
+            throw new Error(`STALE_FIX_ABORTED: Current AST value for property '${op.property}' does not match expected value.`);
+          }
+        }
+
+        prop.remove();
         break;
       }
 
@@ -426,13 +459,16 @@ function applyTsxAstOperations(
         const valStr = typeof op.value === "string" ? `"${op.value}"` : `{${op.value}}`;
         for (const node of selectedNodes) {
           const attr = node.getAttribute(op.attributeName);
-          if (attr && Node.isJsxAttribute(attr)) {
-            if (op.expectedCurrentValue !== undefined) {
-              const curText = attr.getInitializer()?.getText().replace(/^["']|["']$/g, "");
-              if (curText !== undefined && curText !== String(op.expectedCurrentValue)) {
-                throw new Error(`STALE_FIX_ABORTED: JSX attribute '${op.attributeName}' value does not match expected value.`);
-              }
+          if (op.expectedCurrentValue !== undefined) {
+            if (!attr) {
+              throw new Error(`STALE_FIX_ABORTED: JSX attribute '${op.attributeName}' expected to exist on '${targetTag}', but was missing in ${filePath}`);
             }
+            const curText = Node.isJsxAttribute(attr) ? attr.getInitializer()?.getText().replace(/^["']|["']$/g, "") : undefined;
+            if (curText === undefined || !curText.includes(String(op.expectedCurrentValue))) {
+              throw new Error(`STALE_FIX_ABORTED: JSX attribute '${op.attributeName}' value does not match expected value.`);
+            }
+          }
+          if (attr && Node.isJsxAttribute(attr)) {
             attr.setInitializer(valStr);
           } else {
             node.addAttribute({

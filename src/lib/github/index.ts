@@ -200,7 +200,13 @@ export async function createAutoFixPR(
         for (const file of files) {
             const current = await getRepositoryFile(repoUrl, file.path, token);
             const expectedSha = expectedBaseSha ?? file.astPreparedChange?.baseBlobSha;
-            if (current.exists && current.sha && expectedSha) {
+            if (expectedSha) {
+                if (!current.exists || !current.sha) {
+                    return {
+                        success: false,
+                        error: `AST_BASE_SHA_MISMATCH: Target file '${file.path}' existed when fix was generated (base SHA ${expectedSha}), but no longer exists on GitHub. Regenerate proposal.`,
+                    };
+                }
                 if (current.sha !== expectedSha) {
                     return {
                         success: false,
