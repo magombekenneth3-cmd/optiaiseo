@@ -1,9 +1,10 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import { Plus, Trash2, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { addTrackedKeyword, removeTrackedKeyword, getTrackedKeywords } from "@/app/actions/trackedKeywords";
 import { estimateKeywordRoi, opportunityGap } from "@/lib/keywords/roi";
 import { KeywordSparkline } from "@/components/dashboard/KeywordSparkline";
+import { PositionBadge } from "./components/PositionBadge";
 
 interface Snapshot {
     position:     number;
@@ -33,6 +34,12 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
     const [error,    setError]    = useState<string | null>(null);
     const [isPending, startTransition] = useTransition();
 
+    // Undo-on-remove state
+    const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
+    const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }, []);
+
     const atLimit = maxTracked !== -1 && keywords.length >= maxTracked;
 
     function handleAdd() {
@@ -50,12 +57,28 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
     }
 
     function handleRemove(trackedId: string) {
-        startTransition(async () => {
-            const res = await removeTrackedKeyword(siteId, trackedId);
-            if (!res.success) { setError(res.error ?? "Failed to remove"); return; }
-            setKeywords((prev) => prev.filter((k) => k.id !== trackedId));
-        });
+        // Optimistic: hide the row immediately, start a 5-second timer
+        if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+        setPendingRemoveId(trackedId);
+
+        undoTimerRef.current = setTimeout(() => {
+            // Actually delete after 5 seconds
+            startTransition(async () => {
+                const res = await removeTrackedKeyword(siteId, trackedId);
+                if (!res.success) { setError(res.error ?? "Failed to remove"); }
+                setKeywords((prev) => prev.filter((k) => k.id !== trackedId));
+                setPendingRemoveId(null);
+            });
+        }, 5000);
     }
+
+    function handleUndo() {
+        if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+        setPendingRemoveId(null);
+    }
+
+    const pendingKw = pendingRemoveId ? keywords.find(k => k.id === pendingRemoveId) : null;
+    const visibleKeywords = keywords.filter(k => k.id !== pendingRemoveId);
 
     return (
         <div className="card-surface overflow-hidden">
@@ -103,17 +126,25 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
             </div>
 
             {atLimit && (
-                <p className="px-4 py-2 text-xs text-amber-400 bg-amber-500/5 border-b border-border">
+                <p className="px-4 py-2 text-xs text-warning bg-warning/5 border-b border-border">
                     {tier} plan limit reached.{" "}
                     <a href="/dashboard/billing" className="underline">Upgrade</a> for more tracked keywords.
                 </p>
             )}
 
             {error && (
-                <p className="px-4 py-2 text-xs text-red-400 bg-red-500/5 border-b border-border">{error}</p>
+                <p className="px-4 py-2 text-xs text-destructive bg-destructive/5 border-b border-border">{error}</p>
             )}
 
-            {keywords.length === 0 ? (
+            {/* Undo banner */}
+            {pendingKw && (
+                <div className="px-4 py-2 text-xs text-warning font-medium bg-warning/10 border-b border-border flex items-center justify-between">
+                    <span>Removed &ldquo;{pendingKw.keyword}&rdquo;</span>
+                    <button onClick={handleUndo} className="underline font-semibold hover:opacity-80">Undo</button>
+                </div>
+            )}
+
+            {visibleKeywords.length === 0 && !pendingKw ? (
                 <div className="p-10 text-center text-muted-foreground text-sm">
                     No tracked keywords yet. Add your most important target keywords above.
                 </div>
@@ -121,10 +152,10 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
                 <>
                     {/* Mobile */}
                     <div className="md:hidden divide-y divide-border">
-                        {keywords.map((kw) => {
+                        {visibleKeywords.map((kw) => {
                             const latest = kw.snapshots.at(-1);
                             return (
-                                <div key={kw.id} className="flex items-center gap-3 px-4 py-3">
+                                <div key={kw.id} className="flex items-center gap-3 px-4 py-3 group">
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-medium truncate">{kw.keyword}</p>
                                         <p className="text-xs text-muted-foreground mt-0.5">
@@ -135,7 +166,8 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
                                     <button
                                         onClick={() => handleRemove(kw.id)}
                                         className="shrink-0 p-1.5 rounded-md text-muted-foreground
-                                                   hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                                   hover:text-destructive hover:bg-destructive/10 transition-colors
+                                                   opacity-0 group-hover:opacity-100"
                                         aria-label={`Remove ${kw.keyword}`}
                                     >
                                         <Trash2 className="w-4 h-4" />
@@ -148,7 +180,7 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
                     {/* Desktop */}
                     <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-left text-sm whitespace-nowrap">
-                            <thead className="bg-card/50 text-xs font-semibold text-muted-foreground
+                            <thead className="sticky top-0 bg-card z-10 text-xs font-semibold text-muted-foreground
                                               uppercase border-b border-border">
                                 <tr>
                                     <th scope="col" className="px-6 py-3">Keyword</th>
@@ -160,7 +192,7 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
-                                {keywords.map((kw) => {
+                                {visibleKeywords.map((kw) => {
                                     const latest    = kw.snapshots.at(-1);
                                     const trend     = (() => {
                                         const h = kw.snapshots;
@@ -174,48 +206,43 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
                                         ? TrendingDown
                                         : Minus;
                                     const trendColor = trend === "up"
-                                        ? "text-emerald-400"
+                                        ? "text-brand"
                                         : trend === "down"
-                                        ? "text-red-400"
+                                        ? "text-destructive"
                                         : "text-muted-foreground";
 
                                     return (
-                                        <tr key={kw.id} className="hover:bg-card transition-colors">
+                                        <tr key={kw.id} className="hover:bg-muted/50 transition-colors group">
                                             <td className="px-6 py-3.5 font-medium max-w-[200px] truncate"
                                                 title={kw.keyword}>
                                                 {kw.keyword}
                                             </td>
                                             <td className="px-6 py-3.5">
                                                 {latest
-                                                    ? <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold border ${
-                                                        latest.position <= 3
-                                                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                                            : latest.position <= 10
-                                                            ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                                                            : "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                                                    }`}>#{latest.position}</span>
+                                                    ? <PositionBadge position={latest.position} />
                                                     : <span className="text-muted-foreground text-xs">Pending</span>
                                                 }
                                             </td>
                                             <td className="px-6 py-3.5">
                                                 <div className="flex items-center gap-1.5">
-                                                    <KeywordSparkline
-                                                        data={
-                                                            kw.snapshots.length >= 2
-                                                                ? kw.snapshots.map((s) => ({
-                                                                    date:     new Date(s.recordedAt).toISOString().slice(0, 10),
-                                                                    position: s.position,
-                                                                }))
-                                                                : [{ date: "now", position: latest?.position ?? 50 }]
-                                                        }
-                                                        trend={trend}
-                                                        width={72}
-                                                        height={24}
-                                                    />
+                                                    {/* Step 4: don't draw a sparkline at position 50 when < 2 checks */}
+                                                    {kw.snapshots.length >= 2 ? (
+                                                        <KeywordSparkline
+                                                            data={kw.snapshots.map((s) => ({
+                                                                date:     new Date(s.recordedAt).toISOString().slice(0, 10),
+                                                                position: s.position,
+                                                            }))}
+                                                            trend={trend}
+                                                            width={72}
+                                                            height={24}
+                                                        />
+                                                    ) : (
+                                                        <span className="text-xs text-muted-foreground">Collecting data</span>
+                                                    )}
                                                     <TrendIcon className={`w-3.5 h-3.5 ${trendColor}`} />
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-3.5 font-medium text-emerald-400">
+                                            <td className="px-6 py-3.5 font-medium text-brand">
                                                 {kw.roi
                                                     ? `~$${kw.roi.estimatedRevenueUsd.toLocaleString()}`
                                                     : <span className="text-muted-foreground">—</span>}
@@ -225,7 +252,7 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="px-6 py-3.5 text-blue-400 text-xs font-medium">
+                                            <td className="px-6 py-3.5 text-info text-xs font-medium">
                                                 {kw.opportunityGapUsd > 0
                                                     ? `+$${kw.opportunityGapUsd.toLocaleString()}`
                                                     : <span className="text-muted-foreground">Already top 3</span>}
@@ -234,7 +261,8 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
                                                 <button
                                                     onClick={() => handleRemove(kw.id)}
                                                     className="p-1.5 rounded-md text-muted-foreground
-                                                               hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                                               hover:text-destructive hover:bg-destructive/10 transition-colors
+                                                               opacity-0 group-hover:opacity-100"
                                                     aria-label={`Remove ${kw.keyword}`}
                                                 >
                                                     <Trash2 className="w-4 h-4" />

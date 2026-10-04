@@ -25,6 +25,7 @@ export interface PageHeaderProps {
     value: string | number;
     badge?: string;
     color?: string;
+    sub?: string;
   }>;
   currentStep?: "discover" | "decide" | "create" | "optimize" | "publish" | "measure" | "refresh";
 }
@@ -56,7 +57,7 @@ export function PageHeader({
       {/* Category Eyebrow if specified */}
       {category && (
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-brand bg-brand/10 px-2.5 py-0.5 rounded-full border border-brand/20">
             {category}
           </span>
         </div>
@@ -100,7 +101,7 @@ export function PageHeader({
             primaryAction.href ? (
               <Link
                 href={primaryAction.href}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-bold shadow-lg shadow-emerald-500/20 transition-all duration-150 active:scale-95"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand/90 text-black text-sm font-bold shadow-lg shadow-brand/20 transition-all duration-150 active:scale-95"
               >
                 <PrimaryIcon className="w-4 h-4" />
                 {primaryAction.label}
@@ -109,7 +110,7 @@ export function PageHeader({
               <button
                 type="button"
                 onClick={primaryAction.onClick}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-bold shadow-lg shadow-emerald-500/20 transition-all duration-150 active:scale-95"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand/90 text-black text-sm font-bold shadow-lg shadow-brand/20 transition-all duration-150 active:scale-95"
               >
                 <PrimaryIcon className="w-4 h-4" />
                 {primaryAction.label}
@@ -136,6 +137,11 @@ export function PageHeader({
                   {m.badge}
                 </span>
               )}
+              {m.sub && (
+                <span className="text-[10px] text-muted-foreground font-normal">
+                  {m.sub}
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -156,7 +162,7 @@ export function PageHeader({
                   href={step.href}
                   className={`px-2.5 py-1 rounded-lg transition-all shrink-0 ${
                     isCurrent
-                      ? "bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30"
+                      ? "bg-brand/15 text-brand font-bold border border-brand/30"
                       : "hover:bg-muted hover:text-foreground"
                   }`}
                 >
