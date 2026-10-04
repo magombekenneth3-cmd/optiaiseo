@@ -40,14 +40,13 @@ export interface HealingAction {
     type: "PR" | "CONTENT" | "SCHEMA" | "ALERT";
     description: string;
     targetId?: string; // e.g., checkId
-    fix?: string;
     filePath?: string;
     preparedChange?: PreparedAstChange;
 }
 
 function actionFingerprint(action: HealingAction): string {
     return createHash("sha256")
-        .update(JSON.stringify({ type: action.type, targetId: action.targetId, filePath: action.filePath, fix: action.fix }))
+        .update(JSON.stringify({ type: action.type, targetId: action.targetId, filePath: action.filePath, contentHash: action.preparedChange?.contentHash }))
         .digest("hex");
 }
 
@@ -139,9 +138,8 @@ export async function generateHealingPlan(siteId: string, currentGsov: number, p
             // Significant drop in specific model
             actions.push({
                 type: "ALERT",
-                description: `Citation drop in ${currModel.model} from ${prevModel.score}% to ${currModel.score}%.`,
+                description: `Citation drop in ${currModel.model} from ${prevModel.score}% to ${currModel.score}%. Analyze recent content for ${currModel.model} specific citation patterns.`,
                 targetId: `model_${currModel.model}`,
-                fix: `Analyze recent content for ${currModel.model} specific citation patterns.`
             });
         }
     }
@@ -210,7 +208,6 @@ export async function generateHealingPlan(siteId: string, currentGsov: number, p
                         if (repoFile.exists && repoFile.content) {
                             const prepared = applyAstFixPlan(repoFile.content, patchResult.astPlan);
                             candidate.preparedChange = prepared;
-                            candidate.fix = prepared.serializedContent;
                             candidate.filePath = fixRes.filePath;
                             actions.push(candidate);
                             continue;
@@ -270,8 +267,8 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
                     ? " (Automatic repository changes are disabled pending verified deployment evidence.)"
                     : " (Action missing server-side PreparedAstChange artifact — degraded to ALERT.)";
             }
-            if (action.fix) {
-                const qaResult = await validateFixWithQA(action.fix, action.description);
+            if (action.preparedChange?.serializedContent) {
+                const qaResult = await validateFixWithQA(action.preparedChange.serializedContent, action.description);
                 if (!qaResult.valid) {
                     logger.warn(`[Self-Healing QA Failed] ${qaResult.feedback}`);
                     action.type = "ALERT";
@@ -331,7 +328,7 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
                         status: "PENDING",
                         fingerprint,
                         dedupeBucket,
-                        metadata: { fix: action.fix, filePath: action.filePath, fingerprint: actionFingerprint(action) } as any,
+                        metadata: { filePath: action.filePath, fingerprint: actionFingerprint(action) } as any,
                     }
                 });
             } else if (action.type === "ALERT") {
@@ -345,7 +342,7 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
                         status: "COMPLETED",
                         fingerprint,
                         dedupeBucket,
-                        metadata: { fix: action.fix, fingerprint: actionFingerprint(action) } as any,
+                        metadata: { fingerprint: actionFingerprint(action) } as any,
                     }
                 });
             }

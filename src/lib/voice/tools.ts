@@ -270,17 +270,18 @@ Keep your response under 150 words — it will be read aloud to the user.`,
                 // pushFixToGitHub creates a branch + PR — never a direct commit to main.
                 const fixResult = await generateAeoFixInternal(check, domain, site.githubRepoUrl);
 
-                if (!fixResult.success) {
+                if (!fixResult.success || !fixResult.astPlan) {
+                    const errDetail = !fixResult.success ? fixResult.error : "Missing AST fix plan";
                     return {
                         status: "fix_failed",
-                        message: `The fix engine couldn't generate a patch: ${fixResult.error}. Tell the user they can fix this manually from the Audit Reports page.`,
+                        message: `The fix engine couldn't generate a valid AST patch: ${errDetail}. Tell the user they can fix this manually from the Audit Reports page.`,
                     };
                 }
 
                 const prResult = await pushFixToGitHub({
                     repoUrl: site.githubRepoUrl,
                     filePath: fixResult.filePath,
-                    content: fixResult.fix,
+                    astPlan: fixResult.astPlan,
                     commitMessage: `fix(aeo): ${check.label} — auto-fix via OptiAISEO Voice Agent`,
                     siteId: site.id,
                 });

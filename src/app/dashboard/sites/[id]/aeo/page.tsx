@@ -9,6 +9,7 @@ import { generateAeoFix, generateAllFixes, pushFixToGitHub } from "@/app/actions
 import { PrReviewModal, type PrReviewPayload } from "@/components/PrReviewModal";
 import { VisibilityForecastCard } from "@/components/aeo/VisibilityForecastCard";
 import type { AeoResult, AeoCheck } from "@/lib/aeo";
+import type { AstFixPlan } from "@/lib/ast/types";
 import { CreditGate } from "@/components/ui/CreditGate";
 
 // ... (skipping unchanged gradeMeta, categoryMeta, impactBadge, ScoreRing, CheckCard)
@@ -76,6 +77,7 @@ function CheckCard({ check, domain, githubRepoUrl, preloadedFix, siteId }: {
     const [showFix, setShowFix] = useState(false);
     const [fixing, setFixing] = useState(false);
     const [fixCode, setFixCode] = useState<string | null>(null);
+    const [fixAstPlan, setFixAstPlan] = useState<AstFixPlan | null>(null);
     const [filePath, setFilePath] = useState<string | undefined>();
     const [copied, setCopied] = useState(false);
     const [fixError, setFixError] = useState("");
@@ -91,6 +93,7 @@ function CheckCard({ check, domain, githubRepoUrl, preloadedFix, siteId }: {
         setFixing(false);
         if (res.success) {
             setFixCode(res.fix);
+            if (res.astPlan) setFixAstPlan(res.astPlan);
             setFilePath(res.filePath);
             setShowFix(true);
         } else {
@@ -131,10 +134,25 @@ function CheckCard({ check, domain, githubRepoUrl, preloadedFix, siteId }: {
         setReviewPayload(null);
         setPushing(true);
         setPushResult(null);
+        const planToUse: AstFixPlan = fixAstPlan ?? {
+            version: 1,
+            findingFingerprint: `aeo_${check.id}`,
+            filePath,
+            language: "tsx",
+            operations: [
+                {
+                    kind: "insertJsxElement",
+                    jsxSnippet: editedContent,
+                },
+            ],
+            rationale: `AEO Fix: Add ${check.label}`,
+            risk: "SAFE",
+            verification: [],
+        };
         const res = await pushFixToGitHub({
             repoUrl: githubRepoUrl,
             filePath,
-            content: editedContent,
+            astPlan: planToUse,
             commitMessage: `AEO Fix: Add ${check.label}`,
             siteId,
         });

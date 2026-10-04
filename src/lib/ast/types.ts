@@ -51,6 +51,8 @@ export interface SetJsxAttributeOp {
   attributeName: string;
   value: string | boolean | number;
   expectedCurrentValue?: unknown;
+  occurrence?: number;
+  allMatches?: boolean;
 }
 
 export interface RemoveJsxAttributeOp {
@@ -58,6 +60,8 @@ export interface RemoveJsxAttributeOp {
   componentName?: string;
   elementTag?: string;
   attributeName: string;
+  occurrence?: number;
+  allMatches?: boolean;
 }
 
 export interface InsertJsxElementOp {
@@ -68,6 +72,8 @@ export interface InsertJsxElementOp {
   attributes?: Record<string, string | boolean | number>;
   childrenText?: string;
   jsxSnippet?: string;
+  occurrence?: number;
+  allMatches?: boolean;
 }
 
 export interface ReplaceJsxTextOp {
@@ -75,6 +81,8 @@ export interface ReplaceJsxTextOp {
   targetSelector?: string;
   text: string;
   expectedCurrentValue?: unknown;
+  occurrence?: number;
+  allMatches?: boolean;
 }
 
 export interface SetHtmlAttributeOp {
@@ -83,12 +91,16 @@ export interface SetHtmlAttributeOp {
   attributeName: string;
   value: string;
   expectedCurrentValue?: unknown;
+  occurrence?: number;
+  allMatches?: boolean;
 }
 
 export interface RemoveHtmlAttributeOp {
   kind: "removeHtmlAttribute";
   selector: string;
   attributeName: string;
+  occurrence?: number;
+  allMatches?: boolean;
 }
 
 export interface InsertHtmlElementOp {
@@ -99,6 +111,8 @@ export interface InsertHtmlElementOp {
   attributes?: Record<string, string>;
   childrenText?: string;
   htmlSnippet?: string;
+  occurrence?: number;
+  allMatches?: boolean;
 }
 
 export interface UpdateJsonLdPropertyOp {
@@ -138,6 +152,8 @@ export interface SetXmlNodeOp {
   kind: "setXmlNode";
   targetTag: string;
   value: string;
+  occurrence?: number;
+  allMatches?: boolean;
 }
 
 export type AstOperation =

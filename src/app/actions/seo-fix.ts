@@ -340,12 +340,11 @@ export async function generateAllSeoFixes(
 export interface PushParams {
     repoUrl: string;
     filePath: string;
-    content: string;
     issueId: string;
     issueLabel: string;
     siteUrl: string;
+    astPlan: AstFixPlan;
     docsUrl?: string;
-    astPlan?: AstFixPlan;
 }
 
 export type PushResult =
@@ -358,6 +357,10 @@ export async function pushSeoFixToGitHub(params: PushParams): Promise<PushResult
 
     if (!isSafeUrl(params.repoUrl).ok) {
         return { success: false, error: "Invalid repository URL." };
+    }
+
+    if (!params.astPlan) {
+        return { success: false, error: "AST_PLAN_REQUIRED: An explicit server-side AstFixPlan is required to push a fix." };
     }
 
     const account = await prisma.account.findFirst({
@@ -376,30 +379,13 @@ export async function pushSeoFixToGitHub(params: PushParams): Promise<PushResult
         const targetFile = await getRepositoryFile(params.repoUrl, params.filePath, token);
         const existingContent = targetFile.exists && targetFile.content ? targetFile.content : "";
 
-        let prepared: PreparedAstChange;
-        if (params.astPlan) {
-            prepared = applyAstFixPlan(existingContent, params.astPlan);
-        } else {
-            const plan: AstFixPlan = {
-                version: 1,
-                findingFingerprint: createHash("sha256").update(params.issueId).digest("hex").slice(0, 16),
-                filePath: params.filePath,
-                baseBlobSha: targetFile.sha,
-                language: params.filePath.endsWith(".html") ? "html" : "tsx",
-                operations: [
-                    {
-                        kind: "setObjectProperty",
-                        target: "metadata",
-                        property: "title",
-                        value: params.content,
-                    },
-                ],
-                rationale: params.issueLabel,
-                risk: "MEDIUM",
-                verification: [],
-            };
-            prepared = applyAstFixPlan(existingContent, plan);
-        }
+        // P0 requirement: astPlan baseBlobSha must be populated from target file if missing
+        const planToExecute: AstFixPlan = {
+            ...params.astPlan,
+            baseBlobSha: params.astPlan.baseBlobSha || targetFile.sha || "",
+        };
+
+        const prepared = applyAstFixPlan(existingContent, planToExecute);
 
         const prRes = await createAutoFixPR(
             params.repoUrl,

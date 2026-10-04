@@ -133,6 +133,12 @@ export async function createAutoFixPR(
                 error: `UNTRUSTED_CONTENT_BLOCKED: File '${p}' missing server-side PreparedAstChange artifact.`,
             };
         }
+        if (!file.astPreparedChange.baseBlobSha) {
+            return {
+                success: false,
+                error: `AST_BASE_SHA_MISSING: PreparedAstChange for '${p}' missing mandatory baseBlobSha.`,
+            };
+        }
         const actualHash = createHash("sha256").update(file.content).digest("hex");
         if (file.astPreparedChange.contentHash !== actualHash) {
             return {
@@ -190,13 +196,17 @@ export async function createAutoFixPR(
         const { data: repoData } = await octokit.repos.get({ owner, repo });
         const defaultBranch = repoData.default_branch;
 
-        // Protect against stale generation: a proposed replacement is valid only
-        // for the exact repository blob the user reviewed.
-        if (expectedBaseSha !== undefined) {
-            if (files.length !== 1) return { success: false, error: "SHA-pinned proposals must change exactly one file." };
-            const current = await getRepositoryFile(repoUrl, files[0].path, token);
-            if ((current.sha ?? null) !== (expectedBaseSha ?? null)) {
-                return { success: false, error: "The target file changed after this fix was generated. Regenerate and review a new proposal." };
+        // Protect against stale generation: verify PreparedAstChange baseBlobSha against current repository file blob SHA
+        for (const file of files) {
+            const current = await getRepositoryFile(repoUrl, file.path, token);
+            const expectedSha = expectedBaseSha ?? file.astPreparedChange?.baseBlobSha;
+            if (current.exists && current.sha && expectedSha) {
+                if (current.sha !== expectedSha) {
+                    return {
+                        success: false,
+                        error: `AST_BASE_SHA_MISMATCH: Target file '${file.path}' changed after fix was generated (expected base SHA ${expectedSha}, got ${current.sha}). Regenerate proposal.`,
+                    };
+                }
             }
         }
 

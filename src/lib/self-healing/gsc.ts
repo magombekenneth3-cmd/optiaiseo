@@ -151,9 +151,8 @@ export async function generateGscHealingPlan(siteId: string, anomalies: any[]): 
             // GSC data cannot prove a repository path or framework. Generate a
             // reviewable content proposal, never an autonomous source-code PR.
             type: "CONTENT",
-            description: `GSC Drop Detected: ${anomaly.dropPercentage}% drop for '${anomaly.keyword}' on ${anomaly.url}. Automatically adjusting intent targeting.`,
+            description: `GSC Drop Detected: ${anomaly.dropPercentage}% drop for '${anomaly.keyword}' on ${anomaly.url}. Automatically adjusting intent targeting. Suggested fix: ${fixContent}`,
             targetId: anomaly.keyword,
-            fix: fixContent,
             filePath: filePath,
         });
     }

@@ -24,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       version: 1,
       findingFingerprint: "fp_test_1",
       filePath: "src/app/layout.tsx",
+      baseBlobSha: "sha_mock_123",
       language: "tsx",
       operations: [
         {
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       version: 1,
       findingFingerprint: "fp_html_1",
       filePath: "index.html",
+      baseBlobSha: "sha_mock_123",
       language: "html",
       operations: [
         {
@@ -67,7 +69,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           kind: "insertHtmlElement",
           parentSelector: "head",
           position: "append",
-          htmlSnippet: '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+          tagName: "meta",
+          attributes: { name: "viewport", content: "width=device-width, initial-scale=1" },
         },
       ],
       rationale: "Add lang and viewport",
@@ -91,6 +94,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       version: 1,
       findingFingerprint: "fp_stale_1",
       filePath: "src/app/layout.tsx",
+      baseBlobSha: "sha_mock_123",
       language: "tsx",
       operations: [
         {
@@ -116,6 +120,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       version: 1,
       findingFingerprint: "fp_missing_node",
       filePath: "src/app/layout.tsx",
+      baseBlobSha: "sha_mock_123",
       language: "tsx",
       operations: [
         {
@@ -140,6 +145,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       version: 1,
       findingFingerprint: "fp_zero_ops",
       filePath: "src/app/layout.tsx",
+      baseBlobSha: "sha_mock_123",
       language: "tsx",
       operations: [],
       rationale: "Empty ops test",
@@ -196,6 +202,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     const fakePreparedChange = {
       findingFingerprint: "fp_123",
       filePath: "src/app/layout.tsx",
+      baseBlobSha: "sha_mock_123",
       language: "tsx" as const,
       serializedContent: "valid content",
       contentHash: "tampered_hash_that_does_not_match",
@@ -230,6 +237,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       version: 1,
       findingFingerprint: "fp_unsupported",
       filePath: "src/app/layout.tsx",
+      baseBlobSha: "sha_mock_123",
       language: "tsx",
       operations: [
         {
@@ -251,6 +259,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       version: 1,
       findingFingerprint: "fp_robots_1",
       filePath: "public/robots.txt",
+      baseBlobSha: "sha_mock_123",
       language: "robots",
       operations: [
         {
@@ -276,6 +285,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       version: 1,
       findingFingerprint: "fp_xml_1",
       filePath: "sitemap.xml",
+      baseBlobSha: "sha_mock_123",
       language: "xml",
       operations: [
         {
@@ -300,6 +310,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       version: 1,
       findingFingerprint: "fp_json_1",
       filePath: "manifest.json",
+      baseBlobSha: "sha_mock_123",
       language: "json",
       operations: [
         {
@@ -327,6 +338,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     const preparedChange = {
       findingFingerprint: "fp_effect_fail",
       filePath: "src/app/layout.tsx",
+      baseBlobSha: "sha_mock_123",
       language: "tsx" as const,
       serializedContent: content,
       contentHash,
@@ -358,6 +370,84 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
     spyKillSwitch.mockRestore();
     spy.mockRestore();
+  });
+
+  it("throws AST_TARGET_AMBIGUOUS when multiple JSX elements match and occurrence is not specified", () => {
+    const originalTsx = `export default function Gallery() {
+  return (
+    <div>
+      <img src="/a.jpg" alt="First" />
+      <img src="/b.jpg" alt="Second" />
+    </div>
+  );
+}`;
+
+    const planAmbiguous: AstFixPlan = {
+      version: 1,
+      findingFingerprint: "fp_ambig_1",
+      filePath: "src/app/gallery.tsx",
+      language: "tsx",
+      operations: [
+        {
+          kind: "setJsxAttribute",
+          elementTag: "img",
+          attributeName: "alt",
+          value: "Updated Alt",
+        },
+      ],
+      rationale: "Ambiguous target test",
+      risk: "MEDIUM",
+      verification: [],
+    };
+
+    expect(() => applyAstFixPlan(originalTsx, planAmbiguous)).toThrow(/AST_TARGET_AMBIGUOUS/);
+
+    const planOccurrence: AstFixPlan = {
+      version: 1,
+      findingFingerprint: "fp_occurrence_1",
+      filePath: "src/app/gallery.tsx",
+      language: "tsx",
+      operations: [
+        {
+          kind: "setJsxAttribute",
+          elementTag: "img",
+          attributeName: "alt",
+          value: "Updated Second Alt",
+          occurrence: 2,
+        },
+      ],
+      rationale: "Occurrence test",
+      risk: "LOW",
+      verification: [],
+    };
+
+    const prepared = applyAstFixPlan(originalTsx, planOccurrence);
+    expect(prepared.serializedContent).toContain('alt="First"');
+    expect(prepared.serializedContent).toContain('alt="Updated Second Alt"');
+  });
+
+  it("throws AST_TARGET_AMBIGUOUS when multiple HTML elements match selector without occurrence", () => {
+    const originalHtml = `<div><p>Paragraph 1</p><p>Paragraph 2</p></div>`;
+
+    const planAmbiguous: AstFixPlan = {
+      version: 1,
+      findingFingerprint: "fp_html_ambig",
+      filePath: "index.html",
+      language: "html",
+      operations: [
+        {
+          kind: "setHtmlAttribute",
+          selector: "p",
+          attributeName: "class",
+          value: "highlight",
+        },
+      ],
+      rationale: "HTML ambiguous test",
+      risk: "MEDIUM",
+      verification: [],
+    };
+
+    expect(() => applyAstFixPlan(originalHtml, planAmbiguous)).toThrow(/AST_TARGET_AMBIGUOUS/);
   });
 });
 

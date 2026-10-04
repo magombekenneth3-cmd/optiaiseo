@@ -25,7 +25,7 @@ export type { Framework, AeoCheck };
 type ActionError = { success: false; error: string };
 
 type GenerateAeoFixResult =
-  | { success: true; fix: string; language: string; filePath: string; framework: Framework }
+  | { success: true; fix: string; astPlan?: AstFixPlan; language: string; filePath: string; framework: Framework }
   | { success: false; error: string; fallbackGuide?: FallbackGuide };
 
 type GenerateAllFixesResult =
@@ -176,9 +176,9 @@ import { createHash } from "crypto";
 export async function pushFixToGitHub(params: {
   repoUrl: string;
   filePath: string;
-  content: string;
   commitMessage: string;
   siteId: string;
+  astPlan: AstFixPlan;
 }): Promise<PushFixResult> {
   // --- Auth ---
   const session = await getServerSession(authOptions);
@@ -193,6 +193,9 @@ export async function pushFixToGitHub(params: {
   }
   if (!params.commitMessage.trim()) {
     return { success: false, error: "Commit message is required." };
+  }
+  if (!params.astPlan) {
+    return { success: false, error: "AST_PLAN_REQUIRED: An explicit server-side AstFixPlan is required to push a fix." };
   }
 
   // --- GitHub token ---
@@ -213,36 +216,12 @@ export async function pushFixToGitHub(params: {
     const targetFile = await getRepositoryFile(params.repoUrl, params.filePath, token);
     const existingContent = targetFile.exists && targetFile.content ? targetFile.content : "";
 
-    const isHtml = params.filePath.endsWith(".html");
-    const plan: AstFixPlan = {
-      version: 1,
-      findingFingerprint: createHash("sha256").update(params.commitMessage).digest("hex").slice(0, 16),
-      filePath: params.filePath,
-      baseBlobSha: targetFile.sha,
-      language: isHtml ? "html" : "tsx",
-      operations: isHtml
-        ? [
-            {
-              kind: "insertHtmlElement",
-              parentSelector: "head",
-              position: "append",
-              htmlSnippet: params.content,
-            },
-          ]
-        : [
-            {
-              kind: "setObjectProperty",
-              target: "metadata",
-              property: "title",
-              value: params.content,
-            },
-          ],
-      rationale: params.commitMessage,
-      risk: "MEDIUM",
-      verification: [],
+    const planToExecute: AstFixPlan = {
+      ...params.astPlan,
+      baseBlobSha: params.astPlan.baseBlobSha || targetFile.sha || "",
     };
 
-    const prepared = applyAstFixPlan(existingContent, plan);
+    const prepared = applyAstFixPlan(existingContent, planToExecute);
 
     const prRes = await createAutoFixPR(
       params.repoUrl,

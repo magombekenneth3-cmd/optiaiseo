@@ -47,12 +47,12 @@ export async function scoreHealingActions(
       reasons.push(`+30 ${action.type} fix — safe, reversible change`);
     }
 
-    if (action.fix && action.fix.length > 50) {
+    if (action.preparedChange?.serializedContent && action.preparedChange.serializedContent.length > 50) {
       score = clamp(score + 25);
-      reasons.push("+25 specific fix produced (>50 chars)");
-    } else if (action.fix && action.fix.length > 0) {
+      reasons.push("+25 specific AST prepared change produced (>50 chars)");
+    } else if (action.preparedChange?.serializedContent && action.preparedChange.serializedContent.length > 0) {
       score = clamp(score + 10);
-      reasons.push("+10 short fix present");
+      reasons.push("+10 short prepared change present");
     }
 
     const knownIssueTypes = ["GSOV_DROP", "TITLE_MISSING", "META_MISSING", "SCHEMA_INVALID", "HTTPS_MISSING"];
@@ -66,7 +66,7 @@ export async function scoreHealingActions(
       reasons.push(`+10 site has ${successfulLogs} successful heals (track record)`);
     }
 
-    if (action.fix && /TODO|\[NEEDS SOURCE\]|\[ADD/i.test(action.fix)) {
+    if (action.preparedChange?.serializedContent && /TODO|\[NEEDS SOURCE\]|\[ADD/i.test(action.preparedChange.serializedContent)) {
       score = clamp(score - 15);
       reasons.push("-15 fix contains incomplete placeholder");
     }
@@ -135,7 +135,6 @@ export async function executeHealingWithConfidenceGate(
           status:      "PENDING_REVIEW",
           metadata:    {
             type:              action.type,
-            fix:               action.fix,
             filePath:          action.filePath,
             confidence:        action.confidence,
             confidenceReasons: action.confidenceReasons,
@@ -152,7 +151,6 @@ export async function executeHealingWithConfidenceGate(
             type:       action.type,
             confidence: action.confidence,
             decision:   "QUEUE",
-            fix:        action.fix?.slice(0, 120) ?? null,
           },
         });
       }

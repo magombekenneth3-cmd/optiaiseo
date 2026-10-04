@@ -59,7 +59,158 @@ function computeSha256(content: string): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
-/** Compute normalized AST structural fingerprint (excluding trivia, whitespace & comments) */
+// ── Robots.txt Directive AST Model & Application ─────────────────────────────
+
+interface RobotsRule {
+  directive: "Allow" | "Disallow";
+  path: string;
+}
+
+interface RobotsGroup {
+  userAgent: string;
+  rules: RobotsRule[];
+}
+
+interface RobotsAst {
+  groups: RobotsGroup[];
+  sitemaps: string[];
+}
+
+function parseRobotsAst(content: string): RobotsAst {
+  const ast: RobotsAst = { groups: [], sitemaps: [] };
+  let currentGroup: RobotsGroup | null = null;
+
+  const lines = content.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const colonIdx = trimmed.indexOf(":");
+    if (colonIdx === -1) continue;
+
+    const key = trimmed.slice(0, colonIdx).trim().toLowerCase();
+    const val = trimmed.slice(colonIdx + 1).trim();
+
+    if (key === "user-agent") {
+      currentGroup = { userAgent: val, rules: [] };
+      ast.groups.push(currentGroup);
+    } else if (key === "disallow" || key === "allow") {
+      const directive = key === "disallow" ? "Disallow" : "Allow";
+      if (!currentGroup) {
+        currentGroup = { userAgent: "*", rules: [] };
+        ast.groups.push(currentGroup);
+      }
+      currentGroup.rules.push({ directive, path: val });
+    } else if (key === "sitemap") {
+      ast.sitemaps.push(val);
+    }
+  }
+
+  return ast;
+}
+
+function serializeRobotsAst(ast: RobotsAst): string {
+  const lines: string[] = [];
+  for (const group of ast.groups) {
+    lines.push(`User-agent: ${group.userAgent}`);
+    for (const rule of group.rules) {
+      lines.push(`${rule.directive}: ${rule.path}`);
+    }
+    lines.push("");
+  }
+  for (const sitemap of ast.sitemaps) {
+    lines.push(`Sitemap: ${sitemap}`);
+  }
+  return lines.join("\n").trim() + "\n";
+}
+
+function applyRobotsAstOperations(
+  sourceCode: string,
+  filePath: string,
+  operations: AstOperation[],
+): string {
+  const ast = parseRobotsAst(sourceCode);
+
+  for (const op of operations) {
+    if (op.kind === "setRobotsDirective") {
+      let group = ast.groups.find(
+        (g) => g.userAgent.toLowerCase() === op.userAgent.toLowerCase(),
+      );
+      if (!group) {
+        group = { userAgent: op.userAgent, rules: [] };
+        ast.groups.push(group);
+      }
+      const existing = group.rules.find(
+        (r) => r.directive === op.directive && r.path === op.path,
+      );
+      if (!existing) {
+        group.rules.push({ directive: op.directive, path: op.path });
+      }
+    } else if (op.kind === "removeRobotsDirective") {
+      const group = ast.groups.find(
+        (g) => g.userAgent.toLowerCase() === op.userAgent.toLowerCase(),
+      );
+      if (group) {
+        group.rules = group.rules.filter(
+          (r) => !(r.directive === op.directive && r.path === op.path),
+        );
+      }
+    } else {
+      throw new Error(
+        `AST_MUTATION_UNSUPPORTED: Operation kind '${(op as any).kind}' is not supported for robots.txt.`,
+      );
+    }
+  }
+
+  return serializeRobotsAst(ast);
+}
+
+// ── XML AST Application ─────────────────────────────────────────────────────
+
+function applyXmlAstOperations(
+  sourceCode: string,
+  filePath: string,
+  operations: AstOperation[],
+): string {
+  if (!sourceCode.trim().startsWith("<?xml") && !sourceCode.trim().startsWith("<")) {
+    throw new Error(`AST_PARSE_FAILED: File ${filePath} is not a valid XML document.`);
+  }
+
+  const root = parseHtml(sourceCode, { comment: true });
+
+  for (const op of operations) {
+    if (op.kind === "setXmlNode") {
+      const nodes = root.querySelectorAll(op.targetTag);
+      if (nodes.length === 0) {
+        throw new Error(`AST_TARGET_NOT_FOUND: XML tag '${op.targetTag}' not found in ${filePath}`);
+      }
+      let targetNodes: HTMLElement[] = [];
+      if (nodes.length > 1) {
+        if (op.occurrence !== undefined) {
+          if (op.occurrence < 1 || op.occurrence > nodes.length) {
+            throw new Error(`AST_TARGET_NOT_FOUND: Occurrence ${op.occurrence} of XML tag '${op.targetTag}' out of range (${nodes.length} found)`);
+          }
+          targetNodes = [nodes[op.occurrence - 1]];
+        } else if (op.allMatches === true) {
+          targetNodes = nodes;
+        } else {
+          throw new Error(`AST_TARGET_AMBIGUOUS: XML tag '${op.targetTag}' matched ${nodes.length} elements in ${filePath}. Specify occurrence or set allMatches: true.`);
+        }
+      } else {
+        targetNodes = nodes;
+      }
+      for (const n of targetNodes) {
+        n.set_content(op.value);
+      }
+    } else {
+      throw new Error(`AST_MUTATION_UNSUPPORTED: Operation kind '${(op as any).kind}' is not supported for XML.`);
+    }
+  }
+
+  return root.toString();
+}
+
+/** Compute strict AST structural fingerprint without string fallbacks */
 function computeAstFingerprint(code: string, language: string): string {
   try {
     if (language === "typescript" || language === "tsx" || language === "javascript" || language === "jsx") {
@@ -77,17 +228,28 @@ function computeAstFingerprint(code: string, language: string): string {
         }
       });
       return createHash("sha256").update(tokens.join(";")).digest("hex");
+    } else if (language === "html" || language === "xml") {
+      const root = parseHtml(code);
+      const tokens: string[] = [];
+      root.querySelectorAll("*").forEach((el) => {
+        const attrs = Object.keys(el.attributes).sort().join(",");
+        tokens.push(`${el.tagName}:${attrs}`);
+      });
+      return createHash("sha256").update(tokens.join(";")).digest("hex");
+    } else if (language === "json") {
+      const obj = JSON.parse(code);
+      const keys = Object.keys(obj).sort().join(";");
+      return createHash("sha256").update(keys).digest("hex");
+    } else if (language === "robots") {
+      const ast = parseRobotsAst(code);
+      const summary = ast.groups.map(g => `${g.userAgent}:${g.rules.map(r=>r.directive+r.path).join(",")}`).join(";");
+      return createHash("sha256").update(summary).digest("hex");
     }
-  } catch {
-    // Fall back to whitespace-strip normalized hash if AST traversal fails
+  } catch (err) {
+    throw new Error(`AST_FINGERPRINT_FAILED: Failed to generate AST fingerprint for language '${language}': ${(err as Error)?.message}`);
   }
 
-  const normalized = code
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\/\/.*/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return createHash("sha256").update(normalized).digest("hex");
+  throw new Error(`AST_FINGERPRINT_FAILED: Fingerprint calculation not implemented for language '${language}'`);
 }
 
 // ── TypeScript / TSX AST Application ───────────────────────────────────────
@@ -126,7 +288,7 @@ function applyTsxAstOperations(
           }
         } else if (exportedVarDecls.length > 1) {
           throw new Error(
-            `AST_TARGET_NOT_FOUND: Ambiguous top-level exported target '${op.target}' in ${filePath}`,
+            `AST_TARGET_AMBIGUOUS: Ambiguous top-level exported target '${op.target}' in ${filePath}`,
           );
         }
 
@@ -226,46 +388,105 @@ function applyTsxAstOperations(
       }
 
       case "setJsxAttribute": {
-        let attrUpdated = false;
+        const targetTag = op.elementTag || op.componentName;
+        if (!targetTag) {
+          throw new Error(`AST_TARGET_AMBIGUOUS: setJsxAttribute requires an explicit elementTag or componentName target.`);
+        }
+
+        const matchingNodes: (import("ts-morph").JsxSelfClosingElement | import("ts-morph").JsxOpeningElement)[] = [];
         sourceFile.forEachDescendant((node) => {
           if (Node.isJsxSelfClosingElement(node) || Node.isJsxOpeningElement(node)) {
             const tagName = node.getTagNameNode().getText();
-            if (!op.elementTag || tagName === op.elementTag) {
-              const valStr = typeof op.value === "string" ? `"${op.value}"` : `{${op.value}}`;
-              const attr = node.getAttribute(op.attributeName);
-              if (attr && Node.isJsxAttribute(attr)) {
-                attr.setInitializer(valStr);
-              } else {
-                node.addAttribute({
-                  name: op.attributeName,
-                  initializer: valStr,
-                });
-              }
-              attrUpdated = true;
+            if (tagName === targetTag) {
+              matchingNodes.push(node);
             }
           }
         });
-        if (!attrUpdated) {
-          throw new Error(`AST_TARGET_NOT_FOUND: JSX element tag '${op.elementTag ?? "*"}' not found in ${filePath}`);
+
+        if (matchingNodes.length === 0) {
+          throw new Error(`AST_TARGET_NOT_FOUND: JSX element tag '${targetTag}' not found in ${filePath}`);
+        }
+
+        let selectedNodes: typeof matchingNodes = [];
+        if (matchingNodes.length > 1) {
+          if (op.occurrence !== undefined) {
+            if (op.occurrence < 1 || op.occurrence > matchingNodes.length) {
+              throw new Error(`AST_TARGET_NOT_FOUND: Occurrence ${op.occurrence} of JSX tag '${targetTag}' out of range (${matchingNodes.length} found)`);
+            }
+            selectedNodes = [matchingNodes[op.occurrence - 1]];
+          } else if (op.allMatches === true) {
+            selectedNodes = matchingNodes;
+          } else {
+            throw new Error(`AST_TARGET_AMBIGUOUS: Matched ${matchingNodes.length} '${targetTag}' JSX elements in ${filePath}. Specify occurrence index or set allMatches: true.`);
+          }
+        } else {
+          selectedNodes = matchingNodes;
+        }
+
+        const valStr = typeof op.value === "string" ? `"${op.value}"` : `{${op.value}}`;
+        for (const node of selectedNodes) {
+          const attr = node.getAttribute(op.attributeName);
+          if (attr && Node.isJsxAttribute(attr)) {
+            if (op.expectedCurrentValue !== undefined) {
+              const curText = attr.getInitializer()?.getText().replace(/^["']|["']$/g, "");
+              if (curText !== undefined && curText !== String(op.expectedCurrentValue)) {
+                throw new Error(`STALE_FIX_ABORTED: JSX attribute '${op.attributeName}' value does not match expected value.`);
+              }
+            }
+            attr.setInitializer(valStr);
+          } else {
+            node.addAttribute({
+              name: op.attributeName,
+              initializer: valStr,
+            });
+          }
         }
         break;
       }
 
       case "removeJsxAttribute": {
+        const targetTag = op.elementTag || op.componentName;
+        if (!targetTag) {
+          throw new Error(`AST_TARGET_AMBIGUOUS: removeJsxAttribute requires an explicit elementTag or componentName target.`);
+        }
+
+        const matchingNodes: (import("ts-morph").JsxSelfClosingElement | import("ts-morph").JsxOpeningElement)[] = [];
         sourceFile.forEachDescendant((node) => {
           if (Node.isJsxSelfClosingElement(node) || Node.isJsxOpeningElement(node)) {
-            const tagName = node.getTagNameNode().getText();
-            if (!op.elementTag || tagName === op.elementTag) {
-              const attr = node.getAttribute(op.attributeName);
-              if (attr) attr.remove();
+            if (node.getTagNameNode().getText() === targetTag) {
+              matchingNodes.push(node);
             }
           }
         });
+
+        if (matchingNodes.length === 0) {
+          throw new Error(`AST_TARGET_NOT_FOUND: JSX element tag '${targetTag}' not found in ${filePath}`);
+        }
+
+        let selectedNodes: typeof matchingNodes = [];
+        if (matchingNodes.length > 1) {
+          if (op.occurrence !== undefined) {
+            if (op.occurrence < 1 || op.occurrence > matchingNodes.length) {
+              throw new Error(`AST_TARGET_NOT_FOUND: Occurrence ${op.occurrence} of JSX tag '${targetTag}' out of range (${matchingNodes.length} found)`);
+            }
+            selectedNodes = [matchingNodes[op.occurrence - 1]];
+          } else if (op.allMatches === true) {
+            selectedNodes = matchingNodes;
+          } else {
+            throw new Error(`AST_TARGET_AMBIGUOUS: Matched ${matchingNodes.length} '${targetTag}' JSX elements in ${filePath}. Specify occurrence index or set allMatches: true.`);
+          }
+        } else {
+          selectedNodes = matchingNodes;
+        }
+
+        for (const node of selectedNodes) {
+          const attr = node.getAttribute(op.attributeName);
+          if (attr) attr.remove();
+        }
         break;
       }
 
       case "insertJsxElement": {
-        let inserted = false;
         let snippet = op.jsxSnippet;
         if (!snippet && op.tagName) {
           const attrsStr = op.attributes
@@ -280,20 +501,23 @@ function applyTsxAstOperations(
 
         if (!snippet) throw new Error("AST_MUTATION_FAILED: insertJsxElement requires jsxSnippet or tagName");
 
+        const targetTag = op.parentTag || op.targetSelector;
+        const matchingParents: import("ts-morph").JsxElement[] = [];
+
         sourceFile.forEachDescendant((node) => {
-          if (!inserted && Node.isJsxElement(node)) {
+          if (Node.isJsxElement(node)) {
             const tag = node.getOpeningElement().getTagNameNode().getText();
-            if (!op.parentTag || tag === op.parentTag) {
-              const closing = node.getClosingElement();
-              if (closing) {
-                closing.replaceWithText(`${snippet}\n${closing.getText()}`);
-                inserted = true;
-              }
+            if (!targetTag || tag === targetTag) {
+              matchingParents.push(node);
             }
           }
         });
-        if (!inserted) {
-          // If parent JSX node not found, add to top-level JSX return statement
+
+        if (matchingParents.length === 0) {
+          if (targetTag) {
+            throw new Error(`AST_TARGET_NOT_FOUND: Could not find parent JSX tag '${targetTag}' in ${filePath}`);
+          }
+          let inserted = false;
           sourceFile.forEachDescendant((node) => {
             if (!inserted && Node.isReturnStatement(node)) {
               const expr = node.getExpression();
@@ -312,23 +536,78 @@ function applyTsxAstOperations(
               }
             }
           });
+          if (!inserted) throw new Error(`AST_TARGET_NOT_FOUND: Could not find return statement JSX element in ${filePath}`);
+          break;
         }
-        if (!inserted) throw new Error(`AST_TARGET_NOT_FOUND: Could not find parent JSX tag '${op.parentTag ?? "return"}' in ${filePath}`);
+
+        let selectedParents: typeof matchingParents = [];
+        if (matchingParents.length > 1) {
+          if (op.occurrence !== undefined) {
+            if (op.occurrence < 1 || op.occurrence > matchingParents.length) {
+              throw new Error(`AST_TARGET_NOT_FOUND: Occurrence ${op.occurrence} of parent JSX tag '${targetTag}' out of range (${matchingParents.length} found)`);
+            }
+            selectedParents = [matchingParents[op.occurrence - 1]];
+          } else if (op.allMatches === true) {
+            selectedParents = matchingParents;
+          } else {
+            throw new Error(`AST_TARGET_AMBIGUOUS: Matched ${matchingParents.length} parent JSX elements for '${targetTag}' in ${filePath}. Specify occurrence index or set allMatches: true.`);
+          }
+        } else {
+          selectedParents = matchingParents;
+        }
+
+        for (const parent of selectedParents) {
+          const closing = parent.getClosingElement();
+          if (closing) {
+            closing.replaceWithText(`${snippet}\n${closing.getText()}`);
+          }
+        }
         break;
       }
 
       case "replaceJsxText": {
-        let textReplaced = false;
+        const matchingTextNodes: import("ts-morph").JsxText[] = [];
         sourceFile.forEachDescendant((node) => {
-          if (!textReplaced && Node.isJsxText(node)) {
-            if (op.expectedCurrentValue && !node.getText().includes(String(op.expectedCurrentValue))) {
-              throw new Error(`STALE_FIX_ABORTED: JSX text does not match expected current value.`);
+          if (Node.isJsxText(node)) {
+            if (op.targetSelector) {
+              const parentTag = node.getParent() && Node.isJsxElement(node.getParent())
+                ? (node.getParent() as import("ts-morph").JsxElement).getOpeningElement().getTagNameNode().getText()
+                : undefined;
+              if (parentTag === op.targetSelector) {
+                matchingTextNodes.push(node);
+              }
+            } else {
+              matchingTextNodes.push(node);
             }
-            node.replaceWithText(op.text);
-            textReplaced = true;
           }
         });
-        if (!textReplaced) throw new Error(`AST_TARGET_NOT_FOUND: JSX text node not found in ${filePath}`);
+
+        if (matchingTextNodes.length === 0) {
+          throw new Error(`AST_TARGET_NOT_FOUND: JSX text node not found in ${filePath}`);
+        }
+
+        let selectedTextNodes: typeof matchingTextNodes = [];
+        if (matchingTextNodes.length > 1) {
+          if (op.occurrence !== undefined) {
+            if (op.occurrence < 1 || op.occurrence > matchingTextNodes.length) {
+              throw new Error(`AST_TARGET_NOT_FOUND: Occurrence ${op.occurrence} of JSX text node out of range (${matchingTextNodes.length} found)`);
+            }
+            selectedTextNodes = [matchingTextNodes[op.occurrence - 1]];
+          } else if (op.allMatches === true) {
+            selectedTextNodes = matchingTextNodes;
+          } else {
+            throw new Error(`AST_TARGET_AMBIGUOUS: Matched ${matchingTextNodes.length} JSX text nodes in ${filePath}. Specify occurrence index or set allMatches: true.`);
+          }
+        } else {
+          selectedTextNodes = matchingTextNodes;
+        }
+
+        for (const textNode of selectedTextNodes) {
+          if (op.expectedCurrentValue && !textNode.getText().includes(String(op.expectedCurrentValue))) {
+            throw new Error(`STALE_FIX_ABORTED: JSX text does not match expected current value.`);
+          }
+          textNode.replaceWithText(op.text);
+        }
         break;
       }
 
@@ -362,7 +641,23 @@ function applyHtmlAstOperations(
         if (elements.length === 0) {
           throw new Error(`AST_TARGET_NOT_FOUND: Selector '${op.selector}' not found in HTML ${filePath}`);
         }
-        for (const el of elements) {
+        let targetElements: HTMLElement[] = [];
+        if (elements.length > 1) {
+          if (op.occurrence !== undefined) {
+            if (op.occurrence < 1 || op.occurrence > elements.length) {
+              throw new Error(`AST_TARGET_NOT_FOUND: Occurrence ${op.occurrence} of selector '${op.selector}' out of range (${elements.length} found)`);
+            }
+            targetElements = [elements[op.occurrence - 1]];
+          } else if (op.allMatches === true) {
+            targetElements = elements;
+          } else {
+            throw new Error(`AST_TARGET_AMBIGUOUS: Selector '${op.selector}' matched ${elements.length} HTML elements in ${filePath}. Specify occurrence index or set allMatches: true.`);
+          }
+        } else {
+          targetElements = elements;
+        }
+
+        for (const el of targetElements) {
           if (op.expectedCurrentValue !== undefined) {
             const cur = el.getAttribute(op.attributeName);
             if (cur !== undefined && cur !== String(op.expectedCurrentValue)) {
@@ -376,7 +671,26 @@ function applyHtmlAstOperations(
 
       case "removeHtmlAttribute": {
         const elements = root.querySelectorAll(op.selector);
-        for (const el of elements) {
+        if (elements.length === 0) {
+          throw new Error(`AST_TARGET_NOT_FOUND: Selector '${op.selector}' not found in HTML ${filePath}`);
+        }
+        let targetElements: HTMLElement[] = [];
+        if (elements.length > 1) {
+          if (op.occurrence !== undefined) {
+            if (op.occurrence < 1 || op.occurrence > elements.length) {
+              throw new Error(`AST_TARGET_NOT_FOUND: Occurrence ${op.occurrence} of selector '${op.selector}' out of range (${elements.length} found)`);
+            }
+            targetElements = [elements[op.occurrence - 1]];
+          } else if (op.allMatches === true) {
+            targetElements = elements;
+          } else {
+            throw new Error(`AST_TARGET_AMBIGUOUS: Selector '${op.selector}' matched ${elements.length} HTML elements in ${filePath}. Specify occurrence index or set allMatches: true.`);
+          }
+        } else {
+          targetElements = elements;
+        }
+
+        for (const el of targetElements) {
           el.removeAttribute(op.attributeName);
         }
         break;
@@ -402,7 +716,23 @@ function applyHtmlAstOperations(
 
         if (!snippet) throw new Error("AST_MUTATION_FAILED: insertHtmlElement requires htmlSnippet or tagName");
 
-        for (const parent of parents) {
+        let targetParents: HTMLElement[] = [];
+        if (parents.length > 1) {
+          if (op.occurrence !== undefined) {
+            if (op.occurrence < 1 || op.occurrence > parents.length) {
+              throw new Error(`AST_TARGET_NOT_FOUND: Occurrence ${op.occurrence} of parent selector '${op.parentSelector}' out of range (${parents.length} found)`);
+            }
+            targetParents = [parents[op.occurrence - 1]];
+          } else if (op.allMatches === true) {
+            targetParents = parents;
+          } else {
+            throw new Error(`AST_TARGET_AMBIGUOUS: Parent selector '${op.parentSelector}' matched ${parents.length} HTML elements in ${filePath}. Specify occurrence index or set allMatches: true.`);
+          }
+        } else {
+          targetParents = parents;
+        }
+
+        for (const parent of targetParents) {
           if (op.position === "prepend") {
             parent.insertAdjacentHTML("afterbegin", snippet);
           } else {
@@ -420,69 +750,7 @@ function applyHtmlAstOperations(
   return root.toString();
 }
 
-// ── Robots.txt Directive AST Application ─────────────────────────────────────
 
-function applyRobotsAstOperations(
-  sourceCode: string,
-  filePath: string,
-  operations: AstOperation[],
-): string {
-  const lines = sourceCode.split("\n");
-
-  for (const op of operations) {
-    if (op.kind === "setRobotsDirective") {
-      let userAgentIdx = -1;
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].toLowerCase().includes(`user-agent: ${op.userAgent.toLowerCase()}`) || lines[i].toLowerCase().includes(`user-agent: *`)) {
-          userAgentIdx = i;
-          break;
-        }
-      }
-      const newRule = `${op.directive}: ${op.path}`;
-      if (userAgentIdx !== -1) {
-        lines.splice(userAgentIdx + 1, 0, newRule);
-      } else {
-        lines.push(`User-agent: ${op.userAgent}`);
-        lines.push(newRule);
-      }
-    } else if (op.kind === "removeRobotsDirective") {
-      const targetRule = `${op.directive.toLowerCase()}: ${op.path.toLowerCase()}`;
-      const filtered = lines.filter(l => !l.toLowerCase().includes(targetRule));
-      lines.length = 0;
-      lines.push(...filtered);
-    } else {
-      throw new Error(`AST_MUTATION_UNSUPPORTED: Operation kind '${(op as any).kind}' is not supported for robots.txt.`);
-    }
-  }
-
-  return lines.join("\n");
-}
-
-// ── XML AST Application ─────────────────────────────────────────────────────
-
-function applyXmlAstOperations(
-  sourceCode: string,
-  filePath: string,
-  operations: AstOperation[],
-): string {
-  const root = parseHtml(sourceCode);
-
-  for (const op of operations) {
-    if (op.kind === "setXmlNode") {
-      const nodes = root.querySelectorAll(op.targetTag);
-      if (nodes.length === 0) {
-        throw new Error(`AST_TARGET_NOT_FOUND: XML tag '${op.targetTag}' not found in ${filePath}`);
-      }
-      for (const n of nodes) {
-        n.set_content(op.value);
-      }
-    } else {
-      throw new Error(`AST_MUTATION_UNSUPPORTED: Operation kind '${(op as any).kind}' is not supported for XML.`);
-    }
-  }
-
-  return root.toString();
-}
 
 // ── Main Server-Side AST Application Engine ──────────────────────────────────
 
