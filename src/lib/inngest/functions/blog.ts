@@ -742,6 +742,21 @@ Be specific and concise. This will be used to write a better article.`,
                 return liveBlogPost;
             }
 
+            // Avoid a second full rewrite when Stage 4 already produced clean copy.
+            // A double rewrite adds 1-2 minutes and causes content drift, so only
+            // run Claude when the draft still shows AI patterns or editor markers.
+            const lowerContent = liveBlogPost.content.toLowerCase();
+            const AI_PATTERN_SIGNALS = [
+                "in today's", "delve", "it's important to note", "in conclusion",
+                "navigate the", "landscape", "unlock", "game-changer", "seamless",
+                "robust", "leverage", "furthermore", "moreover", "[editor:",
+            ];
+            const hits = AI_PATTERN_SIGNALS.filter((p) => lowerContent.includes(p)).length;
+            if (hits < 2 && !lowerContent.includes("[editor:")) {
+                logger.info("[Blog/Claude] Draft already clean — skipping second editorial pass", { hits });
+                return liveBlogPost;
+            }
+
             const authorContext = [
                 site.authorBio ? `Author bio: ${site.authorBio}` : "",
                 site.authorRole ? `Author role: ${site.authorRole}` : "",
