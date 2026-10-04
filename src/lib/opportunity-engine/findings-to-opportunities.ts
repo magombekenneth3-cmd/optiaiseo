@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import type { AgentFinding } from "@/lib/agents/types";
+import { resolvePageExistence, type PageExistenceResult } from "./page-existence-resolver";
 
 // ── Opportunity Scoring Types ───────────────────────────────────────────────
 
@@ -216,16 +217,53 @@ export async function generateOpportunitiesFromFindings(
     const mapping = FINDING_TYPE_MAPPINGS[finding.type] || DEFAULT_MAPPING;
     const resourceType = finding.affectedResource?.type ?? "SITE";
     const resourceId = finding.affectedResource?.id ?? "site-level";
-    const url = resourceId.startsWith("http") ? resourceId : `https://${resourceId}`;
+    let url = resourceId.startsWith("http") ? resourceId : `https://${resourceId}`;
     const primaryKeyword = finding.title.slice(0, 100);
+
+    // ── Page-Existence Resolution for TOPIC_OPPORTUNITY ──────────────
+    // Instead of blindly mapping TOPIC_OPPORTUNITY → CREATE_NEW_CONTENT,
+    // check whether a relevant page already exists using GSC, Blog, and
+    // crawl evidence. The resolver returns the correct action/category.
+    let resolvedAction = mapping.action;
+    let resolvedCategory = mapping.category;
+    let pageExistenceResult: PageExistenceResult | null = null;
+
+    if (finding.type === "TOPIC_OPPORTUNITY") {
+      // Extract cluster queries from finding evidence metadata
+      const clusterQueries = extractClusterQueries(finding);
+
+      pageExistenceResult = await resolvePageExistence(
+        siteId,
+        resourceId, // The representative keyword
+        clusterQueries,
+      );
+
+      resolvedAction = pageExistenceResult.recommendedAction;
+      resolvedCategory = pageExistenceResult.recommendedCategory;
+
+      // If an existing page was found, use its URL instead of the keyword
+      if (pageExistenceResult.existingPage) {
+        url = pageExistenceResult.existingPage.url.startsWith("http")
+          ? pageExistenceResult.existingPage.url
+          : `https://${pageExistenceResult.existingPage.url}`;
+      }
+
+      logger.info("[OpportunityEngine] Page existence resolved for TOPIC_OPPORTUNITY", {
+        siteId,
+        keyword: resourceId,
+        verdict: pageExistenceResult.verdict,
+        action: resolvedAction,
+        existingUrl: pageExistenceResult.existingPage?.url ?? null,
+      });
+    }
 
     // Compute stable fingerprint for this opportunity
     const opFingerprint = createOpportunityFingerprint({
       siteId,
-      category: mapping.category,
+      category: resolvedCategory,
       resourceType,
       resourceId,
-      action: mapping.action,
+      action: resolvedAction,
     });
 
     // Compute bounded, explainable score
@@ -250,24 +288,42 @@ export async function generateOpportunitiesFromFindings(
       scoredAt: new Date().toISOString(),
     };
 
+    // Build whyNow signals — include page-existence reasoning when available
+    const whyNowSignals: Array<{ signal: string; severity: string; evidence: string }> = [
+      {
+        signal: "AGENT_FINDING",
+        severity: finding.severity,
+        evidence: finding.description.slice(0, 500),
+      },
+    ];
+
+    if (pageExistenceResult) {
+      whyNowSignals.push({
+        signal: "PAGE_EXISTENCE_CHECK",
+        severity: pageExistenceResult.verdict === "EXISTING_CANNIBALIZED" ? "HIGH" : "MEDIUM",
+        evidence: pageExistenceResult.reasoning.slice(0, 500),
+      });
+    }
+
     const decisionData = {
       siteId,
       url,
       primaryKeyword,
-      primaryCategory: mapping.category,
-      opportunityCategories: [mapping.category],
-      action: mapping.action,
+      primaryCategory: resolvedCategory,
+      opportunityCategories: [resolvedCategory],
+      action: resolvedAction,
       fingerprint: opFingerprint,
       score: scorePayload as object,
       whyNow: {
-        signals: [
-          {
-            signal: "AGENT_FINDING",
-            severity: finding.severity,
-            evidence: finding.description.slice(0, 500),
-          },
-        ],
+        signals: whyNowSignals,
         urgency: finding.severity === "CRITICAL" ? "CRITICAL" : finding.severity === "HIGH" ? "HIGH" : "MEDIUM",
+        ...(pageExistenceResult ? { pageExistence: {
+          verdict: pageExistenceResult.verdict,
+          existingUrl: pageExistenceResult.existingPage?.url ?? null,
+          matchSource: pageExistenceResult.existingPage?.matchSource ?? null,
+          matchConfidence: pageExistenceResult.existingPage?.matchConfidence ?? null,
+          candidateCount: pageExistenceResult.allCandidates.length,
+        }} : {}),
       },
       impact: {
         trafficPotential: {
@@ -289,6 +345,10 @@ export async function generateOpportunitiesFromFindings(
         ? await prisma.growthDecision.update({
             where: { id: existing.id },
             data: {
+              url,
+              action: resolvedAction,
+              primaryCategory: resolvedCategory,
+              opportunityCategories: [resolvedCategory],
               score: scorePayload as object,
               whyNow: decisionData.whyNow,
               updatedAt: new Date(),
@@ -300,7 +360,7 @@ export async function generateOpportunitiesFromFindings(
                 siteId,
                 url,
                 primaryKeyword,
-                action: mapping.action,
+                action: resolvedAction,
               },
             },
             update: {
@@ -345,4 +405,25 @@ export async function generateOpportunitiesFromFindings(
   });
 
   return createdCount;
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Extract cluster queries from a TOPIC_OPPORTUNITY finding's evidence metadata.
+ * The keyword-intelligence-agent stores queries in evidence[0].metadata.queries.
+ */
+function extractClusterQueries(finding: AgentFinding): string[] {
+  for (const ev of finding.evidence) {
+    if (ev.metric === "clusterSize" && ev.metadata) {
+      const queries = (ev.metadata as Record<string, unknown>).queries;
+      if (Array.isArray(queries)) {
+        return queries.map(String);
+      }
+    }
+  }
+
+  // Fallback: use the resource ID (representative keyword) as the only query
+  const keyword = finding.affectedResource?.id;
+  return keyword ? [keyword] : [];
 }
