@@ -34,10 +34,10 @@ function ScoreBar({ label, value, detail, tooltip }: {
     return (
         <div className="space-y-1.5" title={tooltip}>
             <div className="flex items-center justify-between">
-                <span className="text-[11px] text-[#8b949e]">{label}</span>
-                <span className="font-mono text-[11px] font-semibold" style={{ color }}>{detail}</span>
+                <span className="text-xs text-muted-foreground">{label}</span>
+                <span className="font-mono text-xs font-semibold" style={{ color }}>{detail}</span>
             </div>
-            <div className="h-1 w-full rounded-full overflow-hidden bg-[#21262d]">
+            <div className="h-1 w-full rounded-full overflow-hidden" style={{ backgroundColor: "var(--border)" }}>
                 <div
                     className="h-full rounded-full transition-all duration-700 ease-out"
                     style={{
@@ -81,8 +81,8 @@ export function ClusterCard({ cluster, siteId }: Props) {
         <div
             className="rounded-xl overflow-hidden transition-all duration-200"
             style={{
-                border: `1px solid ${expanded ? health.border : "#21262d"}`,
-                background: expanded ? health.bg : "rgb(13,17,23)",
+                border: `1px solid ${expanded ? health.border : "var(--border)"}`,
+                background: expanded ? health.bg : "var(--card)",
             }}
         >
             {/* ── Header (always visible) ─────────────────────────────── */}
@@ -100,16 +100,16 @@ export function ClusterCard({ cluster, siteId }: Props) {
 
                 {/* Cluster name + meta */}
                 <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-[#e6edf3] truncate leading-tight">
+                    <p className="text-sm font-semibold text-foreground truncate leading-tight">
                         {cluster.clusterName}
                     </p>
-                    <p className="text-[11px] text-[#484f58] mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                         {pillarNode ? "1 pillar" : "No pillar detected"}
-                        <span className="mx-1.5 text-[#30363d]">·</span>
+                        <span className="mx-1.5 text-muted-foreground/50">·</span>
                         {spokeNodes.length} spoke{spokeNodes.length !== 1 ? "s" : ""}
                         {orphans.length > 0 && (
                             <>
-                                <span className="mx-1.5 text-[#30363d]">·</span>
+                                <span className="mx-1.5 text-muted-foreground/50">·</span>
                                 <span style={{ color: "#fbbf24" }}>
                                     {orphans.length} orphan{orphans.length !== 1 ? "s" : ""}
                                 </span>
@@ -121,19 +121,19 @@ export function ClusterCard({ cluster, siteId }: Props) {
                 {/* Right side: score pill + coverage + chevron */}
                 <div className="flex items-center gap-3 shrink-0">
                     <span
-                        className="hidden sm:inline-block rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide"
+                        className="hidden sm:inline-block rounded-full px-2 py-0.5 text-xs font-bold tracking-wide"
                         style={{ color: health.color, background: health.bg, border: `1px solid ${health.border}` }}
                     >
                         {health.label}
                     </span>
                     <div className="text-right hidden sm:block">
-                        <p className="text-[10px] text-[#484f58] leading-tight">Coverage</p>
-                        <p className="text-xs font-mono font-bold text-[#c9d1d9]">
+                        <p className="text-xs text-muted-foreground leading-tight">Coverage</p>
+                        <p className="text-xs font-mono font-bold text-foreground/80">
                             {spokeNodes.length}/4
                         </p>
                     </div>
                     <ChevronDown
-                        className="h-4 w-4 text-[#484f58] transition-transform duration-200"
+                        className="h-4 w-4 text-muted-foreground transition-transform duration-200"
                         style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
                     />
                 </div>
@@ -141,19 +141,19 @@ export function ClusterCard({ cluster, siteId }: Props) {
 
             {/* ── Expanded body ───────────────────────────────────────── */}
             {expanded && (
-                <div className="border-t border-[#21262d] divide-y divide-[#21262d]">
+                <div className="border-t border-border divide-y divide-border">
 
                     {/* Pillar */}
                     {pillarNode && (
                         <div className="px-5 py-4">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#484f58] mb-2.5">
+                            <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground mb-2.5">
                                 Pillar page
                             </p>
                             <a
                                 href={pillarNode.url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="group/link inline-flex items-center gap-2 text-sm font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+                                className="group/link inline-flex items-center gap-2 text-sm font-semibold text-brand hover:text-brand/80 transition-colors"
                             >
                                 <FileText className="h-3.5 w-3.5 shrink-0 opacity-70" />
                                 <span className="truncate max-w-[340px]">{pillarNode.title}</span>
@@ -161,25 +161,25 @@ export function ClusterCard({ cluster, siteId }: Props) {
                             </a>
                             {pillarNode.position !== undefined ? (
                                 <div className="flex items-center gap-3 mt-1.5">
-                                    <span className="inline-flex items-center gap-1 text-[11px] text-[#8b949e]">
+                                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                                         <TrendingUp className="h-3 w-3" />
-                                        pos&nbsp;<span className="font-mono text-[#c9d1d9]">{pillarNode.position.toFixed(1)}</span>
+                                        pos&nbsp;<span className="font-mono text-foreground/80">{pillarNode.position.toFixed(1)}</span>
                                     </span>
-                                    <span className="text-[#30363d]">·</span>
-                                    <span className="text-[11px] text-[#8b949e]">
-                                        <span className="font-mono text-[#c9d1d9]">{(pillarNode.impressions ?? 0).toLocaleString()}</span> impressions
+                                    <span className="text-muted-foreground/50">·</span>
+                                    <span className="text-xs text-muted-foreground">
+                                        <span className="font-mono text-foreground/80">{(pillarNode.impressions ?? 0).toLocaleString()}</span> impressions
                                     </span>
                                     {pillarNode.clicks !== undefined && (
                                         <>
-                                            <span className="text-[#30363d]">·</span>
-                                            <span className="text-[11px] text-[#8b949e]">
-                                                <span className="font-mono text-[#c9d1d9]">{pillarNode.clicks.toLocaleString()}</span> clicks
+                                            <span className="text-muted-foreground/50">·</span>
+                                            <span className="text-xs text-muted-foreground">
+                                                <span className="font-mono text-foreground/80">{pillarNode.clicks.toLocaleString()}</span> clicks
                                             </span>
                                         </>
                                     )}
                                 </div>
                             ) : (
-                                <p className="text-[11px] text-[#484f58] mt-1.5">No GSC data for this page</p>
+                                <p className="text-xs text-muted-foreground mt-1.5">No GSC data for this page</p>
                             )}
                         </div>
                     )}
@@ -187,7 +187,7 @@ export function ClusterCard({ cluster, siteId }: Props) {
                     {/* Spoke list */}
                     {spokeNodes.length > 0 && (
                         <div className="px-5 py-4">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#484f58] mb-2.5">
+                            <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground mb-2.5">
                                 Spoke pages
                             </p>
                             <ul className="space-y-3">
@@ -210,13 +210,13 @@ export function ClusterCard({ cluster, siteId }: Props) {
                                                         target="_blank"
                                                         rel="noreferrer"
                                                         className={`text-xs font-medium truncate transition-colors ${
-                                                            linked ? "text-[#c9d1d9] hover:text-white" : "text-amber-300/80 hover:text-amber-300"
+                                                            linked ? "text-foreground/80 hover:text-white" : "text-amber-300/80 hover:text-amber-300"
                                                         }`}
                                                     >
                                                         {spoke.title}
                                                     </a>
                                                     {!linked && (
-                                                        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide bg-amber-400/10 text-amber-400 border border-amber-400/20 shrink-0">
+                                                        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-bold tracking-wide bg-amber-400/10 text-amber-400 border border-amber-400/20 shrink-0">
                                                             ORPHAN
                                                         </span>
                                                     )}
@@ -224,19 +224,19 @@ export function ClusterCard({ cluster, siteId }: Props) {
                                                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                                     {spoke.position !== undefined ? (
                                                         <>
-                                                            <span className="text-[10px] text-[#484f58]">
-                                                                pos <span className="font-mono text-[#8b949e]">{spoke.position.toFixed(1)}</span>
+                                                            <span className="text-xs text-muted-foreground">
+                                                                pos <span className="font-mono text-muted-foreground">{spoke.position.toFixed(1)}</span>
                                                             </span>
-                                                            <span className="text-[#30363d]">·</span>
-                                                            <span className="text-[10px] text-[#484f58]">
-                                                                <span className="font-mono text-[#8b949e]">{(spoke.impressions ?? 0).toLocaleString()}</span> imp
+                                                            <span className="text-muted-foreground/50">·</span>
+                                                            <span className="text-xs text-muted-foreground">
+                                                                <span className="font-mono text-muted-foreground">{(spoke.impressions ?? 0).toLocaleString()}</span> imp
                                                             </span>
                                                         </>
                                                     ) : (
-                                                        <span className="text-[10px] text-[#30363d]">No GSC data</span>
+                                                        <span className="text-xs text-muted-foreground/50">No GSC data</span>
                                                     )}
                                                     {linked && (
-                                                        <span className="text-[10px] text-emerald-600">
+                                                        <span className="text-xs text-emerald-600">
                                                             {spoke.inboundClusterMentionCount} inbound mention{spoke.inboundClusterMentionCount !== 1 ? "s" : ""}
                                                         </span>
                                                     )}
@@ -268,13 +268,13 @@ export function ClusterCard({ cluster, siteId }: Props) {
                     {/* Link graph */}
                     {(pillarNode || spokeNodes.length > 0) && spokeNodes.length > 0 && (
                         <div className="px-5 py-4">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#484f58] mb-3">
+                            <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground mb-3">
                                 Cluster link graph
-                                <span className="ml-2 font-normal normal-case text-[#30363d]">
+                                <span className="ml-2 font-normal normal-case text-muted-foreground/50">
                                     — solid = detected mention · dashed = opportunity
                                 </span>
                             </p>
-                            <div className="rounded-lg bg-[#080c10] border border-[#161b22]">
+                            <div className="rounded-lg bg-background border border-border/60">
                                 <LinkGraphSvg pillar={pillarNode} spokes={spokeNodes} />
                             </div>
                         </div>
@@ -283,29 +283,29 @@ export function ClusterCard({ cluster, siteId }: Props) {
                     {/* Missing spoke */}
                     {missingSpokes.length > 0 && (
                         <div className="px-5 py-4">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#484f58] mb-3">
+                            <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground mb-3">
                                 Coverage gaps
                             </p>
                             <div className="space-y-3">
                                 {missingSpokes.map(gap => (
                                     <div
                                         key={gap.topicClusterKey}
-                                        className="rounded-lg border border-dashed border-[#30363d] bg-[#0d1117] p-4"
+                                        className="rounded-lg border border-dashed border-border bg-card p-4"
                                     >
                                         <div className="flex items-start gap-3">
-                                            <div className="mt-0.5 h-6 w-6 rounded-md bg-[#161b22] border border-[#30363d] flex items-center justify-center shrink-0">
-                                                <Sparkles className="h-3 w-3 text-[#8b949e]" />
+                                            <div className="mt-0.5 h-6 w-6 rounded-md bg-muted border border-border flex items-center justify-center shrink-0">
+                                                <Sparkles className="h-3 w-3 text-muted-foreground" />
                                             </div>
                                             <div className="min-w-0 flex-1 space-y-1">
-                                                <p className="text-xs font-semibold text-[#c9d1d9]">{gap.suggestedTitle}</p>
-                                                <p className="text-[11px] text-[#484f58]">
-                                                    Keyword: <span className="font-mono text-[#8b949e]">{gap.suggestedKeyword}</span>
+                                                <p className="text-xs font-semibold text-foreground/80">{gap.suggestedTitle}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Keyword: <span className="font-mono text-muted-foreground">{gap.suggestedKeyword}</span>
                                                     {!gap.hasGscEvidence && (
-                                                        <span className="ml-1.5 text-[#30363d]">· heuristic, no GSC signal</span>
+                                                        <span className="ml-1.5 text-muted-foreground/50">· heuristic, no GSC signal</span>
                                                     )}
                                                 </p>
                                                 {genResult ? (
-                                                    <div className={`flex items-center gap-1.5 text-xs pt-1 ${genResult.ok ? "text-emerald-400" : "text-rose-400"}`}>
+                                                    <div className={`flex items-center gap-1.5 text-xs pt-1 ${genResult.ok ? "text-brand" : "text-rose-400"}`}>
                                                         {genResult.ok
                                                             ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                                                             : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
@@ -316,7 +316,7 @@ export function ClusterCard({ cluster, siteId }: Props) {
                                                         type="button"
                                                         disabled={generating}
                                                         onClick={() => handleGenerateDraft(gap)}
-                                                        className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[#30363d] bg-[#161b22] px-3 py-1.5 text-[11px] font-medium text-[#c9d1d9] hover:border-emerald-500/40 hover:text-emerald-400 hover:bg-emerald-500/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-border bg-muted px-3 py-1.5 text-xs font-medium text-foreground/80 hover:border-brand/40 hover:text-brand hover:bg-brand/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                                     >
                                                         {generating ? (
                                                             <Loader2 className="h-3 w-3 animate-spin" />

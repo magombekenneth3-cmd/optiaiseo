@@ -37,10 +37,10 @@ interface ActionItem {
     est: number;
 }
 
-const CFG: Record<ActionItem["type"], { icon: React.ElementType; label: string; impact: OpportunityImpact; cta: string; color: string }> = {
-    fix_ctr: { icon: AlertTriangle, label: "Fix CTR", impact: "high", cta: "Review page", color: "#d29922" },
-    push_page1: { icon: TrendingUp, label: "Push to Page 1", impact: "high", cta: "Improve page", color: "#3fb950" },
-    create_content: { icon: Sparkles, label: "Create Supporting Content", impact: "medium", cta: "Create content", color: "#58a6ff" },
+const CFG: Record<ActionItem["type"], { icon: React.ElementType; label: string; impact: OpportunityImpact; cta: string; tone: string }> = {
+    fix_ctr:         { icon: AlertTriangle, label: "Fix CTR",                     impact: "high",   cta: "Review page",    tone: "warning" },
+    push_page1:      { icon: TrendingUp,    label: "Push to Page 1",              impact: "high",   cta: "Improve page",   tone: "brand" },
+    create_content:  { icon: Sparkles,      label: "Create Supporting Content",   impact: "medium", cta: "Create content", tone: "info" },
 };
 
 function computeActions(keywords: GscKeyword[]): ActionItem[] {
@@ -101,51 +101,46 @@ export function PriorityActions({ keywords, siteId }: { keywords: GscKeyword[]; 
     const actions = computeActions(keywords);
 
     if (actions.length === 0) return (
-        <div className="rounded-xl border border-[#21262d] bg-[#0d1117] p-6 text-center">
-            <p className="text-[13px] text-[#6e7681]">No priority actions found right now.</p>
+        <div className="rounded-xl border border-border bg-card p-6 text-center">
+            <p className="text-sm text-muted-foreground">No priority actions found right now.</p>
         </div>
     );
 
     return (
         <>
-            <div className="rounded-xl border border-[#21262d] bg-[#0d1117] overflow-hidden h-full">
-                <div className="flex items-center justify-between px-5 py-3 border-b border-[#161b22]">
-                    <h2 className="text-[14px] font-semibold text-[#e6edf3]">Priority Actions</h2>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#d29922]/10 text-[#d29922] border border-[#d29922]/20">
+            <div className="rounded-xl border border-border bg-card overflow-hidden h-full">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-border/60">
+                    <h2 className="text-sm font-semibold text-foreground">Priority Actions</h2>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">
                         {actions.length} actions need your attention
                     </span>
                 </div>
-                <div className="divide-y divide-[#161b22]">
+                <div className="divide-y divide-border/60">
                     {actions.map((a, i) => {
                         const c = CFG[a.type];
                         const Icon = c.icon;
                         return (
-                            <div key={i} className="flex items-center gap-3 px-5 py-3.5 hover:bg-[#0f1318] transition-colors">
+                            <div key={i} className="flex items-center gap-3 px-5 py-3.5 hover:bg-muted/50 transition-colors">
                                 <div
-                                    className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                                    style={{ background: `${c.color}12` }}
+                                    className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-${c.tone}/10`}
                                 >
-                                    <Icon className="w-3.5 h-3.5" style={{ color: c.color }} />
+                                    <Icon className={`w-3.5 h-3.5 text-${c.tone}`} />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-0.5">
-                                        <span className="text-[13px] font-semibold text-[#e6edf3]">{c.label}</span>
-                                        <span
-                                            className="text-[9px] font-bold px-1.5 py-0.5 rounded"
-                                            style={{ color: c.color, background: `${c.color}15` }}
-                                        >
+                                        <span className="text-sm font-semibold text-foreground">{c.label}</span>
+                                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded bg-${c.tone}/10 text-${c.tone}`}>
                                             {c.impact}
                                         </span>
                                     </div>
-                                    <p className="text-[11px] text-[#6e7681] truncate">{a.reason}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{a.reason}</p>
                                 </div>
-                                <span className="hidden sm:block shrink-0 text-[11px] font-medium text-[#2ea043]">
+                                <span className="hidden sm:block shrink-0 text-xs font-medium text-brand">
                                     {a.impactLabel}
                                 </span>
                                 <button
                                     onClick={() => setDrawerKw(a.kw)}
-                                    className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors"
-                                    style={{ color: c.color, borderColor: `${c.color}30`, background: `${c.color}08` }}
+                                    className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors border-${c.tone}/30 bg-${c.tone}/5 text-${c.tone} hover:bg-${c.tone}/10`}
                                 >
                                     {c.cta}<ArrowRight className="w-3 h-3" />
                                 </button>

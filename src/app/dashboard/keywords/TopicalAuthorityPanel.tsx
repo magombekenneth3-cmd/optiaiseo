@@ -20,11 +20,10 @@ function ScoreDial({ score }: { score: number }) {
     const gap = CIRC - fill;
     return (
         <div
-            className="rounded-xl px-4 py-3.5 flex items-center gap-4"
-            style={{ border: "1px solid #21262d", background: "rgb(13,17,23)" }}
+            className="rounded-xl px-4 py-3.5 flex items-center gap-4 border border-border bg-card"
         >
             <svg viewBox="0 0 36 36" width={54} height={54} className="shrink-0" style={{ transform: "rotate(-90deg)" }}>
-                <circle cx="18" cy="18" r={DIAL_R} fill="none" stroke="#21262d" strokeWidth="3" />
+                <circle cx="18" cy="18" r={DIAL_R} fill="none" stroke="var(--border)" strokeWidth="3" />
                 <circle
                     cx="18" cy="18" r={DIAL_R}
                     fill="none"
@@ -36,11 +35,11 @@ function ScoreDial({ score }: { score: number }) {
                 />
             </svg>
             <div>
-                <p className="text-[11px] text-[#484f58] leading-tight">Authority score</p>
-                <p className="text-[28px] font-black tabular-nums leading-none mt-0.5" style={{ color }}>
+                <p className="text-xs text-muted-foreground leading-tight">Authority score</p>
+                <p className="text-2xl font-black tabular-nums leading-none mt-0.5" style={{ color }}>
                     {score}
                 </p>
-                <p className="text-[10px] text-[#30363d] mt-0.5">benchmark-relative</p>
+                <p className="text-xs text-muted-foreground/50 mt-0.5">benchmark-relative</p>
             </div>
         </div>
     );
@@ -49,11 +48,10 @@ function ScoreDial({ score }: { score: number }) {
 function KpiStat({ label, value }: { label: string; value: number }) {
     return (
         <div
-            className="rounded-xl px-4 py-3.5"
-            style={{ border: "1px solid #21262d", background: "rgb(13,17,23)" }}
+            className="rounded-xl px-4 py-3.5 border border-border bg-card"
         >
-            <p className="text-[11px] text-[#484f58] leading-tight">{label}</p>
-            <p className="text-[28px] font-black tabular-nums leading-none text-[#e6edf3] mt-0.5">{value}</p>
+            <p className="text-xs text-muted-foreground leading-tight">{label}</p>
+            <p className="text-2xl font-black tabular-nums leading-none text-foreground mt-0.5">{value}</p>
         </div>
     );
 }
@@ -86,10 +84,10 @@ export function TopicalAuthorityPanel({ siteId }: Props) {
         return (
             <div className="flex flex-col items-center justify-center gap-3 py-24">
                 <div className="relative">
-                    <div className="h-10 w-10 rounded-full border-2 border-[#21262d]" />
-                    <Loader2 className="absolute inset-0 h-10 w-10 animate-spin text-emerald-400 opacity-60" />
+                    <div className="h-10 w-10 rounded-full border-2 border-border" />
+                    <Loader2 className="absolute inset-0 h-10 w-10 animate-spin text-brand opacity-60" />
                 </div>
-                <p className="text-sm text-[#484f58]">Building topical authority map…</p>
+                <p className="text-sm text-muted-foreground">Building topical authority map…</p>
             </div>
         );
     }
@@ -106,12 +104,12 @@ export function TopicalAuthorityPanel({ siteId }: Props) {
     if (!data || data.clusters.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
-                <div className="rounded-full border border-[#21262d] bg-[#0d1117] p-5">
-                    <Globe className="h-8 w-8 text-[#30363d]" />
+                <div className="rounded-full border border-border bg-card p-5">
+                    <Globe className="h-8 w-8 text-muted-foreground/50" />
                 </div>
                 <div>
-                    <p className="text-sm font-semibold text-[#8b949e]">No published content clusters</p>
-                    <p className="text-xs text-[#484f58] mt-1 max-w-xs">
+                    <p className="text-sm font-semibold text-muted-foreground">No published content clusters</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">
                         Publish at least one blog to see your topical authority map.
                     </p>
                 </div>
@@ -157,16 +155,16 @@ export function TopicalAuthorityPanel({ siteId }: Props) {
                 >
                     <div className="flex items-start justify-between gap-4">
                         <div className="space-y-1">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-600">
+                            <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-600">
                                 Recommended next coverage
                             </p>
-                            <p className="text-sm font-semibold text-[#e6edf3]">{topGap.suggestedTitle}</p>
-                            <p className="text-[11px] text-[#484f58]">
-                                Cluster: <span className="text-[#8b949e]">{topGap.topicClusterKey}</span>
-                                <span className="mx-1.5 text-[#30363d]">·</span>
-                                Keyword: <span className="font-mono text-[#8b949e]">{topGap.suggestedKeyword}</span>
+                            <p className="text-sm font-semibold text-foreground">{topGap.suggestedTitle}</p>
+                            <p className="text-xs text-muted-foreground">
+                                Cluster: <span className="text-muted-foreground">{topGap.topicClusterKey}</span>
+                                <span className="mx-1.5 text-muted-foreground/50">·</span>
+                                Keyword: <span className="font-mono text-muted-foreground">{topGap.suggestedKeyword}</span>
                                 {!topGap.hasGscEvidence && (
-                                    <span className="ml-1.5 text-[#30363d]">· heuristic, no GSC signal</span>
+                                    <span className="ml-1.5 text-muted-foreground/50">· heuristic, no GSC signal</span>
                                 )}
                             </p>
                         </div>
@@ -176,7 +174,7 @@ export function TopicalAuthorityPanel({ siteId }: Props) {
             )}
 
             {/* Legend */}
-            <div className="flex flex-wrap items-center gap-4 text-[11px] text-[#484f58] border-t border-[#161b22] pt-4">
+            <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground border-t border-border/60 pt-4">
                 <span className="flex items-center gap-1.5">
                     <span className="inline-block h-0.5 w-5 rounded" style={{ background: "#34d399" }} />
                     Detected internal mention
@@ -189,7 +187,7 @@ export function TopicalAuthorityPanel({ siteId }: Props) {
                     <span className="inline-block h-2 w-2 rounded-full bg-amber-400" />
                     Orphan spoke
                 </span>
-                <span className="ml-auto text-[#30363d]">
+                <span className="ml-auto text-muted-foreground/50">
                     Coverage = spokes vs 4-spoke benchmark
                 </span>
             </div>
@@ -197,10 +195,10 @@ export function TopicalAuthorityPanel({ siteId }: Props) {
             {/* Clusters */}
             <div className="space-y-2">
                 <div className="flex items-center gap-2 pb-1">
-                    <BookOpen className="h-3.5 w-3.5 text-[#484f58]" />
-                    <h2 className="text-[12px] font-semibold text-[#8b949e]">
+                    <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                    <h2 className="text-sm font-semibold text-muted-foreground">
                         Clusters
-                        <span className="text-[#30363d] font-normal ml-1">({data.clusters.length})</span>
+                        <span className="text-muted-foreground/50 font-normal ml-1">({data.clusters.length})</span>
                     </h2>
                 </div>
                 {data.clusters.map(cluster => (

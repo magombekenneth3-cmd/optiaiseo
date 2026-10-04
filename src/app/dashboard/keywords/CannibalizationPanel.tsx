@@ -13,8 +13,8 @@ function CopyButton({ text }: { text: string }) {
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
             }}
-            className="shrink-0 text-[10px] px-2 py-0.5 rounded border border-[#30363d] text-[#6e7681]
-                       hover:text-[#e6edf3] hover:border-[#484f58] transition-colors"
+            className="shrink-0 text-xs px-2 py-0.5 rounded border border-border text-muted-foreground
+                       hover:text-foreground hover:border-border transition-colors"
         >
             {copied ? <Check className="w-3 h-3 inline" /> : <Copy className="w-3 h-3 inline" />}
             {copied ? " Copied" : " Copy"}
@@ -32,11 +32,11 @@ function FixActions({ issue }: { issue: CannibalizationIssue }) {
         return (
             <div className="mt-3">
                 <div className="flex items-center gap-2 mb-1.5">
-                    <FileCode2 className="w-3.5 h-3.5 text-blue-400" />
-                    <p className="text-[11px] font-medium text-[#e6edf3]">Add canonical tag to competing pages:</p>
+                    <FileCode2 className="w-3.5 h-3.5 text-info" />
+                    <p className="text-xs font-medium text-foreground">Add canonical tag to competing pages:</p>
                 </div>
                 <div className="relative">
-                    <pre className="text-[11px] bg-[#0d1117] border border-[#21262d] rounded-lg px-3 py-2 text-[#8b949e] overflow-x-auto whitespace-pre-wrap">
+                    <pre className="text-xs bg-background border border-border rounded-lg px-3 py-2 text-muted-foreground overflow-x-auto whitespace-pre-wrap">
                         {snippet}
                     </pre>
                     <div className="absolute top-1.5 right-1.5">
@@ -54,11 +54,11 @@ function FixActions({ issue }: { issue: CannibalizationIssue }) {
         return (
             <div className="mt-3">
                 <div className="flex items-center gap-2 mb-1.5">
-                    <Link2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <p className="text-[11px] font-medium text-[#e6edf3]">Add internal links from competing pages:</p>
+                    <Link2 className="w-3.5 h-3.5 text-brand" />
+                    <p className="text-xs font-medium text-foreground">Add internal links from competing pages:</p>
                 </div>
                 <div className="relative">
-                    <pre className="text-[11px] bg-[#0d1117] border border-[#21262d] rounded-lg px-3 py-2 text-[#8b949e] overflow-x-auto whitespace-pre-wrap">
+                    <pre className="text-xs bg-background border border-border rounded-lg px-3 py-2 text-muted-foreground overflow-x-auto whitespace-pre-wrap">
                         {snippet}
                     </pre>
                     <div className="absolute top-1.5 right-1.5">
@@ -75,18 +75,18 @@ function FixActions({ issue }: { issue: CannibalizationIssue }) {
     return (
         <div className="mt-3">
             <div className="flex items-center gap-2 mb-1.5">
-                <Merge className="w-3.5 h-3.5 text-amber-400" />
-                <p className="text-[11px] font-medium text-[#e6edf3]">Merge content and set up 301 redirects:</p>
+                <Merge className="w-3.5 h-3.5 text-warning" />
+                <p className="text-xs font-medium text-foreground">Merge content and set up 301 redirects:</p>
             </div>
             <div className="relative">
-                <pre className="text-[11px] bg-[#0d1117] border border-[#21262d] rounded-lg px-3 py-2 text-[#8b949e] overflow-x-auto whitespace-pre-wrap">
+                <pre className="text-xs bg-background border border-border rounded-lg px-3 py-2 text-muted-foreground overflow-x-auto whitespace-pre-wrap">
                     {redirectSnippet}
                 </pre>
                 <div className="absolute top-1.5 right-1.5">
                     <CopyButton text={redirectSnippet} />
                 </div>
             </div>
-            <p className="text-[10px] text-amber-400/70 mt-1.5">
+            <p className="text-xs text-warning/70 mt-1.5">
                 Merge the best content from all pages into {issue.primaryUrl} before redirecting.
             </p>
         </div>
@@ -113,30 +113,30 @@ export function CannibalizationPanel({ siteId }: { siteId: string }) {
     }
 
     return (
-        <div className="rounded-xl border border-[#30363d] bg-[#0d1117] p-5">
+        <div className="rounded-xl border border-border bg-card p-5">
             <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h3 className="font-semibold text-[#e6edf3] text-sm">Keyword Cannibalization</h3>
-                    <p className="text-xs text-[#6e7681] mt-1">
+                    <h3 className="font-semibold text-foreground text-sm">Keyword Cannibalization</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
                         Pages competing for the same keyword split ranking signals.
                     </p>
                 </div>
                 <button
                     onClick={load}
                     disabled={loading}
-                    className="px-4 py-2 rounded-lg bg-[#238636] text-white text-xs font-medium
-                               hover:bg-[#2ea043] disabled:opacity-50 transition-colors"
+                    className="px-4 py-2 rounded-lg bg-brand text-black text-xs font-medium
+                               hover:bg-brand/90 disabled:opacity-50 transition-colors"
                 >
                     {loading ? "Scanning…" : loaded ? "Rescan" : "Scan Now"}
                 </button>
             </div>
 
             {error && (
-                <p className="text-xs text-red-400 bg-red-500/10 rounded-lg px-4 py-2">{error}</p>
+                <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-4 py-2">{error}</p>
             )}
 
             {loaded && issues.length === 0 && (
-                <p className="text-sm text-[#6e7681] text-center py-8">
+                <p className="text-sm text-muted-foreground text-center py-8">
                     🎉 No cannibalization detected across your top 90-day keywords.
                 </p>
             )}
@@ -146,14 +146,14 @@ export function CannibalizationPanel({ siteId }: { siteId: string }) {
                     {issues.map((issue) => (
                         <div
                             key={issue.keyword}
-                            className="rounded-lg border border-[#21262d] bg-[#161b22] px-4 py-3"
+                            className="rounded-lg border border-border bg-muted px-4 py-3"
                         >
                             <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-sm text-[#e6edf3] truncate">
+                                    <p className="font-medium text-sm text-foreground truncate">
                                         &ldquo;{issue.keyword}&rdquo;
                                     </p>
-                                    <p className="text-xs text-[#6e7681] mt-0.5">
+                                    <p className="text-xs text-muted-foreground mt-0.5">
                                         {issue.totalImpressions.toLocaleString()} impressions across{" "}
                                         {issue.urls.length} pages
                                     </p>
@@ -164,11 +164,11 @@ export function CannibalizationPanel({ siteId }: { siteId: string }) {
                                                     href={u.url}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className={`hover:underline ${u.url === issue.primaryUrl ? "text-emerald-400" : "text-blue-400"}`}
+                                                    className={`hover:underline ${u.url === issue.primaryUrl ? "text-brand" : "text-info"}`}
                                                 >
                                                     {u.url === issue.primaryUrl ? "★ " : ""}{u.url}
                                                 </a>
-                                                <span className="text-[#484f58] ml-2">
+                                                <span className="text-muted-foreground ml-2">
                                                     #{u.position} · {u.clicks} clicks
                                                 </span>
                                             </li>
@@ -177,12 +177,12 @@ export function CannibalizationPanel({ siteId }: { siteId: string }) {
 
                                     <FixActions issue={issue} />
                                 </div>
-                                <span className={`shrink-0 text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                                <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-semibold ${
                                     issue.severity === "high"
-                                        ? "bg-red-500/15 text-red-400"
+                                        ? "bg-destructive/15 text-destructive"
                                         : issue.severity === "medium"
-                                        ? "bg-amber-500/15 text-amber-400"
-                                        : "bg-[#21262d] text-[#6e7681]"
+                                        ? "bg-warning/15 text-warning"
+                                        : "bg-muted text-muted-foreground"
                                 }`}>
                                     {issue.severity}
                                 </span>

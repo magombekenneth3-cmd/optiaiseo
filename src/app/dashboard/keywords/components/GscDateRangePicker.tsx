@@ -106,8 +106,8 @@ export function GscDateRangePicker({ activeLabel, siteId }: GscDateRangePickerPr
         <div className="flex flex-col gap-2">
             {/* Preset buttons */}
             <div className="flex items-center gap-1.5 flex-wrap">
-                <Calendar className="w-3.5 h-3.5 text-[#6e7681] shrink-0" />
-                <span className="text-[11px] font-medium text-[#6e7681] mr-1">
+                <Calendar className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <span className="text-xs font-medium text-muted-foreground mr-1">
                     Date range
                 </span>
 
@@ -123,11 +123,11 @@ export function GscDateRangePicker({ activeLabel, siteId }: GscDateRangePickerPr
                             onClick={() => handlePreset(preset.days)}
                             disabled={isPending}
                             className={`
-                                px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-150
+                                px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-150
                                 ${
                                     isActive
-                                        ? "bg-[#388bfd]/15 text-[#58a6ff] border border-[#388bfd]/30"
-                                        : "bg-[#161b22] text-[#8b949e] border border-[#21262d] hover:border-[#30363d] hover:text-[#c9d1d9]"
+                                        ? "bg-info/15 text-info border border-info/30"
+                                        : "bg-muted text-muted-foreground border border-border hover:border-border hover:text-foreground"
                                 }
                                 ${isPending ? "opacity-50 cursor-wait" : "cursor-pointer"}
                             `}
@@ -140,11 +140,11 @@ export function GscDateRangePicker({ activeLabel, siteId }: GscDateRangePickerPr
                 <button
                     onClick={() => setShowCustom(!showCustom)}
                     className={`
-                        px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-150
+                        px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-150
                         ${
                             hasCustomRange || showCustom
-                                ? "bg-[#388bfd]/15 text-[#58a6ff] border border-[#388bfd]/30"
-                                : "bg-[#161b22] text-[#8b949e] border border-[#21262d] hover:border-[#30363d] hover:text-[#c9d1d9]"
+                                ? "bg-info/15 text-info border border-info/30"
+                                : "bg-muted text-muted-foreground border border-border hover:border-border hover:text-foreground"
                         }
                         cursor-pointer
                     `}
@@ -159,7 +159,7 @@ export function GscDateRangePicker({ activeLabel, siteId }: GscDateRangePickerPr
                     <div className="flex flex-col gap-1">
                         <label
                             htmlFor="gsc-start-date"
-                            className="text-[10px] font-medium text-[#6e7681] uppercase tracking-[0.06em]"
+                            className="text-xs font-medium text-muted-foreground uppercase tracking-[0.06em]"
                         >
                             Start
                         </label>
@@ -171,9 +171,9 @@ export function GscDateRangePicker({ activeLabel, siteId }: GscDateRangePickerPr
                             min={minDateStr}
                             max={customEnd || maxDateStr}
                             className="
-                                px-2.5 py-1.5 rounded-md text-[12px] text-[#e6edf3] font-mono
-                                bg-[#0d1117] border border-[#21262d]
-                                focus:border-[#388bfd] focus:outline-none focus:ring-1 focus:ring-[#388bfd]/30
+                                px-2.5 py-1.5 rounded-md text-sm text-foreground font-mono
+                                bg-background border border-border
+                                focus:border-info focus:outline-none focus:ring-1 focus:ring-info/30
                                 transition-colors
                             "
                         />
@@ -181,7 +181,7 @@ export function GscDateRangePicker({ activeLabel, siteId }: GscDateRangePickerPr
                     <div className="flex flex-col gap-1">
                         <label
                             htmlFor="gsc-end-date"
-                            className="text-[10px] font-medium text-[#6e7681] uppercase tracking-[0.06em]"
+                            className="text-xs font-medium text-muted-foreground uppercase tracking-[0.06em]"
                         >
                             End
                         </label>
@@ -193,9 +193,9 @@ export function GscDateRangePicker({ activeLabel, siteId }: GscDateRangePickerPr
                             min={customStart || minDateStr}
                             max={maxDateStr}
                             className="
-                                px-2.5 py-1.5 rounded-md text-[12px] text-[#e6edf3] font-mono
-                                bg-[#0d1117] border border-[#21262d]
-                                focus:border-[#388bfd] focus:outline-none focus:ring-1 focus:ring-[#388bfd]/30
+                                px-2.5 py-1.5 rounded-md text-sm text-foreground font-mono
+                                bg-background border border-border
+                                focus:border-info focus:outline-none focus:ring-1 focus:ring-info/30
                                 transition-colors
                             "
                         />
@@ -209,9 +209,9 @@ export function GscDateRangePicker({ activeLabel, siteId }: GscDateRangePickerPr
                             isPending
                         }
                         className="
-                            px-3 py-1.5 rounded-md text-[11px] font-semibold
-                            bg-[#238636] text-white border border-[#2ea043]
-                            hover:bg-[#2ea043] disabled:opacity-40 disabled:cursor-not-allowed
+                            px-3 py-1.5 rounded-md text-xs font-semibold
+                            bg-brand text-black border border-brand
+                            hover:bg-brand/90 disabled:opacity-40 disabled:cursor-not-allowed
                             transition-colors cursor-pointer
                         "
                     >

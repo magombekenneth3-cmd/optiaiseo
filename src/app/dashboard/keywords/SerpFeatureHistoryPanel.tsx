@@ -88,13 +88,13 @@ function DeltaBadge({ delta }: { delta: number }) {
     if (delta === 0) return <Minus className="w-3.5 h-3.5 text-zinc-500" />;
     if (delta > 0)
         return (
-            <span className="inline-flex items-center gap-0.5 text-emerald-400">
+            <span className="inline-flex items-center gap-0.5 text-brand">
                 <TrendingUp className="w-3 h-3" />
-                <span className="text-[10px] font-bold">New</span>
+                <span className="text-xs font-bold">New</span>
             </span>
         );
     return (
-        <span className="inline-flex items-center gap-0.5 text-red-400">
+        <span className="inline-flex items-center gap-0.5 text-destructive">
             <TrendingDown className="w-3 h-3" />
             <span className="text-[10px] font-bold">Lost</span>
         </span>
@@ -135,14 +135,14 @@ function TimelineRow({
     const lastDate  = shortDate(visible[visible.length - 1].capturedAt);
 
     return (
-        <tr className="bg-[#070a0d]">
+        <tr className="bg-background">
             <td colSpan={colSpan} className="px-5 pb-3 pt-1">
-                <div className="rounded-xl border border-[#21262d] bg-[#0d1117] p-3">
+                <div className="rounded-xl border border-border bg-card p-3">
                     <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] font-bold text-[#6e7681] uppercase tracking-[0.08em]">
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-[0.08em]">
                             Weekly Snapshot History
                         </span>
-                        <span className="text-[10px] text-[#6e7681] tabular-nums">
+                        <span className="text-xs text-muted-foreground tabular-nums">
                             {firstDate} → {lastDate} · {visible.length} scan{visible.length !== 1 ? "s" : ""}
                         </span>
                     </div>
@@ -159,8 +159,8 @@ function TimelineRow({
                                 <div key={field} className="flex items-center gap-2">
                                     {/* Label */}
                                     <span
-                                        className="text-[10px] font-medium tabular-nums shrink-0"
-                                        style={{ color: "#6e7681", width: 72 }}
+                                        className="text-xs font-medium tabular-nums shrink-0 text-muted-foreground"
+                                        style={{ width: 72 }}
                                     >
                                         {label}
                                     </span>
@@ -176,8 +176,8 @@ function TimelineRow({
                                                     width: 10,
                                                     height: 10,
                                                     borderRadius: "50%",
-                                                    backgroundColor: pt.active ? color : "#21262d",
-                                                    border: pt.active ? `1px solid ${color}55` : "1px solid #30363d",
+                                                    backgroundColor: pt.active ? color : "var(--border)",
+                                                    border: pt.active ? `1px solid ${color}55` : "1px solid var(--border)",
                                                     flexShrink: 0,
                                                     transition: "background-color 0.15s",
                                                 }}
@@ -187,9 +187,9 @@ function TimelineRow({
 
                                     {/* Current state + change indicator */}
                                     <span
-                                        className="text-[10px] font-bold shrink-0 tabular-nums"
+                                        className="text-xs font-bold shrink-0 tabular-nums"
                                         style={{
-                                            color: currentlyActive ? color : "#6e7681",
+                                            color: currentlyActive ? color : "var(--muted-foreground)",
                                             minWidth: 48,
                                             textAlign: "right",
                                         }}
@@ -212,16 +212,16 @@ function TimelineRow({
                     </div>
 
                     {/* Legend */}
-                    <div className="mt-2 pt-2 border-t border-[#21262d] flex items-center gap-4 flex-wrap">
-                        <span className="flex items-center gap-1 text-[9px] text-[#6e7681]">
-                            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", backgroundColor: "#388bfd", border: "1px solid #388bfd55" }} />
+                    <div className="mt-2 pt-2 border-t border-border flex items-center gap-4 flex-wrap">
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", backgroundColor: "var(--info)", border: "1px solid var(--info)" }} />
                             Feature present in that scan
                         </span>
-                        <span className="flex items-center gap-1 text-[9px] text-[#6e7681]">
-                            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", backgroundColor: "#21262d", border: "1px solid #30363d" }} />
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", backgroundColor: "var(--border)", border: "1px solid var(--border)" }} />
                             Absent
                         </span>
-                        <span className="text-[9px] text-[#6e7681] ml-auto">
+                        <span className="text-xs text-muted-foreground ml-auto">
                             ▲ = gained · ▼ = lost vs first scan in window
                         </span>
                     </div>
@@ -252,7 +252,7 @@ function SinglePointNotice({ entry }: { entry: SerpFeatureHistoryEntry }) {
     if (entry.snapshots.length !== 1) return null;
     return (
         <span
-            className="text-[10px] text-[#6e7681] ml-1 tabular-nums"
+            className="text-xs text-muted-foreground ml-1 tabular-nums"
             title="Only one scan captured so far — trend will appear after the next weekly scan"
         >
             (1 scan — trend pending)
@@ -316,15 +316,15 @@ export function SerpFeatureHistoryPanel({ siteId }: Props) {
     const COL_SPAN = 9; // keyword + 6 feature cols + 2 delta cols + scans
 
     return (
-        <div className="rounded-2xl border border-[#21262d] bg-[#0d1117] overflow-hidden">
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#21262d]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
                 <div>
-                    <h3 className="text-sm font-semibold text-[#e6edf3] flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                         <Brain className="w-4 h-4 text-purple-400" />
                         SERP Feature Tracker
                     </h3>
-                    <p className="text-[11px] text-[#6e7681] mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                         AI Overview, Featured Snippets &amp; other SERP features per keyword — updated weekly
                     </p>
                 </div>
@@ -332,7 +332,7 @@ export function SerpFeatureHistoryPanel({ siteId }: Props) {
                     <select
                         value={days}
                         onChange={(e) => setDays(Number(e.target.value))}
-                        className="text-[11px] bg-[#161b22] border border-[#30363d] text-[#8b949e] rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-purple-500/50"
+                        className="text-xs bg-muted border border-border text-muted-foreground rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-purple-500/50"
                     >
                         <option value={30}>30 days</option>
                         <option value={60}>60 days</option>
@@ -342,7 +342,7 @@ export function SerpFeatureHistoryPanel({ siteId }: Props) {
                         onClick={() => setRefreshKey((k) => k + 1)}
                         disabled={loading}
                         title="Refresh"
-                        className="p-1.5 rounded-lg border border-[#30363d] text-[#6e7681] hover:text-[#e6edf3] hover:border-[#6e7681] transition-colors disabled:opacity-40"
+                        className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground transition-colors disabled:opacity-40"
                     >
                         <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
                     </button>
@@ -351,7 +351,7 @@ export function SerpFeatureHistoryPanel({ siteId }: Props) {
 
             {/* Loading */}
             {loading && (
-                <div className="px-5 py-10 flex items-center justify-center gap-2 text-[#6e7681] text-sm">
+                <div className="px-5 py-10 flex items-center justify-center gap-2 text-muted-foreground text-sm">
                     <RefreshCw className="w-4 h-4 animate-spin" />
                     Loading SERP feature history…
                 </div>
@@ -372,7 +372,7 @@ export function SerpFeatureHistoryPanel({ siteId }: Props) {
             {!loading && !error && history.length > 0 && (
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm min-w-[700px]">
-                        <thead className="bg-[#0a0d11] text-[10px] font-bold text-[#6e7681] uppercase tracking-wider border-b border-[#21262d]">
+                        <thead className="bg-background text-xs font-bold text-muted-foreground uppercase tracking-wider border-b border-border">
                             <tr>
                                 <th className="px-5 py-3 text-left">Keyword</th>
                                 <th className="px-4 py-3 text-center">
@@ -416,7 +416,7 @@ export function SerpFeatureHistoryPanel({ siteId }: Props) {
                                 <th className="px-4 py-3 text-center">Scans</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-[#161b22]">
+                        <tbody className="divide-y divide-border/60">
                             {history.map((entry) => {
                                 const latest = latestOf(entry);
                                 const isExpanded = expanded.has(entry.keyword);
@@ -426,17 +426,17 @@ export function SerpFeatureHistoryPanel({ siteId }: Props) {
                                     <>
                                         <tr
                                             key={entry.keyword}
-                                            className={`transition-colors ${hasTimeline ? "cursor-pointer hover:bg-[#0a0d11]/80" : "hover:bg-[#0a0d11]/60"}`}
+                                            className={`transition-colors ${hasTimeline ? "cursor-pointer hover:bg-background/80" : "hover:bg-background/60"}`}
                                             onClick={hasTimeline ? () => toggleExpand(entry.keyword) : undefined}
                                             title={hasTimeline ? (isExpanded ? "Collapse timeline" : "Expand weekly history") : undefined}
                                         >
                                             {/* Keyword cell with expand chevron */}
-                                            <td className="px-5 py-3.5 font-medium text-[#e6edf3] max-w-[200px]">
+                                            <td className="px-5 py-3.5 font-medium text-foreground max-w-[200px]">
                                                 <span className="flex items-center gap-1.5">
                                                     {hasTimeline ? (
                                                         isExpanded
-                                                            ? <ChevronDown className="w-3.5 h-3.5 text-[#6e7681] shrink-0" />
-                                                            : <ChevronRight className="w-3.5 h-3.5 text-[#6e7681] shrink-0" />
+                                                            ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                                            : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                                                     ) : (
                                                         <span className="w-3.5 shrink-0" />
                                                     )}
@@ -456,7 +456,7 @@ export function SerpFeatureHistoryPanel({ siteId }: Props) {
                                             <td className="px-4 py-3.5 text-center">
                                                 <DeltaBadge delta={entry.snippetDelta} />
                                             </td>
-                                            <td className="px-4 py-3.5 text-center text-[11px] text-[#6e7681] tabular-nums">
+                                            <td className="px-4 py-3.5 text-center text-xs text-muted-foreground tabular-nums">
                                                 {entry.snapshots.length}
                                             </td>
                                         </tr>
@@ -473,7 +473,7 @@ export function SerpFeatureHistoryPanel({ siteId }: Props) {
                             })}
                         </tbody>
                     </table>
-                    <p className="px-5 py-2.5 text-[10px] text-[#6e7681] border-t border-[#21262d]">
+                    <p className="px-5 py-2.5 text-xs text-muted-foreground border-t border-border">
                         ✓ = feature detected in most recent scan · Δ = change vs. first scan in window · Updated weekly · Click a row to expand timeline
                     </p>
                 </div>

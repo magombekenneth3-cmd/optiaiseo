@@ -8,22 +8,22 @@ export function CollapsibleAnalytics({ siteId }: { siteId: string }) {
     const [open, setOpen] = useState(false);
 
     return (
-        <div className="rounded-xl border border-[#21262d] bg-[#0d1117] overflow-hidden">
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
             <button
                 onClick={() => setOpen(o => !o)}
-                className="w-full flex items-center justify-between px-5 py-3 hover:bg-[#0f1318] transition-colors"
+                className="w-full flex items-center justify-between px-5 py-3 hover:bg-muted/50 transition-colors"
             >
                 <div className="flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-[#388bfd]" />
-                    <span className="text-[13px] font-semibold text-[#e6edf3]">Traffic & Search Performance</span>
-                    <span className="text-[11px] text-[#6e7681]">GSC + GA4</span>
+                    <BarChart3 className="w-4 h-4 text-info" />
+                    <span className="text-sm font-semibold text-foreground">Traffic & Search Performance</span>
+                    <span className="text-xs text-muted-foreground">GSC + GA4</span>
                 </div>
                 <ChevronDown
-                    className={`w-4 h-4 text-[#6e7681] transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+                    className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
                 />
             </button>
             {open && (
-                <div className="border-t border-[#21262d]">
+                <div className="border-t border-border">
                     <UnifiedAnalyticsPanel siteId={siteId} />
                 </div>
             )}
