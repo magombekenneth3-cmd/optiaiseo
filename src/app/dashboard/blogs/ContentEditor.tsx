@@ -16,10 +16,17 @@ import {
     BookOpen,
     Activity,
     RefreshCw,
+    Wand2,
+    Quote,
+    PlusCircle,
+    FileCode,
+    Zap,
+    TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ContentScoreResult, OutlineHeading } from "@/lib/content-scoring";
 import { sanitizeHtml } from "@/lib/sanitize-html";
+import { AiDiffInspector } from "@/components/blog/AiDiffInspector";
 
 function HighlightedContent({ content, keyword }: { content: string; keyword: string }) {
     const highlighted = useMemo(() => {
@@ -391,6 +398,53 @@ export function ContentEditor({
         }
     }, [blogId, scoreData]);
 
+    const handleInlineAiAction = useCallback(async (actionLabel: string, promptText: string) => {
+        if (!content.trim()) {
+            toast.error("Write some content first before invoking AI actions.");
+            return;
+        }
+        setIsImproving(true);
+        toast.info(`Executing AI Action: ${actionLabel}...`);
+        try {
+            const issues = [
+                `Action: ${actionLabel}`,
+                promptText,
+                ...(scoreData?.subScores?.nlpTerms?.missing?.length
+                    ? [`Add missing terms: ${scoreData.subScores.nlpTerms.missing.slice(0, 4).join(", ")}`]
+                    : []),
+            ];
+            const targetId = blogId || "draft";
+            const res = await fetch(`/api/blogs/${targetId}/improve`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    issues,
+                    scoreData: scoreData
+                        ? {
+                            wordCount: scoreData.subScores.wordCount,
+                            keywords: scoreData.subScores.exactKeywords,
+                            readabilityGrade: scoreData.subScores.readability.gradeLevel,
+                            missingTerms: scoreData.subScores.nlpTerms.missing,
+                            missingHeadings: scoreData.subScores.headings.missing,
+                        }
+                        : null,
+                }),
+            });
+            if (!res.ok) throw new Error("AI action failed");
+            const data = await res.json();
+            if (data.content) {
+                setImprovedContent(data.content);
+                setShowDiff(true);
+                toast.success(`${actionLabel} completed! Opening diff inspector.`);
+            }
+        } catch (err) {
+            toast.error(`AI action (${actionLabel}) failed. Please try again.`);
+            console.error(err);
+        } finally {
+            setIsImproving(false);
+        }
+    }, [blogId, content, scoreData]);
+
     const overviewChecks = useMemo(
         () => (scoreData ? buildOverviewChecks(scoreData) : []),
         [scoreData]
@@ -582,6 +636,45 @@ export function ContentEditor({
                         )}
                         {isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />}
                     </div>
+                </div>
+
+                {/* Lex / Notion AI Inline Action Palette */}
+                <div className="flex flex-wrap items-center gap-2 border-b border-purple-500/20 bg-purple-950/20 px-4 py-2 text-xs">
+                    <span className="mr-1 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-purple-400">
+                        <Sparkles className="h-3.5 w-3.5" /> Lex AI Assistant:
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => handleInlineAiAction("Humanize Tone", "Humanize sentence structure, vary line rhythm, remove repetitive AI phrasing.")}
+                        disabled={isImproving}
+                        className="flex items-center gap-1.5 rounded-md border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-xs font-semibold text-purple-300 transition-colors hover:bg-purple-500/20 disabled:opacity-50"
+                    >
+                        <Wand2 className="h-3 w-3" /> ✨ Humanize Tone
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => handleInlineAiAction("GEO Citations", "Embed authoritative citations, statistical evidence, and outbound references.")}
+                        disabled={isImproving}
+                        className="flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
+                    >
+                        <Quote className="h-3 w-3" /> 🎯 Embed Citations
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => handleInlineAiAction("Expand Depth", "Expand section depth and naturally cover missing semantic keywords.")}
+                        disabled={isImproving}
+                        className="flex items-center gap-1.5 rounded-md border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/20 disabled:opacity-50"
+                    >
+                        <PlusCircle className="h-3 w-3" /> 📈 Expand Depth
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => handleInlineAiAction("Add FAQ Section", "Generate an H2 FAQ section answering target query search intent.")}
+                        disabled={isImproving}
+                        className="flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
+                    >
+                        <FileCode className="h-3 w-3" /> 🛡️ Add FAQ
+                    </button>
                 </div>
 
                 {error && (
@@ -1185,63 +1278,26 @@ export function ContentEditor({
                 </div>
             </div>
 
+            {/* Notion/Lex-Style AI Diff Inspector Modal */}
             {showDiff && improvedContent && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
-                    onMouseDown={() => setShowDiff(false)}
-                >
-                    <div className="absolute inset-0 bg-black/80" aria-hidden="true" />
-                    <div
-                        className="relative flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="diff-modal-title"
-                        onMouseDown={(e) => e.stopPropagation()}
-                    >
-                        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-                            <div>
-                                <h3 id="diff-modal-title" className="font-semibold text-foreground">AI Improved Version</h3>
-                                <p className="mt-0.5 text-xs text-muted-foreground">Review the changes below before applying.</p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowDiff(false)}
-                                aria-label="Close diff modal"
-                                className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                            >
-                                <X className="h-4 w-4" />
-                            </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4">
-                            <textarea
-                                value={improvedContent}
-                                onChange={(e) => setImprovedContent(e.target.value)}
-                                aria-label="Improved content preview"
-                                className="h-64 w-full resize-none rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs text-foreground transition-colors focus:border-emerald-500/60 focus:outline-none"
-                            />
-                        </div>
-                        <div className="flex justify-end gap-3 border-t border-border px-5 py-3">
-                            <button
-                                type="button"
-                                onClick={() => setShowDiff(false)}
-                                className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-                            >
-                                Discard
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setContent(improvedContent);
-                                    setShowDiff(false);
-                                    setImprovedContent(null);
-                                }}
-                                className="rounded-xl bg-emerald-500 px-5 py-2 text-sm font-semibold text-black transition-colors hover:bg-emerald-400"
-                            >
-                                Apply Improvements
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <AiDiffInspector
+                    originalContent={content}
+                    aiContent={improvedContent}
+                    scoreBefore={scoreData?.score ?? 65}
+                    onAccept={(merged) => {
+                        setContent(merged);
+                        setShowDiff(false);
+                        setImprovedContent(null);
+                        toast.success("Merged AI improvements applied!");
+                    }}
+                    onReject={() => {
+                        setShowDiff(false);
+                        setImprovedContent(null);
+                        toast("AI improvements discarded");
+                    }}
+                    title="Notion AI Diff Inspector"
+                    subtitle="Review section-by-section changes, accept granular patches, or apply all."
+                />
             )}
         </div>
     );
