@@ -173,35 +173,69 @@ export function ContentHealthRow({ blogs }: { blogs: BlogData[] }) {
     return (
         <section className="flex flex-col gap-4">
             <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-                <div className="rounded-2xl border border-border bg-card/40 p-5">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground/60">
-                        Content Readiness
-                    </p>
-                    <div className="mt-3 flex items-end gap-3">
-                        <span className={`text-5xl font-bold tracking-tight ${scoreColor(contentReadiness)}`}>
-                            {contentReadiness ?? "—"}
-                        </span>
-                        <span className={`mb-2 text-sm font-medium ${scoreColor(contentReadiness)}`}>
-                            {scoreLabel(contentReadiness)}
-                        </span>
-                    </div>
-                    <div className="mt-5 grid grid-cols-3 gap-4">
-                        {drivers.map(d => (
-                            <div key={d.label}>
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
-                                    {d.label}
-                                </p>
-                                <p className={`mt-1 text-xl font-bold tracking-tight ${scoreColor(d.value)}`}>
-                                    {d.value != null ? `${d.value}${d.suffix}` : "—"}
-                                </p>
-                                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-border/30">
-                                    <div
-                                        className={`h-full rounded-full transition-all duration-500 ${barColor(d.value)}`}
-                                        style={{ width: `${d.value ?? 0}%` }}
-                                    />
+                <div className="rounded-2xl border border-white/10 bg-card/60 p-5 backdrop-blur-xl shadow-xl flex items-center justify-between gap-6">
+                    <div className="flex-1">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground/60">
+                            Content Readiness & Radar
+                        </p>
+                        <div className="mt-2 flex items-baseline gap-2">
+                            <span className={`text-4xl font-extrabold tracking-tight ${scoreColor(contentReadiness)}`}>
+                                {contentReadiness ?? "—"}
+                            </span>
+                            <span className="text-xs font-semibold text-muted-foreground">/100</span>
+                            <span className={`ml-2 text-xs font-semibold ${scoreColor(contentReadiness)}`}>
+                                {scoreLabel(contentReadiness)}
+                            </span>
+                        </div>
+                        <div className="mt-4 grid grid-cols-3 gap-3">
+                            {drivers.map(d => (
+                                <div key={d.label} className="rounded-xl border border-white/5 bg-background/40 p-2.5">
+                                    <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                                        {d.label}
+                                    </p>
+                                    <p className={`mt-1 text-lg font-bold tracking-tight ${scoreColor(d.value)}`}>
+                                        {d.value != null ? `${d.value}${d.suffix}` : "—"}
+                                    </p>
+                                    <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-border/30">
+                                        <div
+                                            className={`h-full rounded-full transition-all duration-500 ${barColor(d.value)}`}
+                                            style={{ width: `${d.value ?? 0}%` }}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Radial SVG Meter Gauge */}
+                    <div className="hidden sm:flex relative items-center justify-center shrink-0">
+                        <svg height={88} width={88} className="-rotate-90 transform drop-shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                            <circle
+                                stroke="rgba(255, 255, 255, 0.08)"
+                                fill="transparent"
+                                strokeWidth={7}
+                                r={36}
+                                cx={44}
+                                cy={44}
+                            />
+                            <circle
+                                stroke={contentReadiness != null && contentReadiness >= 80 ? "#10b981" : contentReadiness != null && contentReadiness >= 60 ? "#f59e0b" : "#f43f5e"}
+                                fill="transparent"
+                                strokeWidth={7}
+                                strokeDasharray={`${2 * Math.PI * 36} ${2 * Math.PI * 36}`}
+                                style={{ strokeDashoffset: 2 * Math.PI * 36 - ((contentReadiness ?? 0) / 100) * (2 * Math.PI * 36) }}
+                                strokeLinecap="round"
+                                r={36}
+                                cx={44}
+                                cy={44}
+                                className="transition-all duration-700 ease-out"
+                            />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                            <span className={`text-xl font-mono font-bold ${scoreColor(contentReadiness)}`}>
+                                {contentReadiness ?? "—"}
+                            </span>
+                        </div>
                     </div>
                 </div>
 

@@ -21,6 +21,7 @@ import rehypeRaw from "rehype-raw";
 import rehypeExternalLinks from "rehype-external-links";
 import { toast } from "sonner";
 import { ContentEditor } from "./ContentEditor";
+import { ScoreRadarGauge } from "@/components/blog/ScoreRadarGauge";
 import type { ContentScoreResult } from "@/lib/content-scoring";
 import type { CitationCriterion } from "@/lib/blog/ai-citation-template";
 import { logger } from "@/lib/logger";
@@ -455,52 +456,19 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                                 <p className="mt-1 text-xs text-muted-foreground">Review the article before publishing.</p>
                             </div>
 
+                            {/* Surfer SEO Style Content Radar */}
+                            <ScoreRadarGauge
+                                score={activeScore}
+                                label="Content & Citation Score"
+                                size="md"
+                                subScores={scoreResult?.subScores}
+                                imageRecommendation={scoreResult?.imageRecommendation}
+                                topOpportunities={scoreResult?.topOpportunities}
+                            />
+
                             {activeScore !== null && citationCriteria.length > 0 ? (
                                 <ReadinessCard score={activeScore} criteria={citationCriteria} />
-                            ) : (
-                                <section className="rounded-xl border border-border bg-card p-4">
-                                    <div className="flex items-start gap-3">
-                                        <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                                        <div>
-                                            <h3 className="text-xs font-semibold">Citation score unavailable</h3>
-                                            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                                                Analyze the content to see citation readiness and optimization recommendations.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </section>
-                            )}
-
-                            {/* Content health */}
-                            {scoreResult && (
-                                <section className="rounded-xl border border-border bg-card">
-                                    <div className="border-b border-border px-4 py-3">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <h3 className="text-xs font-semibold">Content health</h3>
-                                                <p className="mt-1 text-[10px] text-muted-foreground">Based on the latest analysis.</p>
-                                            </div>
-                                            <span className="text-sm font-bold tabular-nums">{scoreResult.score}/100</span>
-                                        </div>
-                                    </div>
-                                    <div className="px-4">
-                                        <MetricRow
-                                            label="Word count"
-                                            value={String(scoreResult.subScores.wordCount.current)}
-                                            description={`Target: ${scoreResult.subScores.wordCount.targetMin}–${scoreResult.subScores.wordCount.targetMax}`}
-                                        />
-                                        <MetricRow
-                                            label="Readability"
-                                            value={`Grade ${scoreResult.subScores.readability.gradeLevel.toFixed(1)}`}
-                                        />
-                                        <MetricRow
-                                            label="Keyword uses"
-                                            value={String(scoreResult.subScores.exactKeywords.current)}
-                                            description={`Median: ${scoreResult.subScores.exactKeywords.targetMin}`}
-                                        />
-                                    </div>
-                                </section>
-                            )}
+                            ) : null}
 
                             {/* AI improve action */}
                             {issueCount > 0 && (
