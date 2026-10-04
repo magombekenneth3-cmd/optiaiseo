@@ -16,7 +16,61 @@ export type GrowthAction =
     | "OPTIMIZE_TITLE"
     | "OPTIMIZE_CONTENT_DEPTH"
     | "DEINDEX_OR_REDIRECT"
-    | "MONITOR";
+    | "MONITOR"
+    | "NEEDS_REVIEW"
+    | "MODIFY_ROBOTS_META"
+    | "CHANGE_CANONICAL"
+    | "ADD_INTERNAL_LINKS"
+    | "UPDATE_TITLE_TAG"
+    | "NO_ACTION";
+
+export type PageExistenceVerdict =
+    | "EXISTING_HEALTHY"     // Page exists & ranks acceptably — monitor only
+    | "EXISTING_NEEDS_FIX"   // Page exists but underperforms — optimize it
+    | "EXISTING_CANNIBALIZED" // Multiple pages compete for same intent
+    | "MISSING"              // No relevant page found — create new content
+    | "NEEDS_REVIEW";        // Uncertain or ambiguous match — manual review required
+
+export type MatchSource =
+    | "GSC_RANKING_URL"
+    | "BLOG_RECORD"
+    | "PAGE_AUDIT"
+    | "GSC_BROAD_MATCH"
+    | "EXACT_MATCH"
+    | "SEMANTIC_MATCH"
+    | "REDIRECT_MATCH";
+
+export type MatchType =
+    | "EXACT_MATCH"
+    | "GSC_MATCH"
+    | "BLOG_MATCH"
+    | "AUDIT_MATCH"
+    | "SEMANTIC_MATCH"
+    | "NO_MATCH_FOUND"
+    | "LOW_CONFIDENCE_MATCH"
+    | "AMBIGUOUS_MATCH";
+
+export interface ExistingPageEvidence {
+    url: string;
+    matchSource: MatchSource;
+    matchConfidence: number;
+    matchType?: MatchType;
+    currentPosition?: number;
+    currentImpressions?: number;
+    currentClicks?: number;
+    canonicalUrl?: string;
+    isNoindex?: boolean;
+    issues: string[];
+}
+
+export interface PageExistenceResult {
+    verdict: PageExistenceVerdict;
+    existingPage: ExistingPageEvidence | null;
+    allCandidates: ExistingPageEvidence[];
+    recommendedAction: string;
+    recommendedCategory: string;
+    reasoning: string;
+}
 
 export interface GscPageMetric {
     url: string;

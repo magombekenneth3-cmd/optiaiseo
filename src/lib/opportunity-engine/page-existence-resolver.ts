@@ -1,129 +1,105 @@
 // =============================================================================
-// PAGE EXISTENCE RESOLVER
+// PAGE EXISTENCE RESOLVER — HARDENED IMPLEMENTATION
 //
 // For every TOPIC_OPPORTUNITY finding, determines whether a relevant page
 // already exists on the site before recommending CREATE_NEW_CONTENT.
 //
-// Decision hierarchy (highest confidence first):
-//   1. GSC ranking URL — Google already associates a page with the query
-//   2. Blog/Content record — an existing content record targets these keywords
-//   3. PageAudit URL match — a crawled page with matching URL slug/path
-//   4. GscDailyPerformance URL — any page ranking for similar queries
+// Architectural Principles:
+//   1. GSC tells you what Google associates with the query
+//   2. Site discovery/crawl/blog data tells you whether the page exists
+//   3. Resolver combines both before choosing create vs fix vs monitor vs review
 //
-// Output: PageExistenceResult with verdict + evidence trail
+// Decision hierarchy:
+//   - EXACT_MATCH / GSC_MATCH / BLOG_MATCH / AUDIT_MATCH -> page exists
+//   - LOW_CONFIDENCE_MATCH / AMBIGUOUS_MATCH -> NEEDS_REVIEW (never auto-create)
+//   - NO_MATCH_FOUND -> MISSING -> CREATE_NEW_CONTENT
 // =============================================================================
 
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import type {
+  PageExistenceVerdict,
+  ExistingPageEvidence,
+  PageExistenceResult,
+  MatchSource,
+  MatchType,
+} from "./types";
 
-// ── Result Types ────────────────────────────────────────────────────────────
+export type {
+  PageExistenceVerdict,
+  ExistingPageEvidence,
+  PageExistenceResult,
+  MatchSource,
+  MatchType,
+};
 
-export type PageExistenceVerdict =
-  | "EXISTING_HEALTHY"     // Page exists & ranks acceptably — monitor only
-  | "EXISTING_NEEDS_FIX"   // Page exists but underperforms — optimize it
-  | "EXISTING_CANNIBALIZED" // Multiple pages compete for same intent
-  | "MISSING";             // No relevant page found — create new content
+// ── Configuration Thresholds ────────────────────────────────────────────────
 
-export interface ExistingPageEvidence {
-  /** The URL of the existing page */
-  url: string;
-  /** How the match was found */
-  matchSource:
-    | "GSC_RANKING_URL"
-    | "BLOG_RECORD"
-    | "PAGE_AUDIT"
-    | "GSC_BROAD_MATCH";
-  /** Confidence of the match (0–1) */
-  matchConfidence: number;
-  /** Current GSC position for the topic query (if available) */
-  currentPosition?: number;
-  /** Current impressions (if available) */
-  currentImpressions?: number;
-  /** Current clicks (if available) */
-  currentClicks?: number;
-  /** Issues detected on the existing page */
-  issues: string[];
-}
-
-export interface PageExistenceResult {
-  verdict: PageExistenceVerdict;
-  /** The best-matching existing page (null if MISSING) */
-  existingPage: ExistingPageEvidence | null;
-  /** All candidate pages found (for cannibalization detection) */
-  allCandidates: ExistingPageEvidence[];
-  /** Recommended action override based on the verdict */
-  recommendedAction: string;
-  /** Recommended category override */
-  recommendedCategory: string;
-  /** Human-readable explanation of the decision */
-  reasoning: string;
-}
-
-// ── Configuration ───────────────────────────────────────────────────────────
-
-/** Position threshold: above this, the page is "not really ranking" for the topic */
 const WEAK_RANKING_THRESHOLD = 30;
-
-/** Position threshold: below this (inclusive), the page is healthy */
 const HEALTHY_POSITION_THRESHOLD = 20;
-
-/** Minimum token overlap ratio for slug/title matching */
-const SLUG_MATCH_THRESHOLD = 0.4;
+const STRONG_MATCH_THRESHOLD = 0.6;
+const SLUG_MATCH_THRESHOLD = 0.2;
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
 /**
  * Resolves whether a relevant page already exists for a topic opportunity.
- *
- * Uses existing Prisma models (GscDailyPerformance, Blog, PageAudit) —
- * no new tables, no LLM calls. Pure evidence-based decision.
+ * Pure evidence-based decision using DB models (GscDailyPerformance, Blog, PageAudit).
  */
 export async function resolvePageExistence(
   siteId: string,
   topicKeyword: string,
-  clusterQueries: string[],
+  clusterQueries: string[] = [],
 ): Promise<PageExistenceResult> {
   const candidates: ExistingPageEvidence[] = [];
 
-  // ── Step 1: Check GSC for pages already ranking for this exact query ────
+  // 1. Check GSC for pages ranking for topic or cluster queries
   const gscMatches = await findGscRankingPages(siteId, topicKeyword, clusterQueries);
   candidates.push(...gscMatches);
 
-  // ── Step 2: Check Blog records with matching target keywords ────────────
+  // 2. Check Blog records (targetKeywords & slug/title matching)
   const blogMatches = await findMatchingBlogRecords(siteId, topicKeyword, clusterQueries);
   for (const blog of blogMatches) {
-    // Avoid duplicates — only add if URL not already found
-    if (!candidates.some((c) => normalizeUrl(c.url) === normalizeUrl(blog.url))) {
+    const existingIdx = candidates.findIndex((c) => areUrlsEquivalent(c.url, blog.url));
+    if (existingIdx === -1) {
       candidates.push(blog);
+    } else {
+      // Merge issues and refine confidence
+      const existing = candidates[existingIdx];
+      existing.issues = Array.from(new Set([...existing.issues, ...blog.issues]));
+      existing.matchConfidence = Math.max(existing.matchConfidence, blog.matchConfidence);
     }
   }
 
-  // ── Step 3: Check PageAudit for crawled pages with matching slugs ───────
+  // 3. Check PageAudit records for crawled pages
   const auditMatches = await findMatchingPageAudits(siteId, topicKeyword);
   for (const audit of auditMatches) {
-    if (!candidates.some((c) => normalizeUrl(c.url) === normalizeUrl(audit.url))) {
+    const existingIdx = candidates.findIndex((c) => areUrlsEquivalent(c.url, audit.url));
+    if (existingIdx === -1) {
       candidates.push(audit);
+    } else {
+      const existing = candidates[existingIdx];
+      existing.issues = Array.from(new Set([...existing.issues, ...audit.issues]));
+      if (audit.canonicalUrl) existing.canonicalUrl = audit.canonicalUrl;
+      if (audit.isNoindex !== undefined) existing.isNoindex = audit.isNoindex;
     }
   }
 
-  // ── Step 4: Make the decision ──────────────────────────────────────────
+  // 4. Make deterministic decision based on candidates & intent
   return makeDecision(candidates, topicKeyword);
 }
 
 // ── Evidence Gathering Functions ────────────────────────────────────────────
 
 /**
- * Step 1: Query GscDailyPerformance for pages Google associates with this topic.
- * This is the strongest signal — Google is literally showing this page for the query.
+ * Query GscDailyPerformance for pages Google associates with this topic/queries.
  */
 async function findGscRankingPages(
   siteId: string,
   topicKeyword: string,
   clusterQueries: string[],
 ): Promise<ExistingPageEvidence[]> {
-  // Look for GSC rows where the keyword matches any cluster query
-  // Use the top 10 cluster queries to keep the DB query bounded
-  const queryTerms = [topicKeyword, ...clusterQueries.slice(0, 9)];
+  const queryTerms = Array.from(new Set([topicKeyword, ...clusterQueries.slice(0, 9)]));
 
   try {
     const gscRows = await prisma.gscDailyPerformance.findMany({
@@ -132,13 +108,11 @@ async function findGscRankingPages(
         keyword: { in: queryTerms },
       },
       orderBy: { fetchedAt: "desc" },
-      // Get the most recent data — cap at a reasonable number
       take: 100,
     });
 
     if (gscRows.length === 0) return [];
 
-    // Aggregate by URL to find the best-performing page per URL
     const urlMap = new Map<
       string,
       { clicks: number; impressions: number; positionSum: number; count: number; keywords: Set<string> }
@@ -166,14 +140,16 @@ async function findGscRankingPages(
 
     const results: ExistingPageEvidence[] = [];
 
-    for (const [url, data] of urlMap) {
+    for (const [rawNormUrl, data] of urlMap) {
       const avgPosition = data.impressions > 0 ? data.positionSum / data.impressions : 100;
       const keywordOverlap = data.keywords.size / queryTerms.length;
+      const confidence = Math.min(1, 0.7 + keywordOverlap * 0.3);
 
       results.push({
-        url,
+        url: rawNormUrl.startsWith("/") || rawNormUrl.startsWith("http") ? rawNormUrl : `/${rawNormUrl}`,
         matchSource: "GSC_RANKING_URL",
-        matchConfidence: Math.min(1, 0.7 + keywordOverlap * 0.3),
+        matchConfidence: confidence,
+        matchType: confidence >= STRONG_MATCH_THRESHOLD ? "GSC_MATCH" : "LOW_CONFIDENCE_MATCH",
         currentPosition: Math.round(avgPosition * 10) / 10,
         currentImpressions: data.impressions,
         currentClicks: data.clicks,
@@ -181,9 +157,7 @@ async function findGscRankingPages(
       });
     }
 
-    // Sort by impression volume descending (most significant page first)
     results.sort((a, b) => (b.currentImpressions ?? 0) - (a.currentImpressions ?? 0));
-
     return results;
   } catch (err) {
     logger.warn("[PageExistenceResolver] GSC lookup failed", {
@@ -195,8 +169,7 @@ async function findGscRankingPages(
 }
 
 /**
- * Step 2: Check Blog records for keyword matches.
- * Blogs have `targetKeywords` arrays — we check for overlap with the topic.
+ * Check Blog records for targetKeywords & title/slug matches.
  */
 async function findMatchingBlogRecords(
   siteId: string,
@@ -204,15 +177,14 @@ async function findMatchingBlogRecords(
   clusterQueries: string[],
 ): Promise<ExistingPageEvidence[]> {
   try {
-    // Search for blogs whose targetKeywords overlap with the topic
-    // Prisma's array `hasSome` checks for intersection
+    const queryTerms = Array.from(new Set([topicKeyword, ...clusterQueries.slice(0, 9)]));
     const blogs = await prisma.blog.findMany({
       where: {
         siteId,
         deletedAt: null,
         status: { notIn: ["DELETED", "REJECTED"] },
         targetKeywords: {
-          hasSome: [topicKeyword, ...clusterQueries.slice(0, 9)],
+          hasSome: queryTerms,
         },
       },
       select: {
@@ -230,12 +202,7 @@ async function findMatchingBlogRecords(
       take: 10,
     });
 
-    if (blogs.length === 0) {
-      // Fallback: check if any blog slug/title contains topic tokens
-      return findBlogsBySlugMatch(siteId, topicKeyword);
-    }
-
-    return blogs.map((blog) => {
+    const blogResults: ExistingPageEvidence[] = blogs.map((blog) => {
       const url = blog.sourceUrl || `/blog/${blog.slug}`;
       const issues: string[] = [];
 
@@ -248,19 +215,28 @@ async function findMatchingBlogRecords(
         issues.push("STALE_CONTENT");
       }
 
-      // Compute keyword overlap confidence
-      const matchingKeywords = blog.targetKeywords.filter(
-        (kw) => kw === topicKeyword || clusterQueries.includes(kw),
-      );
+      const matchingKeywords = blog.targetKeywords.filter((kw) => queryTerms.includes(kw));
       const overlapRatio = matchingKeywords.length / Math.max(1, blog.targetKeywords.length);
+      const confidence = Math.min(1, 0.6 + overlapRatio * 0.4);
 
       return {
         url,
         matchSource: "BLOG_RECORD" as const,
-        matchConfidence: Math.min(1, 0.6 + overlapRatio * 0.4),
+        matchConfidence: confidence,
+        matchType: confidence >= STRONG_MATCH_THRESHOLD ? "BLOG_MATCH" : "LOW_CONFIDENCE_MATCH",
         issues,
       };
     });
+
+    // Fallback: slug token matching
+    const slugMatches = await findBlogsBySlugMatch(siteId, topicKeyword);
+    for (const sm of slugMatches) {
+      if (!blogResults.some((b) => areUrlsEquivalent(b.url, sm.url))) {
+        blogResults.push(sm);
+      }
+    }
+
+    return blogResults;
   } catch (err) {
     logger.warn("[PageExistenceResolver] Blog lookup failed", {
       siteId,
@@ -271,7 +247,7 @@ async function findMatchingBlogRecords(
 }
 
 /**
- * Fallback blog search: tokenize the topic and match against slugs.
+ * Fallback blog search: tokenize topic and match against blog slugs & titles.
  */
 async function findBlogsBySlugMatch(
   siteId: string,
@@ -281,7 +257,6 @@ async function findBlogsBySlugMatch(
   if (topicTokens.length === 0) return [];
 
   try {
-    // Fetch recent blogs for this site and check slug overlap
     const blogs = await prisma.blog.findMany({
       where: {
         siteId,
@@ -297,7 +272,7 @@ async function findBlogsBySlugMatch(
         publishedAt: true,
       },
       orderBy: { createdAt: "desc" },
-      take: 200, // Reasonable cap
+      take: 200,
     });
 
     const results: ExistingPageEvidence[] = [];
@@ -318,10 +293,18 @@ async function findBlogsBySlugMatch(
           issues.push("STALE_CONTENT");
         }
 
+        const exactMatch = overlapRatio === 1.0;
+        const confidence = exactMatch ? 0.95 : Math.min(1, 0.4 + overlapRatio * 0.5);
+
         results.push({
           url: blog.sourceUrl || `/blog/${blog.slug}`,
           matchSource: "BLOG_RECORD",
-          matchConfidence: Math.min(1, 0.4 + overlapRatio * 0.4),
+          matchConfidence: confidence,
+          matchType: exactMatch
+            ? "EXACT_MATCH"
+            : confidence >= STRONG_MATCH_THRESHOLD
+              ? "BLOG_MATCH"
+              : "LOW_CONFIDENCE_MATCH",
           issues,
         });
       }
@@ -338,7 +321,7 @@ async function findBlogsBySlugMatch(
 }
 
 /**
- * Step 3: Check PageAudit records for crawled pages with matching URL paths.
+ * Check PageAudit records for crawled pages matching the topic.
  */
 async function findMatchingPageAudits(
   siteId: string,
@@ -348,7 +331,6 @@ async function findMatchingPageAudits(
   if (topicTokens.length === 0) return [];
 
   try {
-    // Fetch recent page audits for this site
     const pageAudits = await prisma.pageAudit.findMany({
       where: { siteId },
       select: {
@@ -363,7 +345,6 @@ async function findMatchingPageAudits(
     const results: ExistingPageEvidence[] = [];
 
     for (const audit of pageAudits) {
-      // Extract path from URL and tokenize it
       const pathTokens = new Set(tokenize(extractPath(audit.pageUrl)));
       const overlap = topicTokens.filter((t) => pathTokens.has(t)).length;
       const overlapRatio = overlap / topicTokens.length;
@@ -372,16 +353,24 @@ async function findMatchingPageAudits(
         const issues: string[] = [];
         if (audit.overallScore < 50) issues.push("LOW_AUDIT_SCORE");
 
-        // Check for specific SEO issues in the audit
         const issueList = audit.issueList as unknown[];
-        if (Array.isArray(issueList) && issueList.length > 5) {
-          issues.push("MANY_AUDIT_ISSUES");
+        if (Array.isArray(issueList)) {
+          for (const item of issueList) {
+            const str = typeof item === "string" ? item : JSON.stringify(item);
+            if (str.includes("noindex")) issues.push("NOINDEX_DETECTED");
+            if (str.includes("canonical")) issues.push("CANONICAL_CONFLICT");
+            if (str.includes("thin")) issues.push("THIN_CONTENT");
+            if (str.includes("orphan") || str.includes("internal_link")) issues.push("ORPHAN_PAGE");
+          }
         }
+
+        const confidence = Math.min(1, 0.35 + overlapRatio * 0.55);
 
         results.push({
           url: audit.pageUrl,
           matchSource: "PAGE_AUDIT",
-          matchConfidence: Math.min(1, 0.3 + overlapRatio * 0.5),
+          matchConfidence: confidence,
+          matchType: confidence >= STRONG_MATCH_THRESHOLD ? "AUDIT_MATCH" : "LOW_CONFIDENCE_MATCH",
           issues,
         });
       }
@@ -403,6 +392,7 @@ function makeDecision(
   candidates: ExistingPageEvidence[],
   topicKeyword: string,
 ): PageExistenceResult {
+  // 1. No candidates found -> MISSING -> CREATE_NEW_CONTENT
   if (candidates.length === 0) {
     return {
       verdict: "MISSING",
@@ -414,16 +404,15 @@ function makeDecision(
     };
   }
 
-  // Sort by match confidence * (inverse position if available)
+  // Sort candidates by match confidence and source weight
   const sorted = [...candidates].sort((a, b) => {
-    // Prioritize GSC matches (strongest signal)
     const sourceWeight = (s: ExistingPageEvidence) =>
       s.matchSource === "GSC_RANKING_URL"
         ? 1.0
         : s.matchSource === "BLOG_RECORD"
-          ? 0.8
+          ? 0.85
           : s.matchSource === "PAGE_AUDIT"
-            ? 0.6
+            ? 0.65
             : 0.4;
 
     const aScore = a.matchConfidence * sourceWeight(a);
@@ -433,36 +422,62 @@ function makeDecision(
 
   const bestMatch = sorted[0];
 
-  // ── Cannibalization check ─────────────────────────────────────────────
-  // Multiple GSC URLs ranking for the same topic = cannibalization
-  const gscCandidates = candidates.filter(
-    (c) => c.matchSource === "GSC_RANKING_URL" && c.currentImpressions && c.currentImpressions > 0,
-  );
+  // 2. Check for Ambiguous / Low-Confidence Match
+  // Ambiguous: multiple candidates with nearly identical confidence scores, or bestMatch < 0.6
+  const isLowConfidence = bestMatch.matchConfidence < STRONG_MATCH_THRESHOLD;
+  const isAmbiguous =
+    sorted.length >= 2 &&
+    sorted[0].matchConfidence - sorted[1].matchConfidence < 0.1 &&
+    sorted[0].matchSource !== "GSC_RANKING_URL";
 
-  if (gscCandidates.length >= 2) {
+  if (isLowConfidence || isAmbiguous) {
+    bestMatch.matchType = isAmbiguous ? "AMBIGUOUS_MATCH" : "LOW_CONFIDENCE_MATCH";
     return {
-      verdict: "EXISTING_CANNIBALIZED",
+      verdict: "NEEDS_REVIEW",
       existingPage: bestMatch,
       allCandidates: sorted,
-      recommendedAction: "CONSOLIDATE_CONTENT",
-      recommendedCategory: "CANNIBALIZATION",
-      reasoning: `${gscCandidates.length} pages compete for topic "${topicKeyword}": ${gscCandidates
-        .slice(0, 3)
-        .map((c) => c.url)
-        .join(", ")}. Consolidation recommended.`,
+      recommendedAction: "NEEDS_REVIEW",
+      recommendedCategory: "QUICK_WIN",
+      reasoning: isAmbiguous
+        ? `Ambiguous page matches found for topic "${topicKeyword}" (${sorted[0].url} vs ${sorted[1].url}). Manual review required.`
+        : `Uncertain page match for "${topicKeyword}" (${bestMatch.url}, confidence: ${bestMatch.matchConfidence.toFixed(2)}). Review before creating new content.`,
     };
   }
 
-  // ── Healthy vs needs-fix decision ─────────────────────────────────────
+  // 3. Cannibalization check (Phase 5: Check intent similarity!)
+  const gscCandidates = sorted.filter(
+    (c) => c.matchSource === "GSC_RANKING_URL" && c.currentImpressions !== undefined && c.currentImpressions > 0,
+  );
+
+  if (gscCandidates.length >= 2) {
+    // Compare intent between top 2 GSC URLs
+    const url1 = gscCandidates[0].url;
+    const url2 = gscCandidates[1].url;
+    const shareSameIntent = checkIntentSimilarity(url1, url2, topicKeyword);
+
+    if (shareSameIntent) {
+      return {
+        verdict: "EXISTING_CANNIBALIZED",
+        existingPage: bestMatch,
+        allCandidates: sorted,
+        recommendedAction: "CONSOLIDATE_CONTENT",
+        recommendedCategory: "CANNIBALIZATION",
+        reasoning: `Multiple pages (${url1}, ${url2}) compete for topic "${topicKeyword}" with identical intent. Consolidation recommended.`,
+      };
+    }
+    // Different intent -> separate valid pages, fall through to single-page diagnosis
+  }
+
+  // 4. Single-page Diagnosis (Phase 6: Specific actions for diagnosed issues)
   const position = bestMatch.currentPosition;
   const hasIssues = bestMatch.issues.length > 0;
 
-  // If page exists in GSC and ranks well with no issues — it's healthy
+  // Healthy Page Check: position <= 20 and no major issues
   if (
-    bestMatch.matchSource === "GSC_RANKING_URL" &&
     position !== undefined &&
     position <= HEALTHY_POSITION_THRESHOLD &&
-    !hasIssues
+    !hasIssues &&
+    bestMatch.matchConfidence >= 0.7
   ) {
     return {
       verdict: "EXISTING_HEALTHY",
@@ -470,64 +485,57 @@ function makeDecision(
       allCandidates: sorted,
       recommendedAction: "MONITOR",
       recommendedCategory: "QUICK_WIN",
-      reasoning: `Page "${bestMatch.url}" already ranks at position ${position} for "${topicKeyword}". No action needed — monitoring.`,
+      reasoning: `Page "${bestMatch.url}" already ranks at position ${position} for "${topicKeyword}". Monitoring.`,
     };
   }
 
-  // Page exists but has problems
-  if (bestMatch.matchConfidence >= 0.5) {
-    const action = determineFixAction(bestMatch);
-    const category = determineCategoryForFix(bestMatch);
+  // Page Exists but Needs Fix
+  const action = determineDiagnosisAction(bestMatch);
+  const category = determineCategoryForFix(bestMatch);
 
-    const issueDescriptions = bestMatch.issues.length > 0
-      ? ` Issues: ${bestMatch.issues.join(", ")}.`
-      : "";
+  const issueDesc = bestMatch.issues.length > 0 ? ` Issues: ${bestMatch.issues.join(", ")}.` : "";
+  const posDesc = position !== undefined ? ` Position: ${position}.` : "";
 
-    const positionDesc = position !== undefined
-      ? ` Currently at position ${position}.`
-      : "";
-
-    return {
-      verdict: "EXISTING_NEEDS_FIX",
-      existingPage: bestMatch,
-      allCandidates: sorted,
-      recommendedAction: action,
-      recommendedCategory: category,
-      reasoning: `Existing page "${bestMatch.url}" found for "${topicKeyword}" via ${bestMatch.matchSource}.${positionDesc}${issueDescriptions} Optimizing existing page instead of creating new content.`,
-    };
-  }
-
-  // Low-confidence match — treat as missing
   return {
-    verdict: "MISSING",
-    existingPage: null,
+    verdict: "EXISTING_NEEDS_FIX",
+    existingPage: bestMatch,
     allCandidates: sorted,
-    recommendedAction: "CREATE_NEW_CONTENT",
-    recommendedCategory: "ALMOST_RANKING",
-    reasoning: `Low-confidence match for "${topicKeyword}" (best: ${bestMatch.matchConfidence.toFixed(2)} via ${bestMatch.matchSource}). Treating as new content opportunity.`,
+    recommendedAction: action,
+    recommendedCategory: category,
+    reasoning: `Existing page "${bestMatch.url}" found for "${topicKeyword}".${posDesc}${issueDesc} Optimizing existing page.`,
   };
 }
 
-// ── Helper Functions ────────────────────────────────────────────────────────
+// ── Diagnosis & Intent Helpers ──────────────────────────────────────────────
 
-function determineFixAction(page: ExistingPageEvidence): string {
-  // Priority: position-based first, then issue-based
+/**
+ * Phase 6: Diagnose exact problem and select appropriate action.
+ */
+function determineDiagnosisAction(page: ExistingPageEvidence): string {
+  // Explicit issue-based overrides first
+  if (page.issues.includes("NOINDEX_DETECTED")) return "MODIFY_ROBOTS_META";
+  if (page.issues.includes("CANONICAL_CONFLICT")) return "CHANGE_CANONICAL";
+  if (page.issues.includes("ORPHAN_PAGE")) return "ADD_INTERNAL_LINKS";
+  if (page.issues.includes("LOW_CTR")) return "OPTIMIZE_TITLE";
+  if (page.issues.includes("THIN_CONTENT") || page.issues.includes("LOW_AUDIT_SCORE")) {
+    return "OPTIMIZE_CONTENT_DEPTH";
+  }
+
+  // Position-based diagnosis
   if (page.currentPosition !== undefined) {
     if (page.currentPosition > WEAK_RANKING_THRESHOLD) {
-      return "OPTIMIZE_CONTENT_DEPTH"; // Ranking too low — major content overhaul
+      return "OPTIMIZE_CONTENT_DEPTH"; // Major ranking deficit
     }
     if (page.currentPosition > HEALTHY_POSITION_THRESHOLD) {
-      return "REFRESH_CONTENT"; // Close to good — refresh
+      return "REFRESH_CONTENT"; // Striking distance
     }
   }
 
-  if (page.issues.includes("STALE_CONTENT")) return "REFRESH_CONTENT";
-  if (page.issues.includes("NEEDS_REFRESH")) return "REFRESH_CONTENT";
-  if (page.issues.includes("LOW_AUDIT_SCORE")) return "OPTIMIZE_CONTENT_DEPTH";
-  if (page.issues.includes("LOW_VALIDATION_SCORE")) return "OPTIMIZE_CONTENT_DEPTH";
-  if (page.issues.includes("STILL_IN_DRAFT")) return "REFRESH_CONTENT";
+  if (page.issues.includes("STALE_CONTENT") || page.issues.includes("NEEDS_REFRESH")) {
+    return "REFRESH_CONTENT";
+  }
 
-  return "IMPROVE_SEARCH_INTENT"; // Default fix
+  return "IMPROVE_SEARCH_INTENT";
 }
 
 function determineCategoryForFix(page: ExistingPageEvidence): string {
@@ -537,10 +545,10 @@ function determineCategoryForFix(page: ExistingPageEvidence): string {
   if (page.currentPosition !== undefined && page.currentPosition <= 15) {
     return "QUICK_WIN";
   }
-  if (page.currentPosition !== undefined && page.currentPosition <= 20) {
+  if (page.currentPosition !== undefined && page.currentPosition <= 30) {
     return "ALMOST_RANKING";
   }
-  return "STALE"; // Default for existing pages that need work
+  return "STALE";
 }
 
 function detectGscIssues(
@@ -549,29 +557,73 @@ function detectGscIssues(
   impressions: number,
 ): string[] {
   const issues: string[] = [];
-
   if (avgPosition > WEAK_RANKING_THRESHOLD) {
     issues.push("WEAK_RANKING");
   }
-
-  if (impressions > 0 && clicks / impressions < 0.01 && avgPosition <= 10) {
+  if (impressions > 100 && clicks / impressions < 0.015 && avgPosition <= 20) {
     issues.push("LOW_CTR");
   }
-
   return issues;
 }
 
 /**
- * Normalize URL for comparison: lowercase, strip trailing slash,
- * strip protocol, strip www, strip query params and fragments.
+ * Phase 5: Check intent similarity between two URLs competing for same query.
  */
-function normalizeUrl(url: string): string {
+function checkIntentSimilarity(url1: string, url2: string, topicKeyword: string): boolean {
+  const p1 = extractPath(url1);
+  const p2 = extractPath(url2);
+  const t1 = tokenize(p1);
+  const t2 = tokenize(p2);
+
+  if (t1.length === 0 || t2.length === 0) return true; // Default to same intent if unparseable
+
+  const set2 = new Set(t2);
+  const overlap = t1.filter((token) => set2.has(token)).length;
+  const similarity = overlap / Math.min(t1.length, t2.length);
+
+  // High path token similarity = same intent (cannibalization)
+  // Low path token similarity = different intent (e.g. /tools/seo vs /blog/seo-guide)
+  return similarity >= 0.5;
+}
+
+// ── URL Normalization & Helper Utilities ────────────────────────────────────
+
+/**
+ * Phase 4: Full URL normalization.
+ * Handles trailing slashes, scheme, www, query params (?utm_...), fragments (#...).
+ */
+export function normalizeUrl(url: string): string {
+  if (!url) return "";
   try {
-    const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
-    return `${parsed.hostname.replace(/^www\./, "")}${parsed.pathname.replace(/\/$/, "")}`.toLowerCase();
+    const raw = url.trim();
+    const hasScheme = raw.startsWith("http://") || raw.startsWith("https://");
+    const parsed = new URL(hasScheme ? raw : `https://dummy.domain${raw.startsWith("/") ? raw : `/${raw}`}`);
+
+    let pathname = parsed.pathname.toLowerCase().replace(/\/+$/, "");
+    if (!pathname) pathname = "/";
+
+    if (hasScheme) {
+      const hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
+      return `${hostname}${pathname}`;
+    }
+    return pathname;
   } catch {
-    return url.toLowerCase().replace(/\/$/, "");
+    return url.toLowerCase().trim().replace(/\/+$/, "").replace(/\?.*$/, "");
   }
+}
+
+/**
+ * Checks if two URLs are equivalent after normalization.
+ */
+export function areUrlsEquivalent(url1: string, url2: string): boolean {
+  const n1 = normalizeUrl(url1);
+  const n2 = normalizeUrl(url2);
+  if (n1 === n2) return true;
+
+  // Path suffix check (e.g. /seo-audit vs example.com/seo-audit)
+  const p1 = n1.replace(/^[a-z0-9.-]+/, "");
+  const p2 = n2.replace(/^[a-z0-9.-]+/, "");
+  return p1.length > 1 && p1 === p2;
 }
 
 /** Tokenize text into lowercase words, stripping stop words */
@@ -597,8 +649,8 @@ function tokenize(text: string): string[] {
 /** Extract URL path and tokenize it (split on /, -, _) */
 function extractPath(url: string): string {
   try {
-    const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
-    return parsed.pathname.replace(/[/\-_]/g, " ");
+    const norm = normalizeUrl(url);
+    return norm.replace(/[/\-_]/g, " ");
   } catch {
     return url.replace(/[/\-_]/g, " ");
   }

@@ -47,7 +47,10 @@ export const GROWTH_ACTION_MAP: Record<string, ActionType> = {
   OPTIMIZE_TITLE:         "UPDATE_TITLE_TAG",
   OPTIMIZE_CONTENT_DEPTH: "REFRESH_CONTENT",
   DEINDEX_OR_REDIRECT:    "REDIRECT_URL",
-  MONITOR:                "UPDATE_META_DESCRIPTION",
+  MODIFY_ROBOTS_META:     "MODIFY_ROBOTS_META",
+  CHANGE_CANONICAL:       "CHANGE_CANONICAL",
+  ADD_INTERNAL_LINKS:     "ADD_INTERNAL_LINKS",
+  UPDATE_TITLE_TAG:       "UPDATE_TITLE_TAG",
 };
 
 // ── Public API ──────────────────────────────────────────────────────────────

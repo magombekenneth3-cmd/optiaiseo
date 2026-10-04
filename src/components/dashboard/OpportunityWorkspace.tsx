@@ -614,6 +614,132 @@ export function OpportunityWorkspace({
         </div>
       </div>
 
+      {/* ─── Page Existence & Search Association Intelligence ───────────── */}
+      {(() => {
+        const pageExistence = (decision.whyNow as any)?.pageExistence as {
+          verdict?: "EXISTING_HEALTHY" | "EXISTING_NEEDS_FIX" | "EXISTING_CANNIBALIZED" | "MISSING" | "NEEDS_REVIEW";
+          existingUrl?: string;
+          matchSource?: string;
+          matchConfidence?: number;
+          matchType?: string;
+          candidateCount?: number;
+          gscEvidence?: { position?: number; impressions?: number; clicks?: number };
+          canonicalUrl?: string;
+          isNoindex?: boolean;
+          issues?: string[];
+        } | undefined;
+
+        const verdict = pageExistence?.verdict ?? (decision.action === "CREATE_NEW_CONTENT" ? "MISSING" : "EXISTING_NEEDS_FIX");
+        const existingUrl = pageExistence?.existingUrl || decision.url;
+        const gsc = pageExistence?.gscEvidence;
+        const pos = gsc?.position ?? (performanceTrend.length > 0 ? Math.round(performanceTrend[performanceTrend.length - 1].position * 10) / 10 : undefined);
+        const imp = gsc?.impressions ?? (performanceTrend.length > 0 ? performanceTrend.reduce((s, d) => s + d.impressions, 0) : undefined);
+        const clicks = gsc?.clicks ?? (performanceTrend.length > 0 ? performanceTrend.reduce((s, d) => s + d.clicks, 0) : undefined);
+        const ctr = imp && imp > 0 && clicks !== undefined ? ((clicks / imp) * 100).toFixed(1) + "%" : null;
+
+        const VERDICT_CONFIG: Record<string, { title: string; badgeCls: string; borderCls: string; bgCls: string; icon: React.ElementType; recText: string }> = {
+          EXISTING_HEALTHY: {
+            title: "Existing Page Found — Healthy & Monitoring",
+            badgeCls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+            borderCls: "border-emerald-500/30",
+            bgCls: "bg-emerald-500/5",
+            icon: CheckCircle2,
+            recText: "Page ranks acceptably with no critical issues detected. Monitoring performance.",
+          },
+          EXISTING_NEEDS_FIX: {
+            title: "Existing Page Found — Optimization Recommended",
+            badgeCls: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+            borderCls: "border-amber-500/30",
+            bgCls: "bg-amber-500/5",
+            icon: AlertTriangle,
+            recText: `Google already associates "${existingUrl}" with "${decision.primaryKeyword}". Improve existing page to capture ranking lift rather than creating duplicate content.`,
+          },
+          EXISTING_CANNIBALIZED: {
+            title: "Multiple Competing Pages — Consolidation Recommended",
+            badgeCls: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+            borderCls: "border-purple-500/30",
+            bgCls: "bg-purple-500/5",
+            icon: Layers,
+            recText: `Multiple pages compete for topic "${decision.primaryKeyword}". Consolidate or redirect competing URLs into a primary canonical authority page.`,
+          },
+          MISSING: {
+            title: "No Suitable Existing Page Found — New Content Recommended",
+            badgeCls: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+            borderCls: "border-blue-500/30",
+            bgCls: "bg-blue-500/5",
+            icon: Rocket,
+            recText: `No suitable existing page was found for "${decision.primaryKeyword}" after evaluating site inventory. Generate a new targeted content brief.`,
+          },
+          NEEDS_REVIEW: {
+            title: "Related Pages Found — Review Required Before Action",
+            badgeCls: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+            borderCls: "border-amber-500/30",
+            bgCls: "bg-amber-500/5",
+            icon: FileSearch,
+            recText: `Potential page matches found for "${decision.primaryKeyword}", but match confidence is ambiguous. Review existing pages before deciding whether to create or fix.`,
+          },
+        };
+
+        const cfg = VERDICT_CONFIG[verdict] ?? VERDICT_CONFIG.EXISTING_NEEDS_FIX;
+        const VIcon = cfg.icon;
+
+        return (
+          <div className={`rounded-2xl border ${cfg.borderCls} ${cfg.bgCls} p-5 space-y-4`}>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border ${cfg.badgeCls}`}>
+                  <VIcon className="w-3.5 h-3.5" />
+                  {cfg.title}
+                </span>
+              </div>
+              {pageExistence?.matchSource && (
+                <span className="text-[11px] font-mono text-muted-foreground bg-accent/40 px-2.5 py-1 rounded border border-border/30">
+                  Match Source: {pageExistence.matchSource.replace(/_/g, " ")} {pageExistence.matchConfidence ? `(${Math.round(pageExistence.matchConfidence * 100)}%)` : ""}
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Target Identity</span>
+                <p className="text-sm font-semibold text-foreground font-mono truncate mt-0.5">{existingUrl}</p>
+                <p className="text-[12px] text-muted-foreground mt-1">
+                  Google query association: <strong className="text-foreground">&quot;{decision.primaryKeyword}&quot;</strong>
+                </p>
+              </div>
+
+              {verdict !== "MISSING" && (pos !== undefined || imp !== undefined) && (
+                <div className="flex items-center gap-4 bg-background/60 p-3 rounded-xl border border-border/30">
+                  {imp !== undefined && (
+                    <div>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Impressions</span>
+                      <span className="text-sm font-bold text-foreground">{imp.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {pos !== undefined && (
+                    <div>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Avg Position</span>
+                      <span className="text-sm font-bold text-amber-400">#{pos}</span>
+                    </div>
+                  )}
+                  {ctr && (
+                    <div>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">CTR</span>
+                      <span className="text-sm font-bold text-emerald-400">{ctr}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="p-3 rounded-xl bg-background/50 border border-border/30 text-[12px] text-muted-foreground leading-relaxed">
+              <span className="font-semibold text-foreground">Strategic Reason: </span>
+              {cfg.recText}
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4 sm:p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">

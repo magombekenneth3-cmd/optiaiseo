@@ -107,6 +107,25 @@ export async function generateProposal(
     };
   }
 
+  // ── Non-mutating action guard ─────────────────────────────────────────
+  // MONITOR / NO_ACTION / NEEDS_REVIEW decisions must NEVER produce a
+  // proposal. A healthy page or ambiguous match should not trigger any
+  // mutation in the system.
+  const NON_MUTATING_ACTIONS = new Set(["MONITOR", "NO_ACTION", "NEEDS_REVIEW"]);
+  if (NON_MUTATING_ACTIONS.has(decision.action)) {
+    logger.info("[ProposalGenerator] Non-mutating action — skipping proposal", {
+      decisionId: input.decisionId,
+      action: decision.action,
+    });
+    return {
+      proposalId: null,
+      actionType: "UPDATE_META_DESCRIPTION",
+      status: "SKIPPED",
+      reason: `Non-mutating action '${decision.action}' — no proposal needed`,
+      autoApproved: false,
+    };
+  }
+
   // 2. Determine ActionType
   const findingType = decision.sourceFindings?.[0]?.finding?.type ?? decision.action;
   const mapping = FINDING_TO_ACTION_MAP[findingType];
@@ -185,7 +204,7 @@ export async function generateProposal(
       actionType,
       targetUrl: decision.url,
       verificationUrl, // Persisted at generation time (Amendment #5)
-      targetModel: targetEntity ? "Blog" : "Page",
+      targetModel: resolveTargetModel(targetEntity, decision.url),
       targetId: targetEntity?.id ?? decision.url,
       status: policy.autoApprove ? "APPROVED" : "READY",
       proposedChanges,
@@ -377,6 +396,66 @@ function generateChangesForAction(
       ];
     }
 
+    case "GENERATE_CONTENT_BRIEF": {
+      const keyword = decision.primaryKeyword;
+      const whyNow = decision.whyNow as Record<string, unknown> ?? {};
+      const pageExistence = whyNow.pageExistence as Record<string, unknown> ?? {};
+      const verdict = (pageExistence.verdict as string) ?? "MISSING";
+      const candidateCount = (pageExistence.candidateCount as number) ?? 0;
+
+      return [
+        {
+          field: "contentBrief",
+          currentValue: null,
+          proposedValue: JSON.stringify({
+            targetKeyword: keyword,
+            targetUrl: decision.url,
+            searchIntent: "informational",
+            pageExistenceVerdict: verdict,
+            candidatesChecked: candidateCount,
+            gscEvidence: {
+              impressions: (decision.impact as any)?.trafficPotential?.expected ?? 0,
+              confidence: (decision.impact as any)?.trafficPotential?.confidence ?? 0,
+            },
+          }),
+          reasoning: `No suitable existing page found for "${keyword}" after checking ${candidateCount} candidates. New content creation recommended.`,
+        },
+      ];
+    }
+
+    case "REDIRECT_URL": {
+      return [
+        {
+          field: "redirect",
+          currentValue: decision.url,
+          proposedValue: "(target URL to be determined)",
+          reasoning: "Page should be redirected — deindexed or consolidated",
+        },
+      ];
+    }
+
+    case "CHANGE_CANONICAL": {
+      return [
+        {
+          field: "canonicalUrl",
+          currentValue: "(current canonical)",
+          proposedValue: decision.url,
+          reasoning: "Canonical URL mismatch — updating to correct canonical",
+        },
+      ];
+    }
+
+    case "MODIFY_ROBOTS_META": {
+      return [
+        {
+          field: "robotsMeta",
+          currentValue: "noindex",
+          proposedValue: "index, follow",
+          reasoning: "Page is noindex but should be indexable",
+        },
+      ];
+    }
+
     default:
       return [];
   }
@@ -420,7 +499,7 @@ function buildExpectedOutcome(
 
 /**
  * Resolves the target entity from the opportunity's URL.
- * Currently supports Blog entities via slug matching.
+ * Supports Blog, PageAudit, or arbitrary crawled URLs.
  */
 async function resolveTarget(
   prisma: any,
@@ -429,12 +508,42 @@ async function resolveTarget(
 ): Promise<any> {
   const slug = url.replace(/^\/blog\//, "").replace(/\/$/, "");
   try {
-    return await prisma.blog.findFirst({
-      where: { siteId, slug },
+    const blog = await prisma.blog.findFirst({
+      where: {
+        siteId,
+        OR: [
+          { slug },
+          { sourceUrl: url },
+        ],
+      },
     });
+    if (blog) return blog;
+
+    const pageAudit = await prisma.pageAudit.findFirst({
+      where: { siteId, pageUrl: url },
+    });
+    if (pageAudit) return pageAudit;
+
+    return {
+      url,
+      siteId,
+      targetType: "ARBITRARY_CRAWLED_URL",
+    };
   } catch {
-    return null;
+    return {
+      url,
+      siteId,
+      targetType: "ARBITRARY_CRAWLED_URL",
+    };
   }
+}
+
+function resolveTargetModel(targetEntity: any, url: string): string {
+  if (!targetEntity) return "Site";
+  if (targetEntity.targetType) return targetEntity.targetType;
+  if (targetEntity.slug !== undefined) return "Blog";
+  if (targetEntity.pageUrl !== undefined) return "PageAudit";
+  return "Site";
 }
 
 // ── Growth Action → ActionType Mapping ──────────────────────────────────────
@@ -444,6 +553,15 @@ async function resolveTarget(
  * This is the fallback when no finding-level mapping exists.
  */
 function mapGrowthActionToActionType(growthAction: string): ActionType {
+  // MONITOR / NO_ACTION / NEEDS_REVIEW should never reach here (guarded above),
+  // but if they do, return a safe non-mutating fallback.
+  const NON_MUTATING = new Set(["MONITOR", "NO_ACTION", "NEEDS_REVIEW"]);
+  if (NON_MUTATING.has(growthAction)) {
+    // Return UPDATE_META_DESCRIPTION as a placeholder — the guard above
+    // will have already returned SKIPPED before we get to change generation.
+    return "UPDATE_META_DESCRIPTION";
+  }
+
   const map: Record<string, ActionType> = {
     REFRESH_CONTENT: "REFRESH_CONTENT",
     BUILD_INTERNAL_LINKS: "ADD_INTERNAL_LINKS",
@@ -453,9 +571,12 @@ function mapGrowthActionToActionType(growthAction: string): ActionType {
     OPTIMIZE_TITLE: "UPDATE_TITLE_TAG",
     OPTIMIZE_CONTENT_DEPTH: "REFRESH_CONTENT",
     DEINDEX_OR_REDIRECT: "REDIRECT_URL",
-    MONITOR: "UPDATE_META_DESCRIPTION", // Default: low-risk observation
+    MODIFY_ROBOTS_META: "MODIFY_ROBOTS_META",
+    CHANGE_CANONICAL: "CHANGE_CANONICAL",
+    ADD_INTERNAL_LINKS: "ADD_INTERNAL_LINKS",
+    UPDATE_TITLE_TAG: "UPDATE_TITLE_TAG",
   };
-  return map[growthAction] ?? "UPDATE_META_DESCRIPTION";
+  return map[growthAction] ?? "REFRESH_CONTENT";
 }
 
 // ── Criteria Value Population ───────────────────────────────────────────────

@@ -322,7 +322,16 @@ export async function generateOpportunitiesFromFindings(
           existingUrl: pageExistenceResult.existingPage?.url ?? null,
           matchSource: pageExistenceResult.existingPage?.matchSource ?? null,
           matchConfidence: pageExistenceResult.existingPage?.matchConfidence ?? null,
+          matchType: pageExistenceResult.existingPage?.matchType ?? null,
           candidateCount: pageExistenceResult.allCandidates.length,
+          gscEvidence: {
+            position: pageExistenceResult.existingPage?.currentPosition ?? null,
+            impressions: pageExistenceResult.existingPage?.currentImpressions ?? null,
+            clicks: pageExistenceResult.existingPage?.currentClicks ?? null,
+          },
+          canonicalUrl: pageExistenceResult.existingPage?.canonicalUrl ?? null,
+          isNoindex: pageExistenceResult.existingPage?.isNoindex ?? null,
+          issues: pageExistenceResult.existingPage?.issues ?? [],
         }} : {}),
       },
       impact: {

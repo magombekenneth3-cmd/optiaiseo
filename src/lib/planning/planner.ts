@@ -167,6 +167,26 @@ export async function planOpportunity(
     };
   }
 
+  // 1.5. Non-mutating action check — MONITOR, NEEDS_REVIEW, NO_ACTION must never produce a proposal
+  const NON_MUTATING = new Set(["MONITOR", "NEEDS_REVIEW", "NO_ACTION"]);
+  if (NON_MUTATING.has(input.opportunity.action)) {
+    logger.info("[Planner] Non-mutating action — skipping plan", {
+      opportunityId,
+      action: input.opportunity.action,
+    });
+    return {
+      decision: "DEFER",
+      plan: null,
+      reasons: [{
+        rule: "NON_MUTATING_ACTION",
+        details: `Non-mutating action '${input.opportunity.action}' — monitoring/review only; no proposal created`,
+      }],
+      opportunityId,
+      proposalId: null,
+      proposalStatus: null,
+    };
+  }
+
   // 2. Validate planning input (checks 1-5)
   const inputValidation = validatePlanningInput(input);
   if (!inputValidation.valid) {
