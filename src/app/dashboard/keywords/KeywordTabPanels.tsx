@@ -15,6 +15,8 @@ import { AllKeywordsTable } from "./AllKeywordsTable";
 import { estimateKeywordRoi } from "@/lib/keywords/roi";
 import { SerpFeatureHistoryPanel } from "./SerpFeatureHistoryPanel";
 import { TopicalAuthorityPanel } from "./TopicalAuthorityPanel";
+import { PositionDistributionChart } from "./components/PositionDistributionChart";
+import { BiggestMovers } from "./components/BiggestMovers";
 
 const TABS = [
     { id: "keywords", label: "Keywords", desc: "Full keyword rankings from Search Console" },
@@ -66,11 +68,11 @@ export function KeywordTabPanels({
     if (trackedCount > 0) badges.tracked = trackedCount;
 
     return (
-        <div id="workspace" className="rounded-xl border border-[#21262d] bg-[#0d1117] overflow-hidden">
+        <div id="workspace" className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="px-5 pt-4 pb-0">
-                <h2 className="text-[14px] font-semibold text-[#e6edf3] mb-3">Keyword Workspace</h2>
+                <h2 className="text-sm font-semibold text-foreground mb-3">Keyword Workspace</h2>
             </div>
-            <div className="flex overflow-x-auto border-b border-[#21262d] scrollbar-none px-5">
+            <div className="flex overflow-x-auto border-b border-border scrollbar-none px-5">
                 {TABS.map(tab => {
                     const isActive = activeTab === tab.id;
                     const badge = badges[tab.id];
@@ -79,16 +81,16 @@ export function KeywordTabPanels({
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
                             className={[
-                                "shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-medium transition-colors whitespace-nowrap border-b-2 -mb-px",
+                                "shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap border-b-2 -mb-px",
                                 isActive
-                                    ? "border-[#388bfd] text-[#e6edf3]"
-                                    : "border-transparent text-[#6e7681] hover:text-[#c9d1d9]",
+                                    ? "border-info text-foreground"
+                                    : "border-transparent text-muted-foreground hover:text-foreground",
                             ].join(" ")}
                         >
                             {tab.label}
                             {badge !== undefined && (
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                                    isActive ? "bg-[#388bfd]/20 text-[#388bfd]" : "bg-[#21262d] text-[#6e7681]"
+                                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                                    isActive ? "bg-info/20 text-info" : "bg-muted text-muted-foreground"
                                 }`}>
                                     {badge}
                                 </span>
@@ -102,6 +104,13 @@ export function KeywordTabPanels({
                 {activeTab === "keywords" && (
                     <PanelErrorBoundary fallbackTitle="Keywords table failed to load">
                         <AllKeywordsTable keywords={keywords} siteId={siteId} />
+                        {/* Step 7: Position distribution + biggest movers below the table */}
+                        {keywords.length > 0 && (
+                            <div className="flex flex-col gap-4 p-5 border-t border-border/60">
+                                <PositionDistributionChart keywords={keywords} />
+                                <BiggestMovers keywords={keywords} />
+                            </div>
+                        )}
                     </PanelErrorBoundary>
                 )}
                 {activeTab === "opportunities" && (
@@ -135,7 +144,7 @@ export function KeywordTabPanels({
                             {hasRankTracking ? (
                                 <TrackedKeywordsPanel siteId={siteId} initialData={trackedKeywordsData} tier={userTier} maxTracked={maxTracked} />
                             ) : (
-                                <div className="py-12 text-center text-[#6e7681] text-[12px]">Rank tracking is available on the Pro plan and above.</div>
+                                <div className="py-12 text-center text-muted-foreground text-sm">Rank tracking is available on the Pro plan and above.</div>
                             )}
                             {hasShareOfVoice && <ShareOfVoiceChart siteId={siteId} />}
                             <SerpFeatureHistoryPanel siteId={siteId} />
