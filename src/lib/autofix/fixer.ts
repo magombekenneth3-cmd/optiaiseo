@@ -206,8 +206,8 @@ function fixBrokenLinks(root: HTMLElement, targetUrl: string, changes: AppliedFi
 
     links.forEach((a) => {
         const href = a.getAttribute("href");
-        if (!href || href === "#" || href === "undefined" || href === "null") {
-            a.setAttribute("href", targetUrl);
+        if (href === "undefined" || href === "null") {
+            a.removeAttribute("href");
             count++;
         }
     });
@@ -215,7 +215,7 @@ function fixBrokenLinks(root: HTMLElement, targetUrl: string, changes: AppliedFi
     if (count > 0) {
         changes.push({
             type: "REDIRECT_404",
-            description: `Fixed ${count} broken/empty anchor href tags by redirecting to canonical target URL`,
+            description: `Cleaned ${count} invalid/corrupted anchor href attributes ("undefined" or "null")`,
         });
     }
 }

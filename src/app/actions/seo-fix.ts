@@ -465,15 +465,7 @@ export async function pushSeoFixToGitHub(params: PushParams): Promise<PushResult
         if (params.filePath.endsWith("layout.tsx") && isPartialMetadataBlock(params.content)) {
             const existing = await fetchGitHubFileContent(owner, repo, params.filePath, defaultBranch, ghHeaders);
             if (existing) {
-                if (existing.includes("export const metadata")) {
-                    logger.debug(`[seo-fix] Surgical merge: replacing metadata block in existing ${params.filePath}`);
-                    contentToCommit = mergeLayoutMetadataBlock(existing, params.content);
-                } else {
-                    // No existing metadata — simple append after last import, no AST needed
-                    contentToCommit = existing + "\n\n" + params.content.trim() + "\n";
-                }
-            } else {
-                logger.warn(`[seo-fix] Could not fetch existing ${params.filePath} for merge — committing AI output as-is.`);
+                contentToCommit = mergeLayoutMetadataBlock(existing, params.content);
             }
         }
 
@@ -620,7 +612,6 @@ function mergeLayoutMetadataBlock(existingContent: string, newMetadataBlock: str
             }
         }
 
-        logger.warn("[seo-fix] Could not locate metadata variable in existing file AST — appending after imports");
         const declarations = existingFile.getImportDeclarations();
         if (declarations.length > 0) {
             const lastImportEnd = declarations[declarations.length - 1].getEnd();
@@ -631,19 +622,10 @@ function mergeLayoutMetadataBlock(existingContent: string, newMetadataBlock: str
         existingFile.insertText(0, cleanBlock + "\n\n");
         return existingFile.getFullText();
     } catch (e: unknown) {
-        logger.error("[seo-fix] AST parsing failed in mergeLayoutMetadataBlock, falling back to regex.", {
+        logger.error("[seo-fix] AST parsing failed in mergeLayoutMetadataBlock", {
             error: (e as Error)?.message || String(e),
         });
-        const metaRegex = /export const metadata[\s\S]*?^\};/m;
-        if (metaRegex.test(existingContent)) {
-            return existingContent.replace(metaRegex, cleanBlock);
-        }
-        const lastImportIdx = existingContent.lastIndexOf("\nimport ");
-        if (lastImportIdx !== -1) {
-            const insertAt = existingContent.indexOf("\n", lastImportIdx + 1) + 1;
-            return existingContent.slice(0, insertAt) + "\n" + cleanBlock + "\n" + existingContent.slice(insertAt);
-        }
-        return cleanBlock + "\n\n" + existingContent;
+        throw new Error(`AST_PARSE_FAILED: Could not parse ${"layout.tsx"} AST safely. Manual fix required.`);
     }
 }
 

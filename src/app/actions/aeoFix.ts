@@ -11,6 +11,7 @@ import {
   type AeoCheck,
   type Framework,
 } from "@/lib/aeo/fix-engine";
+import { Project, SyntaxKind } from "ts-morph";
 import { sanitizeMetadataContent } from "@/lib/seo/ai";
 import { callGemini as geminiCall } from "@/lib/gemini/client";
 import { getFallbackGuide, type FallbackGuide } from "@/lib/seo/fallbacks";
@@ -80,19 +81,33 @@ function getErrorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
-function extractMetadataBlock(src: string): [number, number] | null {
-  const start = src.indexOf("export const metadata");
-  if (start === -1) return null;
-  let depth = 0;
-  let i = start;
-  while (i < src.length) {
-    if (src[i] === "{") depth++;
-    else if (src[i] === "}") {
-      if (--depth === 0) return [start, i + 1];
+function astMergeLayoutMetadataBlock(existingContent: string, newMetadataBlock: string): string {
+  const cleanBlock = newMetadataBlock
+    .replace(/^```[\w-]*\s*/gm, "")
+    .replace(/^```\s*$/gm, "")
+    .trim();
+
+  const project = new Project({ useInMemoryFileSystem: true });
+  const sf = project.createSourceFile("layout.tsx", existingContent);
+  const metadataVar = sf.getVariableDeclaration("metadata");
+
+  if (metadataVar) {
+    const stmt = metadataVar.getFirstAncestorByKind(SyntaxKind.VariableStatement);
+    if (stmt) {
+      stmt.replaceWithText(cleanBlock);
+      return sf.getFullText();
     }
-    i++;
   }
-  return null;
+
+  const declarations = sf.getImportDeclarations();
+  if (declarations.length > 0) {
+    const lastImportEnd = declarations[declarations.length - 1].getEnd();
+    sf.insertText(lastImportEnd, "\n\n" + cleanBlock + "\n");
+    return sf.getFullText();
+  }
+
+  sf.insertText(0, cleanBlock + "\n\n");
+  return sf.getFullText();
 }
 
 function fetchWithTimeout(
@@ -293,25 +308,17 @@ export async function pushFixToGitHub(params: {
           existingData.content.replace(/\n/g, ""),
         );
 
-        const range = extractMetadataBlock(existingContent);
-        if (!range) {
+        try {
+          contentToCommit = astMergeLayoutMetadataBlock(existingContent, params.content);
+        } catch (astErr: unknown) {
+          logger.error("[aeoFix] AST merge failed", { error: (astErr as Error)?.message });
           return {
             success: false,
-            error:
-              "Could not locate metadata block in existing layout.tsx. Manual fix required.",
+            error: "AST parsing failed for metadata block in layout.tsx. Manual fix required.",
           };
         }
-        const cleanBlock = params.content
-          .replace(/^```[\w-]*\s*/gm, "")
-          .replace(/^```\s*$/gm, "")
-          .trim();
-        const [blockStart, blockEnd] = range;
-        contentToCommit =
-          existingContent.slice(0, blockStart) +
-          cleanBlock +
-          existingContent.slice(blockEnd);
         logger.debug(
-          `[aeoFix] Surgical metadata merge applied to ${params.filePath}`,
+          `[aeoFix] Surgical AST metadata merge applied to ${params.filePath}`,
         );
       }
     }

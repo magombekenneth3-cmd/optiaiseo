@@ -2,12 +2,13 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
 import { generateAeoFixInternal as generateAeoFix, validateFixInternal as validateFixWithQA } from "@/lib/aeo/fix-engine";
-import { aeoCheckToFinding } from "@/lib/aeo/fix-adapter";
+import { aeoCheckToFinding, constrainAeoPatch } from "@/lib/aeo/fix-adapter";
+import { applyAstFixPlan } from "@/lib/ast/executor";
 import { gateRemediationType } from "@/lib/seo-audit/contracts";
 import { z } from "zod";
 import { scoreHealingActions } from "./confidence";
 import { createHash } from "crypto";
-import { createAutoFixPR } from "@/lib/github";
+import { createAutoFixPR, getRepositoryFile } from "@/lib/github";
 import { getGitHubToken } from "@/lib/github/token";
 
 
@@ -197,6 +198,26 @@ export async function generateHealingPlan(siteId: string, currentGsov: number, p
         if (!curr) continue;
         const fixRes = await generateAeoFix(curr, site.domain, site.githubRepoUrl ?? undefined);
         if (fixRes.success) {
+            const patchResult = constrainAeoPatch(curr, fixRes.fix, fixRes.filePath, site.domain);
+            if (patchResult.astPlan && site.githubRepoUrl) {
+                const token = await getGitHubToken(site.userId);
+                if (token) {
+                    try {
+                        const repoFile = await getRepositoryFile(site.githubRepoUrl, fixRes.filePath, token);
+                        if (repoFile.exists && repoFile.content) {
+                            const prepared = applyAstFixPlan(repoFile.content, patchResult.astPlan);
+                            candidate.fix = prepared.serializedContent;
+                            candidate.filePath = fixRes.filePath;
+                            actions.push(candidate);
+                            continue;
+                        }
+                    } catch (astErr) {
+                        logger.warn("[Self-Healing] AST execution failed for self-healing candidate", {
+                            error: (astErr as Error)?.message,
+                        });
+                    }
+                }
+            }
             candidate.fix = fixRes.fix;
             candidate.filePath = fixRes.filePath;
             actions.push(candidate);

@@ -13,6 +13,7 @@
  */
 
 import type { VerificationCriterion, RemediationType, FixRisk } from "./diagnostic-types";
+import type { AstOperation, AstLanguage } from "@/lib/ast/types";
 
 // ── Fix Result Types ────────────────────────────────────────────────────────
 
@@ -29,6 +30,10 @@ export interface FixResult {
   action: PatchAction;
   /** File path for create_file actions (e.g. "public/sitemap.xml") */
   filePath?: string;
+  /** Structured AST operations corresponding to this deterministic fix */
+  astOperations?: AstOperation[];
+  /** Target AST language */
+  astLanguage?: AstLanguage;
   /**
    * Risk level — controls execution policy, not just display.
    *   SAFE / LOW   → may auto-generate and auto-PR
@@ -80,6 +85,15 @@ const fixCanonicalMissing: FixGenerator = (ctx) => ({
   targetSelector: "head",
   insertPosition: "beforeEnd",
   action: "insert",
+  astLanguage: "html",
+  astOperations: [
+    {
+      kind: "insertHtmlElement",
+      parentSelector: "head",
+      position: "append",
+      htmlSnippet: `<link rel="canonical" href="${ctx.preferredUrl ?? ctx.url}" />`,
+    },
+  ],
   risk: "MEDIUM",
   verification: [
     { type: "HTML_SELECTOR", selector: 'link[rel="canonical"]', expected: ctx.preferredUrl ?? ctx.url },
@@ -97,6 +111,15 @@ const fixCanonicalParameterized: FixGenerator = (ctx) => {
     patch: `<link rel="canonical" href="${ctx.preferredUrl}" />`,
     targetSelector: 'link[rel="canonical"]',
     action: "replace",
+    astLanguage: "html",
+    astOperations: [
+      {
+        kind: "setHtmlAttribute",
+        selector: 'link[rel="canonical"]',
+        attributeName: "href",
+        value: ctx.preferredUrl,
+      },
+    ],
     risk: "MEDIUM",
     verification: [
       { type: "HTML_SELECTOR", selector: 'link[rel="canonical"]', expected: ctx.preferredUrl },
@@ -124,6 +147,14 @@ const fixMetaNoindex: FixGenerator = (ctx) => {
       patch: null,
       targetSelector: 'meta[name="robots"]',
       action: "remove",
+      astLanguage: "html",
+      astOperations: [
+        {
+          kind: "removeHtmlAttribute",
+          selector: 'meta[name="robots"]',
+          attributeName: "content",
+        },
+      ],
       risk: "HIGH",
       verification: [
         { type: "HTML_SELECTOR", selector: 'meta[name="robots"]', expected: { not_contains: "noindex" } },
@@ -137,6 +168,15 @@ const fixMetaNoindex: FixGenerator = (ctx) => {
     patch: `<meta name="robots" content="${cleaned}" />`,
     targetSelector: 'meta[name="robots"]',
     action: "replace",
+    astLanguage: "html",
+    astOperations: [
+      {
+        kind: "setHtmlAttribute",
+        selector: 'meta[name="robots"]',
+        attributeName: "content",
+        value: cleaned,
+      },
+    ],
     risk: "HIGH",
     verification: [
       { type: "HTML_SELECTOR", selector: 'meta[name="robots"]', expected: { not_contains: "noindex" } },
@@ -154,6 +194,15 @@ const fixViewportMissing: FixGenerator = () => ({
   targetSelector: "head",
   insertPosition: "afterBegin",
   action: "insert",
+  astLanguage: "html",
+  astOperations: [
+    {
+      kind: "insertHtmlElement",
+      parentSelector: "head",
+      position: "prepend",
+      htmlSnippet: '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+    },
+  ],
   risk: "SAFE",
   verification: [
     { type: "HTML_SELECTOR", selector: 'meta[name="viewport"]', expected: { exists: true } },
@@ -170,6 +219,15 @@ const fixCharsetMissing: FixGenerator = () => ({
   targetSelector: "head",
   insertPosition: "afterBegin",
   action: "insert",
+  astLanguage: "html",
+  astOperations: [
+    {
+      kind: "insertHtmlElement",
+      parentSelector: "head",
+      position: "prepend",
+      htmlSnippet: '<meta charset="UTF-8" />',
+    },
+  ],
   risk: "SAFE",
   verification: [
     { type: "HTML_SELECTOR", selector: 'meta[charset]', expected: { exists: true } },
@@ -186,6 +244,15 @@ const fixHtmlLangMissing: FixGenerator = () => ({
   targetSelector: "html",
   action: "insert",
   insertPosition: "afterBegin",
+  astLanguage: "html",
+  astOperations: [
+    {
+      kind: "setHtmlAttribute",
+      selector: "html",
+      attributeName: "lang",
+      value: "en",
+    },
+  ],
   risk: "SAFE",
   verification: [
     { type: "HTML_SELECTOR", selector: "html[lang]", expected: { exists: true } },
@@ -215,6 +282,13 @@ const fixOgTagsMissing: FixGenerator = (ctx) => {
     targetSelector: "head",
     insertPosition: "beforeEnd",
     action: "insert",
+    astLanguage: "html",
+    astOperations: tags.map((t) => ({
+      kind: "insertHtmlElement",
+      parentSelector: "head",
+      position: "append",
+      htmlSnippet: t,
+    })),
     risk: "LOW",
     verification: [
       { type: "HTML_SELECTOR", selector: 'meta[property="og:title"]', expected: { exists: true } },
@@ -243,6 +317,14 @@ const fixSitemapMissing: FixGenerator = (ctx) => {
     patch: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>`,
     filePath: "public/sitemap.xml",
     action: "create_file",
+    astLanguage: "xml",
+    astOperations: [
+      {
+        kind: "setXmlNode",
+        targetTag: "urlset",
+        value: entries,
+      },
+    ],
     risk: "LOW",
     verification: [
       { type: "HTTP_STATUS", url: "/sitemap.xml", expected: 200 },
@@ -268,6 +350,15 @@ const fixRobotsTxtMissing: FixGenerator = (ctx) => ({
   ].join("\n"),
   filePath: "public/robots.txt",
   action: "create_file",
+  astLanguage: "robots",
+  astOperations: [
+    {
+      kind: "setRobotsDirective",
+      userAgent: "*",
+      directive: "Allow",
+      path: "/",
+    },
+  ],
   risk: "HIGH",
   verification: [
     { type: "HTTP_STATUS", url: "/robots.txt", expected: 200 },

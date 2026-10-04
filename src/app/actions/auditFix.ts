@@ -6,7 +6,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { createAutoFixPR, getRepositoryFile } from "@/lib/github";
 import { createHash } from "crypto";
-import { applyUnifiedDiff } from "@/lib/audit-fix/unified-diff";
+import { applyAstFixPlan } from "@/lib/ast/executor";
+import type { AstFixPlan, AstOperation, AstLanguage } from "@/lib/ast/types";
 import {
     sanitizeMetadataContent,
     sanitizeObject,
@@ -270,14 +271,14 @@ ${sharedConstraints}
 
 ## CRITICAL OUTPUT RULES
 - The target path is exactly: ${target.path}
-- Return a minimal unified diff against the pinned source below. Never return a complete file.
-- Do NOT include explanations, prose, or markdown
-- If you cannot generate a valid fix, return: { "patch": "" }
+- Return ONLY structured AST operations to fix this issue in ${target.path}.
+- Do NOT return source code, full file strings, markdown, or text diffs.
+- Return ONLY a JSON object: { "operations": [ { "kind": "setObjectProperty"|"setJsxAttribute"|"insertHtmlElement"|"setHtmlAttribute", ... } ] }
 
 ## PINNED SOURCE (${target.path})
 ${baseline.content}
 
-Return ONLY a valid JSON object with exactly one key: "patch".`;
+Return ONLY valid JSON with key "operations".`;
 
             const text = await callGeminiForFix(prompt);
             if (!text) {
@@ -290,19 +291,43 @@ Return ONLY a valid JSON object with exactly one key: "patch".`;
                 };
             }
 
-            const parsed = parseFixJson<{ patch: string }>(text);
-            if (!parsed?.patch) {
+            const parsed = parseFixJson<{ operations: AstOperation[] }>(text);
+            if (!parsed?.operations || !Array.isArray(parsed.operations) || parsed.operations.length === 0) {
                 const fallback = getStaticFallback(issue);
                 if (fallback) return { success: true, mode: "manual", guide: fallback };
                 return {
                     success: false,
-                    error: "AI returned an invalid response format. Please try again.",
+                    error: "AI returned an invalid response format or empty operations. Please try again.",
                 };
             }
 
+            const isHtml = target.path.endsWith(".html") || target.path.endsWith(".htm");
+            const isXml = target.path.endsWith(".xml");
+            const isRobots = target.path.endsWith(".txt");
+            const astLanguage: AstLanguage = isHtml ? "html" : isXml ? "xml" : isRobots ? "robots" : "tsx";
+
+            const plan: AstFixPlan = {
+                version: 1,
+                findingFingerprint: createHash("sha256").update(issueId).digest("hex").slice(0, 16),
+                filePath: target.path,
+                baseBlobSha: baseline.sha,
+                language: astLanguage,
+                operations: parsed.operations,
+                rationale: issue.title ?? issueId,
+                risk: "MEDIUM",
+                verification: [],
+            };
+
             let resolvedContent: string;
-            try { resolvedContent = applyUnifiedDiff(baseline.content, parsed.patch); }
-            catch { return { success: false, error: "AI returned a malformed or stale patch. Please regenerate the fix." }; }
+            try {
+                const prepared = applyAstFixPlan(baseline.content, plan);
+                resolvedContent = prepared.serializedContent;
+            } catch (astError: unknown) {
+                logger.warn("[AutoFix] AST execution failed", { error: (astError as Error)?.message });
+                const fallback = getStaticFallback(issue);
+                if (fallback) return { success: true, mode: "manual", guide: fallback };
+                return { success: false, error: `AST mutation failed: ${(astError as Error)?.message ?? "Invalid syntax modification"}` };
+            }
             const validationError = validateFix(target.path, resolvedContent, frameworkCtx);
             if (validationError) {
                 logger.warn("[AutoFix] Validation rejected AI output", {

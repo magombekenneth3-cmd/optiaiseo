@@ -28,6 +28,7 @@ import type {
   OptimizationDomain,
   FindingSeverity,
 } from "@/lib/seo-audit/contracts";
+import type { AstFixPlan, AstOperation, AstLanguage } from "@/lib/ast/types";
 import { createHash } from "crypto";
 
 // ── AeoCheck → DiagnosticFinding ────────────────────────────────────────────
@@ -118,13 +119,46 @@ export function constrainAeoPatch(
   //   - Structural changes → HIGH risk
   const risk = classifyAeoPatchRisk(check);
 
-  return {
+  const isHtml = filePath.endsWith(".html") || filePath.endsWith(".htm");
+  const isTsx = filePath.endsWith(".tsx") || filePath.endsWith(".jsx") || filePath.endsWith(".ts") || filePath.endsWith(".js");
+
+  const astLanguage: AstLanguage = isTsx ? "tsx" : isHtml ? "html" : "typescript";
+  const operations: AstOperation[] = isHtml
+    ? [
+        {
+          kind: "insertHtmlElement",
+          parentSelector: "head",
+          position: "append",
+          htmlSnippet: rawFix,
+        },
+      ]
+    : [
+        {
+          kind: "insertJsxElement",
+          parentTag: "head",
+          jsxSnippet: rawFix,
+        },
+      ];
+
+  const astPlan: AstFixPlan = {
+    version: 1,
     findingFingerprint: fingerprint,
     filePath,
-    patch: rawFix,
+    language: astLanguage,
+    operations,
     rationale: `AEO fix for "${check.label}": ${check.recommendation ?? check.detail ?? "improve AI engine visibility"}`,
     risk,
     verification: aeoVerificationCriteria(check, domain),
+  };
+
+  return {
+    findingFingerprint: fingerprint,
+    filePath,
+    displayDiff: rawFix,
+    astPlan,
+    rationale: astPlan.rationale,
+    risk,
+    verification: astPlan.verification,
     aiModel,
     domain: "AEO",
   };

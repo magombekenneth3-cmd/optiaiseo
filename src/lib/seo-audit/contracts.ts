@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import type { AstFixPlan } from "@/lib/ast/types";
 
 // ── Optimization Domains ─────────────────────────────────────────────────────
 //
@@ -375,8 +376,10 @@ export interface AiPatchResult {
   baseCommitSha?: string;
   /** Target file path (relative to project root) */
   filePath: string;
-  /** Unified diff or minimal insertion — NOT an entire file */
-  patch: string;
+  /** Structured AST operations plan (REQUIRED — execution artifact) */
+  astPlan: AstFixPlan;
+  /** Presentation unified diff (for UI display only — never executed) */
+  displayDiff?: string;
   /** Human-readable explanation of what this patch does and why */
   rationale: string;
   /** Risk classification for this specific patch */

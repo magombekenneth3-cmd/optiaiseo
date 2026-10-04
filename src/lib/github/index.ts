@@ -1,11 +1,14 @@
 import { logger } from "@/lib/logger";
 import { Octokit } from "@octokit/rest";
 import { BRAND } from "@/lib/constants/brand";
+import { createHash } from "crypto";
 import {
     registerEffect,
     assertEffectChannelEnabled,
     MutationBlockedError,
 } from "@/lib/mutations";
+
+import type { PreparedAstChange } from "@/lib/ast/types";
 
 const MAX_FILE_SIZE = 1_000_000;
 
@@ -19,6 +22,7 @@ export interface AutoFixFile {
     path: string;
     content: string;
     description: string;
+    astPreparedChange?: PreparedAstChange;
 }
 
 export interface GitHubPRResult {
@@ -122,6 +126,15 @@ export async function createAutoFixPR(
         }
         if (BLOCKED_PATH_PREFIXES.some((prefix) => p.startsWith(prefix))) {
             return { success: false, error: `Refusing to write to protected path: ${p}` };
+        }
+        if (file.astPreparedChange) {
+            const actualHash = createHash("sha256").update(file.content).digest("hex");
+            if (file.astPreparedChange.contentHash !== actualHash) {
+                return {
+                    success: false,
+                    error: `AST_INTEGRITY_FAILED: Content hash does not match PreparedAstChange for ${p}`,
+                };
+            }
         }
     }
 
