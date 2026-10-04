@@ -120,9 +120,9 @@ async function shouldSkip(userId: string): Promise<boolean> {
 
 function buildDay2Html(name: string, userId: string): string {
   const issues = [
-    ["No FAQ section", "AI engines extract Q&A pairs verbatim. Pages with ≥5 FAQ questions are cited 3× more often."],
+    ["No FAQ section", "AI engines extract Q&A pairs verbatim. Pages with a clear FAQ section are more likely to be cited."],
     ["Missing definition block", "If your page doesn't define its topic clearly in the first 100 words, AI engines skip it."],
-    ["No structured data (JSON-LD)", "Article and FAQPage schema are the strongest signals that your page is authoritative."],
+    ["No structured data (JSON-LD)", "Article and FAQPage schema are strong signals that your page is authoritative."],
   ] as const;
 
   const body = `
@@ -159,7 +159,7 @@ function buildDay2Text(name: string, userId: string): string {
       `Why AI engines aren't citing your site yet, ${name}`,
       "",
       "The 3 most common reasons sites get missed:",
-      "1. No FAQ section — pages with ≥5 FAQ questions are cited 3× more often.",
+      "1. No FAQ section — pages with a clear FAQ section are more likely to be cited.",
       "2. Missing definition block — define your topic clearly in the first 100 words.",
       "3. No structured data (JSON-LD) — Article and FAQPage schema signal authority.",
       "",
@@ -221,7 +221,7 @@ function buildDay10Html(name: string, userId: string): string {
       Your competitors may already be ahead in AI search, ${name}
     </h1>
     <p style="color:#9ca3af;font-size:15px;line-height:1.7;margin:0 0 20px;">
-      The share of Google traffic going to AI-generated answers has grown 35% in the last 6 months.
+      The share of search interactions involving AI-generated answers continues to grow.
       Every week you're not optimised for AI citations is a week competitors can take that visibility.
     </p>
     <div style="background:#161b22;border:1px solid #21262d;border-radius:12px;padding:20px;margin-bottom:24px;">

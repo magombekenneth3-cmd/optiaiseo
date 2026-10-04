@@ -5,6 +5,7 @@ import { auditMultiModelMentions } from "@/lib/aeo/multi-model";
 import { type AeoCheck } from "@/lib/aeo";
 import { generateAeoFixInternal } from "@/lib/aeo/fix-engine";
 import { aeoCheckToFinding } from "@/lib/aeo/fix-adapter";
+import { gateRemediationType } from "@/lib/seo-audit/contracts";
 import { pushFixToGitHub } from "@/app/actions/aeoFix";
 import { prisma } from "@/lib/prisma";
 import { AI_MODELS } from "@/lib/constants/ai-models";
@@ -242,22 +243,26 @@ Keep your response under 150 words — it will be read aloud to the user.`,
 
                 // ── Safety gate: classify the check before generating a fix ──────────
                 // Voice is an entry point — it must not have a separate fix architecture.
-                // Convert the AeoCheck to a canonical DiagnosticFinding and inspect
-                // its evidence confidence. Only technical issues with schema/structural
-                // cause proceed to PR generation. Content experiments are returned as
-                // recommendations only — they do not create repository mutations.
+                // Convert the AeoCheck to a canonical DiagnosticFinding and run the
+                // evidence gate. AEO checks carry INFERRED evidence, which downgrades
+                // AI_PATCH → EXPERIMENT. Only checks that pass the gate with AI_PATCH
+                // or DETERMINISTIC proceed to PR generation.
                 const canonicalFinding = aeoCheckToFinding(check, domain);
+                const gateResult = gateRemediationType(
+                    canonicalFinding.remediationType as any,
+                    canonicalFinding.evidence,
+                );
+                const effectiveType = gateResult.effectiveType;
 
                 // Content experiments: never produce a repository mutation from a
                 // single voice invocation — the voice tool is a single AI interaction.
                 const isContentExperiment =
-                    canonicalFinding.remediationType === "EXPERIMENT" ||
-                    canonicalFinding.remediationType === "MANUAL";
+                    effectiveType !== "AI_PATCH" && effectiveType !== "DETERMINISTIC";
 
                 if (isContentExperiment) {
                     return {
                         status: "content_experiment",
-                        message: `The issue "${check.label}" is a content or authority gap that cannot be resolved through an automatic code change. Tell the user this requires a content improvement, not a code fix. Recommend they review the AEO diagnosis for specific action steps.`,
+                        message: `The issue "${check.label}" is a content or authority gap that cannot be resolved through an automatic code change. ${gateResult.reason ?? "Evidence quality is insufficient for automatic fix generation."} Tell the user this requires a content improvement, not a code fix. Recommend they review the AEO diagnosis for specific action steps.`,
                     };
                 }
 

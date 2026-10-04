@@ -127,18 +127,22 @@ export const githubAutofixSiteJob = inngest.createFunction(
         if (fixFiles.length === 0) return { skipped: true, reason: "gemini_failed" };
 
         const prResult = await step.run("open-pr", async () => {
-            return createAutoFixPR(site.githubRepoUrl!, fixFiles, domain, token, site.user?.email ?? undefined);
+            // Phase 5 audit fix: pass siteId to enable kill-switch check.
+            // Previously this path bypassed assertEffectChannelEnabled entirely.
+            return createAutoFixPR(site.githubRepoUrl!, fixFiles, domain, token, site.user?.email ?? undefined, undefined, siteId);
         });
 
         if (prResult.success) {
             logger.debug(`[Inngest/GithubAutofix] PR opened for ${domain}: ${prResult.prUrl}`);
 
-            // Emit seo/fix.deployed events for each fix — triggers T+0 verification
+            // Record healing logs for tracking. Do NOT call recordHealingOutcome
+            // here — recording outcome at PR creation anchors the 30-day
+            // before/after measurement window on the wrong timestamp.
+            // Outcome measurement should happen after deployment/merge.
             await step.run("record-healing-logs", async () => {
                 try {
-                    const { recordHealingOutcome } = await import("./healing-outcomes");
                     for (const file of fixFiles) {
-                        const logEntry = await prisma.selfHealingLog.create({
+                        await prisma.selfHealingLog.create({
                             data: {
                                 siteId,
                                 issueType: file.description ?? "SEO fix",
@@ -147,14 +151,9 @@ export const githubAutofixSiteJob = inngest.createFunction(
                                 status: "PROPOSED",
                             },
                         });
-                        await recordHealingOutcome({
-                            siteId,
-                            healingLogId: logEntry.id,
-                            issueType: file.description ?? "SEO fix",
-                        });
                     }
                 } catch (err) {
-                    logger.warn("[GithubAutofix] Healing outcome recording failed (non-fatal):", {
+                    logger.warn("[GithubAutofix] Healing log recording failed (non-fatal):", {
                         error: (err as Error)?.message,
                     });
                 }

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 import { generateAeoFixInternal as generateAeoFix, validateFixInternal as validateFixWithQA } from "@/lib/aeo/fix-engine";
 import { aeoCheckToFinding } from "@/lib/aeo/fix-adapter";
+import { gateRemediationType } from "@/lib/seo-audit/contracts";
 import { z } from "zod";
 import { scoreHealingActions } from "./confidence";
 import { createHash } from "crypto";
@@ -142,40 +143,63 @@ export async function generateHealingPlan(siteId: string, currentGsov: number, p
     }
 
     // 3. Technical Regression Healing
+    //
+    // Phase 5 audit fix: dedupe BEFORE LLM generation to avoid wasting API
+    // calls on hourly cron runs where the action was already generated.
+    // Also: apply gateRemediationType (evidence gate) instead of checking
+    // the raw remediationType, which is always AI_PATCH for failed AEO checks.
+    const candidateActions: HealingAction[] = [];
     for (const curr of currentChecks) {
         const prev = prevChecks.find(c => c.id === curr.id);
         if (prev?.passed && !curr.passed) {
             // This is a regression
             if (curr.impact === "high" || curr.impact === "medium") {
                 // ── Canonical safety gate ─────────────────────────────────────
-                // Convert to canonical finding to inspect evidence quality.
+                // Convert to canonical finding and run the evidence gate.
                 // AEO checks carry INFERRED evidence by default (Phase 3).
-                // Only AI_PATCH evidence type proceeds to fix generation.
-                // EXPERIMENT / MANUAL evidence stays as ALERT only.
+                // gateRemediationType downgrades AI_PATCH + INFERRED → EXPERIMENT.
+                // Only DETERMINISTIC or AI_PATCH after gating proceeds to fix.
                 const canonicalFinding = aeoCheckToFinding(curr, site.domain);
-                const isFixEligible = canonicalFinding.remediationType === "AI_PATCH" ||
-                    canonicalFinding.remediationType === "DETERMINISTIC";
+                const gateResult = gateRemediationType(
+                    canonicalFinding.remediationType as any,
+                    canonicalFinding.evidence,
+                );
+                const effectiveType = gateResult.effectiveType;
+                const isFixEligible = effectiveType === "AI_PATCH" ||
+                    effectiveType === "DETERMINISTIC";
 
                 if (!isFixEligible) {
                     actions.push({
                         type: "ALERT",
-                        description: `AEO check regression: ${curr.label}. Evidence quality is insufficient for automatic fix generation. Manual review required.`,
+                        description: `AEO check regression: ${curr.label}. ${gateResult.reason ?? "Evidence quality is insufficient for automatic fix generation."} Manual review required.`,
                         targetId: curr.id,
                     });
                     continue;
                 }
 
-                const fixRes = await generateAeoFix(curr, site.domain, site.githubRepoUrl ?? undefined);
-                if (fixRes.success) {
-                    actions.push({
-                        type: site.githubRepoUrl ? "PR" : "CONTENT",
-                        description: `Restore ${curr.label} optimization.`,
-                        targetId: curr.id,
-                        fix: fixRes.fix,
-                        filePath: fixRes.filePath,
-                    });
-                }
+                // Collect candidate fix actions — LLM generation happens below
+                // only if dedupe confirms the action is novel.
+                candidateActions.push({
+                    type: site.githubRepoUrl ? "PR" : "CONTENT",
+                    description: `Restore ${curr.label} optimization.`,
+                    targetId: curr.id,
+                });
             }
+        }
+    }
+
+    // Dedupe candidate actions BEFORE calling the LLM to generate fixes.
+    // This avoids burning an LLM call per hour per check on the cron schedule
+    // when the same action was already generated within the 24h window.
+    const novelCandidates = await filterDuplicateHealingActions(siteId, candidateActions);
+    for (const candidate of novelCandidates) {
+        const curr = currentChecks.find(c => c.id === candidate.targetId);
+        if (!curr) continue;
+        const fixRes = await generateAeoFix(curr, site.domain, site.githubRepoUrl ?? undefined);
+        if (fixRes.success) {
+            candidate.fix = fixRes.fix;
+            candidate.filePath = fixRes.filePath;
+            actions.push(candidate);
         }
     }
 
@@ -191,6 +215,7 @@ export async function generateHealingPlan(siteId: string, currentGsov: number, p
         });
     }
 
+    // Final dedupe pass on alerts + any remaining actions
     return filterDuplicateHealingActions(siteId, actions);
 }
 

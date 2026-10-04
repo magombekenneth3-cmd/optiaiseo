@@ -337,7 +337,7 @@ export function diagnoseAeoData(
         explanation = `Your brand visibility score is ${score}%. Industry category queries (e.g. 'fiber internet in [region]') are not returning your brand. Your competitors with stronger content coverage for these query phrases are being preferred. Create dedicated landing pages targeting these exact query phrases.`;
     } else if (score < 50) {
         primaryProblem = "Brand visibility is below 50% — AI cites competitors more than your brand";
-        explanation = `Your brand visibility score is ${score}%. AI engines are citing your competitors roughly ${100 - score}% more than your brand. This impacts AI-driven discovery at scale.`;
+        explanation = `Your brand visibility score is ${score}%. AI engines are more frequently citing your competitors over your brand for tracked queries. This impacts AI-driven discovery at scale.`;
     } else {
         primaryProblem = "Brand visibility is partially established but has room to improve";
         explanation = `Your brand visibility score is ${score}%. AI engines are citing your brand in ${mentionedCount} of ${records.length} tracked queries. Focus on the failing queries and content gaps identified in the action plan.`;

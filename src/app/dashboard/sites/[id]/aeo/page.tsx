@@ -66,11 +66,12 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
 
 // ─── CHECK CARD WITH FIX GENERATION ──────────────────────────────────────────
 
-function CheckCard({ check, domain, githubRepoUrl, preloadedFix }: {
+function CheckCard({ check, domain, githubRepoUrl, preloadedFix, siteId }: {
     check: AeoCheck;
     domain: string;
     githubRepoUrl?: string;
     preloadedFix?: { fix: string; language: string; filePath?: string };
+    siteId: string;
 }) {
     const [showFix, setShowFix] = useState(false);
     const [fixing, setFixing] = useState(false);
@@ -135,7 +136,7 @@ function CheckCard({ check, domain, githubRepoUrl, preloadedFix }: {
             filePath,
             content: editedContent,
             commitMessage: `AEO Fix: Add ${check.label}`,
-            siteId: "",
+            siteId,
         });
         setPushing(false);
         if (res.success) {
@@ -691,9 +692,8 @@ export default function AeoPage() {
                                     <div className="p-4 rounded-xl bg-muted border border-border">
                                         <p className="text-[10px] font-bold text-muted-foreground uppercase">Total AEO Conversions</p>
                                         <p className="text-3xl font-black text-white mt-1">{metrics.totalConversions}</p>
-                                        <div className="flex items-center gap-1.5 mt-2 text-[10px] text-emerald-400 font-bold">
-                                            <span>↑ 12%</span>
-                                            <span className="text-muted-foreground font-normal italic">vs last month</span>
+                                        <div className="flex items-center gap-1.5 mt-2 text-[10px] text-muted-foreground font-medium">
+                                            <span>Lifetime total</span>
                                         </div>
                                     </div>
                                     <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
@@ -839,6 +839,7 @@ export default function AeoPage() {
                                     domain={siteDomain}
                                     githubRepoUrl={githubRepoUrl || undefined}
                                     preloadedFix={allFixes[check.id]}
+                                    siteId={siteId}
                                 />
                             ))}
                         </div>
@@ -878,6 +879,7 @@ export default function AeoPage() {
                                     domain={siteDomain}
                                     githubRepoUrl={githubRepoUrl || undefined}
                                     preloadedFix={allFixes[check.id]}
+                                    siteId={siteId}
                                 />
                             ))}
                         </div>
