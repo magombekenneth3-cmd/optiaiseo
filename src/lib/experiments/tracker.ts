@@ -267,6 +267,12 @@ export async function recordExperimentBaseline(
                 evaluationDate: experiment.evaluationDate,
                 status: experiment.status,
                 baseline: experiment.baseline as any,
+                // D.5 required fields — legacy defaults
+                hypothesis: `Executing ${experiment.actionExecuted} on ${experiment.targetUrl} will improve rankings`,
+                successMetric: "position",
+                successThreshold: 3.0,
+                configVersion: "legacy-v1",
+                configHash: `legacy-${experiment.id}`,
             },
         });
     } catch (dbErr: unknown) {
@@ -470,6 +476,12 @@ async function persistExperimentUpdate(exp: ExperimentRecord): Promise<void> {
                 status: exp.status,
                 baseline: exp.baseline as any,
                 lift: exp.lift ? (exp.lift as any) : undefined,
+                // D.5 required fields — legacy defaults
+                hypothesis: `Executing ${exp.actionExecuted} on ${exp.targetUrl} will improve rankings`,
+                successMetric: "position",
+                successThreshold: 3.0,
+                configVersion: "legacy-v1",
+                configHash: `legacy-${exp.id}`,
             },
         });
     } catch (dbErr: unknown) {
