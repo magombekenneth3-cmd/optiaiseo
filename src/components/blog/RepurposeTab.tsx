@@ -17,7 +17,15 @@ import {
     AlertTriangle,
     ChevronDown,
     ChevronUp,
+    FileText,
+    Code,
+    Mail,
+    Send,
+    Share2,
+    Sparkles,
+    Globe,
 } from "lucide-react";
+import { toast } from "sonner";
 import type {
     RepurposedContent,
     RepurposeFormat,
@@ -26,6 +34,9 @@ import type {
     YouTubeScript,
     RedditPost,
     PodcastOutline,
+    MediumArticle,
+    HashnodePost,
+    NewsletterDigest,
 } from "@/lib/blog/repurpose";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -46,14 +57,26 @@ type GenerateState =
 // ─── Format config ────────────────────────────────────────────────────────────
 
 const FORMAT_META: Record<RepurposeFormat, { label: string; icon: React.ElementType; color: string }> = {
-    linkedin: { label: "LinkedIn", icon: Linkedin, color: "text-blue-400 border-blue-500/30 bg-blue-500/10" },
-    thread:   { label: "X Thread", icon: Twitter,  color: "text-sky-400 border-sky-500/30 bg-sky-500/10" },
-    youtube:  { label: "YouTube",  icon: Youtube,  color: "text-red-400 border-red-500/30 bg-red-500/10" },
-    reddit:   { label: "Reddit",   icon: MessageSquare, color: "text-orange-400 border-orange-500/30 bg-orange-500/10" },
-    podcast:  { label: "Podcast",  icon: Mic,      color: "text-purple-400 border-purple-500/30 bg-purple-500/10" },
+    linkedin:   { label: "LinkedIn",   icon: Linkedin,      color: "text-blue-400 border-blue-500/30 bg-blue-500/10" },
+    thread:     { label: "X Thread",   icon: Twitter,       color: "text-sky-400 border-sky-500/30 bg-sky-500/10" },
+    youtube:    { label: "YouTube",    icon: Youtube,       color: "text-red-400 border-red-500/30 bg-red-500/10" },
+    reddit:     { label: "Reddit",     icon: MessageSquare, color: "text-orange-400 border-orange-500/30 bg-orange-500/10" },
+    podcast:    { label: "Podcast",    icon: Mic,           color: "text-purple-400 border-purple-500/30 bg-purple-500/10" },
+    medium:     { label: "Medium",     icon: FileText,      color: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" },
+    hashnode:   { label: "Hashnode",   icon: Code,          color: "text-indigo-400 border-indigo-500/30 bg-indigo-500/10" },
+    newsletter: { label: "Newsletter", icon: Mail,          color: "text-pink-400 border-pink-500/30 bg-pink-500/10" },
 };
 
-const ALL_FORMATS: RepurposeFormat[] = ["linkedin", "thread", "youtube", "reddit", "podcast"];
+const ALL_FORMATS: RepurposeFormat[] = [
+    "linkedin",
+    "thread",
+    "youtube",
+    "reddit",
+    "podcast",
+    "medium",
+    "hashnode",
+    "newsletter",
+];
 
 // ─── Copy / Download helpers ──────────────────────────────────────────────────
 
@@ -62,6 +85,7 @@ function useCopy() {
     const copy = useCallback((text: string, key: string) => {
         navigator.clipboard.writeText(text).catch(() => {});
         setCopiedKey(key);
+        toast.success("Copied to clipboard!");
         setTimeout(() => setCopiedKey(null), 2000);
     }, []);
     return { copy, copiedKey };
@@ -283,11 +307,138 @@ function PodcastCard({ data, slug }: { data: PodcastOutline; slug: string }) {
     );
 }
 
+function MediumCard({ data, blogId }: { data: MediumArticle; blogId: string }) {
+    const { copy, copiedKey } = useCopy();
+    const [isPublishing, setIsPublishing] = useState(false);
+    const full = `# ${data.title}\n\n*${data.subtitle}*\n\n${data.bodyHtml}\n\nCanonical URL: ${data.canonicalUrl}\nTags: ${data.tags?.join(", ")}`;
+
+    const handleMediumSync = async () => {
+        setIsPublishing(true);
+        try {
+            const res = await fetch(`/api/blogs/${blogId}/publish`, { method: "POST" });
+            const json = await res.json();
+            if (json.mediumUrl) {
+                toast.success(`Published to Medium! ${json.mediumUrl}`);
+            } else if (json.error) {
+                toast.error(json.error);
+            } else {
+                toast.info("Medium syndication triggered.");
+            }
+        } catch {
+            toast.error("Medium publish failed.");
+        } finally {
+            setIsPublishing(false);
+        }
+    };
+
+    return (
+        <div className="flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                    <p className="font-semibold text-sm">{data.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{data.subtitle}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleMediumSync}
+                        disabled={isPublishing}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all disabled:opacity-50"
+                    >
+                        {isPublishing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Globe className="w-3 h-3" />}
+                        Syndicate to Medium
+                    </button>
+                    <CopyBtn text={full} label="Copy Medium story" copyKey="med-full" copiedKey={copiedKey} onCopy={copy} />
+                </div>
+            </div>
+            <pre className="text-xs text-foreground/80 bg-muted/50 border border-border rounded-xl p-4 whitespace-pre-wrap leading-relaxed max-h-80 overflow-y-auto font-sans">
+                {data.bodyHtml}
+            </pre>
+        </div>
+    );
+}
+
+function HashnodeCard({ data, blogId }: { data: HashnodePost; blogId: string }) {
+    const { copy, copiedKey } = useCopy();
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    const handleHashnodeSync = async () => {
+        setIsSyncing(true);
+        try {
+            const res = await fetch(`/api/blogs/${blogId}/hashnode-sync`, { method: "POST" });
+            const json = await res.json();
+            if (json.hashnodeUrl) {
+                toast.success(`Published to Hashnode! ${json.hashnodeUrl}`);
+            } else if (json.error) {
+                toast.error(json.error);
+            } else {
+                toast.info("Hashnode sync triggered.");
+            }
+        } catch {
+            toast.error("Hashnode sync failed.");
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
+    return (
+        <div className="flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                    <p className="font-semibold text-sm">{data.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{data.subtitle}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleHashnodeSync}
+                        disabled={isSyncing}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-all disabled:opacity-50"
+                    >
+                        {isSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                        Sync to Hashnode
+                    </button>
+                    <CopyBtn text={data.contentMarkdown} label="Copy Markdown" copyKey="hn-md" copiedKey={copiedKey} onCopy={copy} />
+                </div>
+            </div>
+            <pre className="text-xs text-foreground/80 bg-muted/50 border border-border rounded-xl p-4 whitespace-pre-wrap leading-relaxed max-h-80 overflow-y-auto font-mono">
+                {data.contentMarkdown}
+            </pre>
+        </div>
+    );
+}
+
+function NewsletterCard({ data }: { data: NewsletterDigest }) {
+    const { copy, copiedKey } = useCopy();
+    const full = `Subject Options:\n${data.subjectLines?.map((s) => `- ${s}`).join("\n")}\n\nPreview Snippet: ${data.previewSnippet}\n\n${data.bodyMarkdown}\n\nCall To Action: ${data.callToAction}`;
+    return (
+        <div className="flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                    <p className="font-semibold text-sm">Email Digest</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Substack / Mailchimp ready</p>
+                </div>
+                <CopyBtn text={full} label="Copy newsletter" copyKey="nl-full" copiedKey={copiedKey} onCopy={copy} />
+            </div>
+            <div className="space-y-2 rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Subject Line Options:</p>
+                {data.subjectLines?.map((s, i) => (
+                    <div key={i} className="text-xs font-semibold text-foreground bg-card p-2 rounded border border-border/50">
+                        {i + 1}. {s}
+                    </div>
+                ))}
+            </div>
+            <pre className="text-xs text-foreground/80 bg-muted/50 border border-border rounded-xl p-4 whitespace-pre-wrap leading-relaxed max-h-80 overflow-y-auto font-sans">
+                {data.bodyMarkdown}
+            </pre>
+        </div>
+    );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function RepurposeTab({ blogId, blogTitle, blogSlug, onClose }: RepurposeTabProps) {
     const [state, setState] = useState<GenerateState>({ status: "idle" });
     const [activeFormat, setActiveFormat] = useState<RepurposeFormat>("linkedin");
+    const { copy } = useCopy();
 
     const generate = useCallback(async (formats: RepurposeFormat[]) => {
         setState({ status: "loading", formats });
@@ -308,7 +459,6 @@ export function RepurposeTab({ blogId, blogTitle, blogSlug, onClose }: Repurpose
                 succeeded: data.meta?.succeeded ?? [],
                 failed: data.meta?.failed ?? [],
             });
-            // Jump to first succeeded format
             const first = (data.meta?.succeeded as RepurposeFormat[])?.[0];
             if (first) setActiveFormat(first);
         } catch {
@@ -319,26 +469,47 @@ export function RepurposeTab({ blogId, blogTitle, blogSlug, onClose }: Repurpose
     const resultData = state.status === "done" ? state.data : null;
     const succeeded = state.status === "done" ? state.succeeded : [];
 
+    const handleCopyAllPackage = () => {
+        if (!resultData) return;
+        const fullPackage = JSON.stringify(resultData, null, 2);
+        copy(fullPackage, "full-package");
+        toast.success("Full 8-Channel Content Package copied!");
+    };
+
     return (
-        <div className="flex flex-col gap-0 bg-card rounded-2xl border border-border overflow-hidden shadow-xl w-full max-w-2xl">
+        <div className="flex flex-col gap-0 bg-card rounded-2xl border border-border overflow-hidden shadow-2xl w-full max-w-3xl">
             {/* Header */}
-            <div className="flex items-start justify-between gap-3 p-5 border-b border-border bg-muted/20">
-                <div>
-                    <p className="font-bold text-sm flex items-center gap-2">
-                        <Zap className="w-4 h-4 text-amber-400" />
-                        Repurpose Content
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{blogTitle}</p>
+            <div className="flex items-start justify-between gap-3 p-5 border-b border-border bg-zinc-900/60">
+                <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400">
+                        <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                        <p className="font-bold text-sm text-white flex items-center gap-2">
+                            Byword & Jasper Multi-Format Studio
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{blogTitle}</p>
+                    </div>
                 </div>
-                {onClose && (
-                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                        <X className="w-4 h-4" />
-                    </button>
-                )}
+                <div className="flex items-center gap-2">
+                    {resultData && (
+                        <button
+                            onClick={handleCopyAllPackage}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 transition-all"
+                        >
+                            <Share2 className="w-3.5 h-3.5" /> Copy 8-Channel Package
+                        </button>
+                    )}
+                    {onClose && (
+                        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                            <X className="w-4 h-4" />
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Format selector bar */}
-            <div className="flex items-center gap-2 px-5 pt-4 flex-wrap">
+            <div className="flex items-center gap-2 px-5 pt-4 flex-wrap bg-zinc-950/40">
                 {ALL_FORMATS.map((fmt) => {
                     const meta = FORMAT_META[fmt];
                     const Icon = meta.icon;
@@ -370,28 +541,30 @@ export function RepurposeTab({ blogId, blogTitle, blogSlug, onClose }: Repurpose
 
             {/* Generate all button */}
             {state.status !== "loading" && (
-                <div className="px-5 pt-3">
+                <div className="px-5 pt-3 flex items-center justify-between">
                     <button
                         id="repurpose-generate-all"
                         onClick={() => generate(ALL_FORMATS)}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 text-xs font-bold transition-all disabled:opacity-40"
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-purple-500/20 border border-amber-500/30 text-amber-300 hover:brightness-110 text-xs font-bold transition-all disabled:opacity-40"
                     >
                         <Zap className="w-3.5 h-3.5" />
-                        Generate all 5 formats
+                        Generate All 8 Channel Assets
                     </button>
+                    <span className="text-[11px] text-muted-foreground">
+                        Parallel AI execution (~10–15s total)
+                    </span>
                 </div>
             )}
 
             {/* Content area */}
-            <div className="p-5 min-h-[200px]">
+            <div className="p-5 min-h-[220px]">
                 {/* Idle */}
                 {state.status === "idle" && (
                     <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
                         <Zap className="w-8 h-8 text-amber-400 opacity-50" />
                         <p className="text-sm text-muted-foreground">
-                            Click a format above to generate, or use "Generate all 5" to run everything at once.
+                            Click any channel format above to generate, or use "Generate All 8 Channel Assets".
                         </p>
-                        <p className="text-xs text-muted-foreground/60">Takes ~8–15 seconds per format.</p>
                     </div>
                 )}
 
@@ -401,9 +574,7 @@ export function RepurposeTab({ blogId, blogTitle, blogSlug, onClose }: Repurpose
                         <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
                         <p className="text-sm font-semibold">Generating {state.formats.length > 1 ? `${state.formats.length} formats` : FORMAT_META[state.formats[0]].label}…</p>
                         <p className="text-xs text-muted-foreground">
-                            {state.formats.length > 1
-                                ? "Running in parallel — usually 10–20 seconds total."
-                                : "Usually takes ~8 seconds."}
+                            Running in parallel with cached AI acceleration.
                         </p>
                     </div>
                 )}
@@ -460,12 +631,21 @@ export function RepurposeTab({ blogId, blogTitle, blogSlug, onClose }: Repurpose
                         {activeFormat === "podcast" && resultData.podcast && (
                             <PodcastCard data={resultData.podcast} slug={blogSlug} />
                         )}
+                        {activeFormat === "medium" && resultData.medium && (
+                            <MediumCard data={resultData.medium} blogId={blogId} />
+                        )}
+                        {activeFormat === "hashnode" && resultData.hashnode && (
+                            <HashnodeCard data={resultData.hashnode} blogId={blogId} />
+                        )}
+                        {activeFormat === "newsletter" && resultData.newsletter && (
+                            <NewsletterCard data={resultData.newsletter} />
+                        )}
 
                         {/* Not yet generated for active format */}
                         {!resultData[activeFormat] && !state.failed.includes(activeFormat) && (
                             <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
                                 <p className="text-sm text-muted-foreground">
-                                    {FORMAT_META[activeFormat].label} not generated yet.
+                                    {FORMAT_META[activeFormat].label} asset not generated yet.
                                 </p>
                                 <button
                                     onClick={() => generate([activeFormat])}

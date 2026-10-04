@@ -106,7 +106,15 @@ async function withCacheAndRetry<T>(
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
-export type RepurposeFormat = "linkedin" | "thread" | "youtube" | "reddit" | "podcast";
+export type RepurposeFormat =
+    | "linkedin"
+    | "thread"
+    | "youtube"
+    | "reddit"
+    | "podcast"
+    | "medium"
+    | "hashnode"
+    | "newsletter";
 
 export interface LinkedInArticle {
     title: string;
@@ -142,12 +150,37 @@ export interface PodcastOutline {
     estimatedMinutes: number;
 }
 
+export interface MediumArticle {
+    title: string;
+    subtitle: string;
+    bodyHtml: string;
+    canonicalUrl: string;
+    tags: string[];
+}
+
+export interface HashnodePost {
+    title: string;
+    subtitle: string;
+    contentMarkdown: string;
+    tags: string[];
+}
+
+export interface NewsletterDigest {
+    subjectLines: string[];
+    previewSnippet: string;
+    bodyMarkdown: string;
+    callToAction: string;
+}
+
 export interface RepurposedContent {
     linkedin?: LinkedInArticle;
     thread?: TwitterThread;
     youtube?: YouTubeScript;
     reddit?: RedditPost;
     podcast?: PodcastOutline;
+    medium?: MediumArticle;
+    hashnode?: HashnodePost;
+    newsletter?: NewsletterDigest;
     errors: Partial<Record<RepurposeFormat, string>>;
 }
 
@@ -459,20 +492,92 @@ Respond ONLY with a JSON object — no markdown fences:
     return callGeminiJson<PodcastOutline>(prompt, { temperature: 0.55, maxOutputTokens: 2000 });
 }
 
+async function generateMedium(blog: Blog & { site: Site }): Promise<MediumArticle> {
+    const plain = stripHtml(blog.content);
+    const keyword = blog.targetKeywords[0] ?? "";
+    const canonicalUrl = `https://${blog.site.domain}/blog/${blog.slug}`;
+
+    const prompt = `You are a Medium publication editor. Adapt this blog post into a high-engagement Medium story with canonical SEO value.
+
+BLOG TITLE: ${blog.title}
+KEYWORD: ${keyword}
+CANONICAL URL: ${canonicalUrl}
+
+Respond ONLY with a JSON object:
+{
+  "title": "string (engaging Medium story title)",
+  "subtitle": "string (subheadline)",
+  "bodyHtml": "string (clean semantic HTML paragraphs & headings)",
+  "canonicalUrl": "${canonicalUrl}",
+  "tags": ["seo", "technology", "growth"]
+}
+
+SOURCE CONTENT:
+${truncate(plain, 6000)}`;
+
+    return callGeminiJson<MediumArticle>(prompt, { temperature: 0.6, maxOutputTokens: 2500 });
+}
+
+async function generateHashnode(blog: Blog & { site: Site }): Promise<HashnodePost> {
+    const plain = stripHtml(blog.content);
+    const keyword = blog.targetKeywords[0] ?? "";
+
+    const prompt = `You are a technical developer blogging expert on Hashnode. Convert this article into a developer-focused Hashnode Markdown post.
+
+BLOG TITLE: ${blog.title}
+KEYWORD: ${keyword}
+
+Respond ONLY with a JSON object:
+{
+  "title": "string (technical Hashnode title)",
+  "subtitle": "string (brief summary)",
+  "contentMarkdown": "string (clean Github-Flavored Markdown with code blocks)",
+  "tags": ["web-development", "seo", "engineering"]
+}
+
+SOURCE CONTENT:
+${truncate(plain, 6000)}`;
+
+    return callGeminiJson<HashnodePost>(prompt, { temperature: 0.6, maxOutputTokens: 2500 });
+}
+
+async function generateNewsletter(blog: Blog & { site: Site }): Promise<NewsletterDigest> {
+    const plain = stripHtml(blog.content);
+    const keyword = blog.targetKeywords[0] ?? "";
+
+    const prompt = `You are an elite email newsletter writer (Substack / Morning Brew style). Turn this blog into an engaging email digest.
+
+BLOG TITLE: ${blog.title}
+KEYWORD: ${keyword}
+
+Respond ONLY with a JSON object:
+{
+  "subjectLines": ["string", "string", "string"],
+  "previewSnippet": "string (subhead/preheader)",
+  "bodyMarkdown": "string (email body formatted in markdown)",
+  "callToAction": "string (link button text)"
+}
+
+SOURCE CONTENT:
+${truncate(plain, 6000)}`;
+
+    return callGeminiJson<NewsletterDigest>(prompt, { temperature: 0.65, maxOutputTokens: 2000 });
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 /**
- * Repurpose a published blog into up to 5 channel-specific formats.
+ * Repurpose a published blog into up to 8 channel-specific formats.
  * Each format is cache-checked first (Redis, 24h TTL), then generated
  * via Gemini with exponential backoff retry. Runs all requested formats
  * in parallel. Failed formats are recorded in result.errors without throwing.
  *
  * @param blog    — Blog record with site relation included
- * @param formats — Which formats to generate. Defaults to all five.
+ * @param formats — Which formats to generate. Defaults to all 8 formats.
  */
 export async function repurposeBlog(
     blog: Blog & { site: Site },
-    formats: RepurposeFormat[] = ["linkedin", "thread", "youtube", "reddit", "podcast"]
+    formats: RepurposeFormat[] = ["linkedin", "thread", "youtube", "reddit", "podcast", "medium", "hashnode", "newsletter"]
 ): Promise<RepurposedContent> {
     const result: RepurposedContent = { errors: {} };
 
@@ -509,6 +614,15 @@ export async function repurposeBlog(
 
     if (formats.includes("podcast"))
         run("podcast", () => generatePodcast(blog), (r) => { result.podcast = r; });
+
+    if (formats.includes("medium"))
+        run("medium", () => generateMedium(blog), (r) => { result.medium = r; });
+
+    if (formats.includes("hashnode"))
+        run("hashnode", () => generateHashnode(blog), (r) => { result.hashnode = r; });
+
+    if (formats.includes("newsletter"))
+        run("newsletter", () => generateNewsletter(blog), (r) => { result.newsletter = r; });
 
     await Promise.all(tasks);
 

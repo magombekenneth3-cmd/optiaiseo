@@ -8,7 +8,16 @@ import { rateLimit } from "@/lib/rate-limit";
 import { repurposeBlog, type RepurposeFormat } from "@/lib/blog/repurpose";
 import { consumeCredits } from "@/lib/credits";
 
-const ALL_FORMATS: RepurposeFormat[] = ["linkedin", "thread", "youtube", "reddit", "podcast"];
+const ALL_FORMATS: RepurposeFormat[] = [
+    "linkedin",
+    "thread",
+    "youtube",
+    "reddit",
+    "podcast",
+    "medium",
+    "hashnode",
+    "newsletter",
+];
 
 export async function POST(
     req: NextRequest,
