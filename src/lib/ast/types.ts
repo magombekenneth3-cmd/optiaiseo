@@ -64,7 +64,10 @@ export interface InsertJsxElementOp {
   kind: "insertJsxElement";
   targetSelector?: string;
   parentTag?: string;
-  jsxSnippet: string;
+  tagName?: string;
+  attributes?: Record<string, string | boolean | number>;
+  childrenText?: string;
+  jsxSnippet?: string;
 }
 
 export interface ReplaceJsxTextOp {
@@ -92,7 +95,10 @@ export interface InsertHtmlElementOp {
   kind: "insertHtmlElement";
   parentSelector: string;
   position?: "append" | "prepend";
-  htmlSnippet: string;
+  tagName?: string;
+  attributes?: Record<string, string>;
+  childrenText?: string;
+  htmlSnippet?: string;
 }
 
 export interface UpdateJsonLdPropertyOp {

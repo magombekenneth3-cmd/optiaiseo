@@ -19,28 +19,25 @@ export interface GapAnalysisResponse {
 
 import { parse } from "node-html-parser";
 
-/** Replace the first occurrence of a gap's snippet using DOM AST for HTML content or string replacement for plain text. */
+/** Replace the target gap node content strictly using DOM AST mutation. Zero string slicing fallbacks. */
 export function applyGapFix(content: string, gap: IdentifiedGap): string {
     if (!gap.originalSnippet) return content;
-    if (content.includes("<") && content.includes(">")) {
-        try {
-            const root = parse(content);
-            let replaced = false;
-            root.querySelectorAll("*").forEach((node) => {
-                if (!replaced && node.childNodes.length === 1 && node.childNodes[0].nodeType === 3) {
-                    const text = node.text;
-                    if (text.includes(gap.originalSnippet)) {
-                        node.set_content(text.replace(gap.originalSnippet, gap.suggestedReplacement));
-                        replaced = true;
-                    }
+    try {
+        const root = parse(content);
+        let replaced = false;
+        root.querySelectorAll("*").forEach((node) => {
+            if (!replaced && node.childNodes.length === 1 && node.childNodes[0].nodeType === 3) {
+                const text = node.text;
+                if (text.includes(gap.originalSnippet)) {
+                    node.set_content(text.replace(gap.originalSnippet, gap.suggestedReplacement));
+                    replaced = true;
                 }
-            });
-            if (replaced) return root.toString();
-        } catch {
-            // Fall back to exact string match if HTML parse fails
-        }
+            }
+        });
+        if (replaced) return root.toString();
+        throw new Error(`AST_PARSE_FAILED: Target snippet '${gap.originalSnippet.slice(0, 30)}...' not found in DOM AST nodes.`);
+    } catch (err) {
+        if ((err as Error)?.message?.includes("AST_PARSE_FAILED")) throw err;
+        throw new Error(`AST_PARSE_FAILED: Failed to parse DOM AST: ${(err as Error)?.message}`);
     }
-    const i = content.indexOf(gap.originalSnippet);
-    if (i === -1) return content;
-    return content.slice(0, i) + gap.suggestedReplacement + content.slice(i + gap.originalSnippet.length);
 }

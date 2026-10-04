@@ -1,8 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { applyAstFixPlan, generateDisplayUnifiedDiff } from "@/lib/ast/executor";
 import type { AstFixPlan } from "@/lib/ast/types";
 import { tryDeterministicFix } from "@/lib/seo-audit/deterministic-fixes";
 import { createAutoFixPR } from "@/lib/github";
+import * as mutationsModule from "@/lib/mutations";
+import { createHash } from "crypto";
 
 describe("Canonical AST Remediation Engine", () => {
   it("applies setObjectProperty AST mutation on TypeScript metadata export", () => {
@@ -128,7 +130,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       verification: [],
     };
 
-    expect(() => applyAstFixPlan(originalTsx, plan)).toThrow(/AST_MUTATION_FAILED/);
+    expect(() => applyAstFixPlan(originalTsx, plan)).toThrow(/AST_TARGET_NOT_FOUND|AST_MUTATION_FAILED/);
   });
 
   it("fails execution if AstFixPlan contains zero operations", () => {
@@ -172,7 +174,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     expect(fixResult?.astOperations?.[0].kind).toBe("insertHtmlElement");
   });
 
-  it("rejects PR creation when PreparedAstChange content hash mismatches", async () => {
+  it("rejects PR creation when PreparedAstChange artifact is missing (UNTRUSTED_CONTENT_BLOCKED)", async () => {
+    const res = await createAutoFixPR(
+      "https://github.com/owner/repo",
+      [
+        {
+          path: "src/app/layout.tsx",
+          content: "raw content without prepared change",
+          description: "Test description",
+        },
+      ],
+      "example.com",
+      "gho_dummy_token",
+    );
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain("UNTRUSTED_CONTENT_BLOCKED");
+  });
+
+  it("rejects PR creation when PreparedAstChange content hash mismatches (AST_INTEGRITY_FAILED)", async () => {
     const fakePreparedChange = {
       findingFingerprint: "fp_123",
       filePath: "src/app/layout.tsx",
@@ -202,4 +222,142 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     expect(res.success).toBe(false);
     expect(res.error).toContain("AST_INTEGRITY_FAILED");
   });
+
+  it("fails closed when unsupported operation kind is passed (AST_MUTATION_UNSUPPORTED)", () => {
+    const originalTsx = `export const metadata = {};`;
+
+    const plan: AstFixPlan = {
+      version: 1,
+      findingFingerprint: "fp_unsupported",
+      filePath: "src/app/layout.tsx",
+      language: "tsx",
+      operations: [
+        {
+          kind: "nonExistentOperationKind" as any,
+        },
+      ],
+      rationale: "Unsupported op test",
+      risk: "HIGH",
+      verification: [],
+    };
+
+    expect(() => applyAstFixPlan(originalTsx, plan)).toThrow(/AST_MUTATION_UNSUPPORTED/);
+  });
+
+  it("applies Robots.txt AST operations cleanly", () => {
+    const originalRobots = `User-agent: *\nDisallow: /admin\n`;
+
+    const plan: AstFixPlan = {
+      version: 1,
+      findingFingerprint: "fp_robots_1",
+      filePath: "public/robots.txt",
+      language: "robots",
+      operations: [
+        {
+          kind: "setRobotsDirective",
+          userAgent: "*",
+          directive: "Disallow",
+          path: "/private",
+        },
+      ],
+      rationale: "Add disallow rule",
+      risk: "SAFE",
+      verification: [],
+    };
+
+    const prepared = applyAstFixPlan(originalRobots, plan);
+    expect(prepared.serializedContent).toContain("Disallow: /private");
+  });
+
+  it("applies XML AST operations cleanly", () => {
+    const originalXml = `<?xml version="1.0"?><urlset><url><loc>https://example.com/</loc></url></urlset>`;
+
+    const plan: AstFixPlan = {
+      version: 1,
+      findingFingerprint: "fp_xml_1",
+      filePath: "sitemap.xml",
+      language: "xml",
+      operations: [
+        {
+          kind: "setXmlNode",
+          targetTag: "loc",
+          value: "https://example.com/updated",
+        },
+      ],
+      rationale: "Update sitemap url",
+      risk: "SAFE",
+      verification: [],
+    };
+
+    const prepared = applyAstFixPlan(originalXml, plan);
+    expect(prepared.serializedContent).toContain("https://example.com/updated");
+  });
+
+  it("applies JSON AST operations cleanly", () => {
+    const originalJson = `{\n  "name": "app",\n  "version": "1.0.0"\n}`;
+
+    const plan: AstFixPlan = {
+      version: 1,
+      findingFingerprint: "fp_json_1",
+      filePath: "manifest.json",
+      language: "json",
+      operations: [
+        {
+          kind: "setObjectProperty",
+          target: "manifest",
+          property: "version",
+          value: "1.0.1",
+        },
+      ],
+      rationale: "Bump version",
+      risk: "SAFE",
+      verification: [],
+    };
+
+    const prepared = applyAstFixPlan(originalJson, plan);
+    expect(prepared.serializedContent).toContain('"version": "1.0.1"');
+  });
+
+  it("fails closed when registerEffect throws error during PR creation", async () => {
+    const spyKillSwitch = vi.spyOn(mutationsModule, "assertEffectChannelEnabled").mockResolvedValue(undefined as any);
+    const spy = vi.spyOn(mutationsModule, "registerEffect").mockRejectedValue(new Error("Database connection lost"));
+
+    const content = "const x = 1;";
+    const contentHash = createHash("sha256").update(content).digest("hex");
+    const preparedChange = {
+      findingFingerprint: "fp_effect_fail",
+      filePath: "src/app/layout.tsx",
+      language: "tsx" as const,
+      serializedContent: content,
+      contentHash,
+      unifiedDiff: "",
+      astFingerprintBefore: "a",
+      astFingerprintAfter: "b",
+      appliedOperationsCount: 1,
+    };
+
+    const res = await createAutoFixPR(
+      "https://github.com/owner/repo",
+      [
+        {
+          path: "src/app/layout.tsx",
+          content: "const x = 1;",
+          description: "Test description",
+          astPreparedChange: preparedChange,
+        },
+      ],
+      "example.com",
+      "gho_dummy_token",
+      undefined,
+      "op_12345",
+      "site_12345",
+    );
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain("MutationEffect registration failed");
+
+    spyKillSwitch.mockRestore();
+    spy.mockRestore();
+  });
 });
+

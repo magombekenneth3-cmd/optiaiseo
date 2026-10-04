@@ -127,14 +127,18 @@ export async function createAutoFixPR(
         if (BLOCKED_PATH_PREFIXES.some((prefix) => p.startsWith(prefix))) {
             return { success: false, error: `Refusing to write to protected path: ${p}` };
         }
-        if (file.astPreparedChange) {
-            const actualHash = createHash("sha256").update(file.content).digest("hex");
-            if (file.astPreparedChange.contentHash !== actualHash) {
-                return {
-                    success: false,
-                    error: `AST_INTEGRITY_FAILED: Content hash does not match PreparedAstChange for ${p}`,
-                };
-            }
+        if (!file.astPreparedChange) {
+            return {
+                success: false,
+                error: `UNTRUSTED_CONTENT_BLOCKED: File '${p}' missing server-side PreparedAstChange artifact.`,
+            };
+        }
+        const actualHash = createHash("sha256").update(file.content).digest("hex");
+        if (file.astPreparedChange.contentHash !== actualHash) {
+            return {
+                success: false,
+                error: `AST_INTEGRITY_FAILED: Content hash does not match PreparedAstChange for ${p}`,
+            };
         }
     }
 
@@ -169,10 +173,14 @@ export async function createAutoFixPR(
                 },
             });
         } catch (effectErr) {
-            logger.warn("[GitHub Engine] Effect registration failed — continuing with direct dispatch", {
+            logger.error("[GitHub Engine] Effect registration failed — aborting dispatch", {
                 operationId,
                 error: (effectErr as Error)?.message,
             });
+            return {
+                success: false,
+                error: `MutationEffect registration failed: ${(effectErr as Error)?.message}. Aborting dispatch to enforce lifecycle safety.`,
+            };
         }
     }
 

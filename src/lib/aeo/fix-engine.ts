@@ -17,6 +17,8 @@ import {
 } from "@/lib/seo/ai";
 import { buildPrompt, type PromptContext } from "@/lib/seo/prompts";
 import { getFallbackGuide } from "@/lib/seo/fallbacks";
+import { constrainAeoPatch } from "./fix-adapter";
+import type { AstFixPlan } from "@/lib/ast/types";
 
 export type { Framework };
 
@@ -167,7 +169,7 @@ export async function generateAeoFixInternal(
     domain: string,
     repoUrl?: string,
 ): Promise<
-    | { success: true; fix: string; language: string; filePath: string; framework: Framework }
+    | { success: true; fix: string; astPlan?: AstFixPlan; language: string; filePath: string; framework: Framework }
     | { success: false; error: string; fallbackGuide?: ReturnType<typeof getFallbackGuide> }
 > {
     if (!process.env.GEMINI_API_KEY) {
@@ -258,9 +260,12 @@ export async function generateAeoFixInternal(
             status: "success",
         });
 
+        const patchResult = constrainAeoPatch(check, rawFix, filePath, domain, geminiResult.model);
+
         return {
             success: true,
             fix: rawFix,
+            astPlan: patchResult.astPlan,
             language: resolveLanguage(check.id, framework),
             filePath,
             framework,

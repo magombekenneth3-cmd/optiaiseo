@@ -34,12 +34,15 @@ const parseModelResults = (data: unknown) => {
     return res.success ? res.data : [];
 };
 
+import type { PreparedAstChange } from "@/lib/ast/types";
+
 export interface HealingAction {
     type: "PR" | "CONTENT" | "SCHEMA" | "ALERT";
     description: string;
     targetId?: string; // e.g., checkId
     fix?: string;
     filePath?: string;
+    preparedChange?: PreparedAstChange;
 }
 
 function actionFingerprint(action: HealingAction): string {
@@ -206,6 +209,7 @@ export async function generateHealingPlan(siteId: string, currentGsov: number, p
                         const repoFile = await getRepositoryFile(site.githubRepoUrl, fixRes.filePath, token);
                         if (repoFile.exists && repoFile.content) {
                             const prepared = applyAstFixPlan(repoFile.content, patchResult.astPlan);
+                            candidate.preparedChange = prepared;
                             candidate.fix = prepared.serializedContent;
                             candidate.filePath = fixRes.filePath;
                             actions.push(candidate);
@@ -218,9 +222,12 @@ export async function generateHealingPlan(siteId: string, currentGsov: number, p
                     }
                 }
             }
-            candidate.fix = fixRes.fix;
-            candidate.filePath = fixRes.filePath;
-            actions.push(candidate);
+            // If AST plan could not be prepared or executed against pinned file, degrade to ALERT
+            actions.push({
+                type: "ALERT",
+                description: `AEO check regression: ${curr.label}. AST mutation plan could not be safely prepared against repository source. Manual review required.`,
+                targetId: curr.id,
+            });
         }
     }
 
@@ -257,9 +264,11 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
         try {
             const fingerprint = actionFingerprint(action);
             const dedupeBucket = healingBucket();
-            if (action.type === "PR" && !githubAutopilotEnabled) {
+            if (action.type === "PR" && (!githubAutopilotEnabled || !action.preparedChange)) {
                 action.type = "ALERT";
-                action.description += " (Automatic repository changes are disabled pending verified deployment evidence.)";
+                action.description += action.preparedChange
+                    ? " (Automatic repository changes are disabled pending verified deployment evidence.)"
+                    : " (Action missing server-side PreparedAstChange artifact — degraded to ALERT.)";
             }
             if (action.fix) {
                 const qaResult = await validateFixWithQA(action.fix, action.description);
@@ -272,7 +281,7 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
 
             let logRecord: any = null;
 
-            if (action.type === "PR" && site.githubRepoUrl && action.fix && action.filePath) {
+            if (action.type === "PR" && site.githubRepoUrl && action.preparedChange && action.filePath) {
                 // Background workers cannot call a browser-session server action.
                 // Resolve the owner's OAuth credential and execute through the
                 // shared GitHub engine, including its site kill-switch check.
@@ -280,7 +289,14 @@ export async function executeHealing(siteId: string, actions: HealingAction[]) {
                 const res = token
                     ? await createAutoFixPR(
                         site.githubRepoUrl,
-                        [{ path: action.filePath, content: action.fix, description: action.description }],
+                        [
+                            {
+                                path: action.filePath,
+                                content: action.preparedChange.serializedContent,
+                                description: action.description,
+                                astPreparedChange: action.preparedChange,
+                            },
+                        ],
                         site.domain,
                         token,
                         site.user?.email ?? undefined,

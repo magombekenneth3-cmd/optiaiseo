@@ -7,6 +7,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isSafeUrl } from "@/lib/security/safe-url";
+import { applyAstFixPlan } from "@/lib/ast/executor";
+import type { AstFixPlan, PreparedAstChange } from "@/lib/ast/types";
+import { createAutoFixPR, getRepositoryFile } from "@/lib/github";
+import { createHash } from "crypto";
 import {
     detectFramework,
     scanSiteContent,
@@ -341,6 +345,7 @@ export interface PushParams {
     issueLabel: string;
     siteUrl: string;
     docsUrl?: string;
+    astPlan?: AstFixPlan;
 }
 
 export type PushResult =
@@ -351,7 +356,6 @@ export async function pushSeoFixToGitHub(params: PushParams): Promise<PushResult
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return { success: false, error: "Unauthorized" };
 
-    // SSRF guard: canonical isSafeUrl from @/lib/security/safe-url
     if (!isSafeUrl(params.repoUrl).ok) {
         return { success: false, error: "Invalid repository URL." };
     }
@@ -368,191 +372,55 @@ export async function pushSeoFixToGitHub(params: PushParams): Promise<PushResult
         };
     }
 
-    // FIX #4: Parse repo URL with the URL API instead of a brittle regex —
-    // handles trailing .git, query params, and port numbers cleanly.
-    let owner: string;
-    let repo: string;
     try {
-        const u = new URL(params.repoUrl);
-        const parts = u.pathname.replace(/^\/|\.git$/g, "").split("/").filter(Boolean);
-        if (parts.length < 2) throw new Error("Too few path segments");
-        [owner, repo] = parts;
-    } catch {
-        return {
-            success: false,
-            error: `Invalid GitHub repo URL: "${params.repoUrl}". Expected format: https://github.com/owner/repo`,
-        };
-    }
+        const targetFile = await getRepositoryFile(params.repoUrl, params.filePath, token);
+        const existingContent = targetFile.exists && targetFile.content ? targetFile.content : "";
 
-    const timestamp = Date.now();
-    const branchName = `fix/seo-${params.issueId.replace(/_/g, "-")}-${timestamp}`;
-
-    const ghHeaders: HeadersInit = {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Content-Type": "application/json",
-    };
-
-    // FIX #6: All GitHub fetches get an explicit timeout.
-    const ghFetch = (url: string, init?: RequestInit) =>
-        fetch(url, { ...init, signal: AbortSignal.timeout(15_000) });
-
-    try {
-        // 1. Get default branch SHA
-        const repoRes = await ghFetch(`https://api.github.com/repos/${owner}/${repo}`, {
-            headers: ghHeaders,
-        });
-        if (!repoRes.ok) {
-            // FIX #4: Explicit 401 handling for expired tokens.
-            if (repoRes.status === 401) {
-                return { success: false, error: "GitHub token expired. Please reconnect your GitHub account." };
-            }
-            const err = await repoRes.json().catch(() => ({}));
-            return { success: false, error: `Cannot access repo: ${(err as { message?: string }).message ?? repoRes.status}` };
-        }
-        const repoData = await repoRes.json();
-        const defaultBranch: string = repoData.default_branch ?? "main";
-
-        // 2. Get HEAD SHA of default branch
-        const refRes = await ghFetch(
-            `https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${defaultBranch}`,
-            { headers: ghHeaders }
-        );
-        if (!refRes.ok) return { success: false, error: "Could not get default branch ref." };
-        const refData = await refRes.json();
-        const baseSha: string = refData.object.sha;
-
-        // 3. Create feature branch
-        const createBranchRes = await ghFetch(
-            `https://api.github.com/repos/${owner}/${repo}/git/refs`,
-            {
-                method: "POST",
-                headers: ghHeaders,
-                body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha: baseSha }),
-            }
-        );
-        if (!createBranchRes.ok) {
-            if (createBranchRes.status === 401) {
-                return { success: false, error: "GitHub token expired. Please reconnect your GitHub account." };
-            }
-            const err = await createBranchRes.json().catch(() => ({}));
-            if (createBranchRes.status === 403) {
-                return {
-                    success: false,
-                    error: `Branch protection prevented creating '${branchName}'. Your token may need 'repo' scope.`,
-                };
-            }
-            return { success: false, error: `Failed to create branch: ${(err as { message?: string }).message ?? createBranchRes.status}` };
-        }
-
-        // 4. Get existing file SHA if file already exists
-        const fileApiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${params.filePath}`;
-        let existingSha: string | undefined;
-        try {
-            const existingRes = await ghFetch(`${fileApiUrl}?ref=${branchName}`, { headers: ghHeaders });
-            if (existingRes.ok) {
-                const existingData = await existingRes.json();
-                existingSha = existingData.sha;
-            }
-        } catch { /* File doesn't exist yet — fine */ }
-
-        // 5. Commit file to feature branch
-        let contentToCommit = params.content;
-
-        // FIX #5: Skip AST parsing entirely when the file has no existing metadata export —
-        // saves ts-morph instantiation cost in the common case.
-        if (params.filePath.endsWith("layout.tsx") && isPartialMetadataBlock(params.content)) {
-            const existing = await fetchGitHubFileContent(owner, repo, params.filePath, defaultBranch, ghHeaders);
-            if (existing) {
-                contentToCommit = mergeLayoutMetadataBlock(existing, params.content);
-            }
-        }
-
-        if (params.filePath.endsWith(".tsx") || params.filePath.endsWith(".ts")) {
-            const sanitized = sanitizeMetadataContent(contentToCommit);
-            if (sanitized !== contentToCommit) {
-                logger.warn(`[seo-fix] sanitizeMetadataContent removed invalid metadata fields from ${params.filePath}`);
-                contentToCommit = sanitized;
-            }
-        }
-
-        const encoded = Buffer.from(contentToCommit, "utf-8").toString("base64");
-        const commitBody: Record<string, unknown> = {
-            message: `fix(seo): ${params.issueLabel}`,
-            content: encoded,
-            branch: branchName,
-        };
-        if (existingSha) commitBody.sha = existingSha;
-
-        const commitRes = await ghFetch(fileApiUrl, {
-            method: "PUT",
-            headers: ghHeaders,
-            body: JSON.stringify(commitBody),
-        });
-        if (!commitRes.ok) {
-            if (commitRes.status === 401) {
-                return { success: false, error: "GitHub token expired. Please reconnect your GitHub account." };
-            }
-            const err = await commitRes.json().catch(() => ({}));
-            if (commitRes.status === 403) {
-                return {
-                    success: false,
-                    error: `Permission denied writing to branch '${branchName}'. Check that your GitHub token has 'repo' scope.`,
-                };
-            }
-            return { success: false, error: `Failed to commit file: ${(err as { message?: string }).message ?? commitRes.status}` };
-        }
-
-        // 6. Open Pull Request
-        const prBody = buildPrBody({
-            issueId: params.issueId,
-            issueLabel: params.issueLabel,
-            filePath: params.filePath,
-            siteUrl: params.siteUrl,
-            docsUrl: params.docsUrl,
-        });
-
-        const prRes = await ghFetch(
-            `https://api.github.com/repos/${owner}/${repo}/pulls`,
-            {
-                method: "POST",
-                headers: ghHeaders,
-                body: JSON.stringify({
-                    title: `fix(seo): ${params.issueLabel}`,
-                    body: prBody,
-                    head: branchName,
-                    base: defaultBranch,
-                    draft: false,
-                }),
-            }
-        );
-
-        if (!prRes.ok) {
-            if (prRes.status === 401) {
-                return { success: false, error: "GitHub token expired. Please reconnect your GitHub account." };
-            }
-            const err = await prRes.json().catch(() => ({}));
-            if (prRes.status === 403) {
-                return {
-                    success: false,
-                    error: `Branch protection prevents opening a PR. Please open the PR manually from branch '${branchName}'.`,
-                };
-            }
-            // Commit succeeded but PR failed — partial success, give user the compare URL
-            logger.warn("[seo-fix] PR creation failed:", { error: (err as Error)?.message || String(err) });
-            return {
-                success: true,
-                prUrl: `https://github.com/${owner}/${repo}/compare/${branchName}`,
-                branchName,
+        let prepared: PreparedAstChange;
+        if (params.astPlan) {
+            prepared = applyAstFixPlan(existingContent, params.astPlan);
+        } else {
+            const plan: AstFixPlan = {
+                version: 1,
+                findingFingerprint: createHash("sha256").update(params.issueId).digest("hex").slice(0, 16),
+                filePath: params.filePath,
+                baseBlobSha: targetFile.sha,
+                language: params.filePath.endsWith(".html") ? "html" : "tsx",
+                operations: [
+                    {
+                        kind: "setObjectProperty",
+                        target: "metadata",
+                        property: "title",
+                        value: params.content,
+                    },
+                ],
+                rationale: params.issueLabel,
+                risk: "MEDIUM",
+                verification: [],
             };
+            prepared = applyAstFixPlan(existingContent, plan);
         }
 
-        const prData = await prRes.json();
-        return { success: true, prUrl: prData.html_url, branchName };
+        const prRes = await createAutoFixPR(
+            params.repoUrl,
+            [
+                {
+                    path: params.filePath,
+                    content: prepared.serializedContent,
+                    description: params.issueLabel,
+                    astPreparedChange: prepared,
+                },
+            ],
+            params.siteUrl,
+            token,
+            session.user.email ?? undefined,
+        );
+
+        if (!prRes.success) return { success: false, error: prRes.error ?? "PR creation failed" };
+        return { success: true, prUrl: prRes.prUrl!, branchName: prRes.branchName ?? "main" };
     } catch (err: unknown) {
-        logger.error("[seo-fix] GitHub push error:", { error: (err as Error)?.message || String(err) });
-        return { success: false, error: "An unexpected error occurred while pushing to GitHub." };
+        logger.error("[seo-fix] pushSeoFixToGitHub error:", { error: (err as Error)?.message || String(err) });
+        return { success: false, error: `AST remediation failed: ${(err as Error)?.message ?? "An error occurred"}` };
     }
 }
 

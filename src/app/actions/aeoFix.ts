@@ -168,6 +168,11 @@ export async function generateAllFixes(
 
 // pushFixToGitHub
 
+import { applyAstFixPlan } from "@/lib/ast/executor";
+import type { AstFixPlan, PreparedAstChange } from "@/lib/ast/types";
+import { createAutoFixPR, getRepositoryFile } from "@/lib/github";
+import { createHash } from "crypto";
+
 export async function pushFixToGitHub(params: {
   repoUrl: string;
   filePath: string;
@@ -203,215 +208,64 @@ export async function pushFixToGitHub(params: {
         "GitHub account not connected. Please sign in with GitHub to allow PR creation.",
     };
   }
-  if (!token.startsWith("gho_") && !token.startsWith("ghp_")) {
-    logger.error("[aeoFix] Unexpected GitHub token format — rejecting");
-    return { success: false, error: "Invalid GitHub token format." };
-  }
-
-  // --- Parse repo URL ---
-  let owner: string;
-  let repo: string;
-  try {
-    const url = new URL(
-      params.repoUrl.startsWith("http") ? params.repoUrl : `https://${params.repoUrl}`,
-    );
-    const parts = url.pathname
-      .replace(/^\//, "")
-      .replace(/\.git$/, "")
-      .split("/");
-    if (parts.length < 2) throw new Error("too short");
-    [owner, repo] = parts;
-  } catch {
-    return { success: false, error: `Invalid GitHub repo URL: "${params.repoUrl}"` };
-  }
-
-  const ghHeaders: HeadersInit = {
-    Authorization: `Bearer ${token}`,
-    Accept: "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-    "Content-Type": "application/json",
-  };
 
   try {
-    // --- Fetch default branch ---
-    const repoRes = await fetchWithTimeout(
-      `https://api.github.com/repos/${owner}/${repo}`,
-      { headers: ghHeaders },
-    );
-    if (!repoRes.ok) return { success: false, error: "Cannot access repo." };
-    const defaultBranch: string =
-      (await repoRes.json()).default_branch ?? "main";
+    const targetFile = await getRepositoryFile(params.repoUrl, params.filePath, token);
+    const existingContent = targetFile.exists && targetFile.content ? targetFile.content : "";
 
-    // --- Get base SHA ---
-    const refRes = await fetchWithTimeout(
-      `https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${defaultBranch}`,
-      { headers: ghHeaders },
-    );
-    if (!refRes.ok)
-      return { success: false, error: "Could not get default branch ref." };
-    const baseSha: string = (await refRes.json()).object.sha;
-
-    // --- Create fix branch ---
-    const branchName = `fix/seo-autofix-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 7)}`;
-    const createBranchRes = await fetchWithTimeout(
-      `https://api.github.com/repos/${owner}/${repo}/git/refs`,
-      {
-        method: "POST",
-        headers: ghHeaders,
-        body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha: baseSha }),
-      },
-    );
-    if (!createBranchRes.ok) {
-      const err = await createBranchRes.json().catch(() => ({}));
-      return {
-        success: false,
-        error: `Failed to create branch: ${getErrorMessage(
-          err,
-          String(createBranchRes.status),
-        )}`,
-      };
-    }
-
-    // --- Prepare content (surgical metadata merge for layout.tsx) ---
-    let contentToCommit = params.content;
-    if (params.filePath.endsWith("layout.tsx")) {
-      const trimmed = params.content.trimStart();
-
-      if (trimmed.startsWith("import")) {
-        logger.error(
-          `[aeoFix] BLOCKED full-file rewrite attempt for ${params.filePath}`,
-        );
-        return {
-          success: false,
-          error:
-            "The generated fix was a full file rewrite and was blocked for safety. " +
-            "Only the metadata block may be changed in layout.tsx.",
-        };
-      }
-
-      if (trimmed.includes("export const metadata")) {
-        const existingRes = await fetchWithTimeout(
-          `https://api.github.com/repos/${owner}/${repo}/contents/${params.filePath}?ref=${defaultBranch}`,
-          { headers: ghHeaders },
-        );
-        if (!existingRes.ok) {
-          return {
-            success: false,
-            error:
-              "Could not fetch existing layout.tsx. Aborting to prevent data loss.",
-          };
-        }
-        const existingData = await existingRes.json();
-        const existingContent = decodeBase64(
-          existingData.content.replace(/\n/g, ""),
-        );
-
-        try {
-          contentToCommit = astMergeLayoutMetadataBlock(existingContent, params.content);
-        } catch (astErr: unknown) {
-          logger.error("[aeoFix] AST merge failed", { error: (astErr as Error)?.message });
-          return {
-            success: false,
-            error: "AST parsing failed for metadata block in layout.tsx. Manual fix required.",
-          };
-        }
-        logger.debug(
-          `[aeoFix] Surgical AST metadata merge applied to ${params.filePath}`,
-        );
-      }
-    }
-
-    // --- Check for existing file SHA (needed for updates) ---
-    const fileApiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${params.filePath}`;
-    let existingSha: string | undefined;
-    const existingRes = await fetchWithTimeout(
-      `${fileApiUrl}?ref=${branchName}`,
-      { headers: ghHeaders },
-    );
-    if (existingRes.ok) {
-      existingSha = (await existingRes.json()).sha;
-    } else if (existingRes.status !== 404) {
-      return {
-        success: false,
-        error: `Failed to check existing file: ${existingRes.status}`,
-      };
-    }
-
-    // --- Commit file ---
-    const isTypeScript =
-      params.filePath.endsWith(".tsx") || params.filePath.endsWith(".ts");
-    const encoded = encodeBase64(
-      isTypeScript
-        ? sanitizeMetadataContent(contentToCommit)
-        : contentToCommit,
-    );
-    const commitBody: Record<string, unknown> = {
-      message: `fix(seo): ${params.commitMessage}`,
-      content: encoded,
-      branch: branchName,
+    const isHtml = params.filePath.endsWith(".html");
+    const plan: AstFixPlan = {
+      version: 1,
+      findingFingerprint: createHash("sha256").update(params.commitMessage).digest("hex").slice(0, 16),
+      filePath: params.filePath,
+      baseBlobSha: targetFile.sha,
+      language: isHtml ? "html" : "tsx",
+      operations: isHtml
+        ? [
+            {
+              kind: "insertHtmlElement",
+              parentSelector: "head",
+              position: "append",
+              htmlSnippet: params.content,
+            },
+          ]
+        : [
+            {
+              kind: "setObjectProperty",
+              target: "metadata",
+              property: "title",
+              value: params.content,
+            },
+          ],
+      rationale: params.commitMessage,
+      risk: "MEDIUM",
+      verification: [],
     };
-    if (existingSha) commitBody.sha = existingSha;
 
-    const putRes = await fetchWithTimeout(fileApiUrl, {
-      method: "PUT",
-      headers: ghHeaders,
-      body: JSON.stringify(commitBody),
-    });
-    if (!putRes.ok) {
-      const err = await putRes.json().catch(() => ({}));
-      return {
-        success: false,
-        error: getErrorMessage(err, `GitHub API error ${putRes.status}`),
-      };
-    }
+    const prepared = applyAstFixPlan(existingContent, plan);
 
-    // --- Open PR ---
-    const prRes = await fetchWithTimeout(
-      `https://api.github.com/repos/${owner}/${repo}/pulls`,
-      {
-        method: "POST",
-        headers: ghHeaders,
-        body: JSON.stringify({
-          title: `fix(seo): ${params.commitMessage}`,
-          body: [
-            `## 🤖 ${BRAND.NAME} Auto-Fix`,
-            "",
-            `**File:** \`${params.filePath}\``,
-            `**Change:** ${params.commitMessage}`,
-            "",
-            "> ⚠️ Review carefully before merging.",
-            "> For `layout.tsx` fixes: only the `export const metadata` block was changed.",
-            "> All imports, components, and JSX are preserved exactly.",
-            "",
-            `_Generated by ${BRAND.NAME}._`,
-          ].join("\n"),
-          head: branchName,
-          base: defaultBranch,
-          draft: false,
-        }),
-      },
+    const prRes = await createAutoFixPR(
+      params.repoUrl,
+      [
+        {
+          path: params.filePath,
+          content: prepared.serializedContent,
+          description: params.commitMessage,
+          astPreparedChange: prepared,
+        },
+      ],
+      params.repoUrl,
+      token,
+      session.user.email ?? undefined,
+      undefined,
+      params.siteId,
     );
 
-    // PR creation failing is non-fatal — fall back to a compare URL
-    if (!prRes.ok) {
-      return {
-        success: true,
-        url: `https://github.com/${owner}/${repo}/compare/${branchName}`,
-      };
-    }
-
-    return { success: true, url: (await prRes.json()).html_url };
+    if (!prRes.success) return { success: false, error: prRes.error ?? "PR creation failed" };
+    return { success: true, url: prRes.prUrl! };
   } catch (err: unknown) {
-    logger.error("[aeoFix] pushFixToGitHub error", {
-      error: getErrorMessage(err, String(err)),
-      siteId: params.siteId,
-    });
-    return {
-      success: false,
-      error: "An unexpected error occurred while pushing to GitHub.",
-    };
+    logger.error("[aeoFix] pushFixToGitHub error:", { error: (err as Error)?.message || String(err) });
+    return { success: false, error: `AST remediation failed: ${(err as Error)?.message ?? "An error occurred"}` };
   }
 }
 
