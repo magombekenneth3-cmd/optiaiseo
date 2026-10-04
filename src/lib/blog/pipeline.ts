@@ -70,6 +70,14 @@ export interface OutlinePlan {
     slug: string;
     quickAnswer: string;
     metaDescription: string;
+    /**
+     * The article's editorial thesis — a single argumentative sentence that
+     * states what this article believes that most competitors don't say.
+     * Every section should serve this thesis, not just the keyword.
+     * Example: "Most agencies waste budget on vanity metrics because they
+     * never validate search intent before writing."
+     */
+    thesis?: string;
     sections: OutlineSection[];
     estimatedTotal: number;
     /**
@@ -366,6 +374,7 @@ Produce an outline as JSON with this exact shape:
   "title": "Article title — primary keyword in first 60 chars, no clickbait",
   "slug": "lowercase-hyphenated-slug-primary-keyword-only",
   "quickAnswer": "40-60 word direct answer to the keyword query. First word: Yes/No/a number/a tool name/a time frame.",
+  "thesis": "A single argumentative sentence stating this article's unique editorial position — what it believes that most content on this topic gets wrong or ignores. This is NOT a summary. Example: 'Most teams fail at X because they skip Y, and no ranking article addresses this.'",
   "metaDescription": "140-160 chars. Keyword within first 120 chars. Written as ad copy.",
   "sections": [
     {
@@ -398,6 +407,7 @@ RULES:
         title: keyword,
         slug: keyword.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
         quickAnswer: `${keyword} is a practice that helps businesses improve their outcomes. Start by auditing your current approach, then apply the steps in this guide.`,
+        thesis: `Most content about ${keyword} recycles the same surface-level advice without questioning whether the underlying assumptions are correct.`,
         metaDescription: `Learn everything about ${keyword}. Expert guide with real examples, common mistakes, and step-by-step advice. Updated ${ctx.year}.`,
         sections: [
             { heading: `The Truth About ${keyword}`, goal: "Establish authority and hook the reader", tone: "direct", evidenceType: "opinion", wordTarget: 130, keyEntities: [], isIntro: true },
@@ -671,7 +681,7 @@ Violating these rules produces fabricated content that will be caught by the pub
 
 ARTICLE TITLE: "${outline.title}"
 KEYWORD: "${ctx.keyword}"
-
+${outline.thesis ? `\nARTICLE THESIS: "${outline.thesis}"\nEvery paragraph you write must serve this thesis. Do not just summarise the topic — advance the argument. If a sentence doesn't connect to the thesis, cut it.\n` : ""}
 THIS SECTION:
 Heading: "${section.heading}"
 Goal: ${section.goal}

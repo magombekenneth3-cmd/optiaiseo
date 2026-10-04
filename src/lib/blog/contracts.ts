@@ -194,6 +194,8 @@ export const OutlinePlanSchema = z.object({
     title: z.string().trim().min(10).max(90),
     slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(100),
     quickAnswer: z.string().trim().min(20).max(500),
+    /** Single argumentative sentence — the article's unique editorial position. */
+    thesis: z.string().trim().min(10).max(500).optional(),
     metaDescription: z.string().trim().min(50).max(180),
     sections: z.array(OutlineSectionSchema).min(5).max(8),
     estimatedTotal: z.number().int().min(500).max(8_000),
