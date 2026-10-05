@@ -28,6 +28,9 @@ export interface KeywordSuggestion {
     recommendedAction?: string;
     existingPageUrl?: string | null;
     actionType?: "CREATE_PAGE" | "UPDATE_PAGE";
+    searchVolume?: number;
+    difficulty?: number;
+    intent?: "Informational" | "Commercial" | "Transactional" | "Navigational";
 }
 
 interface RawGscKeyword {
@@ -81,6 +84,22 @@ function clusterGscQueries(rawQueries: RawGscKeyword[]): { head: RawGscKeyword; 
     }
 
     return clusters;
+}
+
+function inferQueryIntent(keyword: string): "Informational" | "Commercial" | "Transactional" | "Navigational" {
+    const k = keyword.toLowerCase();
+    if (/\b(buy|pricing|price|cost|order|quote|discount|deal|purchase)\b/.test(k)) return "Transactional";
+    if (/\b(best|vs|review|reviews|top|software|tool|platform|alternative|comparison|provider|service|services|solution|agency)\b/.test(k)) return "Commercial";
+    if (/\b(login|portal|sign in|dashboard|app|website)\b/.test(k)) return "Navigational";
+    return "Informational";
+}
+
+function calculateDifficulty(position: number, competitorDifficulty?: number | null): number {
+    if (competitorDifficulty != null && competitorDifficulty > 0) return Math.min(100, Math.round(competitorDifficulty));
+    if (position <= 0) return 35;
+    if (position <= 10) return Math.min(95, 65 + Math.round((11 - position) * 3));
+    if (position <= 20) return Math.min(65, 45 + Math.round((21 - position) * 2));
+    return Math.max(15, Math.round(45 - (position - 20) * 0.5));
 }
 
 export async function getSiteKeywordSuggestions(
@@ -151,6 +170,9 @@ export async function getSiteKeywordSuggestions(
                         recommendedAction: "CREATE_NEW_CONTENT",
                         existingPageUrl: null,
                         actionType: "CREATE_PAGE",
+                        searchVolume: head.impressions,
+                        difficulty: calculateDifficulty(head.position),
+                        intent: inferQueryIntent(head.keyword),
                     });
                 } else if (
                     existence.verdict === "EXISTING_NEEDS_FIX" ||
@@ -167,6 +189,9 @@ export async function getSiteKeywordSuggestions(
                         recommendedAction: existence.recommendedAction,
                         existingPageUrl: existence.existingPage?.url || null,
                         actionType: "UPDATE_PAGE",
+                        searchVolume: head.impressions,
+                        difficulty: calculateDifficulty(head.position),
+                        intent: inferQueryIntent(head.keyword),
                     });
                 }
             }
@@ -201,6 +226,9 @@ export async function getSiteKeywordSuggestions(
                             recommendedAction: "CREATE_NEW_CONTENT",
                             existingPageUrl: null,
                             actionType: "CREATE_PAGE",
+                            searchVolume: ck.searchVolume ?? 0,
+                            difficulty: calculateDifficulty(0, ck.difficulty),
+                            intent: inferQueryIntent(ck.keyword),
                         });
                     }
 

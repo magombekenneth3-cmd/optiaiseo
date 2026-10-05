@@ -145,7 +145,7 @@ function KeywordStep({
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [custom, setCustom] = useState(keyword || "");
-    const [filterSource, setFilterSource] = useState<"all" | "gsc_gap" | "no_content" | "competitor">("all");
+    const [filterSource, setFilterSource] = useState<"all" | "gsc_gap" | "no_content" | "competitor_gap">("all");
 
     useEffect(() => {
         let cancelled = false;
@@ -180,7 +180,7 @@ function KeywordStep({
                 : "border-amber-500/30 bg-amber-500/10 text-amber-400";
 
     const sourceLabel = (source: KeywordSuggestion["source"]) =>
-        source === "gsc_gap" ? "GSC Gap" : source === "no_content" ? "No Content" : "Competitor";
+        source === "gsc_gap" ? "GSC Gap" : source === "no_content" ? "No Content" : "Competitor Gap";
 
     const canContinue = !!(keyword || custom.trim());
 
@@ -218,7 +218,7 @@ function KeywordStep({
                         { id: "all", label: "All Gaps" },
                         { id: "gsc_gap", label: "GSC Gaps" },
                         { id: "no_content", label: "No Content" },
-                        { id: "competitor", label: "Competitor" },
+                        { id: "competitor_gap", label: "Competitor Gap" },
                     ] as const
                 ).map((tab) => (
                     <button
@@ -260,8 +260,8 @@ function KeywordStep({
                             }`}
                         >
                             <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <p className="truncate text-xs font-bold text-white">{s.keyword}</p>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                    <p className="truncate text-xs font-bold text-white mr-1">{s.keyword}</p>
                                     <span
                                         className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sourceVariant(
                                             s.source
@@ -269,6 +269,34 @@ function KeywordStep({
                                     >
                                         {sourceLabel(s.source)}
                                     </span>
+                                    {s.intent && (
+                                        <span
+                                            className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                                                s.intent === "Commercial"
+                                                    ? "border-purple-500/40 bg-purple-500/15 text-purple-300"
+                                                    : s.intent === "Transactional"
+                                                        ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                                                        : s.intent === "Navigational"
+                                                            ? "border-cyan-500/40 bg-cyan-500/15 text-cyan-300"
+                                                            : "border-zinc-500/40 bg-zinc-500/15 text-zinc-300"
+                                            }`}
+                                        >
+                                            {s.intent}
+                                        </span>
+                                    )}
+                                    {s.difficulty != null && (
+                                        <span
+                                            className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                                                s.difficulty <= 40
+                                                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                                                    : s.difficulty <= 70
+                                                        ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                                                        : "border-rose-500/30 bg-rose-500/10 text-rose-400"
+                                            }`}
+                                        >
+                                            Diff {s.difficulty}
+                                        </span>
+                                    )}
                                     {s.actionType === "UPDATE_PAGE" ? (
                                         <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">
                                             Update Page ({s.recommendedAction || "REFRESH"})
@@ -279,7 +307,19 @@ function KeywordStep({
                                         </span>
                                     )}
                                 </div>
-                                <p className="mt-1 truncate text-[11px] text-zinc-400">{s.reason}</p>
+                                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
+                                    {(s.searchVolume != null || s.impressions > 0) && (
+                                        <span className="font-semibold text-zinc-300">
+                                            {(s.searchVolume ?? s.impressions).toLocaleString()} searches/mo
+                                        </span>
+                                    )}
+                                    {s.position > 0 && (
+                                        <span className="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
+                                            Pos #{s.position}
+                                        </span>
+                                    )}
+                                    <span className="truncate">{s.reason}</span>
+                                </div>
                                 {s.existingPageUrl && (
                                     <p className="mt-0.5 truncate font-mono text-[10px] text-amber-400/90">
                                         Existing Page Target: {s.existingPageUrl}
@@ -335,34 +375,64 @@ function AuthorStep({
         [onChangeField]
     );
 
-    // Calculate live E-E-A-T boost percentage based on provided evidence
-    const eeatBoost = useMemo(() => {
-        let boost = 0;
-        if (form.authorName.trim()) boost += 10;
-        if (form.authorRole.trim()) boost += 10;
-        if (form.realExperience.trim()) boost += 15;
-        if (form.realNumbers.trim()) boost += 10;
-        if (form.localContext.trim()) boost += 5;
-        return boost;
+    // Calculate live E-E-A-T Evidence Completeness based on all captured signals
+    const eeatCompleteness = useMemo(() => {
+        const signals = [
+            { key: "authorName", label: "Author Name", filled: !!form.authorName.trim() },
+            { key: "authorRole", label: "Role / Title", filled: !!form.authorRole.trim() },
+            { key: "authorBio", label: "Author Biography", filled: !!form.authorBio.trim() },
+            { key: "realExperience", label: "Verbatim Case Result", filled: !!form.realExperience.trim() },
+            { key: "realNumbers", label: "Real Metrics", filled: !!form.realNumbers.trim() },
+            { key: "localContext", label: "Local Context", filled: !!form.localContext.trim() },
+        ];
+        const filledCount = signals.filter((s) => s.filled).length;
+        const total = signals.length;
+        const percentage = Math.round((filledCount / total) * 100);
+        return { signals, filledCount, total, percentage };
     }, [form]);
 
     return (
         <div>
-            <div className="mb-4 flex items-start justify-between gap-4">
-                <div>
-                    <h3 className="text-sm font-bold text-white">Author E-E-A-T Real-World Evidence</h3>
-                    <p className="mt-1 text-xs text-zinc-400">
-                        Google Search and AI engines reward verifiable real-author experience over synthetic AI personas.
-                    </p>
+            <div className="mb-4">
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h3 className="text-sm font-bold text-white">Author E-E-A-T Real-World Evidence</h3>
+                        <p className="mt-1 text-xs text-zinc-400">
+                            Google Search and AI engines reward verifiable real-author experience over synthetic AI personas.
+                        </p>
+                    </div>
+
+                    {/* E-E-A-T Evidence Completeness Badge */}
+                    <div
+                        className="flex shrink-0 items-center gap-2 rounded-xl border border-purple-500/30 bg-purple-500/10 px-3 py-1.5"
+                        title="Completeness score based on captured author credentials and first-party experience signals."
+                    >
+                        <Award className="h-4 w-4 text-purple-400" />
+                        <div>
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-purple-300">Evidence Completeness</div>
+                            <div className="font-mono text-xs font-black text-emerald-400">
+                                {eeatCompleteness.percentage}% ({eeatCompleteness.filledCount}/{eeatCompleteness.total} Signals)
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                {/* E-E-A-T Boost Counter Badge */}
-                <div className="flex shrink-0 items-center gap-2 rounded-xl border border-purple-500/30 bg-purple-500/10 px-3 py-1.5">
-                    <Award className="h-4 w-4 text-purple-400" />
-                    <div>
-                        <div className="text-[9px] font-bold uppercase tracking-wider text-purple-300">E-E-A-T Boost</div>
-                        <div className="font-mono text-xs font-black text-emerald-400">+{eeatBoost}% Confidence</div>
-                    </div>
+                {/* Signal Checklist Breakdown */}
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+                    <span className="font-semibold text-zinc-400 mr-0.5">Captured Signals:</span>
+                    {eeatCompleteness.signals.map((sig) => (
+                        <span
+                            key={sig.key}
+                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-colors ${
+                                sig.filled
+                                    ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                                    : "border border-white/5 bg-zinc-900/60 text-zinc-500"
+                            }`}
+                        >
+                            {sig.filled ? <Check className="h-3 w-3 stroke-[3]" /> : <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />}
+                            {sig.label}
+                        </span>
+                    ))}
                 </div>
             </div>
 
@@ -563,6 +633,7 @@ export function GenerateBlogModal({
         keyword: initialKeyword ?? "",
     });
     const [isGenerating, setIsGenerating] = useState(false);
+    const [genError, setGenError] = useState<string | null>(null);
 
     useEffect(() => {
         getSiteAuthorDetails(siteId).then((res) => {
@@ -594,13 +665,16 @@ export function GenerateBlogModal({
     );
 
     const handleGenerate = useCallback(async () => {
+        setGenError(null);
         setIsGenerating(true);
         setStep(2);
         try {
             await onGenerate({ ...form, keyword });
             onClose();
-        } catch {
-            onClose();
+        } catch (err) {
+            const msg = (err as Error)?.message || "Generation couldn't be started. Please check your inputs and try again.";
+            setGenError(msg);
+            setStep(1);
         } finally {
             setIsGenerating(false);
         }
@@ -649,6 +723,22 @@ export function GenerateBlogModal({
                 <div className="p-6">
                     <StepIndicator current={step} />
 
+                    {genError && step === 1 && (
+                        <div className="mb-4 flex items-center justify-between rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-xs text-rose-300">
+                            <div>
+                                <p className="font-bold">Generation failed to start</p>
+                                <p className="text-[11px] text-rose-400/90">{genError}. Your inputs remain saved below.</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleGenerate}
+                                className="shrink-0 rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-rose-400"
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    )}
+
                     {step === 0 && (
                         <KeywordStep
                             siteId={siteId}
@@ -680,7 +770,7 @@ export function GenerateBlogModal({
                         <div className="flex items-center gap-2 text-xs text-zinc-400">
                             <TrendingUp className="h-4 w-4 text-amber-400" />
                             <span>
-                                Credit Cost: <span className="font-bold text-amber-400">15 credits</span>
+                                Credit Cost: <span className="font-bold text-amber-400">10 credits</span>
                             </span>
                         </div>
                         <span className="text-[11px] text-zinc-500 font-mono">Deducted on generation launch</span>
