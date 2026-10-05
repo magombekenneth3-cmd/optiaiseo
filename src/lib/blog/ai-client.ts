@@ -1,6 +1,12 @@
+import { GoogleGenAI } from "@google/genai";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { callGemini, callGeminiJson } from "@/lib/gemini/client";
 import { logger } from "@/lib/logger";
+
+export const getAiClient = () => {
+  if (!process.env.GEMINI_API_KEY) return null;
+  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 120000 } });
+};
 
 async function callOpenAi(params: { prompt: string; systemPrompt?: string; maxTokens: number; temperature?: number; json?: boolean }): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;

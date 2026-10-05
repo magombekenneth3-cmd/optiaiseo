@@ -456,8 +456,8 @@ export function runCompositeValidation(params: {
     htmlContent: string;
     markdownContent: string;
     metaDescription: string;
-    quickAnswer: string;
-    comparisonTable: { problem: string; industryAvg: string; fix: string; result: string }[];
+    quickAnswer?: string;
+    comparisonTable?: { problem: string; industryAvg: string; fix: string; result: string }[];
     author: { name: string; realExperience?: string | null; realNumbers?: string | null };
 }): { errors: string[]; warnings: string[]; blockingIssues: string[]; passed: boolean; score: number } {
     const errors: string[] = [];
@@ -475,11 +475,11 @@ export function runCompositeValidation(params: {
     score -= meta.errors.length * 10;
     score -= meta.warnings.length * 5;
 
-    const qa = validateQuickAnswerUniqueness(params.quickAnswer, params.htmlContent);
+    const qa = validateQuickAnswerUniqueness(params.quickAnswer ?? "", params.htmlContent);
     warnings.push(...qa.warnings);
     score -= qa.warnings.length * 5;
 
-    if (params.comparisonTable?.length > 0) {
+    if (params.comparisonTable && params.comparisonTable.length > 0) {
         const table = auditComparisonTable(params.comparisonTable);
         warnings.push(...table.warnings);
         score -= table.warnings.length * 5;

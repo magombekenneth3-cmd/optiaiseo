@@ -12,7 +12,7 @@
  */
 
 import { AI_MODELS } from "@/lib/constants/ai-models";
-import { generateWithFallback, generateWithFallbackJson } from "./ai-client";
+import { getAiClient, generateWithFallback, generateWithFallbackJson } from "./ai-client";
 import { logger } from "@/lib/logger";
 import type { PromptContext } from "./prompt-context";
 import type { SerpContext } from "./serp";
@@ -661,7 +661,7 @@ ${firstParty.targetCustomer ? `- Target Customer: ${firstParty.targetCustomer}` 
 ${firstParty.realExperience ? `- First-Hand Experience: ${firstParty.realExperience}` : ""}
 ${firstParty.realNumbers ? `- Real Numbers & Telemetry: ${firstParty.realNumbers}` : ""}
 ${firstParty.localContext ? `- Local Market Context: ${firstParty.localContext}` : ""}
-${firstParty.brandFacts.length > 0 ? `- Verified Brand Facts: ${firstParty.brandFacts.map(f => `${f.factType}: ${f.value}`).join("; ")}` : ""}
+${(firstParty.brandFacts?.length ?? 0) > 0 ? `- Verified Brand Facts: ${firstParty.brandFacts?.map(f => `${f.factType}: ${f.value}`).join("; ")}` : ""}
 INSTRUCTION: Weave these verified first-party facts and core services into your section where relevant. Never use generic fallback claims when verified first-party facts exist above.` : "";
 
     const authorNote = sectionResearch.authorEvidence
