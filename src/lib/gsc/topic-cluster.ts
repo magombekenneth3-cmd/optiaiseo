@@ -71,12 +71,13 @@ const STOP_WORDS = new Set([
 
 /**
  * Infer search intent from keyword text.
+ * Navigational is evaluated first to ensure login/portal terms are not misclassified.
  */
 export function inferQueryIntent(keyword: string): SearchIntentCategory {
     const k = keyword.toLowerCase();
+    if (/\b(login|portal|sign in|signin|dashboard|app|website|account)\b/.test(k)) return "Navigational";
     if (/\b(buy|pricing|price|cost|order|quote|discount|deal|purchase)\b/.test(k)) return "Transactional";
     if (/\b(best|vs|review|reviews|top|software|tool|platform|alternative|comparison|provider|service|services|solution|agency)\b/.test(k)) return "Commercial";
-    if (/\b(login|portal|sign in|dashboard|app|website)\b/.test(k)) return "Navigational";
     return "Informational";
 }
 
@@ -112,7 +113,8 @@ export function calculateTokenOverlap(setA: Set<string>, setB: Set<string>): num
 }
 
 /**
- * Cluster raw GSC queries by intent and token overlap.
+ * Cluster raw GSC queries by intent AND token overlap.
+ * Query token similarity + compatible search intent = same GSC topic cluster.
  * High impression queries become cluster heads.
  */
 export function clusterGscQueries(
@@ -126,6 +128,7 @@ export function clusterGscQueries(
         totalClicks: number;
         totalImpressions: number;
         positionSum: number;
+        intent: SearchIntentCategory;
     }[] = [];
 
     const sorted = [...rawQueries].sort((a, b) => b.impressions - a.impressions);
@@ -134,8 +137,15 @@ export function clusterGscQueries(
         const tokens = tokenizeQuery(q.keyword);
         if (tokens.size === 0) continue;
 
+        const qIntent = inferQueryIntent(q.keyword);
+
         let merged = false;
         for (const cluster of clusters) {
+            // Intent compatibility check: queries in the same topic cluster MUST have identical search intent
+            if (cluster.intent !== qIntent) {
+                continue;
+            }
+
             const headTokens = tokenizeQuery(cluster.head.keyword);
             const overlapRatio = calculateTokenOverlap(tokens, headTokens);
 
@@ -162,6 +172,7 @@ export function clusterGscQueries(
                 totalClicks: q.clicks,
                 totalImpressions: q.impressions,
                 positionSum: q.position * q.impressions,
+                intent: qIntent,
             });
         }
     }
@@ -173,7 +184,7 @@ export function clusterGscQueries(
         totalClicks: c.totalClicks,
         totalImpressions: c.totalImpressions,
         avgPosition: c.totalImpressions > 0 ? c.positionSum / c.totalImpressions : c.head.position,
-        intent: inferQueryIntent(c.head.keyword),
+        intent: c.intent,
         uniquePages: 0,
         rankingUrls: [],
         pages: [],
@@ -240,7 +251,7 @@ export function buildGscTopicIntelligence(
         });
     }
 
-    // 3. Cluster queries
+    // 3. Cluster queries with token similarity + intent matching
     const clusters = clusterGscQueries(rawKeywords, threshold);
 
     // 4. Attach ranking URL intelligence to each cluster

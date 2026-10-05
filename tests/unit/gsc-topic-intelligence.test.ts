@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   clusterGscQueries,
   buildGscTopicIntelligence,
+  inferQueryIntent,
   tokenizeQuery,
   calculateTokenOverlap,
   type RawGscKeyword,
@@ -91,6 +92,29 @@ describe("GSC Topic Intelligence Contract & Shared Data Layer", () => {
     expect(topicIntel[0].queries).toEqual(clustersFromRaw[0].queries);
   });
 
+  it("should enforce search intent matching during cluster formation and not merge mixed-intent queries", () => {
+    const rawKeywords: RawGscKeyword[] = [
+      { keyword: "best seo tools", impressions: 2900, clicks: 230, position: 4.1 }, // Commercial
+      { keyword: "best seo tools login", impressions: 800, clicks: 50, position: 2.1 }, // Navigational
+      { keyword: "buy best seo tools", impressions: 500, clicks: 40, position: 3.5 }, // Transactional
+    ];
+
+    const clusters = clusterGscQueries(rawKeywords, 0.6);
+
+    // Mixed intent queries should remain in separate intent-compatible clusters
+    expect(clusters.length).toBe(3);
+    expect(clusters.find((c) => c.head.keyword === "best seo tools")?.intent).toBe("Commercial");
+    expect(clusters.find((c) => c.head.keyword === "best seo tools login")?.intent).toBe("Navigational");
+    expect(clusters.find((c) => c.head.keyword === "buy best seo tools")?.intent).toBe("Transactional");
+  });
+
+  it("should classify navigational login terms prior to commercial terms", () => {
+    expect(inferQueryIntent("best login software")).toBe("Navigational");
+    expect(inferQueryIntent("top app portal")).toBe("Navigational");
+    expect(inferQueryIntent("best software platform")).toBe("Commercial");
+    expect(inferQueryIntent("buy software plan")).toBe("Transactional");
+  });
+
   it("should populate ranking URLs and daily evidence in buildGscTopicIntelligence", () => {
     const topicIntel = buildGscTopicIntelligence(MOCK_GSC_ROWS, 0.6);
     const headCluster = topicIntel.find((t) => t.head.keyword === "best seo tools")!;
@@ -104,7 +128,7 @@ describe("GSC Topic Intelligence Contract & Shared Data Layer", () => {
 
   it("should detect topic-level cannibalization across related query variants", () => {
     const rowsForCannibalization: GscPerformanceInputRow[] = [
-      // URL A ranks for "best seo tools"
+      // URL A ranks for "best seo tools" (Commercial)
       {
         query: "best seo tools",
         page: "https://example.com/blog/best-seo-tools",
@@ -121,7 +145,7 @@ describe("GSC Topic Intelligence Contract & Shared Data Layer", () => {
         position: 3.2,
         date: "2026-10-02",
       },
-      // URL B ranks for "top seo tools" (same topic cluster)
+      // URL B ranks for "top seo tools" (Commercial — same topic cluster)
       {
         query: "top seo tools",
         page: "https://example.com/blog/top-seo-tools",
