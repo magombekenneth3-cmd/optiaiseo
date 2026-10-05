@@ -91,8 +91,8 @@ export async function resolvePageExistence(
 
 /**
  * Batch version of resolvePageExistence.
- * Pre-fetches GSC performance, blog records, and page audits once for siteId,
- * then evaluates all topic queries in memory without database N+1 loops.
+ * Pre-fetches GSC performance (bounded to 90 days), blog records, and page audits once for siteId,
+ * providing zero-N+1 database resolution with indexed in-memory matching.
  */
 export async function resolvePageExistenceBatch(
   siteId: string,
@@ -106,17 +106,14 @@ export async function resolvePageExistenceBatch(
       new Set(topics.flatMap((t) => [t.keyword, ...t.clusterQueries.slice(0, 9)])),
     );
 
+    // Compute per-topic token pool for DB prefetching so every topic contributes relevant tokens
     const topicTokens = Array.from(
       new Set(
-        allQueryTerms.flatMap((term) =>
-          term
-            .toLowerCase()
-            .replace(/[^a-z0-9\s]/g, " ")
-            .split(/\s+/)
-            .filter((w) => w.length > 2),
+        topics.flatMap((t) =>
+          tokenize(`${t.keyword} ${t.clusterQueries.slice(0, 4).join(" ")}`).slice(0, 5)
         ),
       ),
-    ).slice(0, 20);
+    ).slice(0, 100);
 
     const blogConditions = [
       { targetKeywords: { hasSome: allQueryTerms } },
@@ -126,12 +123,17 @@ export async function resolvePageExistenceBatch(
 
     const auditConditions = topicTokens.map((t) => ({ pageUrl: { contains: t } }));
 
+    // Bounded evidence window: 90 days for GSC performance
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
     // Single-pass targeted DB fetches
     const [gscRows, blogs, pageAudits] = await Promise.all([
       prisma.gscDailyPerformance.findMany({
         where: {
           siteId,
           keyword: { in: allQueryTerms },
+          fetchedAt: { gte: ninetyDaysAgo },
         },
         orderBy: { fetchedAt: "desc" },
       }),
@@ -172,7 +174,7 @@ export async function resolvePageExistenceBatch(
       }),
     ]);
 
-    // Build O(1) Hash & Token Indexes once
+    // Build Hash & Token Indexes once for zero-N+1 in-memory matching
     const gscByKeyword = new Map<string, typeof gscRows>();
     for (const row of gscRows) {
       const k = row.keyword.toLowerCase().trim();
@@ -206,7 +208,7 @@ export async function resolvePageExistenceBatch(
       }),
     );
 
-    // Evaluate each topic in O(1) via pre-built indexes
+    // Evaluate each topic via pre-built indexes
     for (const topic of topics) {
       const queryTerms = Array.from(new Set([topic.keyword, ...topic.clusterQueries.slice(0, 9)]));
       const candidates: ExistingPageEvidence[] = [];

@@ -101,13 +101,18 @@ export function analyzeKeywordIntelligence(
       });
     }
 
-    // Clusters with only 1 ranking page but many queries (content gap)
-    if (cluster.uniquePages === 1 && cluster.queries.length >= 3) {
+    // Clusters with 1 ranking page, many queries, but weak ranking (content gap)
+    // Note: If cluster.avgPosition <= 10, a single page serving multiple related queries is a healthy topical consolidation pattern.
+    if (
+      cluster.uniquePages === 1 &&
+      cluster.queries.length >= 3 &&
+      cluster.avgPosition > 10
+    ) {
       findings.push({
         type: "CONTENT_GAP",
         severity: "MEDIUM",
-        title: `Content gap: "${truncate(cluster.representative, 50)}" cluster served by one page`,
-        description: `${cluster.queries.length} related queries all land on a single page. Creating additional pages for subtopics within this cluster could improve coverage and rankings.`,
+        title: `Content gap: "${truncate(cluster.representative, 50)}" cluster served by one struggling page`,
+        description: `${cluster.queries.length} related queries land on a single page averaging position ${cluster.avgPosition.toFixed(1)}. Creating additional pages or expanding subtopic content could improve rankings.`,
         evidence: [
           {
             sourceType: "GSC",
@@ -115,6 +120,7 @@ export function analyzeKeywordIntelligence(
             value: "1",
             metadata: {
               clusterSize: cluster.queries.length,
+              avgPosition: cluster.avgPosition,
               rankingUrls: cluster.rankingUrls.map((r) => ({
                 url: r.url,
                 clicks: r.clicks,

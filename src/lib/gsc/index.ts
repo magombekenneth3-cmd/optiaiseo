@@ -227,6 +227,10 @@ function escapeRegex(s: string): string {
     return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * @deprecated Use buildGscTopicIntelligence or clusterGscQueries from `@/lib/gsc/topic-cluster` instead.
+ * Legacy stop-word + 3-token clustering helper maintained for backwards compatibility.
+ */
 export function clusterKey(keyword: string): string {
     const cleaned = keyword
         .toLowerCase()
@@ -620,6 +624,10 @@ export function aggregateKeywords(rows: KeywordRow[]): AggregatedKeyword[] {
     });
 }
 
+/**
+ * @deprecated Use buildGscTopicIntelligence from `@/lib/gsc/topic-cluster` instead.
+ * Legacy keyword clustering logic.
+ */
 export function clusterKeywords(aggregated: AggregatedKeyword[]): KeywordCluster[] {
     const map = new Map<string, AggregatedKeyword[]>();
 

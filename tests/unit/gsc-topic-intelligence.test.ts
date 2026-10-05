@@ -9,6 +9,7 @@ import {
   type RawGscKeyword,
   type GscPerformanceInputRow,
 } from "@/lib/gsc/topic-cluster";
+import { classifyIntent } from "@/lib/gsc";
 import { analyzeKeywordIntelligence } from "@/lib/agents/keyword-intelligence-agent";
 import { analyzeCannibalization } from "@/lib/agents/cannibalization-agent";
 import { resolvePageExistenceBatch } from "@/lib/opportunity-engine/page-existence-resolver";
@@ -232,5 +233,45 @@ describe("GSC Topic Intelligence Contract & Shared Data Layer", () => {
     expect(result?.verdict).toBe("EXISTING_HEALTHY");
     expect(result?.existingPage?.url).toBe("https://example.com/blog/best-seo-tools");
     expect(result?.existingPage?.url).not.toMatch(/^\/example\.com/);
+  });
+
+  it("should maintain single-source-of-truth intent parity across all consumers", () => {
+    const testQueries = [
+      { q: "best seo tools login", expected: "Navigational" },
+      { q: "buy seo software plan", expected: "Transactional" },
+      { q: "best seo keyword research tool", expected: "Commercial" },
+      { q: "how to do technical seo audit", expected: "Informational" },
+    ];
+
+    for (const { q, expected } of testQueries) {
+      const topicClusterIntent = inferQueryIntent(q);
+      const legacyGscIntent = classifyIntent(q);
+
+      expect(topicClusterIntent).toBe(expected);
+      expect(legacyGscIntent.toLowerCase()).toBe(expected.toLowerCase());
+    }
+  });
+
+  it("should treat single-page clusters with avgPosition <= 10 as healthy topical consolidation and not emit CONTENT_GAP", () => {
+    const healthyClusterGscRows: GscPerformanceInputRow[] = [
+      { query: "best seo tools", page: "https://example.com/blog/seo-tools", clicks: 100, impressions: 1000, position: 3.0, date: "2026-10-01" },
+      { query: "top seo tools", page: "https://example.com/blog/seo-tools", clicks: 80, impressions: 800, position: 4.2, date: "2026-10-01" },
+      { query: "top 10 seo tools", page: "https://example.com/blog/seo-tools", clicks: 50, impressions: 500, position: 5.1, date: "2026-10-01" },
+    ];
+
+    const healthyResult = analyzeKeywordIntelligence("site-1", healthyClusterGscRows as any);
+    const healthyContentGap = healthyResult.findings.find((f) => f.type === "CONTENT_GAP");
+    expect(healthyContentGap).toBeUndefined();
+
+    const strugglingClusterGscRows: GscPerformanceInputRow[] = [
+      { query: "best seo tools", page: "https://example.com/blog/seo-tools", clicks: 5, impressions: 1000, position: 14.0, date: "2026-10-01" },
+      { query: "top seo tools", page: "https://example.com/blog/seo-tools", clicks: 3, impressions: 800, position: 16.2, date: "2026-10-01" },
+      { query: "top 10 seo tools", page: "https://example.com/blog/seo-tools", clicks: 2, impressions: 500, position: 18.1, date: "2026-10-01" },
+    ];
+
+    const strugglingResult = analyzeKeywordIntelligence("site-1", strugglingClusterGscRows as any);
+    const strugglingContentGap = strugglingResult.findings.find((f) => f.type === "CONTENT_GAP");
+    expect(strugglingContentGap).toBeDefined();
+    expect(strugglingContentGap?.type).toBe("CONTENT_GAP");
   });
 });
