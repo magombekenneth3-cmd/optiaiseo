@@ -9,7 +9,7 @@
 import { createFindingFingerprint } from "./fingerprint";
 import type { AgentExecution, AgentFinding } from "./types";
 import type { GscPerformanceRow } from "./gsc-intelligence-agent";
-import { clusterGscQueries, type RawGscKeyword } from "@/lib/gsc/topic-cluster";
+import { buildGscTopicIntelligence } from "@/lib/gsc/topic-cluster";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -41,111 +41,21 @@ export function analyzeCannibalization(
 ): AgentExecution<CannibalizationData> {
   const findings: AgentFinding[] = [];
 
-  // 1. Group data by query → page → daily metrics
-  const queryPageMap = new Map<
-    string,
-    Map<string, { clicks: number; impressions: number; position: number; dates: Set<string> }>
-  >();
-
-  for (const row of dailyData) {
-    if (!queryPageMap.has(row.query)) {
-      queryPageMap.set(row.query, new Map());
-    }
-    const pageMap = queryPageMap.get(row.query)!;
-    const existing = pageMap.get(row.page);
-
-    if (existing) {
-      existing.clicks += row.clicks;
-      existing.impressions += row.impressions;
-      existing.position =
-        (existing.position * existing.impressions + row.position * row.impressions) /
-        (existing.impressions + row.impressions);
-      existing.impressions += row.impressions;
-      existing.dates.add(row.date);
-    } else {
-      pageMap.set(row.page, {
-        clicks: row.clicks,
-        impressions: row.impressions,
-        position: row.position,
-        dates: new Set([row.date]),
-      });
-    }
-  }
-
-  // 2. Build raw GSC keywords & run canonical Topic Clustering
-  const rawKeywords: RawGscKeyword[] = [];
-  for (const [query, pageMap] of queryPageMap.entries()) {
-    let totalImpressions = 0;
-    let totalClicks = 0;
-    let posSum = 0;
-    for (const [, pData] of pageMap.entries()) {
-      totalImpressions += pData.impressions;
-      totalClicks += pData.clicks;
-      posSum += pData.position * pData.impressions;
-    }
-    rawKeywords.push({
-      keyword: query,
-      impressions: totalImpressions,
-      clicks: totalClicks,
-      position: totalImpressions > 0 ? posSum / totalImpressions : 0,
-    });
-  }
-
-  const topicClusters = clusterGscQueries(rawKeywords, 0.6);
+  // Build canonical topic clusters with ranking URLs and daily date evidence
+  const topicClusters = buildGscTopicIntelligence(dailyData, 0.6);
   const risks: CannibalizationRisk[] = [];
-  const processedHeadKeywords = new Set<string>();
 
-  // 3. Evaluate Topic Cluster-level cannibalization
   for (const tc of topicClusters) {
-    const headKeyword = tc.head.keyword;
-    if (processedHeadKeywords.has(headKeyword)) continue;
-    processedHeadKeywords.add(headKeyword);
-
-    // Aggregate page performance across all queries in this topic cluster
-    const clusterPageMap = new Map<
-      string,
-      { clicks: number; impressions: number; posSum: number; dates: Set<string> }
-    >();
-
-    for (const memberQuery of tc.queries) {
-      const pageMap = queryPageMap.get(memberQuery);
-      if (!pageMap) continue;
-
-      for (const [url, data] of pageMap.entries()) {
-        const existing = clusterPageMap.get(url);
-        if (existing) {
-          existing.clicks += data.clicks;
-          existing.impressions += data.impressions;
-          existing.posSum += data.position * data.impressions;
-          for (const d of data.dates) existing.dates.add(d);
-        } else {
-          clusterPageMap.set(url, {
-            clicks: data.clicks,
-            impressions: data.impressions,
-            posSum: data.position * data.impressions,
-            dates: new Set(data.dates),
-          });
-        }
-      }
-    }
-
-    if (clusterPageMap.size < 2) continue;
+    if (tc.rankingUrls.length < 2) continue;
 
     // Filter to pages with meaningful impressions in top 20
-    const significantPages = [...clusterPageMap.entries()]
-      .map(([url, data]) => ({
-        url,
-        clicks: data.clicks,
-        impressions: data.impressions,
-        position: data.impressions > 0 ? data.posSum / data.impressions : 0,
-        dates: data.dates,
-      }))
-      .filter((p) => p.impressions >= 50 && p.position <= 20)
-      .sort((a, b) => a.position - b.position);
+    const significantPages = tc.rankingUrls
+      .filter((p) => p.impressions >= 50 && p.avgPosition <= 20)
+      .sort((a, b) => a.avgPosition - b.avgPosition);
 
     if (significantPages.length < 2) continue;
 
-    // Check temporal competition across URLs
+    // Check temporal competition across URLs using dates evidence
     const temporalEvidence = hasTemporalCompetition(
       significantPages.map((p) => ({ url: p.url, dates: p.dates })),
     );
@@ -153,7 +63,7 @@ export function analyzeCannibalization(
     // Calculate risk score
     const riskScore = calculateRiskScore(
       significantPages.map((p) => ({
-        position: p.position,
+        position: p.avgPosition,
         impressions: p.impressions,
         clicks: p.clicks,
       })),
@@ -162,6 +72,7 @@ export function analyzeCannibalization(
 
     if (riskScore < 30) continue;
 
+    const headKeyword = tc.head.keyword;
     const riskEntry: CannibalizationRisk = {
       query: headKeyword,
       clusterQueries: tc.queries,
@@ -169,8 +80,8 @@ export function analyzeCannibalization(
         url: p.url,
         clicks: p.clicks,
         impressions: p.impressions,
-        position: p.position,
-        daysRanked: p.dates.size,
+        position: p.avgPosition,
+        daysRanked: p.daysRanked,
       })),
       riskScore,
       temporalEvidence,
@@ -184,16 +95,16 @@ export function analyzeCannibalization(
       type: "CANNIBALIZATION_RISK",
       severity,
       title: `Cannibalization risk: "${truncate(headKeyword, 50)}" topic cluster`,
-      description: `${significantPages.length} pages compete for topic cluster "${headKeyword}" (${tc.queries.length} query variants): ${significantPages.map((p) => `${p.url} (pos ${p.position.toFixed(1)})`).join(", ")}. ${temporalEvidence ? "Ranking URLs alternate over time across the cluster." : "Multiple pages have significant impressions for this topic."}`,
+      description: `${significantPages.length} pages compete for topic cluster "${headKeyword}" (${tc.queries.length} query variants): ${significantPages.map((p) => `${p.url} (pos ${p.avgPosition.toFixed(1)})`).join(", ")}. ${temporalEvidence ? "Ranking URLs alternate over time across the cluster." : "Multiple pages have significant impressions for this topic."}`,
       evidence: significantPages.map((p) => ({
         sourceType: "GSC" as const,
         sourceId: `${headKeyword}|${p.url}`,
         metric: "position",
-        value: p.position.toFixed(2),
+        value: p.avgPosition.toFixed(2),
         metadata: {
           clicks: p.clicks,
           impressions: p.impressions,
-          daysRanked: p.dates.size,
+          daysRanked: p.daysRanked,
           clusterQueries: tc.queries.slice(0, 10),
         },
         observedAt: new Date().toISOString(),
@@ -209,14 +120,16 @@ export function analyzeCannibalization(
     });
   }
 
+  const totalQueriesChecked = topicClusters.reduce((sum, tc) => sum + tc.queries.length, 0);
+
   return {
     data: {
       risks,
-      totalQueriesChecked: queryPageMap.size,
+      totalQueriesChecked,
       risksFound: risks.length,
     },
     findings,
-    itemsProcessed: queryPageMap.size,
+    itemsProcessed: dailyData.length,
   };
 }
 

@@ -8,13 +8,18 @@
 //   - Stable fingerprint for opportunity deduplication
 //   - Bounded 0–1 component scoring with explainable weights
 //   - previousFinal preservation on score updates
+//   - Batch page existence resolution for zero N+1 queries
 // =============================================================================
 
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import type { AgentFinding } from "@/lib/agents/types";
-import { resolvePageExistence, type PageExistenceResult } from "./page-existence-resolver";
+import {
+  resolvePageExistence,
+  resolvePageExistenceBatch,
+  type PageExistenceResult,
+} from "./page-existence-resolver";
 
 // ── Opportunity Scoring Types ───────────────────────────────────────────────
 
@@ -27,7 +32,7 @@ export interface OpportunityScoreComponents {
   trafficValue: number;
   /** 0–1: inverse of estimated implementation effort */
   effort: number;
-  /** 0–1: category-based SEO strategic importance (not true business value — placeholder for Phase B revenue/conversion integration) */
+  /** 0–1: category-based SEO strategic importance */
   strategicValue: number;
 }
 
@@ -108,7 +113,7 @@ const SEVERITY_MULTIPLIER: Record<string, number> = {
 
 /**
  * Create a stable fingerprint for an opportunity.
- * Same concept as finding fingerprint — deterministic hash for deduplication.
+ * Deterministic hash for deduplication.
  */
 export function createOpportunityFingerprint(input: {
   siteId: string;
@@ -130,7 +135,6 @@ export function createOpportunityFingerprint(input: {
 
 /**
  * Compute a bounded, explainable opportunity score.
- * All components are 0–1. Final score is 0–100.
  */
 function computeScore(
   finding: AgentFinding,
@@ -149,14 +153,12 @@ function computeScore(
 
 /**
  * Estimate traffic value from finding evidence (0–1 normalized).
- * Uses impressions/clicks evidence if available, otherwise defaults to 0.5.
  */
 function estimateTrafficValue(finding: AgentFinding): number {
   for (const ev of finding.evidence) {
     if (ev.metric === "impressions" && ev.value) {
       const impressions = parseInt(ev.value, 10);
       if (!isNaN(impressions)) {
-        // Log-normalize: 0 impressions → 0, 100 → 0.5, 10000 → 0.9, 100000 → 1.0
         return Math.min(1, Math.log10(Math.max(1, impressions)) / 5);
       }
     }
@@ -167,7 +169,7 @@ function estimateTrafficValue(finding: AgentFinding): number {
       }
     }
   }
-  return 0.5; // Default for findings without traffic evidence
+  return 0.5;
 }
 
 /**
@@ -213,6 +215,26 @@ export async function generateOpportunitiesFromFindings(
 
   let createdCount = 0;
 
+  // Batch pre-resolve page existence for all TOPIC_OPPORTUNITY findings in 1 DB query step
+  const topicOpportunityFindings = findings.filter((f) => f.type === "TOPIC_OPPORTUNITY");
+  let topicExistenceMap = new Map<string, PageExistenceResult>();
+
+  if (topicOpportunityFindings.length > 0) {
+    const batchTopicsPayload = topicOpportunityFindings.map((f) => ({
+      keyword: f.affectedResource?.id ?? "site-level",
+      clusterQueries: extractClusterQueries(f),
+    }));
+
+    try {
+      topicExistenceMap = await resolvePageExistenceBatch(siteId, batchTopicsPayload);
+    } catch (err) {
+      logger.warn("[OpportunityEngine] Batch page existence resolution failed, falling back to individual resolution", {
+        siteId,
+        error: (err as Error)?.message,
+      });
+    }
+  }
+
   for (const finding of findings) {
     const mapping = FINDING_TYPE_MAPPINGS[finding.type] || DEFAULT_MAPPING;
     const resourceType = finding.affectedResource?.type ?? "SITE";
@@ -221,27 +243,28 @@ export async function generateOpportunitiesFromFindings(
     const primaryKeyword = finding.title.slice(0, 100);
 
     // ── Page-Existence Resolution for TOPIC_OPPORTUNITY ──────────────
-    // Instead of blindly mapping TOPIC_OPPORTUNITY → CREATE_NEW_CONTENT,
-    // check whether a relevant page already exists using GSC, Blog, and
-    // crawl evidence. The resolver returns the correct action/category.
+    // Check whether a relevant page already exists using pre-fetched batch map.
+    // Falls back to individual resolution if missing from map.
     let resolvedAction = mapping.action;
     let resolvedCategory = mapping.category;
     let pageExistenceResult: PageExistenceResult | null = null;
 
     if (finding.type === "TOPIC_OPPORTUNITY") {
-      // Extract cluster queries from finding evidence metadata
       const clusterQueries = extractClusterQueries(finding);
+      const key = resourceId.toLowerCase().trim();
+      pageExistenceResult = topicExistenceMap.get(key) ?? null;
 
-      pageExistenceResult = await resolvePageExistence(
-        siteId,
-        resourceId, // The representative keyword
-        clusterQueries,
-      );
+      if (!pageExistenceResult) {
+        pageExistenceResult = await resolvePageExistence(
+          siteId,
+          resourceId,
+          clusterQueries,
+        );
+      }
 
       resolvedAction = pageExistenceResult.recommendedAction;
       resolvedCategory = pageExistenceResult.recommendedCategory;
 
-      // If an existing page was found, use its URL instead of the keyword
       if (pageExistenceResult.existingPage) {
         url = pageExistenceResult.existingPage.url.startsWith("http")
           ? pageExistenceResult.existingPage.url
@@ -349,7 +372,6 @@ export async function generateOpportunitiesFromFindings(
     };
 
     try {
-      // Prefer fingerprint-based upsert, fall back to composite unique
       const decision = existing
         ? await prisma.growthDecision.update({
             where: { id: existing.id },
@@ -420,7 +442,7 @@ export async function generateOpportunitiesFromFindings(
 
 /**
  * Extract cluster queries from a TOPIC_OPPORTUNITY finding's evidence metadata.
- * The keyword-intelligence-agent stores queries in evidence[0].metadata.queries.
+ * The keyword-intelligence-agent stores queries in evidence[0].metadata.queries or clusterQueries.
  */
 function extractClusterQueries(finding: AgentFinding): string[] {
   for (const ev of finding.evidence) {
@@ -433,7 +455,6 @@ function extractClusterQueries(finding: AgentFinding): string[] {
     }
   }
 
-  // Fallback: use the resource ID (representative keyword) as the only query
   const keyword = finding.affectedResource?.id;
   return keyword ? [keyword] : [];
 }

@@ -5,7 +5,7 @@
 import { createFindingFingerprint } from "./fingerprint";
 import type { AgentExecution, AgentFinding } from "./types";
 import type { GscPerformanceRow } from "./gsc-intelligence-agent";
-import { clusterGscQueries, type RawGscKeyword } from "@/lib/gsc/topic-cluster";
+import { buildGscTopicIntelligence, type ClusterRankingUrl } from "@/lib/gsc/topic-cluster";
 
 export interface KeywordCluster {
   representative: string;
@@ -14,6 +14,7 @@ export interface KeywordCluster {
   totalImpressions: number;
   avgPosition: number;
   uniquePages: number;
+  rankingUrls: ClusterRankingUrl[];
 }
 
 export interface KeywordIntelligenceData {
@@ -28,54 +29,15 @@ export function analyzeKeywordIntelligence(
 ): AgentExecution<KeywordIntelligenceData> {
   const findings: AgentFinding[] = [];
 
-  // 1. Aggregate queries
-  const queryMap = new Map<
-    string,
-    { clicks: number; impressions: number; position: number; pages: Set<string> }
-  >();
-
-  for (const row of gscData) {
-    const existing = queryMap.get(row.query);
-    if (existing) {
-      existing.clicks += row.clicks;
-      existing.impressions += row.impressions;
-      existing.position =
-        (existing.position * (existing.impressions - row.impressions) +
-          row.position * row.impressions) /
-        existing.impressions;
-      existing.pages.add(row.page);
-    } else {
-      queryMap.set(row.query, {
-        clicks: row.clicks,
-        impressions: row.impressions,
-        position: row.position,
-        pages: new Set([row.page]),
-      });
-    }
-  }
-
-  // Build raw GSC keywords list for canonical clustering
-  const rawKeywords: RawGscKeyword[] = [...queryMap.entries()].map(([query, data]) => ({
-    keyword: query,
-    clicks: data.clicks,
-    impressions: data.impressions,
-    position: data.position,
-  }));
-
-  // Canonical GSC Topic Clustering
-  const topicClusters = clusterGscQueries(rawKeywords, 0.6);
+  // Build canonical topic clusters with ranking URL intelligence
+  const topicClusters = buildGscTopicIntelligence(gscData, 0.6);
 
   const clusters: KeywordCluster[] = [];
   const clusteredQueriesSet = new Set<string>();
 
   for (const tc of topicClusters) {
-    const allPages = new Set<string>();
     for (const q of tc.queries) {
       clusteredQueriesSet.add(q);
-      const data = queryMap.get(q);
-      if (data) {
-        for (const p of data.pages) allPages.add(p);
-      }
     }
 
     clusters.push({
@@ -84,7 +46,8 @@ export function analyzeKeywordIntelligence(
       totalClicks: tc.totalClicks,
       totalImpressions: tc.totalImpressions,
       avgPosition: tc.avgPosition,
-      uniquePages: allPages.size,
+      uniquePages: tc.uniquePages,
+      rankingUrls: tc.rankingUrls,
     });
   }
 
@@ -105,7 +68,19 @@ export function analyzeKeywordIntelligence(
             sourceType: "GSC",
             metric: "clusterSize",
             value: String(cluster.queries.length),
-            metadata: { queries: cluster.queries.slice(0, 10) },
+            metadata: {
+              queries: cluster.queries.slice(0, 10),
+              rankingUrls: cluster.rankingUrls.map((r) => ({
+                url: r.url,
+                clicks: r.clicks,
+                impressions: r.impressions,
+                avgPosition: r.avgPosition,
+                daysRanked: r.daysRanked,
+              })),
+              clusterImpressions: cluster.totalImpressions,
+              clusterClicks: cluster.totalClicks,
+              clusterAvgPosition: cluster.avgPosition,
+            },
             observedAt: new Date().toISOString(),
           },
           {
@@ -138,7 +113,15 @@ export function analyzeKeywordIntelligence(
             sourceType: "GSC",
             metric: "uniquePages",
             value: "1",
-            metadata: { clusterSize: cluster.queries.length },
+            metadata: {
+              clusterSize: cluster.queries.length,
+              rankingUrls: cluster.rankingUrls.map((r) => ({
+                url: r.url,
+                clicks: r.clicks,
+                impressions: r.impressions,
+                avgPosition: r.avgPosition,
+              })),
+            },
             observedAt: new Date().toISOString(),
           },
         ],
@@ -154,7 +137,8 @@ export function analyzeKeywordIntelligence(
     }
   }
 
-  const singletonCount = queryMap.size - clusteredQueriesSet.size;
+  const allQueriesCount = new Set(gscData.map((d) => d.query)).size;
+  const singletonCount = allQueriesCount - clusteredQueriesSet.size;
 
   return {
     data: {
@@ -163,7 +147,7 @@ export function analyzeKeywordIntelligence(
       totalClusters: clusters.length,
     },
     findings,
-    itemsProcessed: queryMap.size,
+    itemsProcessed: gscData.length,
   };
 }
 
