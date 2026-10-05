@@ -16,7 +16,6 @@ import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import type { AgentFinding } from "@/lib/agents/types";
 import {
-  resolvePageExistence,
   resolvePageExistenceBatch,
   type PageExistenceResult,
 } from "./page-existence-resolver";
