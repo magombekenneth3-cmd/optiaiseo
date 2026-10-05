@@ -260,7 +260,7 @@ function KeywordStep({
                             }`}
                         >
                             <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                     <p className="truncate text-xs font-bold text-white">{s.keyword}</p>
                                     <span
                                         className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sourceVariant(
@@ -269,8 +269,22 @@ function KeywordStep({
                                     >
                                         {sourceLabel(s.source)}
                                     </span>
+                                    {s.actionType === "UPDATE_PAGE" ? (
+                                        <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">
+                                            Update Page ({s.recommendedAction || "REFRESH"})
+                                        </span>
+                                    ) : (
+                                        <span className="shrink-0 rounded border border-emerald-500/40 bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-400">
+                                            Create Page
+                                        </span>
+                                    )}
                                 </div>
                                 <p className="mt-1 truncate text-[11px] text-zinc-400">{s.reason}</p>
+                                {s.existingPageUrl && (
+                                    <p className="mt-0.5 truncate font-mono text-[10px] text-amber-400/90">
+                                        Existing Page Target: {s.existingPageUrl}
+                                    </p>
+                                )}
                             </div>
 
                             {keyword === s.keyword && (
