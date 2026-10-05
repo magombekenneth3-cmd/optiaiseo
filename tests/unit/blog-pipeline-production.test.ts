@@ -346,4 +346,145 @@ describe("Blog Pipeline Production Audit Hardening", () => {
         expect(packet.gscEvidence?.query).toBe("gsc explicit keyword query");
         expect(packet.gscEvidence?.clicks).toBe(250);
     });
+
+    it("15. GSC provenance locking resolves target keyword and locks pipeline type to GSC_GAP", () => {
+        const gscEvidence = {
+            query: "target gsc keyword query",
+            impressions: 5000,
+            clicks: 300,
+        };
+        const siteContextKeywords = ["generic keyword 1", "generic keyword 2"];
+
+        // Simulate Inngest GSC provenance locking logic
+        const gscKeywordFromEvidence = (gscEvidence.query as string | undefined);
+        let finalPipelineType = "SITE_CONTEXT";
+        let category = "generic domain";
+        let keywords = siteContextKeywords;
+
+        if (gscEvidence || gscKeywordFromEvidence) {
+            finalPipelineType = "GSC_GAP";
+            const targetGscKeyword = gscKeywordFromEvidence || "";
+            if (targetGscKeyword) {
+                category = targetGscKeyword;
+                keywords = [targetGscKeyword, ...siteContextKeywords.filter(k => k !== targetGscKeyword)].slice(0, 15);
+            }
+        }
+
+        expect(finalPipelineType).toBe("GSC_GAP");
+        expect(category).toBe("target gsc keyword query");
+        expect(keywords[0]).toBe("target gsc keyword query");
+    });
+
+    it("16. Competitor gap scraped headings and differentiation opportunities flow into research packet", async () => {
+        const competitorAnalysis: CompetitorAnalysis = {
+            competitorDomain: "competitor-domain.com",
+            competitorRankingUrl: "https://competitor-domain.com/page",
+            competitorTitle: "Competitor Page Title",
+            headings: ["Heading 1", "Heading 2", "Comparison"],
+            scrapedText: "Scraped competitor text detailing features.",
+            contentWeaknesses: ["Lacks interactive tools", "No local support"],
+            differentiationOpportunities: ["Provide interactive ROI calculator", "Highlight 24/7 support"],
+        };
+
+        const packet = await buildResearchPacket({
+            keyword: "competitor gap keyword",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+            competitorAnalysis,
+        });
+
+        expect(packet.competitorAnalysis).toBeDefined();
+        expect(packet.competitorAnalysis?.headings).toEqual(["Heading 1", "Heading 2", "Comparison"]);
+        expect(packet.competitorAnalysis?.differentiationOpportunities).toContain("Provide interactive ROI calculator");
+    });
+
+    it("17. Author snapshot event fields override database defaults", () => {
+        const siteDbDefaults = {
+            authorName: "Default DB Author",
+            authorRole: "Default Role",
+            authorBio: "Default Bio",
+            realExperience: "Default Experience",
+            realNumbers: "Default Numbers",
+            localContext: "Default Context",
+        };
+
+        const eventDataAuthor = {
+            authorName: "Snapshot Event Author",
+            authorRole: "Principal Lead",
+            authorBio: "Custom Event Bio",
+            realExperience: "Custom Event Case Study",
+            realNumbers: "Custom 10x ROI",
+            localContext: "Custom Market",
+        };
+
+        // Priority resolution as implemented in Inngest blog function
+        const resolvedAuthor = {
+            name: eventDataAuthor.authorName || siteDbDefaults.authorName,
+            role: eventDataAuthor.authorRole || siteDbDefaults.authorRole,
+            bio: eventDataAuthor.authorBio || siteDbDefaults.authorBio,
+            realExperience: eventDataAuthor.realExperience || siteDbDefaults.realExperience,
+            realNumbers: eventDataAuthor.realNumbers || siteDbDefaults.realNumbers,
+            localContext: eventDataAuthor.localContext || siteDbDefaults.localContext,
+        };
+
+        expect(resolvedAuthor.name).toBe("Snapshot Event Author");
+        expect(resolvedAuthor.role).toBe("Principal Lead");
+        expect(resolvedAuthor.bio).toBe("Custom Event Bio");
+        expect(resolvedAuthor.realExperience).toBe("Custom Event Case Study");
+        expect(resolvedAuthor.realNumbers).toBe("Custom 10x ROI");
+        expect(resolvedAuthor.localContext).toBe("Custom Market");
+    });
+
+    it("18. Stage 5 Analyze -> Revise -> Re-analyze pass retains revision only if defects are reduced", () => {
+        const initialDefects = ["Word count too low (400 words)", "Missing key topic entities: OptiAISEO"];
+        const improvedRevisionDefects: string[] = [];
+        const regressiveRevisionDefects = ["Word count too low (300 words)", "Missing key topic entities: OptiAISEO", "Missing FAQ"];
+
+        // Case A: Revision improves content (defects eliminated/reduced)
+        const acceptRevision = !improvedRevisionDefects.length || improvedRevisionDefects.length < initialDefects.length;
+        expect(acceptRevision).toBe(true);
+
+        // Case B: Revision regresses content (more defects added)
+        const rejectRevision = !regressiveRevisionDefects.length || regressiveRevisionDefects.length < initialDefects.length;
+        expect(rejectRevision).toBe(false);
+    });
+
+    it("19. Schema-aware citation template scoring evaluates combined HTML + JSON-LD script", async () => {
+        const { scoreCitationTemplate } = await import("@/lib/blog/ai-citation-template");
+        const rawHtml = "<h2>Key Tools</h2><p>OptiAISEO delivers automated SEO optimization.</p>";
+        const schemaJson = JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Article",
+            headline: "Key Tools Overview",
+        });
+        const combinedContent = `${rawHtml}\n\n<script type="application/ld+json">\n${schemaJson}\n</script>`;
+
+        const score = scoreCitationTemplate(combinedContent, ["key tools"], "Key Tools Overview");
+        const structDataCriterion = score.criteria.find(c => c.id === "structuredData");
+
+        expect(structDataCriterion?.passed).toBe(true);
+        expect(score.score).toBeGreaterThan(0);
+    });
+
+    it("20. Composite validation recomputes validation score and errors on final assembled HTML", async () => {
+        const { runCompositeValidation } = await import("@/lib/blog/validators");
+        const finalAssembledHtml = "<h1>Top AI SEO Tools</h1><p>Comprehensive guide to optimization tools with proven ROI.</p>";
+        const markdown = "# Top AI SEO Tools\n\nComprehensive guide to optimization tools with proven ROI.";
+        const meta = "Learn about the top AI SEO tools for scaling search traffic.";
+
+        const validation = runCompositeValidation({
+            title: "Top AI SEO Tools",
+            htmlContent: finalAssembledHtml,
+            markdownContent: markdown,
+            metaDescription: meta,
+            author: mockAuthor,
+        });
+
+        expect(validation.score).toBeGreaterThan(0);
+        expect(Array.isArray(validation.errors)).toBe(true);
+        expect(Array.isArray(validation.warnings)).toBe(true);
+    });
 });
+

@@ -12,7 +12,7 @@
  */
 
 import { AI_MODELS } from "@/lib/constants/ai-models";
-import { getAiClient, generateWithFallback, generateWithFallbackJson } from "./ai-client";
+import { generateWithFallback, generateWithFallbackJson } from "./ai-client";
 import { logger } from "@/lib/logger";
 import type { PromptContext } from "./prompt-context";
 import type { SerpContext } from "./serp";
@@ -1198,15 +1198,32 @@ export async function runFullPipeline(params: {
 
     const repairedMarkdown = await repairUnsupportedClaims(polishedMarkdown, researchPacket, ctx);
 
-    // ── Stage 5: Analyze → Revise → Re-analyze ────────────────────────────────
-    const analysisResult = analyzeDraftQuality(repairedMarkdown, brain, researchPacket, ctx);
+    // ── Stage 5: Analyze → Revise → Re-analyze (Max 1 bounded revision attempt) ──
+    const initialAnalysis = analyzeDraftQuality(repairedMarkdown, brain, researchPacket, ctx);
     let finalMarkdown = repairedMarkdown;
-    if (analysisResult.needsRevision && analysisResult.repairDirective) {
+    if (initialAnalysis.needsRevision && initialAnalysis.repairDirective) {
         logger.info("[Pipeline] Stage 5 — Targeted revision pass triggered", {
             keyword,
-            defects: analysisResult.defects,
+            defects: initialAnalysis.defects,
         });
-        finalMarkdown = await applyTargetedRevision(repairedMarkdown, analysisResult.repairDirective, ctx);
+        const revisedMarkdown = await applyTargetedRevision(repairedMarkdown, initialAnalysis.repairDirective, ctx);
+        const postRevisionAnalysis = analyzeDraftQuality(revisedMarkdown, brain, researchPacket, ctx);
+
+        // Retain revision only if it passed quality checks or reduced overall defect count
+        if (!postRevisionAnalysis.needsRevision || postRevisionAnalysis.defects.length < initialAnalysis.defects.length) {
+            logger.info("[Pipeline] Stage 5 — Targeted revision accepted", {
+                keyword,
+                initialDefects: initialAnalysis.defects.length,
+                postDefects: postRevisionAnalysis.defects.length,
+            });
+            finalMarkdown = revisedMarkdown;
+        } else {
+            logger.warn("[Pipeline] Stage 5 — Targeted revision rejected (did not reduce defects)", {
+                keyword,
+                initialDefects: initialAnalysis.defects.length,
+                postDefects: postRevisionAnalysis.defects.length,
+            });
+        }
     }
 
     if (outline.degraded) {
@@ -1278,13 +1295,8 @@ async function applyTargetedRevision(
     directive: string,
     ctx: PromptContext
 ): Promise<string> {
-    const ai = getAiClient();
-    if (!ai) return content;
-
     try {
-        const response = await ai.models.generateContent({
-            model: AI_MODELS.GEMINI_PRO,
-            contents: `You are an expert editorial reviewer. Revise this Markdown article to address the directive below.
+        const prompt = `You are an expert editorial reviewer. Revise this Markdown article to address the directive below.
 
 ARTICLE CONTENT:
 ${content.slice(0, 18000)}
@@ -1294,13 +1306,17 @@ ${directive}
 RULES:
 - Return ONLY the updated Markdown content.
 - Do NOT rewrite or truncate sections that are already working well.
-- Preserve all existing source links and schema scripts.`,
-            config: { temperature: 0.3, maxOutputTokens: 8000 },
+- Preserve all existing source links and schema scripts.`;
+
+        const revised = await generateWithFallback({
+            prompt,
+            temperature: 0.3,
+            maxTokens: 8000,
         });
 
-        const revised = response.text?.trim();
-        if (!revised || revised.length < content.length * 0.7) return content;
-        return revised.replace(/^```markdown\n?/i, "").replace(/^```html\n?/i, "").replace(/\n?```$/i, "");
+        const trimmed = revised?.trim();
+        if (!trimmed || trimmed.length < content.length * 0.7) return content;
+        return trimmed.replace(/^```markdown\n?/i, "").replace(/^```html\n?/i, "").replace(/\n?```$/i, "");
     } catch {
         return content;
     }

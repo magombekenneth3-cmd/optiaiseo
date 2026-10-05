@@ -1,5 +1,6 @@
 import { logger } from "@/lib/logger";
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { Type, Schema } from "@google/genai";
+import { getAiClient } from "./ai-client";
 import { SiteContext } from "./context";
 import { injectInternalLinks } from "./internalLinks";
 import { getFunnelForIntent, SearchIntent as FunnelIntent } from "../aeo/funnels";
@@ -316,10 +317,7 @@ ${nextStepsHtml}
 ${authorHtml}`;
 }
 
-export const getAiClient = () => {
-    if (!process.env.GEMINI_API_KEY) return null;
-    return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 120000 } });
-};
+export { getAiClient };
 
 export function buildBlogResponseSchema(ctx: PromptContext): Schema {
     const wordTarget =
