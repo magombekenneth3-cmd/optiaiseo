@@ -99,8 +99,7 @@ export function GenerateBlogButton({
         };
     }, [isDropdownOpen]);
 
-    const handleGenerate = async (author: AuthorInput) => {
-        setModalOpen(false);
+    const handleGenerate = async (author: AuthorInput): Promise<{ success: boolean; error?: string }> => {
         setIsPending(true);
 
         const loadingId = toast.loading(
@@ -121,7 +120,7 @@ export function GenerateBlogButton({
 
             toast.dismiss(loadingId);
 
-            if (res.success) {
+            if (res && "success" in res && res.success) {
                 router.refresh();
 
                 toast.success(
@@ -137,7 +136,7 @@ export function GenerateBlogButton({
                     { duration: 8000 }
                 );
 
-                return;
+                return { success: true };
             }
 
             const code = (
@@ -162,18 +161,19 @@ export function GenerateBlogButton({
                     }
                 );
             }
+
+            return { success: false, error: (res as any)?.error || "Generation could not be started." };
         } catch (error: unknown) {
             toast.dismiss(loadingId);
+            const msg = (error as Error)?.message || "Please check your connection and try again.";
 
             toast.error(
                 <div className="flex flex-col gap-0.5">
                     <span className="font-semibold">Network error</span>
-                    <span className="text-xs opacity-80">
-                        {(error as Error)?.message ||
-                            "Please check your connection and try again."}
-                    </span>
+                    <span className="text-xs opacity-80">{msg}</span>
                 </div>
             );
+            return { success: false, error: msg };
         } finally {
             setIsPending(false);
         }

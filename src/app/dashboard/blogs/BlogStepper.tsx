@@ -40,7 +40,7 @@ interface GenerateBlogModalProps {
     pipelineType?: string;
     initialKeyword?: string;
     onClose: () => void;
-    onGenerate: (author: AuthorInput) => Promise<void>;
+    onGenerate: (author: AuthorInput) => Promise<{ success: boolean; error?: string } | void>;
 }
 
 const STEPS = [
@@ -284,7 +284,7 @@ function KeywordStep({
                                             {s.intent}
                                         </span>
                                     )}
-                                    {s.difficulty != null && (
+                                    {s.source === "competitor_gap" && s.difficulty != null && (
                                         <span
                                             className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
                                                 s.difficulty <= 40
@@ -308,14 +308,18 @@ function KeywordStep({
                                     )}
                                 </div>
                                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
-                                    {(s.searchVolume != null || s.impressions > 0) && (
+                                    {s.source === "competitor_gap" && s.searchVolume != null ? (
                                         <span className="font-semibold text-zinc-300">
-                                            {(s.searchVolume ?? s.impressions).toLocaleString()} searches/mo
+                                            {s.searchVolume.toLocaleString()} searches/mo
                                         </span>
-                                    )}
+                                    ) : (s.gscImpressions90d != null || s.impressions > 0) ? (
+                                        <span className="font-semibold text-zinc-300">
+                                            {(s.gscImpressions90d ?? s.impressions).toLocaleString()} GSC impressions (90d)
+                                        </span>
+                                    ) : null}
                                     {s.position > 0 && (
                                         <span className="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
-                                            Pos #{s.position}
+                                            GSC Rank #{s.position}
                                         </span>
                                     )}
                                     <span className="truncate">{s.reason}</span>
@@ -600,11 +604,11 @@ function GeneratingStep({ pipelineType }: { pipelineType?: string }) {
             </div>
             <div>
                 <p className="mb-1 text-base font-bold text-white">
-                    {isDataReport ? "Building Data Report…" : "Generating High-E-E-A-T Article…"}
+                    {isDataReport ? "Building Data Report…" : "AI Research & Generation Engine Active…"}
                 </p>
                 <p className="max-w-xs text-xs text-purple-300 font-semibold">{stage.label}</p>
                 <p className="mx-auto mt-2 max-w-xs text-xs text-zinc-400">
-                    Running parallel Inngest background functions. Elapsed:{" "}
+                    Background functions active. Elapsed:{" "}
                     <span className="font-mono font-bold text-white">{elapsedLabel}</span>.
                 </p>
             </div>
@@ -669,7 +673,12 @@ export function GenerateBlogModal({
         setIsGenerating(true);
         setStep(2);
         try {
-            await onGenerate({ ...form, keyword });
+            const res = await onGenerate({ ...form, keyword });
+            if (res && typeof res === "object" && "success" in res && res.success === false) {
+                setGenError(res.error || "Generation couldn't be started. Please check your inputs and try again.");
+                setStep(1);
+                return;
+            }
             onClose();
         } catch (err) {
             const msg = (err as Error)?.message || "Generation couldn't be started. Please check your inputs and try again.";
@@ -773,7 +782,7 @@ export function GenerateBlogModal({
                                 Credit Cost: <span className="font-bold text-amber-400">10 credits</span>
                             </span>
                         </div>
-                        <span className="text-[11px] text-zinc-500 font-mono">Deducted on generation launch</span>
+                        <span className="text-[11px] text-zinc-500 font-mono">Deducted when generation is confirmed</span>
                     </div>
                 )}
             </div>

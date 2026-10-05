@@ -124,7 +124,7 @@ export function GenerateBlogButton({
 
     /** Runs the actual generateBlog call after gate has passed. */
     const executeGenerate = useCallback(
-        async (author: AuthorInput, options?: { preflightId?: string; forceSerpMismatch?: boolean }) => {
+        async (author: AuthorInput, options?: { preflightId?: string; forceSerpMismatch?: boolean }): Promise<{ success: boolean; error?: string }> => {
             setIsPending(true);
             const loadingId = toast.loading(
                 <div className="flex flex-col gap-0.5">
@@ -150,6 +150,7 @@ export function GenerateBlogButton({
                         </div>,
                         { duration: 8000 }
                     );
+                    return { success: true };
                 } else {
                     const r = res as { success: false; error?: string; code?: string };
                     if (r.code === "insufficient_credits" || r.code === "rate_limit") {
@@ -157,18 +158,18 @@ export function GenerateBlogButton({
                     } else {
                         showActionError(r);
                     }
+                    return { success: false, error: r.error || "Generation could not be started." };
                 }
             } catch (error: unknown) {
                 toast.dismiss(loadingId);
+                const msg = (error as Error)?.message || "Please check your connection and try again.";
                 toast.error(
                     <div className="flex flex-col gap-0.5">
                         <span className="font-semibold">Network error</span>
-                        <span className="text-xs opacity-80">
-                            {(error as Error)?.message ||
-                                "Please check your connection and try again."}
-                        </span>
+                        <span className="text-xs opacity-80">{msg}</span>
                     </div>
                 );
+                return { success: false, error: msg };
             } finally {
                 setIsPending(false);
             }
@@ -177,8 +178,7 @@ export function GenerateBlogButton({
     );
 
     const handleGenerate = useCallback(
-        async (author: AuthorInput) => {
-            setModalOpen(false);
+        async (author: AuthorInput): Promise<{ success: boolean; error?: string }> => {
             const keyword = author.keyword?.trim() ?? "";
 
             if (keyword) {
@@ -202,19 +202,19 @@ export function GenerateBlogButton({
                         setSerpGateDecision(decision);
                         setPreflightId(data.preflightId);
                         setIsPending(false);
-                        return; // Hold — show banner
+                        return { success: true };
                     }
                     // ALLOW or SKIP — proceed
-                    await executeGenerate(author, { preflightId: data.preflightId ?? undefined });
+                    return await executeGenerate(author, { preflightId: data.preflightId ?? undefined });
                 } catch {
                     // Preflight network error — fail-open
-                    await executeGenerate(author);
+                    return await executeGenerate(author);
                 } finally {
                     setIsPending(false);
                 }
             } else {
                 // No keyword — skip preflight
-                await executeGenerate(author);
+                return await executeGenerate(author);
             }
         },
         [siteId, executeGenerate]

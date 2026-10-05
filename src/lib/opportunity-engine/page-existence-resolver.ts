@@ -89,6 +89,225 @@ export async function resolvePageExistence(
   return makeDecision(candidates, topicKeyword);
 }
 
+/**
+ * Batch version of resolvePageExistence.
+ * Pre-fetches GSC performance, blog records, and page audits once for siteId,
+ * then evaluates all topic queries in memory without database N+1 loops.
+ */
+export async function resolvePageExistenceBatch(
+  siteId: string,
+  topics: { keyword: string; clusterQueries: string[] }[],
+): Promise<Map<string, PageExistenceResult>> {
+  const resultMap = new Map<string, PageExistenceResult>();
+  if (topics.length === 0) return resultMap;
+
+  try {
+    const allQueryTerms = Array.from(
+      new Set(topics.flatMap((t) => [t.keyword, ...t.clusterQueries.slice(0, 9)])),
+    );
+
+    // Single-pass DB batch fetches
+    const [gscRows, blogs, pageAudits] = await Promise.all([
+      prisma.gscDailyPerformance.findMany({
+        where: {
+          siteId,
+          keyword: { in: allQueryTerms },
+        },
+        orderBy: { fetchedAt: "desc" },
+        take: 500,
+      }),
+      prisma.blog.findMany({
+        where: {
+          siteId,
+          deletedAt: null,
+          status: { notIn: ["DELETED", "REJECTED"] },
+        },
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          status: true,
+          sourceUrl: true,
+          targetKeywords: true,
+          publishedAt: true,
+          updatedAt: true,
+          needsRefresh: true,
+          validationScore: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 300,
+      }),
+      prisma.pageAudit.findMany({
+        where: { siteId },
+        select: {
+          pageUrl: true,
+          overallScore: true,
+          issueList: true,
+        },
+        orderBy: { runTimestamp: "desc" },
+        take: 300,
+      }),
+    ]);
+
+    // Evaluate each topic in memory
+    for (const topic of topics) {
+      const queryTerms = Array.from(new Set([topic.keyword, ...topic.clusterQueries.slice(0, 9)]));
+      const candidates: ExistingPageEvidence[] = [];
+
+      // 1. In-memory GSC matching
+      const gscTopicRows = gscRows.filter((r) => queryTerms.includes(r.keyword));
+      if (gscTopicRows.length > 0) {
+        const urlMap = new Map<
+          string,
+          { clicks: number; impressions: number; positionSum: number; count: number; keywords: Set<string> }
+        >();
+        for (const row of gscTopicRows) {
+          const norm = normalizeUrl(row.url);
+          const existing = urlMap.get(norm);
+          if (existing) {
+            existing.clicks += row.clicks;
+            existing.impressions += row.impressions;
+            existing.positionSum += row.position * row.impressions;
+            existing.count++;
+            existing.keywords.add(row.keyword);
+          } else {
+            urlMap.set(norm, {
+              clicks: row.clicks,
+              impressions: row.impressions,
+              positionSum: row.position * row.impressions,
+              count: 1,
+              keywords: new Set([row.keyword]),
+            });
+          }
+        }
+
+        for (const [rawNormUrl, data] of urlMap) {
+          const avgPosition = data.impressions > 0 ? data.positionSum / data.impressions : 100;
+          const keywordOverlap = data.keywords.size / queryTerms.length;
+          const confidence = Math.min(1, 0.7 + keywordOverlap * 0.3);
+          candidates.push({
+            url: rawNormUrl.startsWith("/") || rawNormUrl.startsWith("http") ? rawNormUrl : `/${rawNormUrl}`,
+            matchSource: "GSC_RANKING_URL",
+            matchConfidence: confidence,
+            matchType: confidence >= STRONG_MATCH_THRESHOLD ? "GSC_MATCH" : "LOW_CONFIDENCE_MATCH",
+            currentPosition: Math.round(avgPosition * 10) / 10,
+            currentImpressions: data.impressions,
+            currentClicks: data.clicks,
+            issues: detectGscIssues(avgPosition, data.clicks, data.impressions),
+          });
+        }
+      }
+
+      // 2. In-memory Blog matching
+      for (const blog of blogs) {
+        const url = blog.sourceUrl || `/blog/${blog.slug}`;
+        const matchingKeywords = blog.targetKeywords.filter((kw) => queryTerms.includes(kw));
+        const overlapRatio = matchingKeywords.length / Math.max(1, blog.targetKeywords.length);
+
+        let confidence = 0;
+        let matchType: MatchType = "LOW_CONFIDENCE_MATCH";
+        let isMatch = false;
+
+        if (matchingKeywords.length > 0) {
+          confidence = Math.min(1, 0.6 + overlapRatio * 0.4);
+          matchType = confidence >= STRONG_MATCH_THRESHOLD ? "BLOG_MATCH" : "LOW_CONFIDENCE_MATCH";
+          isMatch = true;
+        } else {
+          // Slug/title token matching fallback
+          const topicTokens = tokenize(topic.keyword);
+          if (topicTokens.length > 0) {
+            const slugTokens = tokenize(blog.slug.replace(/-/g, " "));
+            const titleTokens = tokenize(blog.title);
+            const combinedTokens = new Set([...slugTokens, ...titleTokens]);
+            const overlap = topicTokens.filter((t) => combinedTokens.has(t)).length;
+            const tokenRatio = overlap / topicTokens.length;
+
+            if (tokenRatio >= SLUG_MATCH_THRESHOLD) {
+              const exactMatch = tokenRatio === 1.0;
+              confidence = exactMatch ? 0.95 : Math.min(1, 0.4 + tokenRatio * 0.5);
+              matchType = exactMatch ? "EXACT_MATCH" : confidence >= STRONG_MATCH_THRESHOLD ? "BLOG_MATCH" : "LOW_CONFIDENCE_MATCH";
+              isMatch = true;
+            }
+          }
+        }
+
+        if (isMatch) {
+          const issues: string[] = [];
+          if (blog.needsRefresh) issues.push("NEEDS_REFRESH");
+          if (blog.status === "DRAFT") issues.push("STILL_IN_DRAFT");
+          if (blog.validationScore !== null && blog.validationScore < 60) issues.push("LOW_VALIDATION_SCORE");
+          if (blog.publishedAt && daysSince(blog.publishedAt) > 180) issues.push("STALE_CONTENT");
+
+          const existingIdx = candidates.findIndex((c) => areUrlsEquivalent(c.url, url));
+          if (existingIdx === -1) {
+            candidates.push({
+              url,
+              matchSource: "BLOG_RECORD",
+              matchConfidence: confidence,
+              matchType,
+              issues,
+            });
+          } else {
+            const existing = candidates[existingIdx];
+            existing.issues = Array.from(new Set([...existing.issues, ...issues]));
+            existing.matchConfidence = Math.max(existing.matchConfidence, confidence);
+          }
+        }
+      }
+
+      // 3. In-memory PageAudit matching
+      const topicTokens = tokenize(topic.keyword);
+      if (topicTokens.length > 0) {
+        for (const audit of pageAudits) {
+          const pathTokens = new Set(tokenize(extractPath(audit.pageUrl)));
+          const overlap = topicTokens.filter((t) => pathTokens.has(t)).length;
+          const overlapRatio = overlap / topicTokens.length;
+
+          if (overlapRatio >= SLUG_MATCH_THRESHOLD) {
+            const issues: string[] = [];
+            if (audit.overallScore < 50) issues.push("LOW_AUDIT_SCORE");
+
+            const issueList = audit.issueList as unknown[];
+            if (Array.isArray(issueList)) {
+              for (const item of issueList) {
+                const str = typeof item === "string" ? item : JSON.stringify(item);
+                if (str.includes("noindex")) issues.push("NOINDEX_DETECTED");
+                if (str.includes("canonical")) issues.push("CANONICAL_CONFLICT");
+                if (str.includes("thin")) issues.push("THIN_CONTENT");
+                if (str.includes("orphan") || str.includes("internal_link")) issues.push("ORPHAN_PAGE");
+              }
+            }
+
+            const confidence = Math.min(1, 0.35 + overlapRatio * 0.55);
+            const existingIdx = candidates.findIndex((c) => areUrlsEquivalent(c.url, audit.pageUrl));
+            if (existingIdx === -1) {
+              candidates.push({
+                url: audit.pageUrl,
+                matchSource: "PAGE_AUDIT",
+                matchConfidence: confidence,
+                matchType: confidence >= STRONG_MATCH_THRESHOLD ? "AUDIT_MATCH" : "LOW_CONFIDENCE_MATCH",
+                issues,
+              });
+            } else {
+              const existing = candidates[existingIdx];
+              existing.issues = Array.from(new Set([...existing.issues, ...issues]));
+            }
+          }
+        }
+      }
+
+      resultMap.set(topic.keyword.toLowerCase().trim(), makeDecision(candidates, topic.keyword));
+    }
+  } catch (err) {
+    logger.warn("[PageExistenceResolver] Batch lookup failed", {
+      siteId,
+      error: (err as Error)?.message,
+    });
+  }
+
+  return resultMap;
+}
+
 // ── Evidence Gathering Functions ────────────────────────────────────────────
 
 /**
