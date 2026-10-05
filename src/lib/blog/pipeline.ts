@@ -26,6 +26,7 @@ import {
     type ResearchPacket,
     type SectionResearch,
     type QueryDecomposition,
+    type CompetitorAnalysis,
     ResearchBrainSchema,
     OutlinePlanSchema,
 } from "./contracts";
@@ -175,6 +176,9 @@ export async function runResearchBrain(
     keyword: string,
     serpContext: SerpContext | null,
     ctx: PromptContext,
+    groundedCtx?: GroundedSiteContext | null,
+    competitorAnalysis?: CompetitorAnalysis | null,
+    pipelineType?: string,
 ): Promise<ResearchBrain> {
     const serpSummary = serpContext
         ? `TOP SERP RESULTS:\n${serpContext.results.slice(0, 3).map((r, i) =>
@@ -196,12 +200,26 @@ export async function runResearchBrain(
         ? `topic or angle genuinely absent from current SERP results — MUST NOT overlap with saturated competitor angles: ${competitorSaturation}`
         : "topic or angle not covered by current top results";
 
+    const groundedBlock = groundedCtx?.contextBlock
+        ? `\nAUTHORITATIVE SITE GROUNDING:\n${groundedCtx.contextBlock}\n`
+        : "";
+
+    const competitorBlock = competitorAnalysis
+        ? `\nTARGET COMPETITOR ANALYSIS (${competitorAnalysis.competitorDomain}):
+- Competitor Headings: ${competitorAnalysis.headings?.slice(0, 10).join(" | ") || "N/A"}
+- Weaknesses: ${competitorAnalysis.contentWeaknesses?.join("; ") || "N/A"}
+- Differentiation: ${competitorAnalysis.differentiationOpportunities?.join("; ") || "N/A"}\n`
+        : "";
+
     const prompt = `You are an editorial research analyst. Your job is NOT to write content — it is to produce a structured research brief that a writer will use.
 
 KEYWORD: "${keyword}"
 INTENT: ${ctx.intent}
 RISK LEVEL: ${ctx.riskTier}
+${pipelineType ? `PIPELINE TYPE: ${pipelineType}` : ""}
 
+${groundedBlock}
+${competitorBlock}
 ${serpSummary}
 
 DIFFERENTIATION MANDATE:
@@ -309,6 +327,9 @@ export async function runOutlinePlanner(
     serpContext: SerpContext | null,
     ctx: PromptContext,
     tone?: string,
+    groundedCtx?: GroundedSiteContext | null,
+    competitorAnalysis?: CompetitorAnalysis | null,
+    pipelineType?: string,
 ): Promise<OutlinePlan> {
     const targetWords = wordCountTarget(ctx, serpContext, brain);
     const depthBenchmark = buildDepthBenchmark(serpContext);
@@ -325,6 +346,30 @@ export async function runOutlinePlanner(
         ? "Include a direct comparison table — this SERP rewards comparative structure."
         : "";
 
+    const dataReportInstruction = pipelineType === "DATA_REPORT"
+        ? `DATA REPORT PIPELINE MANDATE:
+- This MUST be structured as an empirical DATA REPORT or BENCHMARK STUDY.
+- Focus H2 sections on data analysis, key findings, metric breakdowns, industry benchmarks, statistical insights, and practical takeaways.
+- Include at least one section with evidenceType="data" and one with evidenceType="comparison".`
+        : "";
+
+    const competitorInstruction = competitorAnalysis
+        ? `COMPETITOR ATTACK/GAP MANDATE:
+- Competitor domain to outperform: ${competitorAnalysis.competitorDomain}
+- Competitor Headings: ${competitorAnalysis.headings?.slice(0, 8).join(" → ") || "N/A"}
+- Competitor Content Weaknesses: ${competitorAnalysis.contentWeaknesses?.join("; ") || "N/A"}
+- Differentiation Opportunities: ${competitorAnalysis.differentiationOpportunities?.join("; ") || "N/A"}
+- Create sections that directly cover what ${competitorAnalysis.competitorDomain} missed or stated incorrectly.`
+        : "";
+
+    const groundedBlock = groundedCtx?.data ? `
+SITE GROUNDING FACTS:
+- Core Services: ${groundedCtx.data.coreServices || "N/A"}
+- Market / Location: ${groundedCtx.data.location || "N/A"}
+- Target Customer: ${groundedCtx.data.targetCustomer || "N/A"}
+- Brand Facts: ${groundedCtx.data.brandFacts.slice(0, 5).map(f => `${f.factType}: ${f.value}`).join("; ") || "N/A"}
+` : "";
+
     const gapSignal = serpContext
         ? `Table-stakes topics (every competitor covers these — you must too): ${
             serpContext.results.flatMap(r => r.scrapedHeadings ?? []).slice(0, 8).join(", ")}
@@ -338,8 +383,12 @@ TARGET INTENT: ${ctx.intent}
 TONE: ${tone ?? "Authoritative and direct"}
 TOTAL WORD TARGET: ${targetWords}
 YEAR: ${ctx.year}
+${pipelineType ? `PIPELINE TYPE: ${pipelineType}` : ""}
 
+${groundedBlock}
 ${depthBenchmark}
+${dataReportInstruction}
+${competitorInstruction}
 
 RESEARCH BRIEF:
 - Searcher mindset: ${brain.searcherMindset}
@@ -1079,16 +1128,19 @@ export async function runFullPipeline(params: {
     ctx: PromptContext;
     author: AuthorProfile;
     tone?: string;
-    groundedCtx?: GroundedSiteContext;
+    groundedCtx?: GroundedSiteContext | null;
+    competitorAnalysis?: CompetitorAnalysis | null;
+    gscEvidence?: Record<string, unknown> | null;
+    pipelineType?: string;
     ledger?: ResearchEvidenceLedger | null;
 }): Promise<PipelineResult> {
-    const { keyword, serpContext, ctx, author, tone, groundedCtx, ledger } = params;
+    const { keyword, serpContext, ctx, author, tone, groundedCtx, competitorAnalysis, gscEvidence, pipelineType, ledger } = params;
 
     logger.debug("[Pipeline] Stage 1 — Research Brain", { keyword });
-    const brain = await runResearchBrain(keyword, serpContext, ctx);
+    const brain = await runResearchBrain(keyword, serpContext, ctx, groundedCtx, competitorAnalysis, pipelineType);
 
     logger.debug("[Pipeline] Stage 2 — Outline Planner", { keyword });
-    const outline = await runOutlinePlanner(keyword, brain, serpContext, ctx, tone);
+    const outline = await runOutlinePlanner(keyword, brain, serpContext, ctx, tone, groundedCtx, competitorAnalysis, pipelineType);
 
     logger.debug("[Pipeline] Research packet — collecting authoritative sources", {
         keyword,
@@ -1100,6 +1152,9 @@ export async function runFullPipeline(params: {
         serpContext,
         author,
         sections: outline.sections,
+        groundedCtx,
+        competitorAnalysis,
+        gscEvidence,
     });
     const sectionResearch = await buildSectionResearchMap(outline.sections, researchPacket);
 
@@ -1122,7 +1177,7 @@ export async function runFullPipeline(params: {
     const rawDraft = await runSectionWriter(outline, researchPacket, sectionResearch, ctx, claimPlan ?? undefined);
 
     logger.debug("[Pipeline] Stage 4 — Editorial Rewrite", { keyword, chunks: Math.ceil(rawDraft.length / 18000) });
-    const { content: polishedMarkdown, truncated } = await runEditorialRewrite(rawDraft, ctx, groundedCtx);
+    const { content: polishedMarkdown, truncated } = await runEditorialRewrite(rawDraft, ctx, groundedCtx ?? undefined);
     if (truncated) {
         logger.warn("[Pipeline] Editorial rewrite was truncated", { keyword });
     }

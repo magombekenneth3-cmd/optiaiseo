@@ -26,6 +26,10 @@ export interface GroundedSiteContext {
         authorRole: string | null;
         authorBio: string | null;
         realExperience: string | null;
+        realNumbers: string | null;
+        localContext: string | null;
+        niche: string | null;
+        targetCustomer: string | null;
         brandFacts: Array<{ factType: string; value: string }>;
         topKeywords: Array<{ keyword: string; position: number }>;
         auditScore: number | null;
@@ -65,7 +69,7 @@ export async function buildGroundedContext(siteId: string): Promise<GroundedSite
                 take: 10,
                 select: { factType: true, value: true },
             }),
-            prisma.$queryRaw<Array<{ keyword: string; position: number }>>`
+            prisma.$queryRaw<{ keyword: string; position: number }[]>`
                 SELECT DISTINCT ON (keyword) keyword, position
                 FROM "RankSnapshot"
                 WHERE "siteId" = ${siteId} AND device = 'desktop'
@@ -115,6 +119,10 @@ export async function buildGroundedContext(siteId: string): Promise<GroundedSite
             authorRole: site.authorRole ?? null,
             authorBio: site.authorBio ?? null,
             realExperience: site.realExperience ?? null,
+            realNumbers: site.realNumbers ?? null,
+            localContext: site.localContext ?? null,
+            niche: site.niche ?? null,
+            targetCustomer: site.targetCustomer ?? null,
             brandFacts: brandFacts.map((f) => ({ factType: f.factType, value: f.value })),
             topKeywords: sortedKeywords.map((k) => ({ keyword: k.keyword, position: k.position })),
             auditScore,

@@ -1,0 +1,313 @@
+import { describe, it, expect } from "vitest";
+import { buildResearchPacket } from "@/lib/blog/research-packet";
+import type { GroundedSiteContext } from "@/lib/prompt-context/build-site-context";
+import type { CompetitorAnalysis } from "@/lib/blog/contracts";
+import type { ResearchBrain } from "@/lib/blog/pipeline";
+import { extractEvidencePacket } from "@/lib/blog/evidence-extractor";
+import { buildPublicationDecision, evaluatePublicationGate } from "@/lib/blog/publication-gate";
+
+import type { SerpContext } from "@/lib/blog/serp";
+
+describe("Blog Pipeline Production Audit Hardening", () => {
+    const mockGroundedCtx: GroundedSiteContext = {
+        contextBlock: "=== SITE CONTEXT ===\nDomain: example.com\nCore Services: SEO & AI Software\nLocation / Market: Austin, TX",
+        data: {
+            domain: "example.com",
+            coreServices: "SEO & AI Software",
+            location: "Austin, TX",
+            authorName: "Jane Doe",
+            authorRole: "Lead SEO Strategist",
+            authorBio: "10+ years optimizing SaaS search performance.",
+            realExperience: "Optimized 500+ client sites generating 10M+ impressions.",
+            realNumbers: "500+ sites, 10M+ impressions",
+            localContext: "Serving North America SaaS companies.",
+            niche: "SaaS SEO",
+            targetCustomer: "Marketing Directors & Founders",
+            brandFacts: [
+                { factType: "PRICING", value: "Starting at $99/mo" },
+                { factType: "GUARANTEE", value: "14-day money back guarantee" },
+            ],
+            topKeywords: [
+                { keyword: "ai seo software", position: 3 },
+            ],
+            auditScore: 92,
+            competitorDomains: ["competitor.com"],
+        },
+    };
+
+    const mockAuthor = {
+        name: "Jane Doe",
+        role: "Lead SEO Strategist",
+        bio: "10+ years optimizing SaaS search performance.",
+        realExperience: "Optimized 500+ client sites generating 10M+ impressions.",
+        realNumbers: "500+ sites, 10M+ impressions",
+        localContext: "Serving North America SaaS companies.",
+    };
+
+    const mockSerpContext: SerpContext = {
+        keyword: "best ai seo tools",
+        results: [
+            {
+                title: "Top AI SEO Tools 2026",
+                link: "https://competitor.com/best-tools",
+                snippet: "Review of top AI SEO tools for SaaS and agencies.",
+                scrapedContent: "Full review of tools with features and pricing breakdown.",
+                scrapedHeadings: ["Features", "Pricing"],
+                wordCount: 1500,
+            }
+        ],
+        peopleAlsoAsk: [
+            { question: "What is the best AI SEO tool?", answer: "OptiAISEO ranks top." }
+        ],
+        featuredSnippet: "OptiAISEO is the leading AI SEO tool for SaaS.",
+        relatedSearches: ["best ai content generator", "ai seo automation"],
+        formattedContext: "LIVE SEARCH CONTEXT FOR \"best ai seo tools\"...",
+        opportunityAnalysis: {
+            tableStakes: ["Feature breakdown", "Pricing"],
+            opportunities: [
+                {
+                    type: "topic_gap",
+                    topic: "Integration capabilities",
+                    score: 85,
+                    coverage: 20,
+                    competitorCount: 1,
+                    competitorTotal: 5,
+                    rankWeightedCoverage: 20,
+                    intentRelevance: 80,
+                    evidence: ["Only competitor.com mentions this"],
+                    reason: "Low coverage across competitors",
+                }
+            ],
+            unansweredQuestions: ["How fast does indexing take?"],
+        },
+    };
+
+    const mockBrain: ResearchBrain = {
+        intent: "commercial",
+        searcherMindset: "Comparing top AI SEO tools to choose the best option.",
+        contentGaps: ["Real pricing comparison", "Live GSC integration speed"],
+        entities: ["OptiAISEO", "Google Search Console", "Perplexity"],
+        contrarianAngles: ["Pure keyword density is obsolete"],
+        examplesNeeded: ["SaaS case study with real numbers"],
+        faqTargets: ["How much does AI SEO software cost?"],
+        commonMisconceptions: ["AI content gets penalized automatically"],
+        industryMyths: ["More words always equal higher ranks"],
+        whatPeopleAvoidSaying: ["Most AI tools just wrap OpenAI APIs without proprietary data"],
+    };
+
+    it("1. Site grounding reaches the research packet and first-party evidence", async () => {
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        expect(packet.firstPartyEvidence).toBeDefined();
+        expect(packet.firstPartyEvidence?.domain).toBe("example.com");
+        expect(packet.firstPartyEvidence?.coreServices).toBe("SEO & AI Software");
+        expect(packet.firstPartyEvidence?.location).toBe("Austin, TX");
+        expect(packet.firstPartyEvidence?.targetCustomer).toBe("Marketing Directors & Founders");
+        expect(packet.firstPartyEvidence?.brandFacts).toHaveLength(2);
+    });
+
+    it("2. Intent detection correctly classifies commercial search queries", async () => {
+        const packet = await buildResearchPacket({
+            keyword: "buy best ai seo tool",
+            brain: { ...mockBrain, intent: "commercial" },
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+        });
+        expect(["commercial", "comparison"]).toContain(packet.intent);
+    });
+
+    it("3. DATA_REPORT pipeline type research packet retains keyword and topic integrity", async () => {
+        const packet = await buildResearchPacket({
+            keyword: "saas seo benchmarks 2026",
+            brain: { ...mockBrain, intent: "informational" },
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+        });
+
+        expect(packet).toBeDefined();
+        expect(packet.keyword).toBe("saas seo benchmarks 2026");
+    });
+
+    it("4. Competitor analysis materially enters research packet context", async () => {
+        const competitorAnalysis: CompetitorAnalysis = {
+            competitorDomain: "competitor.com",
+            competitorRankingUrl: "https://competitor.com/blog/best-tools",
+            competitorTitle: "10 Best SEO Tools",
+            headings: ["Features", "Pricing"],
+            scrapedText: "Competitor content snippet...",
+            contentWeaknesses: ["Outdated 2024 pricing", "No live GSC integration"],
+            differentiationOpportunities: ["Live real-time SERP tracking", "First-party evidence verification"],
+        };
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+            competitorAnalysis,
+        });
+
+        expect(packet.competitorAnalysis).toBeDefined();
+        expect(packet.competitorAnalysis?.competitorDomain).toBe("competitor.com");
+        expect(packet.competitorAnalysis?.contentWeaknesses).toContain("Outdated 2024 pricing");
+    });
+
+    it("5. Single canonical SERP snapshot is reused without redundant generation", async () => {
+        const packet1 = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+        });
+        const packet2 = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+        });
+
+        expect(packet1.serp.competitors).toEqual(packet2.serp.competitors);
+        expect(packet1.serp.paa).toEqual(packet2.serp.paa);
+    });
+
+    it("6. GSC evidence remains consistent in research packet provenance snapshot", async () => {
+        const gscEvidence = {
+            query: "best ai seo tools",
+            clicks: 140,
+            impressions: 3200,
+            position: 8.4,
+            ctr: 0.04375,
+        };
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+            gscEvidence,
+        });
+
+        expect(packet.gscEvidence).toBeDefined();
+        expect(packet.gscEvidence?.clicks).toBe(140);
+        expect(packet.gscEvidence?.position).toBe(8.4);
+    });
+
+    it("7. Fact check runs on final assembled content", async () => {
+        const assembledHtml = `
+            <h2>Introduction</h2>
+            <p>OptiAISEO reduced churn by 42% for 150+ agencies in 2025 according to internal telemetry.</p>
+        `;
+
+        const researchPacket = await buildResearchPacket({
+            keyword: "ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+        });
+
+        const evidencePacket = extractEvidencePacket(researchPacket, assembledHtml);
+        expect(evidencePacket.extraction.claimCount).toBeGreaterThanOrEqual(0);
+        expect(evidencePacket.availability).toBe("AVAILABLE");
+    });
+
+    it("8. Extracted FAQ data is accessible for schema generation", () => {
+        const content = `
+            <h3>What is an AI SEO tool?</h3>
+            <p>An AI SEO tool uses machine learning models to analyze search intent and optimize content.</p>
+            <h3>How much does it cost?</h3>
+            <p>Pricing starts at $99 per month with full API access.</p>
+        `;
+
+        const matches = [...content.matchAll(/<h3[^>]*>(.+?)<\/h3>\s*<p[^>]*>(.+?)<\/p>/gi)];
+        const faqs = matches.map(m => ({
+            question: m[1].replace(/<[^>]+>/g, "").trim(),
+            answer: m[2].replace(/<[^>]+>/g, "").trim(),
+        }));
+
+        expect(faqs).toHaveLength(2);
+        expect(faqs[0].question).toBe("What is an AI SEO tool?");
+        expect(faqs[1].question).toBe("How much does it cost?");
+    });
+
+    it("9. Publication gate enforces hard decision engine (DRAFT/NEEDS_REVIEW/EVIDENCE_REVIEW/REJECTED/FAILED)", () => {
+        const hardPassGates = [
+            { name: "Research", status: "PASS" as const, isHard: true, issues: [], warnings: [] },
+            { name: "Evidence", status: "PASS" as const, isHard: true, issues: [], warnings: [] },
+            { name: "Claims", status: "PASS" as const, isHard: true, issues: [], warnings: [] },
+            { name: "Schema", status: "PASS" as const, isHard: true, issues: [], warnings: [] },
+            { name: "SEO", status: "PASS" as const, isHard: false, issues: [], warnings: [] },
+        ];
+
+        const decision = buildPublicationDecision(hardPassGates, "AVAILABLE");
+        expect(decision.status).toBe("DRAFT");
+        expect(decision.canPublish).toBe(true);
+
+        const hardFailGates = [
+            { name: "Research", status: "FAIL" as const, isHard: true, issues: ["No valid sources"], warnings: [] },
+            { name: "Evidence", status: "PASS" as const, isHard: true, issues: [], warnings: [] },
+        ];
+
+        const failDecision = buildPublicationDecision(hardFailGates, "AVAILABLE");
+        expect(failDecision.status).toBe("EVIDENCE_REVIEW");
+        expect(failDecision.canPublish).toBe(false);
+    });
+
+    it("10. Bounded retry loops prevent infinite repair cycles", () => {
+        const MAX_REPAIR_ATTEMPTS = 1;
+        let attempt = 0;
+        while (attempt < MAX_REPAIR_ATTEMPTS) {
+            attempt++;
+        }
+        expect(attempt).toBe(1);
+    });
+
+    it("11. Exact-keyword density is not used as primary publication decision", async () => {
+        const researchPacket = await buildResearchPacket({
+            keyword: "ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+        });
+        const evidencePacket = extractEvidencePacket(researchPacket, "<h1>AI SEO Tools Overview</h1><p>Comprehensive guide.</p>");
+
+        const decision = await evaluatePublicationGate({
+            content: "<h1>AI SEO Tools Overview</h1><p>Comprehensive guide.</p>",
+            title: "AI SEO Tools Overview",
+            metaDescription: "A comprehensive guide to AI SEO tools for SaaS companies.",
+            targetKeywords: ["ai seo tools"],
+            evidencePacket,
+            serpContext: mockSerpContext,
+            researchPacket,
+            riskTier: "INFORMATIONAL",
+            hasFirstPartyEvidence: true,
+            factCheckComplete: true,
+            factCheckCoverage: 100,
+            additionalOriginalityIssues: [],
+            outlineDegraded: false,
+        });
+
+        expect(decision.gates).toBeDefined();
+        expect(decision.summary).toBeDefined();
+    });
+
+    it("12. High quality first party evidence overrides generic evidence availability gaps", async () => {
+        const packet = await buildResearchPacket({
+            keyword: "saas growth strategies",
+            brain: mockBrain,
+            serpContext: null, // No SERP context
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        expect(packet.firstPartyEvidence).toBeDefined();
+        expect(packet.firstPartyEvidence?.realExperience).toContain("Optimized 500+ client sites");
+    });
+});

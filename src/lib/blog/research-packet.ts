@@ -131,15 +131,21 @@ function authorEvidence(author: AuthorProfile) {
  * packet later in the pipeline: that would allow the article and its gate to
  * evaluate different research snapshots.
  */
+import type { GroundedSiteContext } from "@/lib/prompt-context/build-site-context";
+import type { CompetitorAnalysis } from "./contracts";
+
 export async function buildResearchPacket(params: {
     keyword: string;
     brain: ResearchBrain;
     serpContext: SerpContext | null;
     author: AuthorProfile;
     sections?: OutlineSection[];
+    groundedCtx?: GroundedSiteContext | null;
+    competitorAnalysis?: CompetitorAnalysis | null;
+    gscEvidence?: Record<string, unknown> | null;
 }): Promise<ResearchPacket> {
     const retrievedAt = new Date().toISOString();
-    const { keyword, brain, serpContext, author, sections = [] } = params;
+    const { keyword, brain, serpContext, author, sections = [], groundedCtx, competitorAnalysis, gscEvidence } = params;
     const serpSources = (serpContext?.results ?? [])
         .map((result, index) => sourceFromSerpResult(result, `serp-${index + 1}`, retrievedAt))
         .filter((source): source is SourceEvidence => source !== null);
@@ -176,6 +182,36 @@ export async function buildResearchPacket(params: {
             ...(typeof result.wordCount === "number" ? { wordCount: result.wordCount } : {}),
         }));
 
+    const firstPartyEvidence = groundedCtx?.data ? {
+        domain: groundedCtx.data.domain,
+        coreServices: groundedCtx.data.coreServices,
+        location: groundedCtx.data.location,
+        targetCustomer: groundedCtx.data.targetCustomer,
+        brandFacts: groundedCtx.data.brandFacts,
+        authorName: author.name || groundedCtx.data.authorName,
+        authorRole: author.role || groundedCtx.data.authorRole,
+        authorBio: author.bio || groundedCtx.data.authorBio,
+        realExperience: author.realExperience || groundedCtx.data.realExperience,
+        realNumbers: author.realNumbers || null,
+        localContext: author.localContext || null,
+        topKeywords: groundedCtx.data.topKeywords,
+        competitorDomains: groundedCtx.data.competitorDomains,
+    } : {
+        domain: undefined,
+        coreServices: null,
+        location: null,
+        targetCustomer: null,
+        brandFacts: [],
+        authorName: author.name,
+        authorRole: author.role,
+        authorBio: author.bio,
+        realExperience: author.realExperience,
+        realNumbers: author.realNumbers,
+        localContext: author.localContext,
+        topKeywords: [],
+        competitorDomains: [],
+    };
+
     return ResearchPacketSchema.parse({
         collectedAt: retrievedAt,
         evidenceAvailability: sources.length > 0
@@ -194,7 +230,7 @@ export async function buildResearchPacket(params: {
             })),
             format: serpContext ? classifySerpFormat(serpContext.results).format : null,
             tableStakes: serpContext?.opportunityAnalysis?.tableStakes ?? [],
-            opportunities: serpContext?.opportunityAnalysis?.opportunities ?? [],
+            opportunities: (serpContext?.opportunityAnalysis?.opportunities ?? []).map(o => typeof o === "string" ? o : o.topic),
             unansweredQuestions: serpContext?.opportunityAnalysis?.unansweredQuestions ?? [],
         },
         sources,
@@ -206,6 +242,9 @@ export async function buildResearchPacket(params: {
                 .map(source => source.id),
         })),
         authorEvidence: authorEvidence(author),
+        firstPartyEvidence,
+        ...(competitorAnalysis ? { competitorAnalysis } : {}),
+        ...(gscEvidence ? { gscEvidence } : {}),
         ...(brain.informationGainDirective ? { informationGain: brain.informationGainDirective } : {}),
         contentGaps: compact(brain.contentGaps),
         misconceptions: compact(brain.commonMisconceptions),

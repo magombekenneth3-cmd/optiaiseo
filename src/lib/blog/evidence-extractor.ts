@@ -111,6 +111,65 @@ function evidenceAvailability(researchPacket: ResearchPacket | null): EvidenceAv
     return "AVAILABLE";
 }
 
+function findSupportingSource(
+    claimText: string,
+    sources: SourceEvidence[],
+    researchPacket: ResearchPacket | null,
+): { sourceId: string; method: "source_text_match" | "first_party" } | null {
+    const claimLower = claimText.toLowerCase();
+    const claimTerms = significantTerms(claimText);
+    if (claimTerms.size === 0) return null;
+
+    // Check first-party evidence
+    const fp = researchPacket?.firstPartyEvidence;
+    if (fp) {
+        if (fp.realNumbers && claimTerms.size >= 2) {
+            const numTerms = significantTerms(fp.realNumbers);
+            const overlap = [...claimTerms].filter(t => numTerms.has(t)).length;
+            if (overlap >= 2) return { sourceId: "first-party-author", method: "first_party" };
+        }
+        if (fp.brandFacts?.length) {
+            for (const fact of fp.brandFacts) {
+                const factLower = `${fact.factType} ${fact.value}`.toLowerCase();
+                const factTerms = significantTerms(factLower);
+                const overlap = [...claimTerms].filter(t => factTerms.has(t)).length;
+                if (overlap >= 2 || (fact.value.length > 5 && claimLower.includes(fact.value.toLowerCase()))) {
+                    return { sourceId: "first-party-brand", method: "first_party" };
+                }
+            }
+        }
+    }
+
+    const authorEv = researchPacket?.authorEvidence;
+    if (authorEv) {
+        if (authorEv.realNumbers) {
+            const numTerms = significantTerms(authorEv.realNumbers);
+            const overlap = [...claimTerms].filter(t => numTerms.has(t)).length;
+            if (overlap >= 2) return { sourceId: "first-party-author", method: "first_party" };
+        }
+    }
+
+    // Check source passage support (prefer high-authority, recent, passage support)
+    for (const source of sources) {
+        const sourceText = `${source.title} ${source.claim} ${source.evidence}`.toLowerCase();
+        const sourceTerms = significantTerms(sourceText);
+        const overlap = [...claimTerms].filter(t => sourceTerms.has(t)).length;
+
+        // If claim has numeric figures, ensure numeric match in source evidence
+        const claimNumbers = claimText.match(/\d+(?:\.\d+)?%?/g);
+        let numbersMatch = true;
+        if (claimNumbers && claimNumbers.length > 0) {
+            numbersMatch = claimNumbers.some(n => sourceText.includes(n.toLowerCase()));
+        }
+
+        if (overlap >= 3 && numbersMatch && (source.authorityScore ?? source.confidence) >= 0.5) {
+            return { sourceId: source.id, method: "source_text_match" };
+        }
+    }
+
+    return null;
+}
+
 /**
  * Extracts provenance from the *final* content. Call this after every editorial
  * rewrite; using a packet extracted from an earlier draft would mask removed
@@ -155,10 +214,18 @@ export function extractEvidencePacket(
             if (!normalizedClaim || seenClaims.has(dedupeKey) || claims.length >= 100) continue;
             seenClaims.add(dedupeKey);
 
-            const matchedSourceIds = block.sourceIds;
-            const matchMethod = matchedSourceIds.length > 0
-                ? "explicit_citation" as const
-                : "unsupported" as const;
+            let matchedSourceIds = [...block.sourceIds];
+            let matchMethod: "explicit_citation" | "source_text_match" | "first_party" | "unsupported" =
+                matchedSourceIds.length > 0 ? "explicit_citation" : "unsupported";
+
+            if (matchedSourceIds.length === 0) {
+                const passageMatch = findSupportingSource(normalizedClaim, sources, researchPacket);
+                if (passageMatch) {
+                    matchedSourceIds = [passageMatch.sourceId];
+                    matchMethod = passageMatch.method;
+                }
+            }
+
             const claimId = `claim-${claims.length + 1}`;
             const type = hasStatistic ? "statistic" as const : "fact" as const;
 
@@ -179,6 +246,17 @@ export function extractEvidencePacket(
                 unsupportedClaims.push(issue);
                 if (hasStatistic) unsourcedStatistics.push(issue);
                 if (CASE_STUDY_RESULT_PATTERN.test(normalizedClaim)) {
+                    unverifiedCaseStudies.push(
+                        `Unverified case-study result: "${normalizedClaim.slice(0, 180)}${normalizedClaim.length > 180 ? "…" : ""}"`,
+                    );
+                }
+            } else if (CASE_STUDY_RESULT_PATTERN.test(normalizedClaim)) {
+                // Verify case study actually supports specific outcome
+                const supportedBySource = sources.some(s =>
+                    matchedSourceIds.includes(s.id) &&
+                    /\d+(?:\.\d+)?%/.test(`${s.title} ${s.claim} ${s.evidence}`)
+                );
+                if (!supportedBySource && matchMethod !== "first_party") {
                     unverifiedCaseStudies.push(
                         `Unverified case-study result: "${normalizedClaim.slice(0, 180)}${normalizedClaim.length > 180 ? "…" : ""}"`,
                     );

@@ -127,6 +127,45 @@ export const AuthorEvidenceSchema = z.object({
     localContext: z.string().trim().max(2_000).optional(),
 });
 
+export const FirstPartyEvidenceSchema = z.object({
+    domain: z.string().trim().max(300).optional(),
+    coreServices: z.string().trim().max(2_000).nullable().optional(),
+    location: z.string().trim().max(500).nullable().optional(),
+    targetCustomer: z.string().trim().max(2_000).nullable().optional(),
+    brandFacts: z.array(z.object({
+        factType: z.string().trim().max(200),
+        value: z.string().trim().max(2_000),
+    })).max(20).optional(),
+    authorName: z.string().trim().max(200).nullable().optional(),
+    authorRole: z.string().trim().max(300).nullable().optional(),
+    authorBio: z.string().trim().max(2_000).nullable().optional(),
+    realExperience: z.string().trim().max(4_000).nullable().optional(),
+    realNumbers: z.string().trim().max(2_000).nullable().optional(),
+    localContext: z.string().trim().max(2_000).nullable().optional(),
+    topKeywords: z.array(z.object({
+        keyword: z.string().trim().max(200),
+        position: z.number(),
+    })).max(20).optional(),
+    competitorDomains: z.array(z.string().trim().max(300)).max(20).optional(),
+});
+
+export const CompetitorAnalysisSchema = z.object({
+    competitorDomain: z.string().trim().max(300),
+    searchVolume: z.number().optional(),
+    difficulty: z.number().optional(),
+    competitorRankingUrl: z.string().trim().max(1000).optional(),
+    competitorTitle: z.string().trim().max(500).optional(),
+    headings: z.array(z.string().trim().max(500)).max(50).optional(),
+    scrapedText: z.string().trim().max(5000).optional(),
+    wordCount: z.number().optional(),
+    entities: z.array(z.string().trim().max(200)).max(30).optional(),
+    structuralStrengths: z.array(z.string().trim().max(500)).max(20).optional(),
+    contentWeaknesses: z.array(z.string().trim().max(500)).max(20).optional(),
+    missingQuestions: z.array(z.string().trim().max(500)).max(20).optional(),
+    missingSubtopics: z.array(z.string().trim().max(500)).max(20).optional(),
+    differentiationOpportunities: z.array(z.string().trim().max(500)).max(20).optional(),
+});
+
 export const ResearchPacketSchema = z.object({
     /** Stable snapshot timestamp for the research used by this generation. */
     collectedAt: z.string().datetime(),
@@ -139,10 +178,16 @@ export const ResearchPacketSchema = z.object({
         competitors: z.array(CompetitorResearchSchema).max(10),
         paa: z.array(PaaQuestionSchema).max(20),
         format: z.string().trim().max(100).nullable(),
+        tableStakes: StringList.optional(),
+        opportunities: StringList.optional(),
+        unansweredQuestions: StringList.optional(),
     }),
     sources: z.array(SourceEvidenceSchema).max(40),
     entities: z.array(EntityEvidenceSchema).max(30),
     authorEvidence: AuthorEvidenceSchema,
+    firstPartyEvidence: FirstPartyEvidenceSchema.optional(),
+    competitorAnalysis: CompetitorAnalysisSchema.optional(),
+    gscEvidence: z.record(z.string(), z.unknown()).optional(),
     informationGain: z.string().trim().max(2_000).optional(),
     contentGaps: StringList,
     misconceptions: StringList,
@@ -395,6 +440,8 @@ export type CompetitorResearch = z.infer<typeof CompetitorResearchSchema>;
 export type PaaQuestion = z.infer<typeof PaaQuestionSchema>;
 export type EntityEvidence = z.infer<typeof EntityEvidenceSchema>;
 export type AuthorEvidence = z.infer<typeof AuthorEvidenceSchema>;
+export type FirstPartyEvidence = z.infer<typeof FirstPartyEvidenceSchema>;
+export type CompetitorAnalysis = z.infer<typeof CompetitorAnalysisSchema>;
 export type ResearchPacket = z.infer<typeof ResearchPacketSchema>;
 export type OutlineTone = z.infer<typeof OutlineToneSchema>;
 export type EvidenceType = z.infer<typeof EvidenceTypeSchema>;

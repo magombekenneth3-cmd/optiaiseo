@@ -143,6 +143,8 @@ async function runSemanticEnrichmentCheck(
     content: string
 ): Promise<{ expectedEntities: string[]; missingEntities: string[]; enrichmentScore: number | null; available: boolean }> {
     try {
+        const plainText = content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        const contentSample = content.slice(0, 40000);
         const parsed = await callGeminiJson<{
             expectedEntities: string[];
             missingEntities: string[];
@@ -155,14 +157,24 @@ async function runSemanticEnrichmentCheck(
 
 Return JSON only: { "expectedEntities": [...], "missingEntities": [...], "enrichmentScore": 0-100 }
 
-Article (first 10000 chars):
-${content.substring(0, 10000)}`,
+Article:
+${contentSample}`,
             { maxOutputTokens: 1024, temperature: 0.1, timeoutMs: 45000 }
         );
+
+        // Filter out entities reported as missing if they actually appear in the full article text
+        const lowerContent = plainText.toLowerCase();
+        const trulyMissing = (parsed.missingEntities ?? []).filter(entity => {
+            const lowerEnt = entity.toLowerCase();
+            return !lowerContent.includes(lowerEnt);
+        });
+
+        const adjustedScore = Math.max(0, 100 - (trulyMissing.length * 8));
+
         return {
             expectedEntities: parsed.expectedEntities ?? [],
-            missingEntities: parsed.missingEntities ?? [],
-            enrichmentScore: Number.isFinite(parsed.enrichmentScore) ? parsed.enrichmentScore : null,
+            missingEntities: trulyMissing,
+            enrichmentScore: Number.isFinite(adjustedScore) ? adjustedScore : (parsed.enrichmentScore ?? null),
             available: true,
         };
     } catch {
@@ -550,10 +562,11 @@ Be specific and concise. This will be used to write a better article.`,
 
         // Pulls brand facts, keyword positions, location and author details
         // so prompts know exactly where/who they're writing for.
-        const groundedContext = await step.run("build-blog-context", async () => {
-            const { getGroundedContextBlock } = await import("@/lib/prompt-context/build-site-context");
-            return getGroundedContextBlock(siteId);
+        const groundedSiteCtx = await step.run("build-blog-context", async () => {
+            const { buildGroundedContext } = await import("@/lib/prompt-context/build-site-context");
+            return buildGroundedContext(siteId);
         });
+        const groundedContext = groundedSiteCtx?.contextBlock ?? "";
 
         // ── Step progress: researching → drafting ──────────────────────────
         const _blogIdForStep = event.data.blogId as string | undefined;
@@ -599,7 +612,8 @@ Be specific and concise. This will be used to write a better article.`,
                 const res = await Promise.race([
                     generateBlogFromCompetitorGap(
                         safeKeyword, safeDomain, searchVolume ?? 0, difficulty ?? 0,
-                        author, site.domain, undefined, site.blogTone || undefined, siteId, competitorSerpContext
+                        author, site.domain, undefined, site.blogTone || undefined, siteId, competitorSerpContext,
+                        groundedSiteCtx, gscEvidence, finalPipelineType
                     ),
                     new Promise<never>((_, reject) =>
                         setTimeout(() => reject(new Error("[Blog] generate-competitor-content timed out after 4.5 min")), GENERATION_TIMEOUT_MS)
@@ -626,19 +640,20 @@ Be specific and concise. This will be used to write a better article.`,
 
             let category = siteContext?.category ?? site.domain;
             let keywords = siteContext?.keywords ?? [];
-            finalPipelineType = siteContext ? "SITE_CONTEXT" : "INDUSTRY";
 
-            // The user typed (or we selected) a specific keyword in Step 0.
-            // It arrives as event.data.keyword. We MUST place it at position [0]
-            // so generateEvergreenPost uses it as primaryKeyword for the prompt.
-            // GSC opportunities are still fetched below for semantic enrichment,
-            // but they cannot displace the user's chosen keyword.
-            if (keyword && (pipelineType === "USER_KEYWORD" || pipelineType === "SEED_KEYWORD")) {
+            if (pipelineType === "DATA_REPORT") {
+                finalPipelineType = "DATA_REPORT";
+                if (keyword) {
+                    category = keyword;
+                    keywords = [keyword, ...(siteContext?.keywords ?? []).filter(k => k.toLowerCase() !== keyword.toLowerCase())].slice(0, 15);
+                }
+            } else if (keyword && (pipelineType === "USER_KEYWORD" || pipelineType === "SEED_KEYWORD")) {
                 category = keyword;
-                // Put the chosen keyword first; retain site keywords as semantic support
                 keywords = [keyword, ...(siteContext?.keywords ?? []).filter(k => k.toLowerCase() !== keyword.toLowerCase())].slice(0, 15);
                 finalPipelineType = pipelineType;
                 logger.info(`[Blog/Pipeline] USER_KEYWORD override — primary keyword: "${keyword}"`, { siteId, pipelineType });
+            } else {
+                finalPipelineType = siteContext ? "SITE_CONTEXT" : "INDUSTRY";
             }
 
             const gscOpp = await step.run("fetch-gsc-opportunities", async () => {
@@ -670,7 +685,7 @@ Be specific and concise. This will be used to write a better article.`,
 
             // Only let GSC override category/keywords when no explicit keyword was supplied.
             // When the user chose a keyword, GSC data is secondary enrichment only.
-            if (!keyword && gscOpp.length > 0) {
+            if (!keyword && gscOpp.length > 0 && pipelineType !== "DATA_REPORT") {
                 keywords = [...gscOpp.map(o => o.keyword), ...(siteContext?.keywords ?? [])].slice(0, 15);
                 category = `${displayName} — GSC Opportunity`;
                 finalPipelineType = "GSC_GAP";
@@ -678,7 +693,7 @@ Be specific and concise. This will be used to write a better article.`,
                 const brand = site.domain.replace(/^www\./, "").split(".")[0];
                 category = brand;
                 keywords = [brand, "guide", "tips", "how to", "best practices"];
-                finalPipelineType = "INDUSTRY";
+                if (pipelineType !== "DATA_REPORT") finalPipelineType = "INDUSTRY";
             } else if (keyword && gscOpp.length > 0) {
                 // Enrich the user's keyword list with GSC semantic terms (don't replace position 0)
                 const gscTerms = gscOpp.map(o => o.keyword).filter(k => k.toLowerCase() !== keyword.toLowerCase());
@@ -714,7 +729,8 @@ Be specific and concise. This will be used to write a better article.`,
                 const res = await Promise.race([
                     generateEvergreenPost(
                         category, keywords, author, enrichedSiteContext,
-                        site.blogTone || undefined, siteId, precomputedSerpContext
+                        site.blogTone || undefined, siteId, precomputedSerpContext,
+                        groundedSiteCtx, undefined, gscEvidence, finalPipelineType
                     ),
                     new Promise<never>((_, reject) =>
                         setTimeout(() => reject(new Error("[Blog] generate-evergreen-post timed out after 4.5 min")), GENERATION_TIMEOUT_MS)
@@ -850,49 +866,22 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             }
         });
 
-        const factCheck = await step.run("fact-check-validation", async () => {
-            return await runFactCheckValidation(liveBlogPost.content);
-        });
-
-        // ── Step progress: drafting → fact_check ─────────────────────────
-        if (_blogIdForStep) {
-            await step.run("mark-step-fact-check", async () => {
-                const { redis: stepRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
-                await stepRedis?.set(`blog:step:${_blogIdForStep}`, "fact_check", { ex: 7200 }).catch(() => null);
-            });
-        }
-
-        const enrichment = await step.run("semantic-enrichment-check", async () => {
-            const primaryKeyword = keyword || liveBlogPost.targetKeywords[0] || liveBlogPost.title;
-            return runSemanticEnrichmentCheck(primaryKeyword, liveBlogPost.content);
-        });
-
-        // Google rewards depth. Thin content (<900 words) is auto-demoted to NEEDS_REVIEW.
+        // ── 1. Final length normalization ──────────────────────────────────
         // Overly long content (>6000 words) is truncated at the last sentence boundary
-        // before the limit — Google's HCU penalises keyword-stuffed bloat.
-        // Meta descriptions >160 chars are silently truncated in SERPs — fix before save.
+        // before the limit before fact-checking or gating runs.
         await step.run("validate-length-constraints", async () => {
-            // Word count (strip HTML tags, count whitespace-delimited tokens)
             const plainText = liveBlogPost.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
             let wordCount = plainText.split(" ").filter(Boolean).length;
 
-            // The LLM is instructed not to exceed 6000 words, but as a hard safety
-            // net we truncate the HTML at the last sentence boundary before 6000 words.
             const MAX_WORDS = 6000;
             if (wordCount > MAX_WORDS) {
-                // Walk through the HTML building up a word-count-aware window.
-                // We truncate by rebuilding the plain-text at the word level,
-                // then finding the matching character position in the original HTML.
                 const words = plainText.split(" ");
                 const allowedPlain = words.slice(0, MAX_WORDS).join(" ");
-                // Find the last sentence-ending punctuation (.?!) before the hard cut
                 const lastSentenceEnd = allowedPlain.search(/[.?!][^.?!]*$/);
                 const cutAt = lastSentenceEnd > 0
-                    ? lastSentenceEnd + 1   // include the punctuation mark
+                    ? lastSentenceEnd + 1
                     : allowedPlain.length;
 
-                // Map the char position back into the HTML:
-                // Walk HTML chars, counting non-tag text chars until we reach cutAt.
                 let htmlCursor = 0;
                 let textCursor = 0;
                 let inTag = false;
@@ -905,7 +894,7 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 }
 
                 liveBlogPost.content = liveBlogPost.content.slice(0, htmlCursor) + "</p>";
-                wordCount = MAX_WORDS;   // approximate — re-counting is expensive
+                wordCount = MAX_WORDS;
 
                 liveBlogPost.validationWarnings.push(
                     `Content exceeded ${MAX_WORDS} words and was trimmed. Review the truncated ending before publishing.`
@@ -920,21 +909,17 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                     `Content is thin (${wordCount} words) relative to the planned search-task scope. Review coverage before publishing.`
                 );
                 if (wordCount < 500) {
-                    // Critically thin — hard error, not just a warning
                     liveBlogPost.validationErrors.push(`Content too short: ${wordCount} words (minimum 500).`);
                 }
             }
 
-            // Title length (Google shows ~55-60 chars before truncation)
             if (liveBlogPost.title.length > 60) {
                 liveBlogPost.validationWarnings.push(
                     `Title is ${liveBlogPost.title.length} chars — Google truncates at ~60. Consider shortening.`
                 );
             }
 
-            // Meta description length
             if (liveBlogPost.metaDescription.length > 160) {
-                // Truncate and log — don't block, just fix silently
                 liveBlogPost.metaDescription = liveBlogPost.metaDescription.slice(0, 157) + "...";
                 liveBlogPost.validationWarnings.push("Meta description truncated to 160 chars.");
             } else if (liveBlogPost.metaDescription.length < 50) {
@@ -946,132 +931,13 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             logger.info(`[Blog/LengthGate] words=${wordCount} titleLen=${liveBlogPost.title.length} metaLen=${liveBlogPost.metaDescription.length}`);
         });
 
-
-        // ── Publication Gate (replaces score-based quality gate) ──────────
-        // Import and run the publication gate which checks:
-        // - Fabricated statistics, case studies, experience claims
-        // - Generic AI introductions
-        // - Section duplication / repetition
-        // - Originality vs SERP competitors
-        // - Unsupported product claims
-        // - Structure and SEO/AEO basics
-        //
-        // Decision logic (hard gates, not scores):
-        //   Fabrication detected    → REJECTED
-        //   Evidence issues         → EVIDENCE_REVIEW
-        //   Weak originality / high-risk warnings → NEEDS_REVIEW
-        //   All gates pass          → DRAFT
-
-        const qualityScore = factCheck.qualityScore !== null
-            ? Math.min(factCheck.qualityScore, liveBlogPost.validationScore)
-            : liveBlogPost.validationScore;
-
-        if (factCheck.issues.length > 0) {
-            logger.warn(`[Blog/Pipeline] Fact-check issues (score ${qualityScore}/100):`, {
-                issues: factCheck.issues,
-                factCheckAvailable: factCheck.qualityScore !== null,
-            });
-        }
-
-        // PLACEHOLDER_PATTERN must match every pattern checked by content-lint.ts to
-        // ensure placeholder detection is consistent across the pipeline stages.
-        // Adding new placeholder patterns here also requires adding them in content-lint.ts.
-        //
-        // ┌─ Pattern                  ┌─ Stage that produces it
-        // │ [Section generation failed │ section writer (rules.ts)
-        // │ [EDITOR:                   │ editorial pass
-        // │ TODO / TBD / FIXME         │ LLM template artefacts
-        // │ lorem ipsum                │ LLM hallucination filler
-        // │ Example Company            │ generic company placeholder
-        // │ YourCompany                │ template variable
-        // │ {{...}}                    │ unresolved template variable
-        // │ [INSERT STAT]              │ LLM stat placeholder
-        // │ [IMAGE HERE]               │ image placeholder
-        // └─────────────────────────────────────────────────────
-        const PLACEHOLDER_PATTERN = /\[Section generation failed|\[EDITOR:|\bTODO\b|\bTBD\b|\bFIXME\b|lorem ipsum|Example Company|YourCompany|\{\{[^}]+\}\}|\[INSERT STAT\]|\[IMAGE HERE\]/i;
-        if (PLACEHOLDER_PATTERN.test(liveBlogPost.content)) {
-            // Find which patterns matched so we can trace the source stage in logs.
-            const matchedPatterns = [
-                /\[Section generation failed/i.test(liveBlogPost.content) && "[Section generation failed] (section writer failure)",
-                /\[EDITOR:/i.test(liveBlogPost.content) && "[EDITOR:] (editorial pass artefact)",
-                /\b(?:TODO|FIXME)\b/i.test(liveBlogPost.content) && "TODO/FIXME (LLM template artefact)",
-                /\bTBD\b/i.test(liveBlogPost.content) && "TBD (LLM template artefact)",
-                /lorem ipsum/i.test(liveBlogPost.content) && "lorem ipsum (LLM filler)",
-                /Example Company|YourCompany/i.test(liveBlogPost.content) && "Example Company/YourCompany (template variable)",
-                /\{\{[^}]+\}\}/i.test(liveBlogPost.content) && "{{...}} (unresolved template variable)",
-                /\[INSERT STAT\]/i.test(liveBlogPost.content) && "[INSERT STAT] (stat placeholder)",
-                /\[IMAGE HERE\]/i.test(liveBlogPost.content) && "[IMAGE HERE] (image placeholder)",
-            ].filter(Boolean);
-            logger.error("[Blog/Pipeline] Content contains placeholder text — marking FAILED, will not publish", {
-                siteId,
-                keyword,
-                matchedPatterns,
-            });
-            liveBlogPost.validationErrors.push(
-                `Content contains unresolved placeholder text (${matchedPatterns.join("; ")}). ` +
-                "This is a content pipeline failure, not a quality gate failure. " +
-                "Regenerate before publishing."
-            );
-        }
-
+        // ── 2. Interactive Widget Generation & Validation ──────────────────
         const interactiveWidget = await step.run("generate-interactive-widget", async () => {
             const primaryKeyword = keyword || liveBlogPost.targetKeywords[0] || liveBlogPost.title;
             return await generateInteractiveWidget(primaryKeyword, liveBlogPost.content);
         });
 
-        const schemaMarkup = await step.run("generate-schema-markup", async () => {
-            return await generateSchemaMarkup({
-                title: liveBlogPost.title,
-                keyword: keyword || liveBlogPost.targetKeywords[0] || "",
-                slug: liveBlogPost.slug,
-                siteDomain: site.domain,
-                author,
-                description: liveBlogPost.metaDescription,
-                faqs: [],
-            });
-        });
-
-        // ── Step progress: fact_check → schema ──────────────────────────
-        if (_blogIdForStep) {
-            await step.run("mark-step-schema", async () => {
-                const { redis: stepRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
-                await stepRedis?.set(`blog:step:${_blogIdForStep}`, "schema", { ex: 7200 }).catch(() => null);
-            });
-        }
-
-        // Runs after schema markup is generated so JSON-LD is included in the score.
-        // Scores 8 criteria: direct answer, definition block, stats, FAQ, comparison
-        // table, E-E-A-T attribution, internal links, structured data.
-        const citationGate = await step.run("citation-template-gate", async () => {
-            try {
-                const htmlWithSchema = schemaMarkup
-                    ? liveBlogPost.content + schemaMarkup
-                    : liveBlogPost.content;
-                return gateCitationScore(
-                    htmlWithSchema,
-                    liveBlogPost.targetKeywords,
-                    liveBlogPost.title,
-                );
-            } catch (citErr: unknown) {
-                // gateCitationScore must never crash the job — degrade to zero score
-                logger.warn("[Blog/CitationGate] gateCitationScore threw — returning zero score", {
-                    error: (citErr as Error)?.message,
-                });
-                return {
-                    citationScore: 0,
-                    citationReady: false,
-                    citationTopFix: "Citation scoring failed — manual review recommended.",
-                    citationCriteria: {},
-                    intent: "informational" as const,
-                };
-            }
-        });
-
-        logger.info(`[Blog/CitationGate] Score ${citationGate.citationScore}/100 — ready: ${citationGate.citationReady}`, {
-            siteId, keyword, intent: citationGate.intent,
-            topFix: citationGate.citationReady ? null : citationGate.citationTopFix,
-        });
-
+        // ── 3. Final Content Assembly (Funnel CTA) ─────────────────────────
         const finalContent = await step.run("inject-funnel-cta", async () => {
             try {
                 const funnelIntent = (detectedIntent === "local" ? "informational" : detectedIntent) as FunnelIntent;
@@ -1089,8 +955,6 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 const { sanitizeHtml } = await import("@/lib/sanitize-html");
                 return sanitizeHtml(content);
             } catch (funnelErr: unknown) {
-                // Funnel injection must never crash the job — content is already generated.
-                // Degrade gracefully: return original content without the CTA.
                 logger.warn("[Blog/Funnel] inject-funnel-cta threw — using original content", {
                     error: (funnelErr as Error)?.message,
                     siteId,
@@ -1101,6 +965,111 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             }
         });
         liveBlogPost.content = finalContent;
+
+        // ── 4. Placeholder & Secondary Surface Validation ──────────────────
+        const PLACEHOLDER_PATTERN = /\[Section generation failed|\[EDITOR:|\bTODO\b|\bTBD\b|\bFIXME\b|lorem ipsum|Example Company|YourCompany|\{\{[^}]+\}\}|\[INSERT STAT\]|\[IMAGE HERE\]/i;
+        const fullContentToCheck = liveBlogPost.content + (interactiveWidget ?? "");
+
+        if (PLACEHOLDER_PATTERN.test(fullContentToCheck)) {
+            const matchedPatterns = [
+                /\[Section generation failed/i.test(fullContentToCheck) && "[Section generation failed] (section writer failure)",
+                /\[EDITOR:/i.test(fullContentToCheck) && "[EDITOR:] (editorial pass artefact)",
+                /\b(?:TODO|FIXME)\b/i.test(fullContentToCheck) && "TODO/FIXME (LLM template artefact)",
+                /\bTBD\b/i.test(fullContentToCheck) && "TBD (LLM template artefact)",
+                /lorem ipsum/i.test(fullContentToCheck) && "lorem ipsum (LLM filler)",
+                /Example Company|YourCompany/i.test(fullContentToCheck) && "Example Company/YourCompany (template variable)",
+                /\{\{[^}]+\}\}/i.test(fullContentToCheck) && "{{...}} (unresolved template variable)",
+                /\[INSERT STAT\]/i.test(fullContentToCheck) && "[INSERT STAT] (stat placeholder)",
+                /\[IMAGE HERE\]/i.test(fullContentToCheck) && "[IMAGE HERE] (image placeholder)",
+            ].filter(Boolean);
+            logger.error("[Blog/Pipeline] Content or widget contains placeholder text — marking FAILED, will not publish", {
+                siteId,
+                keyword,
+                matchedPatterns,
+            });
+            liveBlogPost.validationErrors.push(
+                `Content contains unresolved placeholder text (${matchedPatterns.join("; ")}). ` +
+                "This is a content pipeline failure, not a quality gate failure. " +
+                "Regenerate before publishing."
+            );
+        }
+
+        // ── 5. Fact Check Validation on Exact Assembled Content ────────────
+        const factCheck = await step.run("fact-check-validation", async () => {
+            return await runFactCheckValidation(liveBlogPost.content);
+        });
+
+        if (_blogIdForStep) {
+            await step.run("mark-step-fact-check", async () => {
+                const { redis: stepRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
+                await stepRedis?.set(`blog:step:${_blogIdForStep}`, "fact_check", { ex: 7200 }).catch(() => null);
+            });
+        }
+
+        // ── 6. Semantic Enrichment Check on Full Final Content ──────────────
+        const enrichment = await step.run("semantic-enrichment-check", async () => {
+            const primaryKeyword = keyword || liveBlogPost.targetKeywords[0] || liveBlogPost.title;
+            return runSemanticEnrichmentCheck(primaryKeyword, liveBlogPost.content);
+        });
+
+        // ── 7. FAQ Extraction & Schema Markup Generation ────────────────────
+        function extractFaqsFromContent(content: string): { question: string; answer: string }[] {
+            const faqs: { question: string; answer: string }[] = [];
+            const matches = [...content.matchAll(/<h3[^>]*>(.+?)<\/h3>\s*<p[^>]*>(.+?)<\/p>/gi)];
+            for (const match of matches) {
+                const q = match[1].replace(/<[^>]+>/g, "").trim();
+                const a = match[2].replace(/<[^>]+>/g, "").trim();
+                if (q && a && (q.endsWith("?") || /^(what|how|why|can|is|are|does|do|where|when|who)\b/i.test(q))) {
+                    faqs.push({ question: q, answer: a });
+                }
+            }
+            return faqs;
+        }
+
+        const extractedFaqs = liveBlogPost.faqs?.length
+            ? liveBlogPost.faqs
+            : extractFaqsFromContent(liveBlogPost.content);
+
+        const schemaMarkup = await step.run("generate-schema-markup", async () => {
+            return await generateSchemaMarkup({
+                title: liveBlogPost.title,
+                keyword: keyword || liveBlogPost.targetKeywords[0] || "",
+                slug: liveBlogPost.slug,
+                siteDomain: site.domain,
+                author,
+                description: liveBlogPost.metaDescription,
+                faqs: extractedFaqs,
+            });
+        });
+
+        if (_blogIdForStep) {
+            await step.run("mark-step-schema", async () => {
+                const { redis: stepRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
+                await stepRedis?.set(`blog:step:${_blogIdForStep}`, "schema", { ex: 7200 }).catch(() => null);
+            });
+        }
+
+        // ── 8. Citation & Publication Gates ──────────────────────────────────
+        const qualityScore = factCheck.qualityScore !== null
+            ? Math.min(factCheck.qualityScore, liveBlogPost.validationScore)
+            : liveBlogPost.validationScore;
+
+        if (factCheck.issues.length > 0) {
+            logger.warn(`[Blog/Pipeline] Fact-check issues (score ${qualityScore}/100):`, {
+                issues: factCheck.issues,
+                factCheckAvailable: factCheck.qualityScore !== null,
+            });
+        }
+
+        // ── Citation Gate ─────────────────────────────────────────────────
+        const citationGate = await step.run("citation-template-gate", async () => {
+            const { gateCitationScore } = await import("@/lib/blog/ai-citation-template");
+            return gateCitationScore(
+                liveBlogPost.content,
+                liveBlogPost.targetKeywords,
+                liveBlogPost.title
+            );
+        });
 
         // ── Publication Gate ──────────────────────────────────────────────
         const publicationGateStep = await step.run("publication-gate", async () => {

@@ -62,6 +62,7 @@ export interface BlogPostDraft {
     /** Inputs needed when the final publication gate re-extracts evidence. */
     riskTier: PromptContext["riskTier"];
     hasFirstPartyEvidence: boolean;
+    faqs?: { question: string; answer: string }[];
     /** True when the outline planner failed and a fallback template was used. */
     degraded?: boolean;
 }
@@ -533,6 +534,7 @@ export async function buildPost(
         missingEvidence: evidencePacket.unsourcedStatistics ?? [],
         riskTier: ctx.riskTier,
         hasFirstPartyEvidence: !!(author.realExperience || author.realNumbers),
+        faqs: faqs ?? undefined,
         degraded: degraded === true,
     };
 }
@@ -611,6 +613,9 @@ export async function generateTrendingPost(
     return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket, pipeline.degraded);
 }
 
+import type { GroundedSiteContext } from "@/lib/prompt-context/build-site-context";
+import type { CompetitorAnalysis } from "./contracts";
+
 export async function generateEvergreenPost(
     category: string,
     keywords: string[],
@@ -618,21 +623,27 @@ export async function generateEvergreenPost(
     siteContext?: SiteContext | null,
     tone?: string,
     siteId?: string,
-    precomputedSerpContext?: SerpContext | null
+    precomputedSerpContext?: SerpContext | null,
+    groundedCtx?: GroundedSiteContext | null,
+    intentOverride?: string,
+    gscEvidence?: Record<string, unknown> | null,
+    pipelineType?: string,
 ): Promise<BlogPostDraft> {
     const ai = getAiClient();
     if (!ai) throw new Error("GEMINI_API_KEY is missing.");
 
     const primaryKeyword = keywords[0];
-    const displayName = siteContext?.title.split(" — ")[0] ?? cleanDomainToDisplayName(siteContext?.domain ?? "");
+    const displayName = siteContext?.title.split(" — ")[0] ?? cleanDomainToDisplayName(siteContext?.domain ?? groundedCtx?.data.domain ?? "");
+
+    const resolvedIntent = (intentOverride as SearchIntent) ?? detectIntent(primaryKeyword);
 
     const ctx = buildPromptContext({
         keyword: primaryKeyword,
         category,
-        intent: "informational",
-        hasAuthorGrounding: !!(author.realExperience || author.realNumbers),
+        intent: resolvedIntent,
+        hasAuthorGrounding: !!(author.realExperience || author.realNumbers || groundedCtx?.data.realExperience),
         displayName,
-        siteDomain: siteContext?.domain,
+        siteDomain: siteContext?.domain ?? groundedCtx?.data.domain,
     });
 
     let serpContext: SerpContext | null = null;
@@ -648,7 +659,16 @@ export async function generateEvergreenPost(
         logger.error("[Blog Engine] SERP context failed:", { error: (e as Error)?.message });
     }
 
-    const pipeline = await runFullPipeline({ keyword: primaryKeyword, serpContext, ctx, author, tone });
+    const pipeline = await runFullPipeline({
+        keyword: primaryKeyword,
+        serpContext,
+        ctx,
+        author,
+        tone,
+        groundedCtx,
+        gscEvidence,
+        pipelineType,
+    });
 
     // Build a synthetic GeminiBlogResponse from pipeline output so buildPost
     // can assemble HTML, inject photos, FAQs, and run validation unchanged.
@@ -677,7 +697,9 @@ export async function generateBlogFromKeywordGap(
     targetUrl?: string,
     siteDomain?: string,
     intentOverride?: string,
-    siteId?: string
+    siteId?: string,
+    groundedCtx?: GroundedSiteContext | null,
+    gscEvidence?: Record<string, unknown> | null,
 ): Promise<BlogPostDraft> {
     if (!getAiClient()) throw new Error("GEMINI_API_KEY is missing.");
 
@@ -686,9 +708,9 @@ export async function generateBlogFromKeywordGap(
         keyword,
         category: keyword,
         intent,
-        hasAuthorGrounding: !!(author.realExperience || author.realNumbers),
-        displayName: cleanDomainToDisplayName(siteDomain ?? ""),
-        siteDomain,
+        hasAuthorGrounding: !!(author.realExperience || author.realNumbers || groundedCtx?.data.realExperience),
+        displayName: cleanDomainToDisplayName(siteDomain ?? groundedCtx?.data.domain ?? ""),
+        siteDomain: siteDomain ?? groundedCtx?.data.domain,
     });
 
     const positionHint =
@@ -704,7 +726,7 @@ export async function generateBlogFromKeywordGap(
         logger.error("[Blog Engine] SERP context failed:", { error: (e as Error)?.message });
     }
 
-    const pipeline = await runFullPipeline({ keyword, serpContext, ctx, author });
+    const pipeline = await runFullPipeline({ keyword, serpContext, ctx, author, groundedCtx, gscEvidence, pipelineType: "GSC_GAP" });
 
     const syntheticResponse: GeminiBlogResponse = {
         title: pipeline.title,
@@ -733,7 +755,10 @@ export async function generateBlogFromCompetitorGap(
     intentOverride?: string,
     tone?: string,
     siteId?: string,
-    precomputedSerpContext?: SerpContext | null
+    precomputedSerpContext?: SerpContext | null,
+    groundedCtx?: GroundedSiteContext | null,
+    gscEvidence?: Record<string, unknown> | null,
+    pipelineType?: string,
 ): Promise<BlogPostDraft> {
     if (!getAiClient()) throw new Error("GEMINI_API_KEY is missing.");
 
@@ -742,9 +767,9 @@ export async function generateBlogFromCompetitorGap(
         keyword,
         category: keyword,
         intent,
-        hasAuthorGrounding: !!(author.realExperience || author.realNumbers),
-        displayName: cleanDomainToDisplayName(siteDomain ?? ""),
-        siteDomain,
+        hasAuthorGrounding: !!(author.realExperience || author.realNumbers || groundedCtx?.data.realExperience),
+        displayName: cleanDomainToDisplayName(siteDomain ?? groundedCtx?.data.domain ?? ""),
+        siteDomain: siteDomain ?? groundedCtx?.data.domain,
     });
 
     logger.debug(`[Blog Engine] Competitor gap post: "${keyword}" vs ${competitorDomain}`, { searchVolume, difficulty });
@@ -756,7 +781,32 @@ export async function generateBlogFromCompetitorGap(
         logger.error("[Blog Engine] SERP context failed:", { error: (e as Error)?.message });
     }
 
-    const pipeline = await runFullPipeline({ keyword, serpContext, ctx, author, tone });
+    const competitorMatch = serpContext?.results.find(r => r.link.includes(competitorDomain));
+    const competitorAnalysis: CompetitorAnalysis = {
+        competitorDomain,
+        searchVolume,
+        difficulty,
+        competitorRankingUrl: competitorMatch?.link,
+        competitorTitle: competitorMatch?.title,
+        headings: competitorMatch?.scrapedHeadings ?? [],
+        scrapedText: competitorMatch?.snippet,
+        wordCount: competitorMatch?.wordCount,
+        structuralStrengths: ["Ranks on page 1 for target keyword"],
+        contentWeaknesses: ["Lacks first-party practitioner evidence", "Generic introductory advice"],
+        differentiationOpportunities: [`Expose content gaps in ${competitorDomain}`, "Offer direct actionable insights"],
+    };
+
+    const pipeline = await runFullPipeline({
+        keyword,
+        serpContext,
+        ctx,
+        author,
+        tone,
+        groundedCtx,
+        competitorAnalysis,
+        gscEvidence,
+        pipelineType: pipelineType || "COMPETITOR_GAP",
+    });
 
     const syntheticResponse: GeminiBlogResponse = {
         title: pipeline.title,
