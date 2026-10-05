@@ -24,6 +24,8 @@ export interface ClusterRankingUrl {
     dates: Set<string>;
 }
 
+export type SearchIntentCategory = "Informational" | "Commercial" | "Transactional" | "Navigational";
+
 export interface GscTopicCluster {
     head: RawGscKeyword;
     variants: string[];
@@ -31,6 +33,7 @@ export interface GscTopicCluster {
     totalClicks: number;
     totalImpressions: number;
     avgPosition: number;
+    intent: SearchIntentCategory;
     uniquePages: number;
     rankingUrls: ClusterRankingUrl[];
     pages: {
@@ -65,6 +68,17 @@ const STOP_WORDS = new Set([
     "what", "which", "who", "whom", "this", "that", "these", "those",
     "how", "when", "where", "why", "best", "top", "online"
 ]);
+
+/**
+ * Infer search intent from keyword text.
+ */
+export function inferQueryIntent(keyword: string): SearchIntentCategory {
+    const k = keyword.toLowerCase();
+    if (/\b(buy|pricing|price|cost|order|quote|discount|deal|purchase)\b/.test(k)) return "Transactional";
+    if (/\b(best|vs|review|reviews|top|software|tool|platform|alternative|comparison|provider|service|services|solution|agency)\b/.test(k)) return "Commercial";
+    if (/\b(login|portal|sign in|dashboard|app|website)\b/.test(k)) return "Navigational";
+    return "Informational";
+}
 
 /**
  * Tokenize a query string into a Set of normalized tokens (diacritic-free, lowercase, stopword-filtered).
@@ -159,6 +173,7 @@ export function clusterGscQueries(
         totalClicks: c.totalClicks,
         totalImpressions: c.totalImpressions,
         avgPosition: c.totalImpressions > 0 ? c.positionSum / c.totalImpressions : c.head.position,
+        intent: inferQueryIntent(c.head.keyword),
         uniquePages: 0,
         rankingUrls: [],
         pages: [],

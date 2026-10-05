@@ -4,17 +4,19 @@
 // Pure function. No Prisma, no Inngest, no HTTP.
 // Queries GscDailyPerformance for cases where multiple pages rank for
 // the same topic cluster or keyword, with temporal evidence of URL alternation.
+// Includes search intent compatibility checks to prevent false positives.
 // =============================================================================
 
 import { createFindingFingerprint } from "./fingerprint";
 import type { AgentExecution, AgentFinding } from "./types";
 import type { GscPerformanceRow } from "./gsc-intelligence-agent";
-import { buildGscTopicIntelligence } from "@/lib/gsc/topic-cluster";
+import { buildGscTopicIntelligence, inferQueryIntent } from "@/lib/gsc/topic-cluster";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export interface CannibalizationRisk {
   query: string;
+  intent?: string;
   clusterQueries?: string[];
   pages: {
     url: string;
@@ -55,6 +57,15 @@ export function analyzeCannibalization(
 
     if (significantPages.length < 2) continue;
 
+    // Search Intent Compatibility Check:
+    // Verify that the multi-page ranking competition represents true intent collision
+    // (e.g. not a navigational login page co-ranking with a commercial guide).
+    const headIntent = tc.intent || inferQueryIntent(tc.head.keyword);
+    if (headIntent === "Navigational" && significantPages.length < 3) {
+      // Navigational queries (e.g., login, dashboard) naturally pull homepage/login URLs; skip low-level noise
+      continue;
+    }
+
     // Check temporal competition across URLs using dates evidence
     const temporalEvidence = hasTemporalCompetition(
       significantPages.map((p) => ({ url: p.url, dates: p.dates })),
@@ -75,6 +86,7 @@ export function analyzeCannibalization(
     const headKeyword = tc.head.keyword;
     const riskEntry: CannibalizationRisk = {
       query: headKeyword,
+      intent: headIntent,
       clusterQueries: tc.queries,
       pages: significantPages.map((p) => ({
         url: p.url,
@@ -95,7 +107,7 @@ export function analyzeCannibalization(
       type: "CANNIBALIZATION_RISK",
       severity,
       title: `Cannibalization risk: "${truncate(headKeyword, 50)}" topic cluster`,
-      description: `${significantPages.length} pages compete for topic cluster "${headKeyword}" (${tc.queries.length} query variants): ${significantPages.map((p) => `${p.url} (pos ${p.avgPosition.toFixed(1)})`).join(", ")}. ${temporalEvidence ? "Ranking URLs alternate over time across the cluster." : "Multiple pages have significant impressions for this topic."}`,
+      description: `${significantPages.length} pages compete for ${headIntent} topic cluster "${headKeyword}" (${tc.queries.length} query variants): ${significantPages.map((p) => `${p.url} (pos ${p.avgPosition.toFixed(1)})`).join(", ")}. ${temporalEvidence ? "Ranking URLs alternate over time across the cluster." : "Multiple pages have significant impressions for this topic."}`,
       evidence: significantPages.map((p) => ({
         sourceType: "GSC" as const,
         sourceId: `${headKeyword}|${p.url}`,
@@ -106,6 +118,7 @@ export function analyzeCannibalization(
           impressions: p.impressions,
           daysRanked: p.daysRanked,
           clusterQueries: tc.queries.slice(0, 10),
+          topicIntent: headIntent,
         },
         observedAt: new Date().toISOString(),
       })),
