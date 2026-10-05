@@ -1,4 +1,6 @@
 
+import { inferQueryIntent } from "./topic-cluster";
+
 const GSC_BASE = "https://www.googleapis.com/webmasters/v3/sites";
 const PAGE_SIZE = 25_000;
 const RETRY_ATTEMPTS = 3;
@@ -663,18 +665,8 @@ export function clusterKeywords(aggregated: AggregatedKeyword[]): KeywordCluster
 }
 
 export function classifyIntent(keyword: string): Intent {
-    const kw = keyword.toLowerCase();
-
-    if (/\b(best|top|vs|versus|review|reviews|compare|comparison|alternatives?)\b/.test(kw)) {
-        return "commercial";
-    }
-    if (/\b(buy|price|pricing|cost|cheap|deal|order|shop|hire|subscribe)\b/.test(kw)) {
-        return "transactional";
-    }
-    if (/\b(how|what|why|when|who|guide|tutorial|tips|examples?)\b/.test(kw)) {
-        return "informational";
-    }
-    return "navigational";
+    const intent = inferQueryIntent(keyword);
+    return intent.toLowerCase() as Intent;
 }
 
 export function splitBrandKeywords(

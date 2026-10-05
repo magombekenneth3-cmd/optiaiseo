@@ -59,14 +59,13 @@ export function analyzeCannibalization(
 
     // Search Intent Compatibility Check:
     // Verify that the multi-page ranking competition represents true intent collision
-    // (e.g. not a navigational login page co-ranking with a commercial guide).
     const headIntent = tc.intent || inferQueryIntent(tc.head.keyword);
     if (headIntent === "Navigational" && significantPages.length < 3) {
-      // Navigational queries (e.g., login, dashboard) naturally pull homepage/login URLs; skip low-level noise
+      // Navigational queries (e.g., login, portal) naturally pull homepage/login URLs; skip low-level noise
       continue;
     }
 
-    // Check temporal competition across URLs using dates evidence
+    // Check temporal competition across all competing URLs using dates evidence
     const temporalEvidence = hasTemporalCompetition(
       significantPages.map((p) => ({ url: p.url, dates: p.dates })),
     );
@@ -155,15 +154,23 @@ function hasTemporalCompetition(
 
   const allDates = new Set<string>();
   for (const page of pages) {
-    for (const date of page.dates) allDates.add(date);
+    for (const date of page.dates) {
+      if (date) allDates.add(date);
+    }
   }
 
-  const [page1, page2] = pages;
-  const page1Only = [...page1.dates].filter((d) => !page2.dates.has(d)).length;
-  const page2Only = [...page2.dates].filter((d) => !page1.dates.has(d)).length;
-  const totalDays = allDates.size;
+  if (allDates.size === 0) return false;
 
-  return totalDays > 0 && (page1Only + page2Only) / totalDays > 0.2;
+  let singlePageDays = 0;
+  for (const date of allDates) {
+    const activePages = pages.filter((p) => p.dates.has(date));
+    if (activePages.length === 1) {
+      singlePageDays++;
+    }
+  }
+
+  const temporalSwitchRatio = singlePageDays / allDates.size;
+  return temporalSwitchRatio >= 0.2;
 }
 
 function calculateRiskScore(

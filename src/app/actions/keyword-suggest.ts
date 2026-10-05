@@ -7,7 +7,7 @@ import { authOptions } from "@/lib/auth";
 import { fetchGSCKeywords, normaliseSiteUrl } from "@/lib/gsc";
 import { getUserGscToken } from "@/lib/gsc/token";
 import { resolvePageExistenceBatch, type PageExistenceVerdict } from "@/lib/opportunity-engine/page-existence-resolver";
-import { clusterGscQueries, type GscTopicCluster, type RawGscKeyword } from "@/lib/gsc/topic-cluster";
+import { clusterGscQueries, inferQueryIntent, type GscTopicCluster, type RawGscKeyword } from "@/lib/gsc/topic-cluster";
 
 const GSC_RULES = {
     buriedPosition: 20,
@@ -33,14 +33,6 @@ export interface KeywordSuggestion {
     searchVolume?: number;
     difficulty?: number;
     intent?: "Informational" | "Commercial" | "Transactional" | "Navigational";
-}
-
-function inferQueryIntent(keyword: string): "Informational" | "Commercial" | "Transactional" | "Navigational" {
-    const k = keyword.toLowerCase();
-    if (/\b(buy|pricing|price|cost|order|quote|discount|deal|purchase)\b/.test(k)) return "Transactional";
-    if (/\b(best|vs|review|reviews|top|software|tool|platform|alternative|comparison|provider|service|services|solution|agency)\b/.test(k)) return "Commercial";
-    if (/\b(login|portal|sign in|dashboard|app|website)\b/.test(k)) return "Navigational";
-    return "Informational";
 }
 
 export async function getSiteKeywordSuggestions(
@@ -77,7 +69,7 @@ export async function getSiteKeywordSuggestions(
         }
 
         // Gather all candidates for batch page existence resolution
-        let gscClusters: { head: RawGscKeyword; variants: string[] }[] = [];
+        let gscClusters: GscTopicCluster[] = [];
         let competitorKeywords: { keyword: string; searchVolume: number | null; difficulty: number | null }[] = [];
 
         try {
@@ -88,7 +80,10 @@ export async function getSiteKeywordSuggestions(
                 90,
                 500
             );
-            const gscKeywords: RawGscKeyword[] = raw.slice(0, 300);
+            // Sort by impressions descending before slicing to ensure high-value keywords are prioritized
+            const gscKeywords: RawGscKeyword[] = [...raw]
+                .sort((a, b) => b.impressions - a.impressions)
+                .slice(0, 300);
             gscClusters = clusterGscQueries(gscKeywords).slice(0, 20);
         } catch (err) {
             const msg = (err as Error)?.message ?? "";
@@ -138,7 +133,7 @@ export async function getSiteKeywordSuggestions(
                     existingPageUrl: null,
                     actionType: "CREATE_PAGE",
                     gscImpressions90d: head.impressions,
-                    intent: inferQueryIntent(head.keyword),
+                    intent: cluster.intent,
                 });
             } else if (
                 existence.verdict === "EXISTING_NEEDS_FIX" ||
@@ -156,7 +151,7 @@ export async function getSiteKeywordSuggestions(
                     existingPageUrl: existence.existingPage?.url || null,
                     actionType: "UPDATE_PAGE",
                     gscImpressions90d: head.impressions,
-                    intent: inferQueryIntent(head.keyword),
+                    intent: cluster.intent,
                 });
             }
         }

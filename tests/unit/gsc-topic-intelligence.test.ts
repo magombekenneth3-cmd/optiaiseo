@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { prisma } from "@/lib/prisma";
 import {
   clusterGscQueries,
   buildGscTopicIntelligence,
@@ -42,6 +43,10 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 describe("GSC Topic Intelligence Contract & Shared Data Layer", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   const MOCK_GSC_ROWS: GscPerformanceInputRow[] = [
     {
       query: "best seo tools",
@@ -101,7 +106,6 @@ describe("GSC Topic Intelligence Contract & Shared Data Layer", () => {
 
     const clusters = clusterGscQueries(rawKeywords, 0.6);
 
-    // Mixed intent queries should remain in separate intent-compatible clusters
     expect(clusters.length).toBe(3);
     expect(clusters.find((c) => c.head.keyword === "best seo tools")?.intent).toBe("Commercial");
     expect(clusters.find((c) => c.head.keyword === "best seo tools login")?.intent).toBe("Navigational");
@@ -128,7 +132,6 @@ describe("GSC Topic Intelligence Contract & Shared Data Layer", () => {
 
   it("should detect topic-level cannibalization across related query variants", () => {
     const rowsForCannibalization: GscPerformanceInputRow[] = [
-      // URL A ranks for "best seo tools" (Commercial)
       {
         query: "best seo tools",
         page: "https://example.com/blog/best-seo-tools",
@@ -145,7 +148,6 @@ describe("GSC Topic Intelligence Contract & Shared Data Layer", () => {
         position: 3.2,
         date: "2026-10-02",
       },
-      // URL B ranks for "top seo tools" (Commercial — same topic cluster)
       {
         query: "top seo tools",
         page: "https://example.com/blog/top-seo-tools",
@@ -189,16 +191,46 @@ describe("GSC Topic Intelligence Contract & Shared Data Layer", () => {
     expect(result.data.clusters[0].rankingUrls).toBeDefined();
   });
 
-  it("should resolve page existence in batch with zero N+1 DB calls", async () => {
+  it("should resolve page existence in batch with exactly 1 set of DB queries (zero N+1 calls)", async () => {
     const topics = [
       { keyword: "best seo tools", clusterQueries: ["top seo tools", "best seo software"] },
       { keyword: "keyword research guide", clusterQueries: ["how to do keyword research"] },
+      { keyword: "technical seo checklist", clusterQueries: ["seo audit steps"] },
     ];
 
     const resultMap = await resolvePageExistenceBatch("site-1", topics);
 
     expect(resultMap.has("best seo tools")).toBe(true);
     expect(resultMap.has("keyword research guide")).toBe(true);
+    expect(resultMap.has("technical seo checklist")).toBe(true);
     expect(resultMap.get("best seo tools")?.verdict).toBe("MISSING");
+
+    // Cardinality assertions proving zero N+1 database queries
+    expect(prisma.gscDailyPerformance.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.blog.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.pageAudit.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("should preserve uncorrupted original URLs in page existence candidates without leading slash corruption", async () => {
+    const mockGscRow = {
+      keyword: "best seo tools",
+      url: "https://example.com/blog/best-seo-tools",
+      impressions: 500,
+      clicks: 40,
+      position: 3.5,
+    };
+    (prisma.gscDailyPerformance.findMany as any).mockResolvedValueOnce([mockGscRow]);
+
+    const topics = [
+      { keyword: "best seo tools", clusterQueries: ["top seo tools"] },
+    ];
+
+    const resultMap = await resolvePageExistenceBatch("site-1", topics);
+    const result = resultMap.get("best seo tools");
+
+    expect(result).toBeDefined();
+    expect(result?.verdict).toBe("EXISTING_HEALTHY");
+    expect(result?.existingPage?.url).toBe("https://example.com/blog/best-seo-tools");
+    expect(result?.existingPage?.url).not.toMatch(/^\/example\.com/);
   });
 });

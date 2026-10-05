@@ -216,7 +216,7 @@ export async function resolvePageExistenceBatch(
       if (gscTopicRows.length > 0) {
         const urlMap = new Map<
           string,
-          { clicks: number; impressions: number; positionSum: number; count: number; keywords: Set<string> }
+          { originalUrl: string; clicks: number; impressions: number; positionSum: number; count: number; keywords: Set<string> }
         >();
         for (const row of gscTopicRows) {
           const norm = normalizeUrl(row.url);
@@ -229,6 +229,7 @@ export async function resolvePageExistenceBatch(
             existing.keywords.add(row.keyword);
           } else {
             urlMap.set(norm, {
+              originalUrl: row.url,
               clicks: row.clicks,
               impressions: row.impressions,
               positionSum: row.position * row.impressions,
@@ -238,12 +239,12 @@ export async function resolvePageExistenceBatch(
           }
         }
 
-        for (const [rawNormUrl, data] of urlMap) {
+        for (const [, data] of urlMap) {
           const avgPosition = data.impressions > 0 ? data.positionSum / data.impressions : 100;
           const keywordOverlap = data.keywords.size / queryTerms.length;
           const confidence = Math.min(1, 0.7 + keywordOverlap * 0.3);
           candidates.push({
-            url: rawNormUrl.startsWith("/") || rawNormUrl.startsWith("http") ? rawNormUrl : `/${rawNormUrl}`,
+            url: data.originalUrl,
             matchSource: "GSC_RANKING_URL",
             matchConfidence: confidence,
             matchType: confidence >= STRONG_MATCH_THRESHOLD ? "GSC_MATCH" : "LOW_CONFIDENCE_MATCH",
@@ -394,7 +395,7 @@ async function findGscRankingPages(
 
     const urlMap = new Map<
       string,
-      { clicks: number; impressions: number; positionSum: number; count: number; keywords: Set<string> }
+      { originalUrl: string; clicks: number; impressions: number; positionSum: number; count: number; keywords: Set<string> }
     >();
 
     for (const row of gscRows) {
@@ -408,6 +409,7 @@ async function findGscRankingPages(
         existing.keywords.add(row.keyword);
       } else {
         urlMap.set(norm, {
+          originalUrl: row.url,
           clicks: row.clicks,
           impressions: row.impressions,
           positionSum: row.position * row.impressions,
@@ -419,13 +421,13 @@ async function findGscRankingPages(
 
     const results: ExistingPageEvidence[] = [];
 
-    for (const [rawNormUrl, data] of urlMap) {
+    for (const [, data] of urlMap) {
       const avgPosition = data.impressions > 0 ? data.positionSum / data.impressions : 100;
       const keywordOverlap = data.keywords.size / queryTerms.length;
       const confidence = Math.min(1, 0.7 + keywordOverlap * 0.3);
 
       results.push({
-        url: rawNormUrl.startsWith("/") || rawNormUrl.startsWith("http") ? rawNormUrl : `/${rawNormUrl}`,
+        url: data.originalUrl,
         matchSource: "GSC_RANKING_URL",
         matchConfidence: confidence,
         matchType: confidence >= STRONG_MATCH_THRESHOLD ? "GSC_MATCH" : "LOW_CONFIDENCE_MATCH",
