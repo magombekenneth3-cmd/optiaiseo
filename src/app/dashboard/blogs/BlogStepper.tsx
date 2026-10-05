@@ -1,74 +1,90 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-    Loader2, X, Search, TrendingUp, FileText, Sparkles,
-    Check, ChevronRight, ChevronLeft, User, Briefcase, Hash,
-    MapPin, BarChart,
+    Loader2,
+    X,
+    Search,
+    TrendingUp,
+    FileText,
+    Sparkles,
+    Check,
+    ChevronRight,
+    ChevronLeft,
+    User,
+    Briefcase,
+    Hash,
+    MapPin,
+    BarChart,
+    ShieldCheck,
+    Award,
+    Zap,
+    Filter,
 } from "lucide-react";
 import { getSiteAuthorDetails } from "@/app/actions/blog";
 import { getSiteKeywordSuggestions, type KeywordSuggestion } from "@/app/actions/keyword-suggest";
 
 export interface AuthorInput {
-    authorName:     string;
-    authorRole:     string;
-    authorBio:      string;
+    authorName: string;
+    authorRole: string;
+    authorBio: string;
     realExperience: string;
-    realNumbers:    string;
-    localContext:   string;
-    keyword:        string;
+    realNumbers: string;
+    localContext: string;
+    keyword: string;
 }
 
 interface GenerateBlogModalProps {
-    siteId:          string;
-    siteDomain:      string;
-    pipelineType?:   string;
+    siteId: string;
+    siteDomain: string;
+    pipelineType?: string;
     initialKeyword?: string;
-    onClose:         () => void;
-    onGenerate:      (author: AuthorInput) => Promise<void>;
+    onClose: () => void;
+    onGenerate: (author: AuthorInput) => Promise<void>;
 }
 
 const STEPS = [
-    { id: "keyword",  label: "Topic",    icon: Search    },
-    { id: "author",   label: "Details",  icon: User      },
-    { id: "generate", label: "Generate", icon: Sparkles  },
+    { id: "keyword", label: "Topic & Search Intent", icon: Search },
+    { id: "author", label: "E-E-A-T Evidence", icon: ShieldCheck },
+    { id: "generate", label: "Generation Engine", icon: Sparkles },
 ] as const;
 
-type StepId = typeof STEPS[number]["id"];
-void (null as unknown as StepId);
-
 const inputCls =
-    "w-full bg-card border border-white/8 hover:border-white/15 focus:border-emerald-500/50 rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors";
+    "w-full bg-zinc-900/80 border border-white/10 hover:border-white/20 focus:border-emerald-500/60 rounded-xl px-3.5 py-2.5 text-sm text-foreground placeholder:text-zinc-600 outline-none transition-all";
 
 function Field({
-    icon, label, hint, required, children,
+    icon,
+    label,
+    hint,
+    required,
+    children,
 }: {
-    icon:      React.ReactNode;
-    label:     string;
-    hint?:     string;
+    icon: React.ReactNode;
+    label: string;
+    hint?: string;
     required?: boolean;
-    children:  React.ReactNode;
+    children: React.ReactNode;
 }) {
     return (
         <div className="space-y-1.5">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <span className="text-muted-foreground">{icon}</span>
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
+                <span className="text-emerald-400">{icon}</span>
                 {label}
-                {required && <span className="text-emerald-500">*</span>}
+                {required && <span className="text-emerald-400">*</span>}
             </label>
             {children}
-            {hint && <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p>}
+            {hint && <p className="text-[11px] leading-relaxed text-zinc-400">{hint}</p>}
         </div>
     );
 }
 
 function StepIndicator({ current }: { current: number }) {
     return (
-        <div className="mb-6 flex items-center gap-0">
+        <div className="mb-6 flex items-center gap-0 px-2">
             {STEPS.map((step, i) => {
-                const done   = i < current;
+                const done = i < current;
                 const active = i === current;
-                const Icon   = step.icon;
+                const Icon = step.icon;
                 return (
                     <div
                         key={step.id}
@@ -77,25 +93,32 @@ function StepIndicator({ current }: { current: number }) {
                     >
                         <div className="flex flex-col items-center gap-1">
                             <div
-                                className={`flex h-7 w-7 items-center justify-center rounded-full border transition-all duration-200 ${
-                                    done   ? "border-emerald-500 bg-emerald-500" :
-                                    active ? "border-emerald-500/40 bg-emerald-500/10" :
-                                             "border-border bg-muted"
+                                className={`flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ${
+                                    done
+                                        ? "border-emerald-500 bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
+                                        : active
+                                            ? "border-purple-500/60 bg-purple-500/20 text-purple-300 shadow-md shadow-purple-500/20"
+                                            : "border-white/10 bg-zinc-900 text-zinc-500"
                                 }`}
                             >
-                                {done
-                                    ? <Check className="h-3.5 w-3.5 text-black" />
-                                    : <Icon className={`h-3.5 w-3.5 ${active ? "text-emerald-400" : "text-muted-foreground"}`} />
-                                }
+                                {done ? (
+                                    <Check className="h-4 w-4 stroke-[3]" />
+                                ) : (
+                                    <Icon className="h-4 w-4" />
+                                )}
                             </div>
-                            <span className={`whitespace-nowrap text-xs font-medium ${active ? "text-foreground" : "text-muted-foreground"}`}>
+                            <span
+                                className={`whitespace-nowrap text-[11px] font-bold ${
+                                    active ? "text-white" : done ? "text-emerald-400" : "text-zinc-500"
+                                }`}
+                            >
                                 {step.label}
                             </span>
                         </div>
                         {i < STEPS.length - 1 && (
                             <div
-                                className="mb-4 h-px flex-1 mx-1.5 transition-colors duration-300"
-                                style={{ background: i < current ? "#10b981" : "var(--border)" }}
+                                className="mb-4 mx-2 h-0.5 flex-1 transition-all duration-500"
+                                style={{ background: i < current ? "#10b981" : "rgba(255,255,255,0.08)" }}
                             />
                         )}
                     </div>
@@ -112,23 +135,24 @@ function KeywordStep({
     onSelect,
     onNext,
 }: {
-    siteId:          string;
+    siteId: string;
     initialKeyword?: string;
-    keyword:         string;
-    onSelect:        (kw: string) => void;
-    onNext:          () => void;
+    keyword: string;
+    onSelect: (kw: string) => void;
+    onNext: () => void;
 }) {
     const [suggestions, setSuggestions] = useState<KeywordSuggestion[]>([]);
-    const [loading, setLoading]         = useState(true);
-    const [fetchError, setFetchError]   = useState<string | null>(null);
-    const [custom, setCustom]           = useState(keyword || "");
+    const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+    const [custom, setCustom] = useState(keyword || "");
+    const [filterSource, setFilterSource] = useState<"all" | "gsc_gap" | "no_content" | "competitor">("all");
 
     useEffect(() => {
         let cancelled = false;
         setLoading(true);
         setFetchError(null);
         getSiteKeywordSuggestions(siteId)
-            .then(res => {
+            .then((res) => {
                 if (cancelled) return;
                 if (res.success) setSuggestions(res.suggestions);
             })
@@ -138,80 +162,128 @@ function KeywordStep({
             .finally(() => {
                 if (!cancelled) setLoading(false);
             });
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+        };
     }, [siteId]);
 
+    const filteredSuggestions = useMemo(() => {
+        if (filterSource === "all") return suggestions;
+        return suggestions.filter((s) => s.source === filterSource);
+    }, [suggestions, filterSource]);
+
     const sourceVariant = (source: KeywordSuggestion["source"]) =>
-        source === "gsc_gap"    ? "text-emerald-400" :
-        source === "no_content" ? "text-blue-400"    :
-        "text-amber-400";
+        source === "gsc_gap"
+            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+            : source === "no_content"
+                ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
+                : "border-amber-500/30 bg-amber-500/10 text-amber-400";
 
     const sourceLabel = (source: KeywordSuggestion["source"]) =>
-        source === "gsc_gap"    ? "GSC Gap"    :
-        source === "no_content" ? "No Content" :
-        "Competitor";
+        source === "gsc_gap" ? "GSC Gap" : source === "no_content" ? "No Content" : "Competitor";
 
     const canContinue = !!(keyword || custom.trim());
 
     return (
         <div>
-            <h3 className="mb-1 text-sm font-medium text-foreground">What should this post rank for?</h3>
-            <p className="mb-4 text-xs text-muted-foreground">
-                Pick a gap keyword or type your own. We pulled these from your GSC data and competitor analysis.
-            </p>
+            <div className="mb-4">
+                <h3 className="text-sm font-bold text-white">What target topic should this post rank for?</h3>
+                <p className="mt-1 text-xs text-zinc-400">
+                    Pick a GSC search intent gap or type a custom keyword. Pulled live from your Google Search Console analytics.
+                </p>
+            </div>
 
             <div className="relative mb-4">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                 <input
                     type="text"
                     value={custom}
-                    onChange={e => {
+                    onChange={(e) => {
                         setCustom(e.target.value);
                         onSelect(e.target.value);
                     }}
-                    placeholder="Type a keyword…"
-                    className={`${inputCls} pl-9`}
+                    placeholder="Type or search target keyword…"
+                    className={`${inputCls} pl-10`}
                     autoFocus={!initialKeyword}
                 />
             </div>
 
+            {/* Filter Tabs */}
+            <div className="mb-3 flex items-center gap-1.5 overflow-x-auto pb-1">
+                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500 mr-1">
+                    <Filter className="h-3 w-3" /> Filter:
+                </span>
+                {(
+                    [
+                        { id: "all", label: "All Gaps" },
+                        { id: "gsc_gap", label: "GSC Gaps" },
+                        { id: "no_content", label: "No Content" },
+                        { id: "competitor", label: "Competitor" },
+                    ] as const
+                ).map((tab) => (
+                    <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setFilterSource(tab.id)}
+                        className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                            filterSource === tab.id
+                                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
+                                : "border-white/5 bg-zinc-900/60 text-zinc-400 hover:text-white"
+                        }`}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+
             {loading ? (
-                <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Fetching keyword gaps…
+                <div className="flex items-center justify-center gap-2 py-8 text-xs text-zinc-400">
+                    <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                    Fetching live GSC keyword gap metrics…
                 </div>
             ) : fetchError ? (
-                <p className="text-xs text-rose-400">{fetchError}</p>
-            ) : suggestions.length > 0 ? (
-                <div className="space-y-1.5">
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Keywords you're not ranking for yet
-                    </p>
-                    {suggestions.map(s => (
+                <p className="py-4 text-xs text-rose-400">{fetchError}</p>
+            ) : filteredSuggestions.length > 0 ? (
+                <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                    {filteredSuggestions.map((s) => (
                         <button
                             key={s.keyword}
                             type="button"
-                            onClick={() => { onSelect(s.keyword); setCustom(s.keyword); }}
-                            className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all ${
+                            onClick={() => {
+                                onSelect(s.keyword);
+                                setCustom(s.keyword);
+                            }}
+                            className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all ${
                                 keyword === s.keyword
-                                    ? "border-emerald-500/30 bg-emerald-500/10"
-                                    : "border-border bg-card hover:border-white/15"
+                                    ? "border-emerald-500/60 bg-emerald-500/15 text-white shadow-md shadow-emerald-500/10"
+                                    : "border-white/5 bg-zinc-900/50 hover:border-white/15"
                             }`}
                         >
                             <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-medium text-foreground">{s.keyword}</p>
-                                <p className="mt-0.5 truncate text-xs text-muted-foreground">{s.reason}</p>
+                                <div className="flex items-center gap-2">
+                                    <p className="truncate text-xs font-bold text-white">{s.keyword}</p>
+                                    <span
+                                        className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sourceVariant(
+                                            s.source
+                                        )}`}
+                                    >
+                                        {sourceLabel(s.source)}
+                                    </span>
+                                </div>
+                                <p className="mt-1 truncate text-[11px] text-zinc-400">{s.reason}</p>
                             </div>
-                            <span className={`shrink-0 text-xs font-semibold ${sourceVariant(s.source)}`}>
-                                {sourceLabel(s.source)}
-                            </span>
-                            {keyword === s.keyword && <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />}
+
+                            {keyword === s.keyword && (
+                                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-black">
+                                    <Check className="h-3.5 w-3.5 stroke-[3]" />
+                                </div>
+                            )}
                         </button>
                     ))}
                 </div>
             ) : (
-                <p className="text-xs text-muted-foreground">
-                    No gap data found yet. Connect Google Search Console or add competitors to get suggestions.
+                <p className="py-4 text-xs italic text-zinc-500">
+                    No keyword gap suggestions found for this filter. You can type any target keyword above.
                 </p>
             )}
 
@@ -220,9 +292,9 @@ function KeywordStep({
                     type="button"
                     onClick={onNext}
                     disabled={!canContinue}
-                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-5 py-2 text-sm font-semibold text-black transition-all hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-2.5 text-xs font-bold text-black transition-all hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                    Continue <ChevronRight className="h-4 w-4" />
+                    Continue to E-E-A-T Evidence <ChevronRight className="h-4 w-4" />
                 </button>
             </div>
         </div>
@@ -236,11 +308,11 @@ function AuthorStep({
     onBack,
     isGenerating,
 }: {
-    form:          AuthorInput;
+    form: AuthorInput;
     onChangeField: (field: keyof AuthorInput, value: string) => void;
-    onNext:        () => void;
-    onBack:        () => void;
-    isGenerating:  boolean;
+    onNext: () => void;
+    onBack: () => void;
+    isGenerating: boolean;
 }) {
     const handleChange = useCallback(
         (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -249,112 +321,139 @@ function AuthorStep({
         [onChangeField]
     );
 
+    // Calculate live E-E-A-T boost percentage based on provided evidence
+    const eeatBoost = useMemo(() => {
+        let boost = 0;
+        if (form.authorName.trim()) boost += 10;
+        if (form.authorRole.trim()) boost += 10;
+        if (form.realExperience.trim()) boost += 15;
+        if (form.realNumbers.trim()) boost += 10;
+        if (form.localContext.trim()) boost += 5;
+        return boost;
+    }, [form]);
+
     return (
         <div>
-            <h3 className="mb-1 text-sm font-medium text-foreground">Author details</h3>
-            <p className="mb-4 text-xs text-muted-foreground">
-                Real author details help your posts rank. Google rewards verifiable people — not AI personas. Saved automatically.
-            </p>
+            <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                    <h3 className="text-sm font-bold text-white">Author E-E-A-T Real-World Evidence</h3>
+                    <p className="mt-1 text-xs text-zinc-400">
+                        Google Search and AI engines reward verifiable real-author experience over synthetic AI personas.
+                    </p>
+                </div>
 
-            <div className="space-y-4">
-                <Field icon={<User className="h-3.5 w-3.5" />} label="Your name" required>
-                    <input
-                        type="text"
-                        name="authorName"
-                        value={form.authorName}
-                        onChange={handleChange}
-                        placeholder="e.g. Magombe Kenneth David"
-                        required
-                        autoFocus
-                        className={inputCls}
-                    />
-                </Field>
+                {/* E-E-A-T Boost Counter Badge */}
+                <div className="flex shrink-0 items-center gap-2 rounded-xl border border-purple-500/30 bg-purple-500/10 px-3 py-1.5">
+                    <Award className="h-4 w-4 text-purple-400" />
+                    <div>
+                        <div className="text-[9px] font-bold uppercase tracking-wider text-purple-300">E-E-A-T Boost</div>
+                        <div className="font-mono text-xs font-black text-emerald-400">+{eeatBoost}% Confidence</div>
+                    </div>
+                </div>
+            </div>
 
-                <Field icon={<Briefcase className="h-3.5 w-3.5" />} label="Your role at this business">
-                    <input
-                        type="text"
-                        name="authorRole"
-                        value={form.authorRole}
-                        onChange={handleChange}
-                        placeholder="e.g. Founder & Farm Consultant"
-                        className={inputCls}
-                    />
-                </Field>
+            <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field icon={<User className="h-3.5 w-3.5" />} label="Author Name" required>
+                        <input
+                            type="text"
+                            name="authorName"
+                            value={form.authorName}
+                            onChange={handleChange}
+                            placeholder="e.g. Magombe Kenneth"
+                            required
+                            autoFocus
+                            className={inputCls}
+                        />
+                    </Field>
+
+                    <Field icon={<Briefcase className="h-3.5 w-3.5" />} label="Role / Title">
+                        <input
+                            type="text"
+                            name="authorRole"
+                            value={form.authorRole}
+                            onChange={handleChange}
+                            placeholder="e.g. Founder & Lead Consultant"
+                            className={inputCls}
+                        />
+                    </Field>
+                </div>
 
                 <Field
                     icon={<FileText className="h-3.5 w-3.5" />}
-                    label="Short bio"
-                    hint="2–3 sentences. Years of experience and what you specialise in."
+                    label="Author Biography"
+                    hint="2–3 sentences highlighting credentials and domain authority."
                 >
                     <textarea
                         name="authorBio"
                         value={form.authorBio}
                         onChange={handleChange}
-                        placeholder="e.g. 5 years running a piggery in Wakiso District. I help Ugandan farmers increase yields while cutting feed costs."
+                        placeholder="e.g. 8 years leading SEO engineering & AI Search visibility strategy for growth companies."
                         rows={2}
                         className={`${inputCls} resize-none`}
                     />
                 </Field>
 
-                <details className="group rounded-lg border border-border bg-muted/20">
-                    <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-xs font-semibold text-foreground">
-                        Add credibility details
-                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-90" />
-                    </summary>
-                    <div className="space-y-4 border-t border-border p-3">
-                <Field
-                    icon={<ChevronRight className="h-3.5 w-3.5" />}
-                    label="A real result or experience"
-                    hint="One specific thing you achieved. This becomes the case study."
-                >
-                    <textarea
-                        name="realExperience"
-                        value={form.realExperience}
-                        onChange={handleChange}
-                        placeholder="e.g. Reduced pig mortality from 12% to 4% in 60 days by switching feed supplier"
-                        rows={2}
-                        className={`${inputCls} resize-none`}
-                    />
-                </Field>
-
-                <Field
-                    icon={<Hash className="h-3.5 w-3.5" />}
-                    label="Real numbers (costs, yields, rates)"
-                    hint="Used verbatim — no AI can fake your actual figures."
-                >
-                    <input
-                        type="text"
-                        name="realNumbers"
-                        value={form.realNumbers}
-                        onChange={handleChange}
-                        placeholder="e.g. Feed UGX 45,000/bag, avg yield 80kg/month, FCR 2.1"
-                        className={inputCls}
-                    />
-                </Field>
-
-                <Field
-                    icon={<MapPin className="h-3.5 w-3.5" />}
-                    label="Local context"
-                    hint="Location + any seasonal or regional factors."
-                >
-                    <input
-                        type="text"
-                        name="localContext"
-                        value={form.localContext}
-                        onChange={handleChange}
-                        placeholder="e.g. Kampala, Uganda — two rainy seasons, April–June and Oct–Nov"
-                        className={inputCls}
-                    />
-                </Field>
+                <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4 space-y-4">
+                    <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
+                        <Award className="h-4 w-4 text-purple-400" />
+                        Verbatim Experience & Statistical Evidence (High-Impact E-E-A-T)
                     </div>
-                </details>
+
+                    <Field
+                        icon={<Award className="h-3.5 w-3.5" />}
+                        label="Verbatim Experience / Case Result"
+                        hint="A specific result achieved. This is injected as a verifiable case study block."
+                    >
+                        <textarea
+                            name="realExperience"
+                            value={form.realExperience}
+                            onChange={handleChange}
+                            placeholder="e.g. Reduced organic rank drop from 18% to 0% by migrating to canonical AST remediation architecture."
+                            rows={2}
+                            className={`${inputCls} resize-none`}
+                        />
+                    </Field>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <Field
+                            icon={<Hash className="h-3.5 w-3.5" />}
+                            label="Real Figures & Metrics"
+                            hint="Costs, yields, rates used verbatim."
+                        >
+                            <input
+                                type="text"
+                                name="realNumbers"
+                                value={form.realNumbers}
+                                onChange={handleChange}
+                                placeholder="e.g. $450/mo saved, 85% CTR, 4.2s LCP"
+                                className={inputCls}
+                            />
+                        </Field>
+
+                        <Field
+                            icon={<MapPin className="h-3.5 w-3.5" />}
+                            label="Local & Regional Context"
+                            hint="Location & regional market factors."
+                        >
+                            <input
+                                type="text"
+                                name="localContext"
+                                value={form.localContext}
+                                onChange={handleChange}
+                                placeholder="e.g. Kampala, East Africa region"
+                                className={inputCls}
+                            />
+                        </Field>
+                    </div>
+                </div>
             </div>
 
-            <div className="mt-6 flex items-center justify-between">
+            <div className="mt-6 flex items-center justify-between border-t border-white/10 pt-4">
                 <button
                     type="button"
                     onClick={onBack}
-                    className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-zinc-400 transition-colors hover:text-white"
                 >
                     <ChevronLeft className="h-4 w-4" /> Back
                 </button>
@@ -362,12 +461,16 @@ function AuthorStep({
                     type="button"
                     onClick={onNext}
                     disabled={!form.authorName.trim() || isGenerating}
-                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-5 py-2 text-sm font-semibold text-black transition-all hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-emerald-500 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-purple-500/20 transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                     {isGenerating ? (
-                        <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
+                        <>
+                            <Loader2 className="h-4 w-4 animate-spin" /> Launching Pipeline…
+                        </>
                     ) : (
-                        <><Sparkles className="h-4 w-4" /> Create article</>
+                        <>
+                            <Sparkles className="h-4 w-4" /> Launch AI Content Engine
+                        </>
                     )}
                 </button>
             </div>
@@ -376,10 +479,10 @@ function AuthorStep({
 }
 
 const GENERATION_STAGES = [
-    { until: 20,       label: "Researching keywords and search intent…" },
-    { until: 60,       label: "Structuring headings and outline…" },
-    { until: 120,      label: "Writing with your real author details…" },
-    { until: Infinity, label: "Polishing and running quality checks…" },
+    { until: 20, label: "Researching keywords and SERP search intent gaps…" },
+    { until: 60, label: "Constructing H2/H3 outline & GEO Q&A nodes…" },
+    { until: 120, label: "Writing section depth with real author E-E-A-T evidence…" },
+    { until: Infinity, label: "Polishing Speakable JSON-LD & running quality audit…" },
 ] as const;
 
 function GeneratingStep({ pipelineType }: { pipelineType?: string }) {
@@ -394,31 +497,34 @@ function GeneratingStep({ pipelineType }: { pipelineType?: string }) {
         return () => window.clearInterval(timer);
     }, []);
 
-    const stage = GENERATION_STAGES.find(s => elapsed < s.until) ?? GENERATION_STAGES[GENERATION_STAGES.length - 1];
+    const stage =
+        GENERATION_STAGES.find((s) => elapsed < s.until) ?? GENERATION_STAGES[GENERATION_STAGES.length - 1];
     const minutes = Math.floor(elapsed / 60);
     const seconds = elapsed % 60;
     const elapsedLabel = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 
     return (
         <div className="flex flex-col items-center justify-center gap-4 py-12 text-center" aria-live="polite">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10">
-                {isDataReport
-                    ? <BarChart className="h-5 w-5 animate-pulse text-emerald-400" />
-                    : <Sparkles className="h-5 w-5 animate-pulse text-emerald-400" />
-                }
+            <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-purple-500/30 bg-purple-500/15 text-purple-400 shadow-xl shadow-purple-500/20">
+                {isDataReport ? (
+                    <BarChart className="h-7 w-7 animate-pulse text-emerald-400" />
+                ) : (
+                    <Sparkles className="h-7 w-7 animate-pulse text-purple-300" />
+                )}
+                <span className="absolute -right-1 -top-1 h-3.5 w-3.5 animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full bg-emerald-500" />
             </div>
             <div>
-                <p className="mb-1 text-sm font-medium text-foreground">
-                    {isDataReport ? "Building data report…" : "Writing your post…"}
+                <p className="mb-1 text-base font-bold text-white">
+                    {isDataReport ? "Building Data Report…" : "Generating High-E-E-A-T Article…"}
                 </p>
-                <p className="max-w-xs text-xs text-muted-foreground">
-                    {stage.label}
-                </p>
-                <p className="mx-auto mt-2 max-w-xs text-xs text-muted-foreground">
-                    This usually takes 1–3 minutes. Keep this window open — elapsed {elapsedLabel}.
+                <p className="max-w-xs text-xs text-purple-300 font-semibold">{stage.label}</p>
+                <p className="mx-auto mt-2 max-w-xs text-xs text-zinc-400">
+                    Running parallel Inngest background functions. Elapsed:{" "}
+                    <span className="font-mono font-bold text-white">{elapsedLabel}</span>.
                 </p>
             </div>
-            <Loader2 className="mt-2 h-5 w-5 animate-spin text-emerald-400" />
+            <Loader2 className="mt-2 h-6 w-6 animate-spin text-emerald-400" />
         </div>
     );
 }
@@ -431,44 +537,45 @@ export function GenerateBlogModal({
     onClose,
     onGenerate,
 }: GenerateBlogModalProps) {
-    const [step, setStep]           = useState(0);
-    const [keyword, setKeyword]     = useState(initialKeyword ?? "");
-    const [form, setForm]           = useState<AuthorInput>({
-        authorName:     "",
-        authorRole:     "",
-        authorBio:      "",
+    const [step, setStep] = useState(0);
+    const [keyword, setKeyword] = useState(initialKeyword ?? "");
+    const [form, setForm] = useState<AuthorInput>({
+        authorName: "",
+        authorRole: "",
+        authorBio: "",
         realExperience: "",
-        realNumbers:    "",
-        localContext:   "",
-        keyword:        initialKeyword ?? "",
+        realNumbers: "",
+        localContext: "",
+        keyword: initialKeyword ?? "",
     });
     const [isGenerating, setIsGenerating] = useState(false);
 
     useEffect(() => {
-        getSiteAuthorDetails(siteId).then(res => {
+        getSiteAuthorDetails(siteId).then((res) => {
             if (res.success && res.site) {
-                setForm(prev => ({
+                setForm((prev) => ({
                     ...prev,
-                    authorName:     res.site?.authorName     || "",
-                    authorRole:     res.site?.authorRole     || "",
-                    authorBio:      res.site?.authorBio      || "",
+                    authorName: res.site?.authorName || "",
+                    authorRole: res.site?.authorRole || "",
+                    authorBio: res.site?.authorBio || "",
                     realExperience: res.site?.realExperience || "",
-                    realNumbers:    res.site?.realNumbers    || "",
-                    localContext:   res.site?.localContext   || "",
+                    realNumbers: res.site?.realNumbers || "",
+                    localContext: res.site?.localContext || "",
                 }));
             }
         });
     }, [siteId]);
 
     useEffect(() => {
-        const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === "Escape") onClose();
+        };
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
     }, [onClose]);
 
     const handleChangeField = useCallback(
-        (field: keyof AuthorInput, value: string) =>
-            setForm(prev => ({ ...prev, [field]: value })),
+        (field: keyof AuthorInput, value: string) => setForm((prev) => ({ ...prev, [field]: value })),
         []
     );
 
@@ -476,7 +583,6 @@ export function GenerateBlogModal({
         setIsGenerating(true);
         setStep(2);
         try {
-            // Delegate to parent — GenerateBlogButton owns preflight + gate
             await onGenerate({ ...form, keyword });
             onClose();
         } catch {
@@ -490,35 +596,43 @@ export function GenerateBlogModal({
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+            onClick={(e) => {
+                if (e.target === e.currentTarget) onClose();
+            }}
         >
-            <div className="absolute inset-0 bg-black/80" aria-hidden="true" />
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-md" aria-hidden="true" />
 
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-label={isDataReport ? "Data Report" : "Create article"}
-                className="relative w-full max-w-lg animate-in fade-in zoom-in-95 overflow-hidden rounded-2xl border border-border bg-background shadow-[0_0_80px_rgba(0,0,0,0.8)] duration-200"
+                className="relative w-full max-w-xl animate-in fade-in zoom-in-95 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/95 shadow-[0_0_80px_rgba(16,185,129,0.15)] backdrop-blur-2xl duration-200"
             >
-                <div className="flex items-center justify-between border-b border-border px-6 py-4">
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-white/10 bg-zinc-900/60 px-6 py-4">
                     <div>
-                        <h2 className="text-sm font-semibold text-foreground">
-                            {isDataReport ? "Data Report" : "Create article"}
-                        </h2>
-                        <p className="mt-0.5 font-mono text-xs text-muted-foreground">{siteDomain}</p>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-base font-bold text-white">
+                                {isDataReport ? "Data Report Creator" : "Create Article Studio"}
+                            </h2>
+                            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                                E-E-A-T V2
+                            </span>
+                        </div>
+                        <p className="mt-0.5 font-mono text-xs text-zinc-400">{siteDomain}</p>
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
                         aria-label="Close"
-                        className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        className="rounded-xl p-2 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
                     >
-                        <X className="h-4 w-4" />
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                <div className="max-h-[75vh] overflow-y-auto p-6">
+                <div className="p-6">
                     <StepIndicator current={step} />
 
                     {step === 0 && (
@@ -526,9 +640,9 @@ export function GenerateBlogModal({
                             siteId={siteId}
                             initialKeyword={initialKeyword}
                             keyword={keyword}
-                            onSelect={kw => {
+                            onSelect={(kw) => {
                                 setKeyword(kw);
-                                setForm(prev => ({ ...prev, keyword: kw }));
+                                setForm((prev) => ({ ...prev, keyword: kw }));
                             }}
                             onNext={() => setStep(1)}
                         />
@@ -545,15 +659,17 @@ export function GenerateBlogModal({
                     )}
 
                     {step === 2 && <GeneratingStep pipelineType={pipelineType} />}
-
                 </div>
 
                 {step === 1 && (
-                    <div className="flex items-center gap-2 border-t border-border bg-background px-6 py-3">
-                        <TrendingUp className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-                        <span className="text-xs text-muted-foreground">
-                            Costs <span className="font-semibold text-amber-400">15 credits</span> — deducted on generate
-                        </span>
+                    <div className="flex items-center justify-between border-t border-white/10 bg-zinc-900/80 px-6 py-3.5">
+                        <div className="flex items-center gap-2 text-xs text-zinc-400">
+                            <TrendingUp className="h-4 w-4 text-amber-400" />
+                            <span>
+                                Credit Cost: <span className="font-bold text-amber-400">15 credits</span>
+                            </span>
+                        </div>
+                        <span className="text-[11px] text-zinc-500 font-mono">Deducted on generation launch</span>
                     </div>
                 )}
             </div>
