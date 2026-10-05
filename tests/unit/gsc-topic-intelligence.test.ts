@@ -274,4 +274,30 @@ describe("GSC Topic Intelligence Contract & Shared Data Layer", () => {
     expect(strugglingContentGap).toBeDefined();
     expect(strugglingContentGap?.type).toBe("CONTENT_GAP");
   });
+
+  it("should guarantee every topic contributes to prefetch tokens in resolvePageExistenceBatch", async () => {
+    // Generate 35 distinct topics, each with unique terms
+    const topics = Array.from({ length: 35 }, (_, i) => ({
+      keyword: `topic term${i} specialty${i}`,
+      clusterQueries: [`subterm${i} detail${i}`],
+    }));
+
+    // Mock blog search to capture the query parameters passed to Prisma
+    let capturedBlogQuery: any = null;
+    (prisma.blog.findMany as any).mockImplementationOnce((query: any) => {
+      capturedBlogQuery = query;
+      return Promise.resolve([]);
+    });
+
+    await resolvePageExistenceBatch("site-1", topics);
+
+    expect(capturedBlogQuery).toBeDefined();
+    expect(capturedBlogQuery.where.OR).toBeDefined();
+
+    // Verify that the 35th topic's unique term ("term34") was included in the OR slug/title filters
+    const hasLastTopicToken = capturedBlogQuery.where.OR.some(
+      (cond: any) => cond.slug?.contains === "term34" || cond.title?.contains === "term34"
+    );
+    expect(hasLastTopicToken).toBe(true);
+  });
 });

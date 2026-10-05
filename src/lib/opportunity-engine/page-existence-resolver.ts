@@ -106,14 +106,24 @@ export async function resolvePageExistenceBatch(
       new Set(topics.flatMap((t) => [t.keyword, ...t.clusterQueries.slice(0, 9)])),
     );
 
-    // Compute per-topic token pool for DB prefetching so every topic contributes relevant tokens
-    const topicTokens = Array.from(
-      new Set(
-        topics.flatMap((t) =>
-          tokenize(`${t.keyword} ${t.clusterQueries.slice(0, 4).join(" ")}`).slice(0, 5)
-        ),
-      ),
-    ).slice(0, 100);
+    // Guarantee every topic contributes up to 2 distinct tokens to the prefetch pool
+    const topicTokensSet = new Set<string>();
+    for (const t of topics) {
+      const tTokens = tokenize(`${t.keyword} ${t.clusterQueries.slice(0, 2).join(" ")}`);
+      let addedForTopic = 0;
+      for (const token of tTokens) {
+        if (topicTokensSet.has(token)) {
+          addedForTopic++;
+          if (addedForTopic >= 2) break;
+          continue;
+        }
+        if (topicTokensSet.size >= 150) break; // Safety ceiling for DB query conditions
+        topicTokensSet.add(token);
+        addedForTopic++;
+        if (addedForTopic >= 2) break;
+      }
+    }
+    const topicTokens = Array.from(topicTokensSet);
 
     const blogConditions = [
       { targetKeywords: { hasSome: allQueryTerms } },
