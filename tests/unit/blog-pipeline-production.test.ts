@@ -441,8 +441,10 @@ describe("Blog Pipeline Production Audit Hardening", () => {
     it("18. Stage 5 Analyze -> Revise -> Re-analyze pass executes quality analysis and prevents truncation", async () => {
         const testCtx = buildPromptContext({
             keyword: "best ai seo tools",
-            domain: "example.com",
-            intent: "commercial",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "transactional",
+            hasAuthorGrounding: true,
         });
 
         const researchPacket = await buildResearchPacket({

@@ -1261,7 +1261,7 @@ export function analyzeDraftQuality(
 
     // 1. Word Count & Search Intent Scope
     const wordCount = content.trim().split(/\s+/).length;
-    const targetWordCount = ctx.intent === "commercial" || ctx.intent === "comparison" ? 1200 : 800;
+    const targetWordCount = ctx.intent === "transactional" ? 1200 : 800;
     if (wordCount < targetWordCount) {
         defects.push(`Word count is too low (${wordCount} words; target is ${targetWordCount}+ words for ${ctx.intent} intent).`);
     }
@@ -1288,8 +1288,8 @@ export function analyzeDraftQuality(
         defects.push("Missing direct Quick Answer / Key Takeaways summary block for search snippets.");
     }
 
-    if ((ctx.intent === "commercial" || ctx.intent === "comparison") && !/<table|\|.*\|/i.test(content)) {
-        defects.push("Commercial/comparison intent requires a structured comparison table or breakdown.");
+    if (ctx.intent === "transactional" && !/<table|\|.*\|/i.test(content)) {
+        defects.push("Transactional/comparison intent requires a structured comparison table or breakdown.");
     }
 
     // 5. Competitor Gap & Differentiation Opportunities
