@@ -7,6 +7,7 @@ import { authOptions } from "@/lib/auth";
 import { fetchGSCKeywords, normaliseSiteUrl } from "@/lib/gsc";
 import { getUserGscToken } from "@/lib/gsc/token";
 import { resolvePageExistenceBatch, type PageExistenceVerdict } from "@/lib/opportunity-engine/page-existence-resolver";
+import { clusterGscQueries, type GscTopicCluster, type RawGscKeyword } from "@/lib/gsc/topic-cluster";
 
 const GSC_RULES = {
     buriedPosition: 20,
@@ -32,59 +33,6 @@ export interface KeywordSuggestion {
     searchVolume?: number;
     difficulty?: number;
     intent?: "Informational" | "Commercial" | "Transactional" | "Navigational";
-}
-
-interface RawGscKeyword {
-    keyword: string;
-    impressions: number;
-    clicks: number;
-    position: number;
-}
-
-/**
- * Cluster raw GSC queries by intent and token overlap.
- */
-function clusterGscQueries(rawQueries: RawGscKeyword[]): { head: RawGscKeyword; variants: string[] }[] {
-    const clusters: { head: RawGscKeyword; variants: string[] }[] = [];
-    const STOP_WORDS = new Set([
-        "a", "an", "the", "and", "or", "in", "on", "at", "to", "for", "of", "with", "by", "from", "is", "are", "best", "top", "online", "how", "what", "which", "where"
-    ]);
-
-    function tokenize(text: string): Set<string> {
-        return new Set(
-            text
-                .toLowerCase()
-                .replace(/[^a-z0-9\s]/g, " ")
-                .split(/\s+/)
-                .filter((w) => w.length > 2 && !STOP_WORDS.has(w))
-        );
-    }
-
-    const sorted = [...rawQueries].sort((a, b) => b.impressions - a.impressions);
-
-    for (const q of sorted) {
-        const tokens = tokenize(q.keyword);
-        if (tokens.size === 0) continue;
-
-        let merged = false;
-        for (const cluster of clusters) {
-            const headTokens = tokenize(cluster.head.keyword);
-            const intersection = [...tokens].filter((t) => headTokens.has(t));
-            const overlapRatio = intersection.length / Math.min(tokens.size, headTokens.size);
-
-            if (overlapRatio >= 0.6) {
-                cluster.variants.push(q.keyword);
-                merged = true;
-                break;
-            }
-        }
-
-        if (!merged) {
-            clusters.push({ head: q, variants: [q.keyword] });
-        }
-    }
-
-    return clusters;
 }
 
 function inferQueryIntent(keyword: string): "Informational" | "Commercial" | "Transactional" | "Navigational" {

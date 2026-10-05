@@ -366,6 +366,7 @@ export function GenerateBlogButton({
                     siteDomain={siteDomain}
                     pipelineType={pendingPipelineType}
                     initialKeyword={initialKeyword}
+                    initialAuthor={pendingAuthor ?? undefined}
                     onClose={() => setModalOpen(false)}
                     onGenerate={handleGenerate}
                 />

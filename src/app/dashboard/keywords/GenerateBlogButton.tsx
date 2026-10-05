@@ -99,7 +99,10 @@ export function GenerateBlogButton({
         };
     }, [isDropdownOpen]);
 
+    const [pendingAuthor, setPendingAuthor] = useState<AuthorInput | null>(null);
+
     const handleGenerate = async (author: AuthorInput): Promise<{ success: boolean; error?: string }> => {
+        setPendingAuthor(author);
         setIsPending(true);
 
         const loadingId = toast.loading(
@@ -292,6 +295,7 @@ export function GenerateBlogButton({
                     siteDomain={siteDomain}
                     pipelineType={pendingPipelineType}
                     initialKeyword={initialKeyword}
+                    initialAuthor={pendingAuthor ?? undefined}
                     onClose={() => setModalOpen(false)}
                     onGenerate={handleGenerate}
                 />

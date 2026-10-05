@@ -424,9 +424,10 @@ export async function generateOpportunitiesFromFindings(
  */
 function extractClusterQueries(finding: AgentFinding): string[] {
   for (const ev of finding.evidence) {
-    if (ev.metric === "clusterSize" && ev.metadata) {
-      const queries = (ev.metadata as Record<string, unknown>).queries;
-      if (Array.isArray(queries)) {
+    if (ev.metadata) {
+      const meta = ev.metadata as Record<string, unknown>;
+      const queries = meta.queries || meta.clusterQueries;
+      if (Array.isArray(queries) && queries.length > 0) {
         return queries.map(String);
       }
     }

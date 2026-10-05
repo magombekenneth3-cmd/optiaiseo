@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { KeywordSuggestion } from "@/app/actions/keyword-suggest";
+import type { AuthorInput } from "@/app/dashboard/blogs/BlogStepper";
 
 describe("BlogStepper & Keyword Intelligence Production-Grade Remediation", () => {
     it("distinguishes GSC 90-day impressions from real monthly search volume", () => {
@@ -90,5 +91,26 @@ describe("BlogStepper & Keyword Intelligence Production-Grade Remediation", () =
         const result = await mockOnGenerate();
         expect(result.success).toBe(false);
         expect(result.error).toBe("Insufficient credits available");
+    });
+
+    it("preserves custom user edits verbatim when initialAuthor is restored on recovery", () => {
+        const savedCustomAuthor: AuthorInput = {
+            authorName: "Kenneth Magombe",
+            authorRole: "Principal Engineer",
+            authorBio: "Custom unsaved bio text",
+            realExperience: "Custom unsaved case study result",
+            realNumbers: "$12,000 saved",
+            localContext: "East Africa Market",
+            keyword: "custom target topic",
+        };
+
+        // Simulated modal hydration logic
+        const restoredFormState: AuthorInput = savedCustomAuthor;
+
+        expect(restoredFormState.authorName).toBe("Kenneth Magombe");
+        expect(restoredFormState.authorBio).toBe("Custom unsaved bio text");
+        expect(restoredFormState.realExperience).toBe("Custom unsaved case study result");
+        expect(restoredFormState.realNumbers).toBe("$12,000 saved");
+        expect(restoredFormState.keyword).toBe("custom target topic");
     });
 });

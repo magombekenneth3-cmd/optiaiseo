@@ -106,7 +106,27 @@ export async function resolvePageExistenceBatch(
       new Set(topics.flatMap((t) => [t.keyword, ...t.clusterQueries.slice(0, 9)])),
     );
 
-    // Single-pass targeted DB fetches (no arbitrary evidence truncation for target query set)
+    const topicTokens = Array.from(
+      new Set(
+        allQueryTerms.flatMap((term) =>
+          term
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, " ")
+            .split(/\s+/)
+            .filter((w) => w.length > 2),
+        ),
+      ),
+    ).slice(0, 20);
+
+    const blogConditions = [
+      { targetKeywords: { hasSome: allQueryTerms } },
+      ...topicTokens.map((t) => ({ slug: { contains: t } })),
+      ...topicTokens.map((t) => ({ title: { contains: t } })),
+    ];
+
+    const auditConditions = topicTokens.map((t) => ({ pageUrl: { contains: t } }));
+
+    // Single-pass targeted DB fetches
     const [gscRows, blogs, pageAudits] = await Promise.all([
       prisma.gscDailyPerformance.findMany({
         where: {
@@ -120,6 +140,7 @@ export async function resolvePageExistenceBatch(
           siteId,
           deletedAt: null,
           status: { notIn: ["DELETED", "REJECTED"] },
+          ...(blogConditions.length > 0 ? { OR: blogConditions } : {}),
         },
         select: {
           id: true,
@@ -134,15 +155,20 @@ export async function resolvePageExistenceBatch(
           validationScore: true,
         },
         orderBy: { createdAt: "desc" },
+        take: 300,
       }),
       prisma.pageAudit.findMany({
-        where: { siteId },
+        where: {
+          siteId,
+          ...(auditConditions.length > 0 ? { OR: auditConditions } : {}),
+        },
         select: {
           pageUrl: true,
           overallScore: true,
           issueList: true,
         },
         orderBy: { runTimestamp: "desc" },
+        take: 300,
       }),
     ]);
 

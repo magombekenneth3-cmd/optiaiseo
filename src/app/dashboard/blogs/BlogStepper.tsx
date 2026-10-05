@@ -39,6 +39,7 @@ interface GenerateBlogModalProps {
     siteDomain: string;
     pipelineType?: string;
     initialKeyword?: string;
+    initialAuthor?: AuthorInput;
     onClose: () => void;
     onGenerate: (author: AuthorInput) => Promise<{ success: boolean; error?: string } | void>;
 }
@@ -614,24 +615,28 @@ export function GenerateBlogModal({
     siteDomain,
     pipelineType,
     initialKeyword,
+    initialAuthor,
     onClose,
     onGenerate,
 }: GenerateBlogModalProps) {
     const [step, setStep] = useState(0);
-    const [keyword, setKeyword] = useState(initialKeyword ?? "");
-    const [form, setForm] = useState<AuthorInput>({
-        authorName: "",
-        authorRole: "",
-        authorBio: "",
-        realExperience: "",
-        realNumbers: "",
-        localContext: "",
-        keyword: initialKeyword ?? "",
-    });
+    const [keyword, setKeyword] = useState(initialAuthor?.keyword ?? initialKeyword ?? "");
+    const [form, setForm] = useState<AuthorInput>(
+        initialAuthor ?? {
+            authorName: "",
+            authorRole: "",
+            authorBio: "",
+            realExperience: "",
+            realNumbers: "",
+            localContext: "",
+            keyword: initialKeyword ?? "",
+        }
+    );
     const [isGenerating, setIsGenerating] = useState(false);
     const [genError, setGenError] = useState<string | null>(null);
 
     useEffect(() => {
+        if (initialAuthor) return;
         getSiteAuthorDetails(siteId).then((res) => {
             if (res.success && res.site) {
                 setForm((prev) => ({
@@ -645,7 +650,7 @@ export function GenerateBlogModal({
                 }));
             }
         });
-    }, [siteId]);
+    }, [siteId, initialAuthor]);
 
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
