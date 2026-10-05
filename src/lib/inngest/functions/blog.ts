@@ -981,6 +981,9 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             }
         });
         liveBlogPost.content = finalContent;
+        if (liveBlogPost.contentMarkdown) {
+            liveBlogPost.contentMarkdown = finalContent;
+        }
 
         // ── 4. Placeholder & Secondary Surface Validation ──────────────────
         const PLACEHOLDER_PATTERN = /\[Section generation failed|\[EDITOR:|\bTODO\b|\bTBD\b|\bFIXME\b|lorem ipsum|Example Company|YourCompany|\{\{[^}]+\}\}|\[INSERT STAT\]|\[IMAGE HERE\]/i;

@@ -1244,13 +1244,13 @@ export async function runFullPipeline(params: {
     };
 }
 
-interface AnalysisResult {
+export interface AnalysisResult {
     needsRevision: boolean;
     defects: string[];
     repairDirective: string | null;
 }
 
-function analyzeDraftQuality(
+export function analyzeDraftQuality(
     content: string,
     brain: ResearchBrain,
     packet: ResearchPacket,
@@ -1259,13 +1259,14 @@ function analyzeDraftQuality(
     const defects: string[] = [];
     const lower = content.toLowerCase();
 
-    // Check word count
+    // 1. Word Count & Search Intent Scope
     const wordCount = content.trim().split(/\s+/).length;
-    if (wordCount < 600) {
-        defects.push(`Word count is too low (${wordCount} words; target is 800+ words).`);
+    const targetWordCount = ctx.intent === "commercial" || ctx.intent === "comparison" ? 1200 : 800;
+    if (wordCount < targetWordCount) {
+        defects.push(`Word count is too low (${wordCount} words; target is ${targetWordCount}+ words for ${ctx.intent} intent).`);
     }
 
-    // Check key entities
+    // 2. Key Topic Entity & Subtopic Coverage
     const missingEntities = (brain.entities ?? [])
         .filter(e => !lower.includes(e.toLowerCase()))
         .slice(0, 3);
@@ -1273,7 +1274,7 @@ function analyzeDraftQuality(
         defects.push(`Missing key topic entities: ${missingEntities.join(", ")}.`);
     }
 
-    // Check search intent satisfaction (FAQ / direct answer presence)
+    // 3. Question & FAQ Coverage
     if (brain.faqTargets && brain.faqTargets.length > 0) {
         const hasFaq = /<h3[^>]*>|\bfaq\b|\bfrequently asked\b/i.test(content);
         if (!hasFaq) {
@@ -1281,16 +1282,44 @@ function analyzeDraftQuality(
         }
     }
 
+    // 4. SERP Format & Answer Block Alignment
+    const hasQuickAnswer = /quick answer|key takeaway|direct answer|in summary/i.test(content);
+    if (!hasQuickAnswer && ctx.intent === "informational") {
+        defects.push("Missing direct Quick Answer / Key Takeaways summary block for search snippets.");
+    }
+
+    if ((ctx.intent === "commercial" || ctx.intent === "comparison") && !/<table|\|.*\|/i.test(content)) {
+        defects.push("Commercial/comparison intent requires a structured comparison table or breakdown.");
+    }
+
+    // 5. Competitor Gap & Differentiation Opportunities
+    if (packet.competitorAnalysis?.differentiationOpportunities?.length) {
+        const missingOpportunities = packet.competitorAnalysis.differentiationOpportunities
+            .filter(opp => !lower.includes(opp.toLowerCase().slice(0, 15)))
+            .slice(0, 2);
+        if (missingOpportunities.length > 0) {
+            defects.push(`Missing key competitor differentiation opportunities: ${missingOpportunities.join("; ")}.`);
+        }
+    }
+
+    // 6. First-Party Evidence Backing
+    if (packet.firstPartyEvidence?.brandFacts?.length) {
+        const hasBrandFact = packet.firstPartyEvidence.brandFacts.some(f => lower.includes(f.value.toLowerCase()));
+        if (!hasBrandFact) {
+            defects.push("Missing verified first-party brand facts in article content.");
+        }
+    }
+
     if (defects.length === 0) {
         return { needsRevision: false, defects: [], repairDirective: null };
     }
 
-    const repairDirective = `REVISION DIRECTIVE: The article has these specific gaps:\n${defects.map(d => `- ${d}`).join("\n")}\nAdd missing sections or details cleanly into the Markdown content. Preserve all existing headers, code blocks, and source citations.`;
+    const repairDirective = `REVISION DIRECTIVE: The article has these specific quality and coverage gaps:\n${defects.map(d => `- ${d}`).join("\n")}\nAdd missing details, sections, tables, or direct answer blocks cleanly into the Markdown content. Preserve all existing headers, code blocks, and source citations without truncating existing content.`;
 
     return { needsRevision: true, defects, repairDirective };
 }
 
-async function applyTargetedRevision(
+export async function applyTargetedRevision(
     content: string,
     directive: string,
     ctx: PromptContext
@@ -1299,7 +1328,7 @@ async function applyTargetedRevision(
         const prompt = `You are an expert editorial reviewer. Revise this Markdown article to address the directive below.
 
 ARTICLE CONTENT:
-${content.slice(0, 18000)}
+${content}
 
 ${directive}
 
@@ -1315,7 +1344,8 @@ RULES:
         });
 
         const trimmed = revised?.trim();
-        if (!trimmed || trimmed.length < content.length * 0.7) return content;
+        // Safety check: Reject revisions that drop below 85% of original length (prevent truncation)
+        if (!trimmed || trimmed.length < content.length * 0.85) return content;
         return trimmed.replace(/^```markdown\n?/i, "").replace(/^```html\n?/i, "").replace(/\n?```$/i, "");
     } catch {
         return content;

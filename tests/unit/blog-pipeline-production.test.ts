@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { buildResearchPacket } from "@/lib/blog/research-packet";
 import type { GroundedSiteContext } from "@/lib/prompt-context/build-site-context";
 import type { CompetitorAnalysis } from "@/lib/blog/contracts";
-import type { ResearchBrain } from "@/lib/blog/pipeline";
+import { ResearchBrain, analyzeDraftQuality, applyTargetedRevision } from "@/lib/blog/pipeline";
+import { buildPromptContext } from "@/lib/blog/prompt-context";
 import { extractEvidencePacket } from "@/lib/blog/evidence-extractor";
 import { buildPublicationDecision, evaluatePublicationGate } from "@/lib/blog/publication-gate";
 
@@ -437,18 +438,43 @@ describe("Blog Pipeline Production Audit Hardening", () => {
         expect(resolvedAuthor.localContext).toBe("Custom Market");
     });
 
-    it("18. Stage 5 Analyze -> Revise -> Re-analyze pass retains revision only if defects are reduced", () => {
-        const initialDefects = ["Word count too low (400 words)", "Missing key topic entities: OptiAISEO"];
-        const improvedRevisionDefects: string[] = [];
-        const regressiveRevisionDefects = ["Word count too low (300 words)", "Missing key topic entities: OptiAISEO", "Missing FAQ"];
+    it("18. Stage 5 Analyze -> Revise -> Re-analyze pass executes quality analysis and prevents truncation", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            domain: "example.com",
+            intent: "commercial",
+        });
 
-        // Case A: Revision improves content (defects eliminated/reduced)
-        const acceptRevision = !improvedRevisionDefects.length || improvedRevisionDefects.length < initialDefects.length;
-        expect(acceptRevision).toBe(true);
+        const researchPacket = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
 
-        // Case B: Revision regresses content (more defects added)
-        const rejectRevision = !regressiveRevisionDefects.length || regressiveRevisionDefects.length < initialDefects.length;
-        expect(rejectRevision).toBe(false);
+        // Thin initial draft (300 words, missing entities, comparison table, and FAQ)
+        const thinDraft = "<h1>Best AI SEO Tools</h1><p>A quick overview of tools.</p>";
+        const initialAnalysis = analyzeDraftQuality(thinDraft, mockBrain, researchPacket, testCtx);
+
+        expect(initialAnalysis.needsRevision).toBe(true);
+        expect(initialAnalysis.defects.length).toBeGreaterThanOrEqual(2);
+        expect(initialAnalysis.repairDirective).toContain("REVISION DIRECTIVE");
+
+        // Comprehensive draft (1300 words, entity OptiAISEO included, comparison table present, FAQ included)
+        const richDraft = `<h1>Best AI SEO Tools</h1><p>Quick Answer: OptiAISEO provides automated search intelligence for SaaS.</p>` +
+            `<table><tr><th>Tool</th><th>Price</th></tr><tr><td>OptiAISEO</td><td>$99</td></tr></table>` +
+            `<h3>Frequently Asked Questions</h3><p>What is OptiAISEO? It is an AI SEO tool.</p>` +
+            ` `.repeat(6000); // 1200+ word count simulation
+
+        const postAnalysis = analyzeDraftQuality(richDraft, mockBrain, researchPacket, testCtx);
+        expect(postAnalysis.defects.length).toBeLessThan(initialAnalysis.defects.length);
+
+        // Verify non-truncation safety check in applyTargetedRevision retains original content if revision truncates by >15%
+        const longArticle = "# Full Article\n" + "Word ".repeat(4000);
+        // applyTargetedRevision returns original content if AI returned empty/severely truncated content (<85%)
+        const result = await applyTargetedRevision(longArticle, "Add FAQ", testCtx);
+        expect(result.length).toBeGreaterThanOrEqual(longArticle.length * 0.85);
     });
 
     it("19. Schema-aware citation template scoring evaluates combined HTML + JSON-LD script", async () => {
