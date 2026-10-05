@@ -106,23 +106,40 @@ export async function resolvePageExistenceBatch(
       new Set(topics.flatMap((t) => [t.keyword, ...t.clusterQueries.slice(0, 9)])),
     );
 
-    // Guarantee every topic contributes up to 2 distinct tokens to the prefetch pool
+    // Two-pass fair round-robin token prefetch allocation:
+    // Pass 1: Give every topic its FIRST available distinct NEW token.
+    // Pass 2: Give every topic its SECOND available distinct NEW token (if available).
+    // Duplicate/shared tokens do not count toward a topic's new-token quota.
+    // Safety budget scales dynamically with topic count (capped at 300 unique tokens).
+    const MAX_PREFETCH_TOKENS = Math.min(300, Math.max(100, topics.length * 2));
     const topicTokensSet = new Set<string>();
-    for (const t of topics) {
-      const tTokens = tokenize(`${t.keyword} ${t.clusterQueries.slice(0, 2).join(" ")}`);
-      let addedForTopic = 0;
-      for (const token of tTokens) {
-        if (topicTokensSet.has(token)) {
-          addedForTopic++;
-          if (addedForTopic >= 2) break;
-          continue;
+
+    const topicCandidates = topics.map((t) =>
+      tokenize(`${t.keyword} ${t.clusterQueries.slice(0, 4).join(" ")}`),
+    );
+
+    // Pass 1: Allocate 1st distinct NEW token per topic
+    for (let i = 0; i < topics.length; i++) {
+      if (topicTokensSet.size >= MAX_PREFETCH_TOKENS) break;
+      for (const token of topicCandidates[i]) {
+        if (!topicTokensSet.has(token)) {
+          topicTokensSet.add(token);
+          break;
         }
-        if (topicTokensSet.size >= 150) break; // Safety ceiling for DB query conditions
-        topicTokensSet.add(token);
-        addedForTopic++;
-        if (addedForTopic >= 2) break;
       }
     }
+
+    // Pass 2: Allocate 2nd distinct NEW token per topic
+    for (let i = 0; i < topics.length; i++) {
+      if (topicTokensSet.size >= MAX_PREFETCH_TOKENS) break;
+      for (const token of topicCandidates[i]) {
+        if (!topicTokensSet.has(token)) {
+          topicTokensSet.add(token);
+          break;
+        }
+      }
+    }
+
     const topicTokens = Array.from(topicTokensSet);
 
     const blogConditions = [

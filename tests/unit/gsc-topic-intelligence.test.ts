@@ -300,4 +300,107 @@ describe("GSC Topic Intelligence Contract & Shared Data Layer", () => {
     );
     expect(hasLastTopicToken).toBe(true);
   });
+
+  it("should ensure duplicate/shared tokens do not consume a topic's 2 new-token quota", async () => {
+    const topics = [
+      { keyword: "shared audit guide", clusterQueries: [] },
+      { keyword: "shared analysis report", clusterQueries: [] },
+    ];
+
+    let capturedQuery: any = null;
+    (prisma.blog.findMany as any).mockImplementationOnce((query: any) => {
+      capturedQuery = query;
+      return Promise.resolve([]);
+    });
+
+    await resolvePageExistenceBatch("site-1", topics);
+
+    expect(capturedQuery).toBeDefined();
+    const orConditions = capturedQuery.where.OR;
+
+    // "shared" is present from Topic 0.
+    // Topic 1 has "shared", "analysis", "report".
+    // Duplicate "shared" must NOT consume Topic 1's quota, so BOTH "analysis" and "report" must be in OR filters!
+    const hasAnalysis = orConditions.some((c: any) => c.slug?.contains === "analysis" || c.title?.contains === "analysis");
+    const hasReport = orConditions.some((c: any) => c.slug?.contains === "report" || c.title?.contains === "report");
+
+    expect(hasAnalysis).toBe(true);
+    expect(hasReport).toBe(true);
+  });
+
+  it("should perform two-pass round-robin allocation so all topics receive Pass 1 token before Pass 2 tokens", async () => {
+    // 50 topics with 2 tokens each
+    const topics = Array.from({ length: 50 }, (_, i) => ({
+      keyword: `alpha${i} beta${i}`,
+      clusterQueries: [],
+    }));
+
+    let capturedQuery: any = null;
+    (prisma.blog.findMany as any).mockImplementationOnce((query: any) => {
+      capturedQuery = query;
+      return Promise.resolve([]);
+    });
+
+    await resolvePageExistenceBatch("site-1", topics);
+
+    const orConditions = capturedQuery.where.OR;
+
+    // Verify Pass 1 token of the last topic ("alpha49") is present in OR conditions
+    const hasPass1LastTopic = orConditions.some(
+      (c: any) => c.slug?.contains === "alpha49" || c.title?.contains === "alpha49"
+    );
+    expect(hasPass1LastTopic).toBe(true);
+  });
+
+  it("should scale to 100 topics without positionally starving late topics in Prisma queries", async () => {
+    const topics = Array.from({ length: 100 }, (_, i) => ({
+      keyword: `batchterm${i} detail${i}`,
+      clusterQueries: [],
+    }));
+
+    let capturedQuery: any = null;
+    (prisma.blog.findMany as any).mockImplementationOnce((query: any) => {
+      capturedQuery = query;
+      return Promise.resolve([]);
+    });
+
+    await resolvePageExistenceBatch("site-1", topics);
+
+    const orConditions = capturedQuery.where.OR;
+
+    // Verify late topic ("batchterm99") is represented in Prisma OR filter
+    const hasLateTopic = orConditions.some(
+      (c: any) => c.slug?.contains === "batchterm99" || c.title?.contains === "batchterm99"
+    );
+    expect(hasLateTopic).toBe(true);
+  });
+
+  it("should produce deterministic token prefetch queries across multiple invocations with identical inputs", async () => {
+    const topics = [
+      { keyword: "deterministic topic one", clusterQueries: ["query alpha"] },
+      { keyword: "deterministic topic two", clusterQueries: ["query beta"] },
+      { keyword: "deterministic topic three", clusterQueries: ["query gamma"] },
+    ];
+
+    let query1: any = null;
+    let query2: any = null;
+
+    (prisma.blog.findMany as any).mockImplementationOnce((q: any) => {
+      query1 = q;
+      return Promise.resolve([]);
+    });
+
+    await resolvePageExistenceBatch("site-1", topics);
+
+    (prisma.blog.findMany as any).mockImplementationOnce((q: any) => {
+      query2 = q;
+      return Promise.resolve([]);
+    });
+
+    await resolvePageExistenceBatch("site-1", topics);
+
+    expect(query1).toBeDefined();
+    expect(query2).toBeDefined();
+    expect(query1.where.OR).toEqual(query2.where.OR);
+  });
 });
