@@ -393,6 +393,7 @@ export async function resolvePageExistenceBatch(
       siteId,
       error: (err as Error)?.message,
     });
+    throw err;
   }
 
   return resultMap;

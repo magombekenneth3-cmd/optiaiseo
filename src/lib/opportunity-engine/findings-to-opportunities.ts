@@ -228,10 +228,18 @@ export async function generateOpportunitiesFromFindings(
     try {
       topicExistenceMap = await resolvePageExistenceBatch(siteId, batchTopicsPayload);
     } catch (err) {
-      logger.warn("[OpportunityEngine] Batch page existence resolution failed, falling back to individual resolution", {
+      logger.warn("[OpportunityEngine] Batch page existence resolution failed on first attempt, retrying once", {
         siteId,
         error: (err as Error)?.message,
       });
+      try {
+        topicExistenceMap = await resolvePageExistenceBatch(siteId, batchTopicsPayload);
+      } catch (retryErr) {
+        logger.error("[OpportunityEngine] Batch page existence resolution failed after retry, failing safe to NEEDS_REVIEW", {
+          siteId,
+          error: (retryErr as Error)?.message,
+        });
+      }
     }
   }
 
@@ -244,22 +252,28 @@ export async function generateOpportunitiesFromFindings(
 
     // ── Page-Existence Resolution for TOPIC_OPPORTUNITY ──────────────
     // Check whether a relevant page already exists using pre-fetched batch map.
-    // Falls back to individual resolution if missing from map.
+    // Fails safe to NEEDS_REVIEW if unpopulated without per-topic DB loops.
     let resolvedAction = mapping.action;
     let resolvedCategory = mapping.category;
     let pageExistenceResult: PageExistenceResult | null = null;
 
     if (finding.type === "TOPIC_OPPORTUNITY") {
-      const clusterQueries = extractClusterQueries(finding);
       const key = resourceId.toLowerCase().trim();
       pageExistenceResult = topicExistenceMap.get(key) ?? null;
 
       if (!pageExistenceResult) {
-        pageExistenceResult = await resolvePageExistence(
+        logger.warn("[OpportunityEngine] Page existence unpopulated for topic, failing safe to NEEDS_REVIEW", {
           siteId,
-          resourceId,
-          clusterQueries,
-        );
+          keyword: resourceId,
+        });
+        pageExistenceResult = {
+          verdict: "NEEDS_REVIEW",
+          existingPage: null,
+          allCandidates: [],
+          recommendedAction: "NEEDS_REVIEW",
+          recommendedCategory: "QUICK_WIN",
+          reasoning: `Page existence unpopulated for topic "${resourceId}". Safe fallback to NEEDS_REVIEW (manual review required).`,
+        };
       }
 
       resolvedAction = pageExistenceResult.recommendedAction;

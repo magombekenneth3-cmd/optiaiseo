@@ -12,7 +12,11 @@ import {
 import { classifyIntent } from "@/lib/gsc";
 import { analyzeKeywordIntelligence } from "@/lib/agents/keyword-intelligence-agent";
 import { analyzeCannibalization } from "@/lib/agents/cannibalization-agent";
-import { resolvePageExistenceBatch } from "@/lib/opportunity-engine/page-existence-resolver";
+import {
+  resolvePageExistenceBatch,
+  resolvePageExistence,
+} from "@/lib/opportunity-engine/page-existence-resolver";
+import { generateOpportunitiesFromFindings } from "@/lib/opportunity-engine/findings-to-opportunities";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -402,5 +406,86 @@ describe("GSC Topic Intelligence Contract & Shared Data Layer", () => {
     expect(query1).toBeDefined();
     expect(query2).toBeDefined();
     expect(query1.where.OR).toEqual(query2.where.OR);
+  });
+
+  describe("Failure-Path Hardening & Zero-N+1 Fallback Integrity", () => {
+    const build50TopicFindings = (): any[] =>
+      Array.from({ length: 50 }, (_, i) => ({
+        type: "TOPIC_OPPORTUNITY",
+        severity: "MEDIUM",
+        confidence: 0.8,
+        title: `Topic opportunity ${i}`,
+        description: `Description ${i}`,
+        fingerprint: `fp-${i}`,
+        affectedResource: { type: "KEYWORD", id: `topic-keyword-${i}` },
+        evidence: [{ sourceType: "GSC", metric: "clusterSize", value: "3", metadata: { queries: [`query-${i}`] } }],
+      }));
+
+    it("should resolve 50 TOPIC_OPPORTUNITY findings with 1 batch call and 0 individual resolver calls", async () => {
+      const findings = build50TopicFindings();
+
+      (prisma.agentFinding.findMany as any).mockResolvedValueOnce([]);
+      (prisma.gscDailyPerformance.findMany as any).mockResolvedValueOnce([]);
+      (prisma.blog.findMany as any).mockResolvedValueOnce([]);
+      (prisma.pageAudit.findMany as any).mockResolvedValueOnce([]);
+
+      const createdCount = await generateOpportunitiesFromFindings("site-1", findings);
+
+      expect(createdCount).toBe(50);
+      // Batch resolver performs 1 findMany on gscDailyPerformance, 1 on blog, 1 on pageAudit
+      expect(prisma.gscDailyPerformance.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.blog.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.pageAudit.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it("should retry batch resolution once when first batch attempt fails, avoiding per-topic resolver calls", async () => {
+      const findings = build50TopicFindings();
+
+      (prisma.agentFinding.findMany as any).mockResolvedValue([]);
+      (prisma.blog.findMany as any).mockResolvedValue([]);
+      (prisma.pageAudit.findMany as any).mockResolvedValue([]);
+
+      // Mock GSC findMany to throw on 1st call, succeed on 2nd call (retry)
+      (prisma.gscDailyPerformance.findMany as any)
+        .mockRejectedValueOnce(new Error("Transient DB Timeout"))
+        .mockResolvedValueOnce([]);
+
+      const createdCount = await generateOpportunitiesFromFindings("site-1", findings);
+
+      expect(createdCount).toBe(50);
+      // Retried once -> 2 calls total to gscDailyPerformance
+      expect(prisma.gscDailyPerformance.findMany).toHaveBeenCalledTimes(2);
+    });
+
+    it("should fail-safe to NEEDS_REVIEW when batch resolution fails after retry without N+1 per-finding calls", async () => {
+      const findings = build50TopicFindings();
+
+      (prisma.agentFinding.findMany as any).mockResolvedValue([]);
+      (prisma.blog.findMany as any).mockResolvedValue([]);
+      (prisma.pageAudit.findMany as any).mockResolvedValue([]);
+
+      // Mock GSC findMany to throw on both 1st and 2nd calls
+      (prisma.gscDailyPerformance.findMany as any)
+        .mockRejectedValueOnce(new Error("Persistent DB Error"))
+        .mockRejectedValueOnce(new Error("Persistent DB Error"));
+
+      const createdCount = await generateOpportunitiesFromFindings("site-1", findings);
+
+      expect(createdCount).toBe(50);
+      // Exactly 2 attempts total (1 initial + 1 retry) on gscDailyPerformance, zero individual per-finding calls
+      expect(prisma.gscDailyPerformance.findMany).toHaveBeenCalledTimes(2);
+
+      // Verify that decisions created failed safe to action "NEEDS_REVIEW" and NEVER "CREATE_NEW_CONTENT"
+      const upsertCalls = (prisma.growthDecision.upsert as any).mock.calls;
+      expect(upsertCalls.length).toBeGreaterThan(0);
+
+      for (const call of upsertCalls) {
+        const createData = call[0].create;
+        expect(createData.action).toBe("NEEDS_REVIEW");
+        expect(createData.action).not.toBe("CREATE_NEW_CONTENT");
+        expect(createData.primaryCategory).toBe("QUICK_WIN");
+        expect(createData.whyNow.signals.some((s: any) => s.signal === "PAGE_EXISTENCE_CHECK")).toBe(true);
+      }
+    });
   });
 });
