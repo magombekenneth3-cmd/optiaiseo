@@ -455,7 +455,14 @@ export const generateBlogJob = inngest.createFunction(
             return s;
         });
 
-        const author = buildAuthorFromSite(site);
+        const author = {
+            name: (event.data.authorName as string | undefined)?.trim() || site.authorName || "Editorial Team",
+            role: (event.data.authorRole as string | undefined)?.trim() || site.authorRole || undefined,
+            bio: (event.data.authorBio as string | undefined)?.trim() || site.authorBio || undefined,
+            realExperience: (event.data.realExperience as string | undefined)?.trim() ?? site.realExperience ?? null,
+            realNumbers: (event.data.realNumbers as string | undefined)?.trim() ?? site.realNumbers ?? null,
+            localContext: (event.data.localContext as string | undefined)?.trim() ?? site.localContext ?? null,
+        };
         const displayName = cleanDomainToDisplayName(site.domain);
 
         const detectedIntent = detectIntent(keyword ?? "");
@@ -640,8 +647,17 @@ Be specific and concise. This will be used to write a better article.`,
 
             let category = siteContext?.category ?? site.domain;
             let keywords = siteContext?.keywords ?? [];
+            const gscKeywordFromEvidence = (gscEvidence?.query as string | undefined) || (gscEvidence?.keyword as string | undefined);
 
-            if (pipelineType === "DATA_REPORT") {
+            if (pipelineType === "GSC_GAP" || gscEvidence || gscKeywordFromEvidence) {
+                finalPipelineType = "GSC_GAP";
+                const targetGscKeyword = gscKeywordFromEvidence || keyword || "";
+                if (targetGscKeyword) {
+                    category = targetGscKeyword;
+                    keywords = [targetGscKeyword, ...(siteContext?.keywords ?? []).filter(k => k.toLowerCase() !== targetGscKeyword.toLowerCase())].slice(0, 15);
+                }
+                logger.info(`[Blog/Pipeline] GSC_GAP provenance locked — target keyword: "${keywords[0]}"`, { siteId, pipelineType: finalPipelineType });
+            } else if (pipelineType === "DATA_REPORT") {
                 finalPipelineType = "DATA_REPORT";
                 if (keyword) {
                     category = keyword;
@@ -1050,6 +1066,18 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         }
 
         // ── 8. Citation & Publication Gates ──────────────────────────────────
+        const { runCompositeValidation } = await import("@/lib/blog/validators");
+        const freshValidation = runCompositeValidation({
+            title: liveBlogPost.title,
+            htmlContent: liveBlogPost.content,
+            markdownContent: liveBlogPost.contentMarkdown,
+            metaDescription: liveBlogPost.metaDescription,
+            author,
+        });
+        liveBlogPost.validationScore = freshValidation.score;
+        liveBlogPost.validationErrors = [...new Set([...liveBlogPost.validationErrors, ...freshValidation.errors])];
+        liveBlogPost.validationWarnings = [...new Set([...liveBlogPost.validationWarnings, ...freshValidation.warnings])];
+
         const qualityScore = factCheck.qualityScore !== null
             ? Math.min(factCheck.qualityScore, liveBlogPost.validationScore)
             : liveBlogPost.validationScore;
@@ -1064,8 +1092,11 @@ ${liveBlogPost.content.substring(0, 80000)}`,
         // ── Citation Gate ─────────────────────────────────────────────────
         const citationGate = await step.run("citation-template-gate", async () => {
             const { gateCitationScore } = await import("@/lib/blog/ai-citation-template");
+            const fullContentWithSchema = schemaMarkup
+                ? `${liveBlogPost.content}\n\n<script type="application/ld+json">\n${schemaMarkup}\n</script>`
+                : liveBlogPost.content;
             return gateCitationScore(
-                liveBlogPost.content,
+                fullContentWithSchema,
                 liveBlogPost.targetKeywords,
                 liveBlogPost.title
             );

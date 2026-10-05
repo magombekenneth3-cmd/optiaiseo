@@ -789,11 +789,21 @@ export async function generateBlogFromCompetitorGap(
         competitorRankingUrl: competitorMatch?.link,
         competitorTitle: competitorMatch?.title,
         headings: competitorMatch?.scrapedHeadings ?? [],
-        scrapedText: competitorMatch?.snippet,
+        scrapedText: competitorMatch?.scrapedContent || competitorMatch?.snippet,
         wordCount: competitorMatch?.wordCount,
-        structuralStrengths: ["Ranks on page 1 for target keyword"],
-        contentWeaknesses: ["Lacks first-party practitioner evidence", "Generic introductory advice"],
-        differentiationOpportunities: [`Expose content gaps in ${competitorDomain}`, "Offer direct actionable insights"],
+        structuralStrengths: competitorMatch?.wordCount
+            ? [`In-depth ranking page (~${competitorMatch.wordCount} words)`, ...(competitorMatch.scrapedHeadings?.length ? [`Structured into ${competitorMatch.scrapedHeadings.length} section headings`] : [])]
+            : [`Page 1 ranking competitor for ${keyword}`],
+        contentWeaknesses: [
+            ...(competitorMatch?.scrapedContent && !/experience|testing|data|result/i.test(competitorMatch.scrapedContent) ? ["Lacks verified first-party experience/testing evidence"] : ["Relies primarily on generic advice"]),
+            ...(competitorMatch?.scrapedSchemaTypes?.length === 0 ? ["Lacks structured JSON-LD schema markup"] : []),
+            `Omits proprietary telemetry and live searcher data`,
+        ],
+        differentiationOpportunities: [
+            `Provide verified first-party telemetry and original data`,
+            `Directly answer searcher intent in opening paragraph`,
+            `Outrank ${competitorDomain} on structural depth and schema completeness`,
+        ],
     };
 
     const pipeline = await runFullPipeline({

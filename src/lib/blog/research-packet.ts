@@ -191,9 +191,9 @@ export async function buildResearchPacket(params: {
         authorName: author.name || groundedCtx.data.authorName,
         authorRole: author.role || groundedCtx.data.authorRole,
         authorBio: author.bio || groundedCtx.data.authorBio,
-        realExperience: author.realExperience || groundedCtx.data.realExperience,
-        realNumbers: author.realNumbers || null,
-        localContext: author.localContext || null,
+        realExperience: author.realExperience || groundedCtx.data.realExperience || null,
+        realNumbers: author.realNumbers || groundedCtx.data.realNumbers || null,
+        localContext: author.localContext || groundedCtx.data.localContext || null,
         topKeywords: groundedCtx.data.topKeywords,
         competitorDomains: groundedCtx.data.competitorDomains,
     } : {

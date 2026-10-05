@@ -651,6 +651,19 @@ async function writeSingleSection(
         ? `FEATURED SNIPPET TARGET: The intro paragraph must contain or closely mirror this answer:\n"${outline.quickAnswer}"\nThis is what Google will extract for Position 0.`
         : "";
 
+    const firstParty = researchPacket.firstPartyEvidence;
+    const firstPartyNote = firstParty ? `
+AUTHORITATIVE FIRST-PARTY EVIDENCE & SITE CONTEXT:
+- Domain/Brand: ${firstParty.domain ?? "Our Brand"}
+${firstParty.coreServices ? `- Core Services: ${firstParty.coreServices}` : ""}
+${firstParty.location ? `- Location / Market: ${firstParty.location}` : ""}
+${firstParty.targetCustomer ? `- Target Customer: ${firstParty.targetCustomer}` : ""}
+${firstParty.realExperience ? `- First-Hand Experience: ${firstParty.realExperience}` : ""}
+${firstParty.realNumbers ? `- Real Numbers & Telemetry: ${firstParty.realNumbers}` : ""}
+${firstParty.localContext ? `- Local Market Context: ${firstParty.localContext}` : ""}
+${firstParty.brandFacts.length > 0 ? `- Verified Brand Facts: ${firstParty.brandFacts.map(f => `${f.factType}: ${f.value}`).join("; ")}` : ""}
+INSTRUCTION: Weave these verified first-party facts and core services into your section where relevant. Never use generic fallback claims when verified first-party facts exist above.` : "";
+
     const authorNote = sectionResearch.authorEvidence
         ? `AUTHOR EVIDENCE: Weave in naturally only when it is relevant — "${sectionResearch.authorEvidence.slice(0, 500)}"`
         : `EXPERIENCE SIGNAL: Include at least one "in practice" observation, a named failure mode,
@@ -757,6 +770,7 @@ EDITORIAL MEMORY:
 ${memoryNote}
 ${entityNote}
 ${openerNote}
+${firstPartyNote}
 ${authorNote}
 ${mythNote}
 ${misconceptionNote}
@@ -1184,6 +1198,17 @@ export async function runFullPipeline(params: {
 
     const repairedMarkdown = await repairUnsupportedClaims(polishedMarkdown, researchPacket, ctx);
 
+    // ── Stage 5: Analyze → Revise → Re-analyze ────────────────────────────────
+    const analysisResult = analyzeDraftQuality(repairedMarkdown, brain, researchPacket, ctx);
+    let finalMarkdown = repairedMarkdown;
+    if (analysisResult.needsRevision && analysisResult.repairDirective) {
+        logger.info("[Pipeline] Stage 5 — Targeted revision pass triggered", {
+            keyword,
+            defects: analysisResult.defects,
+        });
+        finalMarkdown = await applyTargetedRevision(repairedMarkdown, analysisResult.repairDirective, ctx);
+    }
+
     if (outline.degraded) {
         logger.warn("[Pipeline] DEGRADED_GENERATION: fallback outline was used — article will require review", { keyword });
     }
@@ -1193,11 +1218,90 @@ export async function runFullPipeline(params: {
         slug: outline.slug,
         quickAnswer: outline.quickAnswer,
         metaDescription: outline.metaDescription,
-        markdownContent: repairedMarkdown,
+        markdownContent: finalMarkdown,
         brain,
         outline,
         researchPacket,
         claimPlan,
         degraded: outline.degraded === true,
     };
+}
+
+interface AnalysisResult {
+    needsRevision: boolean;
+    defects: string[];
+    repairDirective: string | null;
+}
+
+function analyzeDraftQuality(
+    content: string,
+    brain: ResearchBrain,
+    packet: ResearchPacket,
+    ctx: PromptContext
+): AnalysisResult {
+    const defects: string[] = [];
+    const lower = content.toLowerCase();
+
+    // Check word count
+    const wordCount = content.trim().split(/\s+/).length;
+    if (wordCount < 600) {
+        defects.push(`Word count is too low (${wordCount} words; target is 800+ words).`);
+    }
+
+    // Check key entities
+    const missingEntities = (brain.entities ?? [])
+        .filter(e => !lower.includes(e.toLowerCase()))
+        .slice(0, 3);
+    if (missingEntities.length > 0) {
+        defects.push(`Missing key topic entities: ${missingEntities.join(", ")}.`);
+    }
+
+    // Check search intent satisfaction (FAQ / direct answer presence)
+    if (brain.faqTargets && brain.faqTargets.length > 0) {
+        const hasFaq = /<h3[^>]*>|\bfaq\b|\bfrequently asked\b/i.test(content);
+        if (!hasFaq) {
+            defects.push(`Missing dedicated FAQ section addressing key questions.`);
+        }
+    }
+
+    if (defects.length === 0) {
+        return { needsRevision: false, defects: [], repairDirective: null };
+    }
+
+    const repairDirective = `REVISION DIRECTIVE: The article has these specific gaps:\n${defects.map(d => `- ${d}`).join("\n")}\nAdd missing sections or details cleanly into the Markdown content. Preserve all existing headers, code blocks, and source citations.`;
+
+    return { needsRevision: true, defects, repairDirective };
+}
+
+async function applyTargetedRevision(
+    content: string,
+    directive: string,
+    ctx: PromptContext
+): Promise<string> {
+    const ai = getAiClient();
+    if (!ai) return content;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: AI_MODELS.GEMINI_PRO,
+            contents: `You are an expert editorial reviewer. Revise this Markdown article to address the directive below.
+
+ARTICLE CONTENT:
+${content.slice(0, 18000)}
+
+${directive}
+
+RULES:
+- Return ONLY the updated Markdown content.
+- Do NOT rewrite or truncate sections that are already working well.
+- Preserve all existing source links and schema scripts.`,
+            config: { temperature: 0.3, maxOutputTokens: 8000 },
+        });
+
+        const revised = response.text?.trim();
+        if (!revised || revised.length < content.length * 0.7) return content;
+        return revised.replace(/^```markdown\n?/i, "").replace(/^```html\n?/i, "").replace(/\n?```$/i, "");
+    } catch {
+        return content;
+    }
 }

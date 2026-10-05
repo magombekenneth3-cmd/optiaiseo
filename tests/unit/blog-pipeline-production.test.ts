@@ -309,5 +309,41 @@ describe("Blog Pipeline Production Audit Hardening", () => {
 
         expect(packet.firstPartyEvidence).toBeDefined();
         expect(packet.firstPartyEvidence?.realExperience).toContain("Optimized 500+ client sites");
+        expect(packet.firstPartyEvidence?.realNumbers).toContain("500+ sites");
+        expect(packet.firstPartyEvidence?.localContext).toContain("Serving North America");
+    });
+
+    it("13. Citation gate evaluates generated JSON-LD schema artifact", async () => {
+        const { scoreCitationTemplate } = await import("@/lib/blog/ai-citation-template");
+        const htmlWithoutSchema = "<h1>AI SEO Tools</h1><p>OptiAISEO is defined as a practitioner tool.</p>";
+        const schema = JSON.stringify({ "@context": "https://schema.org", "@type": "Article", headline: "AI SEO Tools" });
+        const htmlWithSchema = `${htmlWithoutSchema}\n<script type="application/ld+json">\n${schema}\n</script>`;
+
+        const scoreBefore = scoreCitationTemplate(htmlWithoutSchema, ["ai seo tools"], "AI SEO Tools");
+        const scoreAfter = scoreCitationTemplate(htmlWithSchema, ["ai seo tools"], "AI SEO Tools");
+
+        expect(scoreAfter.score).toBeGreaterThan(scoreBefore.score);
+        expect(scoreAfter.criteria.find(c => c.id === "structuredData")?.passed).toBe(true);
+    });
+
+    it("14. GSC evidence query locks keyword and pipeline provenance", async () => {
+        const gscEvidence = {
+            query: "gsc explicit keyword query",
+            clicks: 250,
+            impressions: 4000,
+            position: 5.2,
+        };
+
+        const packet = await buildResearchPacket({
+            keyword: "unrelated fallback keyword",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+            gscEvidence,
+        });
+
+        expect(packet.gscEvidence?.query).toBe("gsc explicit keyword query");
+        expect(packet.gscEvidence?.clicks).toBe(250);
     });
 });
