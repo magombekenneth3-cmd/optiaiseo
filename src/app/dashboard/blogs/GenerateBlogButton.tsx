@@ -224,12 +224,17 @@ export function GenerateBlogButton({
     const handleGateConfirm = useCallback(async () => {
         if (!pendingAuthor) return;
         setSerpGateDecision(null);
-        await executeGenerate(pendingAuthor, {
+        const result = await executeGenerate(pendingAuthor, {
             preflightId: preflightId ?? undefined,
             forceSerpMismatch: true,
         });
-        setPendingAuthor(null);
-        setPreflightId(null);
+        if (result && !result.success) {
+            // Post-gate generation failure — re-open modal with saved author form state intact
+            setModalOpen(true);
+        } else {
+            setPendingAuthor(null);
+            setPreflightId(null);
+        }
     }, [pendingAuthor, preflightId, executeGenerate]);
 
     const handleGateCancel = useCallback(() => {

@@ -106,7 +106,7 @@ export async function resolvePageExistenceBatch(
       new Set(topics.flatMap((t) => [t.keyword, ...t.clusterQueries.slice(0, 9)])),
     );
 
-    // Single-pass DB batch fetches
+    // Single-pass targeted DB fetches (no arbitrary evidence truncation for target query set)
     const [gscRows, blogs, pageAudits] = await Promise.all([
       prisma.gscDailyPerformance.findMany({
         where: {
@@ -114,7 +114,6 @@ export async function resolvePageExistenceBatch(
           keyword: { in: allQueryTerms },
         },
         orderBy: { fetchedAt: "desc" },
-        take: 500,
       }),
       prisma.blog.findMany({
         where: {
@@ -135,7 +134,6 @@ export async function resolvePageExistenceBatch(
           validationScore: true,
         },
         orderBy: { createdAt: "desc" },
-        take: 300,
       }),
       prisma.pageAudit.findMany({
         where: { siteId },
@@ -145,17 +143,50 @@ export async function resolvePageExistenceBatch(
           issueList: true,
         },
         orderBy: { runTimestamp: "desc" },
-        take: 300,
       }),
     ]);
 
-    // Evaluate each topic in memory
+    // Build O(1) Hash & Token Indexes once
+    const gscByKeyword = new Map<string, typeof gscRows>();
+    for (const row of gscRows) {
+      const k = row.keyword.toLowerCase().trim();
+      const existing = gscByKeyword.get(k) || [];
+      existing.push(row);
+      gscByKeyword.set(k, existing);
+    }
+
+    const blogByTargetKeyword = new Map<string, typeof blogs>();
+    const blogTokenIndex: Array<{ blog: (typeof blogs)[0]; combinedTokens: Set<string> }> = [];
+
+    for (const blog of blogs) {
+      for (const kw of blog.targetKeywords) {
+        const k = kw.toLowerCase().trim();
+        const existing = blogByTargetKeyword.get(k) || [];
+        existing.push(blog);
+        blogByTargetKeyword.set(k, existing);
+      }
+      const slugTokens = tokenize(blog.slug.replace(/-/g, " "));
+      const titleTokens = tokenize(blog.title);
+      blogTokenIndex.push({
+        blog,
+        combinedTokens: new Set([...slugTokens, ...titleTokens]),
+      });
+    }
+
+    const auditTokenIndex: Array<{ audit: (typeof pageAudits)[0]; pathTokens: Set<string> }> = pageAudits.map(
+      (audit) => ({
+        audit,
+        pathTokens: new Set(tokenize(extractPath(audit.pageUrl))),
+      }),
+    );
+
+    // Evaluate each topic in O(1) via pre-built indexes
     for (const topic of topics) {
       const queryTerms = Array.from(new Set([topic.keyword, ...topic.clusterQueries.slice(0, 9)]));
       const candidates: ExistingPageEvidence[] = [];
 
-      // 1. In-memory GSC matching
-      const gscTopicRows = gscRows.filter((r) => queryTerms.includes(r.keyword));
+      // 1. Fast GSC matching via index
+      const gscTopicRows = queryTerms.flatMap((term) => gscByKeyword.get(term.toLowerCase().trim()) || []);
       if (gscTopicRows.length > 0) {
         const urlMap = new Map<
           string,
@@ -198,79 +229,82 @@ export async function resolvePageExistenceBatch(
         }
       }
 
-      // 2. In-memory Blog matching
-      for (const blog of blogs) {
+      // 2. Fast Blog matching via targetKeyword map + token index
+      const targetKeywordBlogs = queryTerms.flatMap(
+        (term) => blogByTargetKeyword.get(term.toLowerCase().trim()) || [],
+      );
+      const matchedBlogIds = new Set<string>();
+
+      for (const blog of targetKeywordBlogs) {
+        if (matchedBlogIds.has(blog.id)) continue;
+        matchedBlogIds.add(blog.id);
+
         const url = blog.sourceUrl || `/blog/${blog.slug}`;
         const matchingKeywords = blog.targetKeywords.filter((kw) => queryTerms.includes(kw));
         const overlapRatio = matchingKeywords.length / Math.max(1, blog.targetKeywords.length);
+        const confidence = Math.min(1, 0.6 + overlapRatio * 0.4);
 
-        let confidence = 0;
-        let matchType: MatchType = "LOW_CONFIDENCE_MATCH";
-        let isMatch = false;
+        const issues: string[] = [];
+        if (blog.needsRefresh) issues.push("NEEDS_REFRESH");
+        if (blog.status === "DRAFT") issues.push("STILL_IN_DRAFT");
+        if (blog.validationScore !== null && blog.validationScore < 60) issues.push("LOW_VALIDATION_SCORE");
+        if (blog.publishedAt && daysSince(blog.publishedAt) > 180) issues.push("STALE_CONTENT");
 
-        if (matchingKeywords.length > 0) {
-          confidence = Math.min(1, 0.6 + overlapRatio * 0.4);
-          matchType = confidence >= STRONG_MATCH_THRESHOLD ? "BLOG_MATCH" : "LOW_CONFIDENCE_MATCH";
-          isMatch = true;
-        } else {
-          // Slug/title token matching fallback
-          const topicTokens = tokenize(topic.keyword);
-          if (topicTokens.length > 0) {
-            const slugTokens = tokenize(blog.slug.replace(/-/g, " "));
-            const titleTokens = tokenize(blog.title);
-            const combinedTokens = new Set([...slugTokens, ...titleTokens]);
-            const overlap = topicTokens.filter((t) => combinedTokens.has(t)).length;
-            const tokenRatio = overlap / topicTokens.length;
+        candidates.push({
+          url,
+          matchSource: "BLOG_RECORD",
+          matchConfidence: confidence,
+          matchType: confidence >= STRONG_MATCH_THRESHOLD ? "BLOG_MATCH" : "LOW_CONFIDENCE_MATCH",
+          issues,
+        });
+      }
 
-            if (tokenRatio >= SLUG_MATCH_THRESHOLD) {
-              const exactMatch = tokenRatio === 1.0;
-              confidence = exactMatch ? 0.95 : Math.min(1, 0.4 + tokenRatio * 0.5);
-              matchType = exactMatch ? "EXACT_MATCH" : confidence >= STRONG_MATCH_THRESHOLD ? "BLOG_MATCH" : "LOW_CONFIDENCE_MATCH";
-              isMatch = true;
-            }
-          }
-        }
+      // Fallback token index matching for blogs not already matched by exact targetKeyword
+      const topicTokens = tokenize(topic.keyword);
+      if (topicTokens.length > 0) {
+        for (const item of blogTokenIndex) {
+          if (matchedBlogIds.has(item.blog.id)) continue;
 
-        if (isMatch) {
-          const issues: string[] = [];
-          if (blog.needsRefresh) issues.push("NEEDS_REFRESH");
-          if (blog.status === "DRAFT") issues.push("STILL_IN_DRAFT");
-          if (blog.validationScore !== null && blog.validationScore < 60) issues.push("LOW_VALIDATION_SCORE");
-          if (blog.publishedAt && daysSince(blog.publishedAt) > 180) issues.push("STALE_CONTENT");
+          const overlap = topicTokens.filter((t) => item.combinedTokens.has(t)).length;
+          const tokenRatio = overlap / topicTokens.length;
 
-          const existingIdx = candidates.findIndex((c) => areUrlsEquivalent(c.url, url));
-          if (existingIdx === -1) {
+          if (tokenRatio >= SLUG_MATCH_THRESHOLD) {
+            const blog = item.blog;
+            matchedBlogIds.add(blog.id);
+            const url = blog.sourceUrl || `/blog/${blog.slug}`;
+            const exactMatch = tokenRatio === 1.0;
+            const confidence = exactMatch ? 0.95 : Math.min(1, 0.4 + tokenRatio * 0.5);
+
+            const issues: string[] = [];
+            if (blog.needsRefresh) issues.push("NEEDS_REFRESH");
+            if (blog.status === "DRAFT") issues.push("STILL_IN_DRAFT");
+            if (blog.validationScore !== null && blog.validationScore < 60) issues.push("LOW_VALIDATION_SCORE");
+            if (blog.publishedAt && daysSince(blog.publishedAt) > 180) issues.push("STALE_CONTENT");
+
             candidates.push({
               url,
               matchSource: "BLOG_RECORD",
               matchConfidence: confidence,
-              matchType,
+              matchType: exactMatch ? "EXACT_MATCH" : confidence >= STRONG_MATCH_THRESHOLD ? "BLOG_MATCH" : "LOW_CONFIDENCE_MATCH",
               issues,
             });
-          } else {
-            const existing = candidates[existingIdx];
-            existing.issues = Array.from(new Set([...existing.issues, ...issues]));
-            existing.matchConfidence = Math.max(existing.matchConfidence, confidence);
           }
         }
-      }
 
-      // 3. In-memory PageAudit matching
-      const topicTokens = tokenize(topic.keyword);
-      if (topicTokens.length > 0) {
-        for (const audit of pageAudits) {
-          const pathTokens = new Set(tokenize(extractPath(audit.pageUrl)));
-          const overlap = topicTokens.filter((t) => pathTokens.has(t)).length;
+        // 3. Fast PageAudit matching via token index
+        for (const item of auditTokenIndex) {
+          const overlap = topicTokens.filter((t) => item.pathTokens.has(t)).length;
           const overlapRatio = overlap / topicTokens.length;
 
           if (overlapRatio >= SLUG_MATCH_THRESHOLD) {
+            const audit = item.audit;
             const issues: string[] = [];
             if (audit.overallScore < 50) issues.push("LOW_AUDIT_SCORE");
 
             const issueList = audit.issueList as unknown[];
             if (Array.isArray(issueList)) {
-              for (const item of issueList) {
-                const str = typeof item === "string" ? item : JSON.stringify(item);
+              for (const issueItem of issueList) {
+                const str = typeof issueItem === "string" ? issueItem : JSON.stringify(issueItem);
                 if (str.includes("noindex")) issues.push("NOINDEX_DETECTED");
                 if (str.includes("canonical")) issues.push("CANONICAL_CONFLICT");
                 if (str.includes("thin")) issues.push("THIN_CONTENT");

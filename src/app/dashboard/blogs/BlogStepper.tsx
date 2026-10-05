@@ -566,13 +566,6 @@ function AuthorStep({
     );
 }
 
-const GENERATION_STAGES = [
-    { until: 20, label: "Researching keywords and SERP search intent gaps…" },
-    { until: 60, label: "Constructing H2/H3 outline & GEO Q&A nodes…" },
-    { until: 120, label: "Writing section depth with real author E-E-A-T evidence…" },
-    { until: Infinity, label: "Polishing Speakable JSON-LD & running quality audit…" },
-] as const;
-
 function GeneratingStep({ pipelineType }: { pipelineType?: string }) {
     const isDataReport = pipelineType === "DATA_REPORT";
     const [elapsed, setElapsed] = useState(0);
@@ -585,8 +578,6 @@ function GeneratingStep({ pipelineType }: { pipelineType?: string }) {
         return () => window.clearInterval(timer);
     }, []);
 
-    const stage =
-        GENERATION_STAGES.find((s) => elapsed < s.until) ?? GENERATION_STAGES[GENERATION_STAGES.length - 1];
     const minutes = Math.floor(elapsed / 60);
     const seconds = elapsed % 60;
     const elapsedLabel = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
@@ -604,12 +595,13 @@ function GeneratingStep({ pipelineType }: { pipelineType?: string }) {
             </div>
             <div>
                 <p className="mb-1 text-base font-bold text-white">
-                    {isDataReport ? "Building Data Report…" : "AI Research & Generation Engine Active…"}
+                    {isDataReport ? "Building Data-Journalism Report…" : "AI Research & Generation Pipeline Active"}
                 </p>
-                <p className="max-w-xs text-xs text-purple-300 font-semibold">{stage.label}</p>
+                <p className="max-w-xs text-xs text-purple-300 font-semibold">
+                    Background functions are assembling SERP research &amp; writing article content.
+                </p>
                 <p className="mx-auto mt-2 max-w-xs text-xs text-zinc-400">
-                    Background functions active. Elapsed:{" "}
-                    <span className="font-mono font-bold text-white">{elapsedLabel}</span>.
+                    Elapsed: <span className="font-mono font-bold text-white">{elapsedLabel}</span>.
                 </p>
             </div>
             <Loader2 className="mt-2 h-6 w-6 animate-spin text-emerald-400" />
