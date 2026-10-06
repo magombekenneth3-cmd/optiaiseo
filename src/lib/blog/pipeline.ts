@@ -34,7 +34,7 @@ import {
     OutlinePlanSchema,
 } from "./contracts";
 import type { PageExistenceVerdict, ExistingPageEvidence } from "@/lib/opportunity-engine/types";
-import { makeDecision } from "@/lib/opportunity-engine/page-existence-resolver";
+import { resolvePageExistence, makeDecision } from "@/lib/opportunity-engine/page-existence-resolver";
 import { extractEvidencePacket } from "./evidence-extractor";
 import {
     buildResearchPacket,
@@ -44,6 +44,7 @@ import {
 } from "./research-packet";
 import type { ResearchEvidenceLedger } from "./evidence-ledger";
 import { buildClaimPlan, renderClaimPlanForSection, type ClaimPlan, type SectionClaimPlan } from "./claim-plan";
+import { suggestInternalLinks } from "./internalLinks";
 
 export interface ResearchBrain {
     intent: string;
@@ -1152,14 +1153,50 @@ export async function runFullPipeline(params: {
     gscEvidence?: Record<string, unknown> | null;
     pipelineType?: string;
     ledger?: ResearchEvidenceLedger | null;
+    siteId?: string;
+    existingSite?: import("./contracts").PageExistenceResult | null;
+    internalLinkOpportunities?: import("./contracts").InternalLinkSuggestion[] | null;
 }): Promise<PipelineResult> {
-    const { keyword, serpContext, ctx, author, tone, groundedCtx, competitorAnalysis, gscEvidence, pipelineType, ledger } = params;
+    const { keyword, serpContext, ctx, author, tone, groundedCtx, competitorAnalysis, gscEvidence, pipelineType, ledger, siteId } = params;
 
     logger.debug("[Pipeline] Stage 1 — Research Brain", { keyword });
     const brain = await runResearchBrain(keyword, serpContext, ctx, groundedCtx, competitorAnalysis, pipelineType);
 
     logger.debug("[Pipeline] Stage 2 — Outline Planner", { keyword });
     const outline = await runOutlinePlanner(keyword, brain, serpContext, ctx, tone, groundedCtx, competitorAnalysis, pipelineType);
+
+    let existingSite = params.existingSite ?? null;
+    if (!existingSite && siteId) {
+        try {
+            existingSite = await resolvePageExistence(siteId, keyword);
+        } catch (err) {
+            logger.warn("[Pipeline] Page existence resolution failed — proceeding without snapshot", {
+                siteId,
+                keyword,
+                error: (err as Error)?.message,
+            });
+        }
+    }
+
+    let internalLinkOpportunities = params.internalLinkOpportunities ?? null;
+    if (!internalLinkOpportunities && siteId) {
+        try {
+            const domain = ctx.siteDomain ?? groundedCtx?.data.domain ?? null;
+            internalLinkOpportunities = await suggestInternalLinks(
+                "",
+                [keyword],
+                siteId,
+                "",
+                domain
+            );
+        } catch (err) {
+            logger.warn("[Pipeline] Internal link suggestion fetch failed — proceeding without suggestions", {
+                siteId,
+                keyword,
+                error: (err as Error)?.message,
+            });
+        }
+    }
 
     logger.debug("[Pipeline] Research packet — collecting authoritative sources", {
         keyword,
@@ -1174,6 +1211,8 @@ export async function runFullPipeline(params: {
         groundedCtx,
         competitorAnalysis,
         gscEvidence,
+        existingSite,
+        internalLinkOpportunities,
     });
     const sectionResearch = await buildSectionResearchMap(outline.sections, researchPacket);
 
@@ -1747,94 +1786,16 @@ function checkExistingSiteStrategy(
         };
     }
 
-    const candidates: ExistingPageEvidence[] = [];
-
-    if (packet.gscEvidence) {
-        const mainUrl = (typeof packet.gscEvidence.url === "string" && packet.gscEvidence.url.trim())
-            ? packet.gscEvidence.url.trim()
-            : undefined;
-        const pos = typeof packet.gscEvidence.position === "number" ? packet.gscEvidence.position : undefined;
-        const impressions = typeof packet.gscEvidence.impressions === "number" ? packet.gscEvidence.impressions : undefined;
-        const clicks = typeof packet.gscEvidence.clicks === "number" ? packet.gscEvidence.clicks : undefined;
-
-        if (mainUrl) {
-            candidates.push({
-                url: mainUrl,
-                matchSource: "GSC_RANKING_URL",
-                matchConfidence: (pos !== undefined && pos <= 20) ? 0.95 : 0.6,
-                matchType: "GSC_MATCH",
-                currentPosition: pos,
-                currentImpressions: impressions,
-                currentClicks: clicks,
-                issues: [],
-            });
-        }
-
-        const competingUrls = Array.isArray(packet.gscEvidence.competingUrls)
-            ? (packet.gscEvidence.competingUrls as unknown[]).filter((u): u is string => typeof u === "string" && u.trim().length > 0)
-            : Array.isArray(packet.gscEvidence.urls)
-            ? (packet.gscEvidence.urls as unknown[]).filter((u): u is string => typeof u === "string" && u.trim().length > 0)
-            : [];
-
-        for (const compUrl of competingUrls) {
-            if (compUrl !== mainUrl) {
-                candidates.push({
-                    url: compUrl,
-                    matchSource: "GSC_RANKING_URL",
-                    matchConfidence: 0.9,
-                    matchType: "GSC_MATCH",
-                    currentPosition: pos,
-                    currentImpressions: impressions,
-                    currentClicks: clicks,
-                    issues: [],
-                });
-            }
-        }
-    }
-
-    let verdict: PageExistenceVerdict | "UNAVAILABLE" = "UNAVAILABLE";
-    let hasStrategicConflict = false;
-    let hasCannibalizationRisk = false;
-
-    if (candidates.length > 0) {
-        const decision = makeDecision(candidates, ctx.keyword);
-        verdict = decision.verdict;
-
-        if (verdict === "EXISTING_HEALTHY") {
-            hasStrategicConflict = true;
-            hasCannibalizationRisk = false;
-            details.push(`Existing page (${decision.existingPage?.url}) already ranks healthy for query '${ctx.keyword}'. Strategy indicates MONITOR or REFRESH rather than creating new content.`);
-        } else if (verdict === "EXISTING_NEEDS_FIX") {
-            hasStrategicConflict = true;
-            hasCannibalizationRisk = false;
-            details.push(`Existing page (${decision.existingPage?.url}) underperforms for query '${ctx.keyword}'. Strategy indicates OPTIMIZE existing page.`);
-        } else if (verdict === "EXISTING_CANNIBALIZED") {
-            hasStrategicConflict = true;
-            hasCannibalizationRisk = true;
-            details.push(`Multiple pages conflict for query '${ctx.keyword}'. Strategy indicates CONSOLIDATE.`);
-            const competing = decision.allCandidates.map(c => c.url).filter(Boolean);
-            conflictingUrls.push(...competing);
-            cannibalizationDetails.push(`Multiple ranking pages (${competing.join(", ")}) target the same query '${ctx.keyword}'.`);
-        } else if (verdict === "NEEDS_REVIEW") {
-            hasStrategicConflict = false;
-            hasCannibalizationRisk = false;
-            details.push(`Ambiguous or low-confidence existing page matches for query '${ctx.keyword}'. Manual review recommended.`);
-        } else if (verdict === "MISSING") {
-            hasStrategicConflict = false;
-            hasCannibalizationRisk = false;
-        }
-    }
-
     return {
         existingSiteFit: {
-            verdict,
-            hasStrategicConflict,
-            details,
+            verdict: "UNAVAILABLE" as const,
+            hasStrategicConflict: false,
+            details: ["No canonical page-existence snapshot was available in the ResearchPacket."],
         },
         cannibalizationRisk: {
-            hasRisk: hasCannibalizationRisk,
-            conflictingUrls,
-            details: cannibalizationDetails,
+            hasRisk: false,
+            conflictingUrls: [],
+            details: [],
         },
     };
 }

@@ -592,6 +592,7 @@ export async function generateTrendingPost(
         ctx,
         author,
         tone: `Journalist covering ${industry} for a ${country} audience — specific, current, practitioner-focused`,
+        siteId,
     });
 
     const syntheticResponse: GeminiBlogResponse = {
@@ -666,6 +667,7 @@ export async function generateEvergreenPost(
         groundedCtx,
         gscEvidence,
         pipelineType,
+        siteId,
     });
 
     // Build a synthetic GeminiBlogResponse from pipeline output so buildPost
@@ -724,7 +726,7 @@ export async function generateBlogFromKeywordGap(
         logger.error("[Blog Engine] SERP context failed:", { error: (e as Error)?.message });
     }
 
-    const pipeline = await runFullPipeline({ keyword, serpContext, ctx, author, groundedCtx, gscEvidence, pipelineType: "GSC_GAP" });
+    const pipeline = await runFullPipeline({ keyword, serpContext, ctx, author, groundedCtx, gscEvidence, pipelineType: "GSC_GAP", siteId });
 
     const syntheticResponse: GeminiBlogResponse = {
         title: pipeline.title,
@@ -814,6 +816,7 @@ export async function generateBlogFromCompetitorGap(
         competitorAnalysis,
         gscEvidence,
         pipelineType: pipelineType || "COMPETITOR_GAP",
+        siteId,
     });
 
     const syntheticResponse: GeminiBlogResponse = {

@@ -434,7 +434,7 @@ export async function generateBlogForKeyword(
 
         // Credits are the sole gate — no monthly blog count limit.
         logger.debug(`[Keywords] Generating blog for keyword: "${safeKeyword}" (intent: ${intent ?? "unknown"})`);
-        const post = await generateBlogFromKeywordGap(safeKeyword, position, impressions, { name: site.domain }, site.domain, intent);
+        const post = await generateBlogFromKeywordGap(safeKeyword, position, impressions, { name: site.domain }, undefined, site.domain, intent, site.id);
         const { publicationGate } = await evaluateDraftForPublication(post);
 
         const blog = await prisma.blog.create({

@@ -756,6 +756,21 @@ describe("Blog Pipeline Production Audit Hardening", () => {
             gscEvidence,
         });
 
+        packet.existingSite = {
+            verdict: "EXISTING_HEALTHY",
+            existingPage: {
+                url: "https://example.com/blog/existing-tools",
+                matchSource: "GSC_RANKING_URL",
+                matchConfidence: 0.95,
+                currentPosition: 4.2,
+                issues: [],
+            },
+            allCandidates: [],
+            recommendedAction: "MONITOR",
+            recommendedCategory: "HEALTHY",
+            reasoning: "Healthy page ranks position 4.2.",
+        };
+
         const articleContent = "<h1>Best AI SEO Tools</h1><p>Full article content.</p>";
         const analysis = analyzeDraftQuality(articleContent, mockBrain, packet, testCtx);
 
@@ -789,6 +804,24 @@ describe("Blog Pipeline Production Audit Hardening", () => {
             groundedCtx: mockGroundedCtx,
             gscEvidence,
         });
+
+        packet.existingSite = {
+            verdict: "EXISTING_CANNIBALIZED",
+            existingPage: {
+                url: "https://example.com/blog/existing-ai-tools-1",
+                matchSource: "GSC_RANKING_URL",
+                matchConfidence: 0.95,
+                currentPosition: 8.5,
+                issues: [],
+            },
+            allCandidates: [
+                { url: "https://example.com/blog/existing-ai-tools-1", matchSource: "GSC_RANKING_URL", matchConfidence: 0.95, issues: [] },
+                { url: "https://example.com/blog/existing-ai-tools-2", matchSource: "GSC_RANKING_URL", matchConfidence: 0.90, issues: [] },
+            ],
+            recommendedAction: "CONSOLIDATE",
+            recommendedCategory: "CANNIBALIZATION",
+            reasoning: "Multiple pages competing.",
+        };
 
         const articleContent = "<h1>Best AI SEO Tools</h1><p>New article content.</p>";
         const analysis = analyzeDraftQuality(articleContent, mockBrain, packet, testCtx);
@@ -1049,12 +1082,19 @@ describe("Blog Pipeline Production Audit Hardening", () => {
             groundedCtx: mockGroundedCtx,
         });
 
-        packet.gscEvidence = {
-            query: "best ai seo tools",
-            position: 15.4,
-            clicks: 12,
-            impressions: 400,
-            url: "https://example.com/blog/old-tools-guide",
+        packet.existingSite = {
+            verdict: "EXISTING_HEALTHY",
+            existingPage: {
+                url: "https://example.com/blog/old-tools-guide",
+                matchSource: "GSC_RANKING_URL",
+                matchConfidence: 0.9,
+                currentPosition: 15.4,
+                issues: [],
+            },
+            allCandidates: [],
+            recommendedAction: "REFRESH",
+            recommendedCategory: "HEALTHY",
+            reasoning: "Existing page match.",
         };
 
         const draft = "<h1>Best AI SEO Tools</h1><p>Content draft.</p>";
@@ -1081,12 +1121,19 @@ describe("Blog Pipeline Production Audit Hardening", () => {
             groundedCtx: mockGroundedCtx,
         });
 
-        packet.gscEvidence = {
-            query: "best ai seo tools",
-            position: 4.0,
-            clicks: 250,
-            impressions: 3000,
-            url: "https://example.com/blog/top-tools",
+        packet.existingSite = {
+            verdict: "EXISTING_HEALTHY",
+            existingPage: {
+                url: "https://example.com/blog/top-tools",
+                matchSource: "GSC_RANKING_URL",
+                matchConfidence: 0.95,
+                currentPosition: 4.0,
+                issues: [],
+            },
+            allCandidates: [],
+            recommendedAction: "MONITOR",
+            recommendedCategory: "HEALTHY",
+            reasoning: "Single healthy page.",
         };
 
         const draft = "<h1>Best AI SEO Tools</h1><p>Content draft.</p>";
@@ -1233,10 +1280,27 @@ describe("Blog Pipeline Production Audit Hardening", () => {
             groundedCtx: mockGroundedCtx,
         });
 
-        packet.gscEvidence = {
-            query: "best ai seo tools",
-            position: 4.0,
-            url: "https://example.com/blog/existing-tools-guide",
+        packet.existingSite = {
+            verdict: "EXISTING_HEALTHY",
+            existingPage: {
+                url: "https://example.com/blog/existing-tools-guide",
+                matchSource: "GSC_RANKING_URL",
+                matchConfidence: 0.95,
+                currentPosition: 4.0,
+                issues: [],
+            },
+            allCandidates: [
+                {
+                    url: "https://example.com/blog/existing-tools-guide",
+                    matchSource: "GSC_RANKING_URL",
+                    matchConfidence: 0.95,
+                    currentPosition: 4.0,
+                    issues: [],
+                },
+            ],
+            recommendedAction: "MONITOR",
+            recommendedCategory: "HEALTHY",
+            reasoning: "Single healthy page ranking position 4.",
         };
 
         const draft = "<h1>Best AI SEO Tools</h1><p>Draft text.</p>";
@@ -1267,11 +1331,34 @@ describe("Blog Pipeline Production Audit Hardening", () => {
             groundedCtx: mockGroundedCtx,
         });
 
-        packet.gscEvidence = {
-            query: "best ai seo tools",
-            position: 5.0,
-            url: "https://example.com/blog/existing-tools-guide-1",
-            competingUrls: ["https://example.com/blog/existing-tools-guide-2"],
+        packet.existingSite = {
+            verdict: "EXISTING_CANNIBALIZED",
+            existingPage: {
+                url: "https://example.com/blog/existing-tools-guide-1",
+                matchSource: "GSC_RANKING_URL",
+                matchConfidence: 0.95,
+                currentPosition: 5.0,
+                issues: [],
+            },
+            allCandidates: [
+                {
+                    url: "https://example.com/blog/existing-tools-guide-1",
+                    matchSource: "GSC_RANKING_URL",
+                    matchConfidence: 0.95,
+                    currentPosition: 5.0,
+                    issues: [],
+                },
+                {
+                    url: "https://example.com/blog/existing-tools-guide-2",
+                    matchSource: "GSC_RANKING_URL",
+                    matchConfidence: 0.90,
+                    currentPosition: 5.0,
+                    issues: [],
+                },
+            ],
+            recommendedAction: "CONSOLIDATE",
+            recommendedCategory: "CANNIBALIZATION",
+            reasoning: "Multiple pages competing for query.",
         };
 
         const draft = "<h1>Best AI SEO Tools</h1><p>Draft text.</p>";
@@ -1646,6 +1733,338 @@ describe("Blog Pipeline Production Audit Hardening", () => {
 
         const isSameType: [AnalysisResultType] extends [ContentAnalysisReportType] ? true : false = true;
         expect(isSameType).toBe(true);
+    });
+
+    it("56. Production Path Integration: runFullPipeline with siteId populates existingSite & internalLinkOpportunities in ResearchPacket", async () => {
+        const mockBrainResponse = {
+            intent: "commercial",
+            searcherMindset: "Looking for best AI SEO tools",
+            contentGaps: ["Lack of benchmark testing"],
+            entities: ["AI SEO", "Keyword Research"],
+            contrarianAngles: ["More tools isn't always better"],
+            examplesNeeded: ["Case study"],
+            faqTargets: ["What is the best AI SEO tool?"],
+            commonMisconceptions: ["AI replaces humans"],
+            industryMyths: ["More keywords = higher rank"],
+            whatPeopleAvoidSaying: ["Tools are expensive"],
+        };
+
+        const mockOutline = {
+            title: "Best AI SEO Tools Guide for 2026",
+            slug: "best-ai-seo-tools-guide",
+            quickAnswer: "Here is a comprehensive summary of the best AI SEO tools available today.",
+            metaDescription: "Discover the best AI SEO tools to automate your content strategy and boost organic traffic.",
+            sections: [
+                { heading: "Introduction to AI SEO", goal: "Explain AI SEO", tone: "analytical", evidenceType: "example", wordTarget: 200, keyEntities: ["AI SEO"] },
+                { heading: "Top Tools Overview", goal: "Review top tools", tone: "analytical", evidenceType: "comparison", wordTarget: 300, keyEntities: ["Tools"] },
+                { heading: "Key Features to Compare", goal: "Compare features", tone: "instructional", evidenceType: "data", wordTarget: 300, keyEntities: ["Features"] },
+                { heading: "Implementation Strategy", goal: "Provide steps", tone: "instructional", evidenceType: "how_to", wordTarget: 300, keyEntities: ["Strategy"] },
+                { heading: "Conclusion and Next Steps", goal: "Summarize findings", tone: "direct", evidenceType: "example", wordTarget: 200, keyEntities: ["Conclusion"] },
+            ],
+            estimatedTotal: 1300,
+        };
+
+        const aiClient = await import("@/lib/blog/ai-client");
+        const spyAi = vi.spyOn(aiClient, "generateWithFallback").mockResolvedValue(
+            "Paragraph 1 explaining AI SEO tools in extensive depth and detail.\n\n" +
+            "Paragraph 2 providing detailed analysis and strategic recommendations for practitioners."
+        );
+        const spyAiJson = vi.spyOn(aiClient, "generateWithFallbackJson").mockImplementation(async (opts) => {
+            const promptStr = typeof opts === "string" ? opts : JSON.stringify(opts);
+            if (promptStr.includes("Outline") || promptStr.includes("sections")) {
+                return mockOutline as any;
+            }
+            return mockBrainResponse as any;
+        });
+
+        const pageResolver = await import("@/lib/opportunity-engine/page-existence-resolver");
+        const internalLinkModule = await import("@/lib/blog/internalLinks");
+
+        const mockResolve = vi.spyOn(pageResolver, "resolvePageExistence").mockResolvedValue({
+            verdict: "EXISTING_HEALTHY",
+            existingPage: {
+                url: "https://example.com/blog/canonical-page",
+                matchSource: "GSC_RANKING_URL",
+                matchConfidence: 0.95,
+                currentPosition: 4,
+                issues: [],
+            },
+            allCandidates: [],
+            recommendedAction: "MONITOR",
+            recommendedCategory: "HEALTHY",
+            reasoning: "Healthy page ranks position 4.",
+        });
+
+        const mockSuggest = vi.spyOn(internalLinkModule, "suggestInternalLinks").mockResolvedValue([
+            {
+                destination: "https://example.com/blog/canonical-target",
+                relationship: "topical",
+                anchorConcept: "AI SEO automation",
+                relevance: 0.9,
+                reason: "Cluster relevance",
+            },
+        ]);
+
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const { runFullPipeline } = await import("@/lib/blog/pipeline");
+        const result = await runFullPipeline({
+            keyword: "best ai seo tools",
+            serpContext: mockSerpContext,
+            ctx: testCtx,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+            siteId: "site-123",
+        });
+
+        expect(mockResolve).toHaveBeenCalledTimes(1);
+        expect(mockResolve).toHaveBeenCalledWith("site-123", "best ai seo tools");
+        expect(mockSuggest).toHaveBeenCalledTimes(1);
+
+        expect(result.researchPacket.existingSite).toBeDefined();
+        expect(result.researchPacket.existingSite?.verdict).toBe("EXISTING_HEALTHY");
+        expect(result.researchPacket.internalLinkOpportunities).toBeDefined();
+        expect(result.researchPacket.internalLinkOpportunities).toHaveLength(1);
+        expect(result.researchPacket.internalLinkOpportunities?.[0].destination).toBe("https://example.com/blog/canonical-target");
+
+        mockResolve.mockRestore();
+        mockSuggest.mockRestore();
+        spyAi.mockRestore();
+        spyAiJson.mockRestore();
+    });
+
+    it("57. Caller without siteId leaves existingSite & internalLinkOpportunities omitted without fake snapshot", async () => {
+        const mockBrainResponse = {
+            intent: "commercial",
+            searcherMindset: "Looking for best AI SEO tools",
+            contentGaps: ["Lack of benchmark testing"],
+            entities: ["AI SEO", "Keyword Research"],
+            contrarianAngles: ["More tools isn't always better"],
+            examplesNeeded: ["Case study"],
+            faqTargets: ["What is the best AI SEO tool?"],
+            commonMisconceptions: ["AI replaces humans"],
+            industryMyths: ["More keywords = higher rank"],
+            whatPeopleAvoidSaying: ["Tools are expensive"],
+        };
+
+        const mockOutline = {
+            title: "Best AI SEO Tools Guide for 2026",
+            slug: "best-ai-seo-tools-guide",
+            quickAnswer: "Here is a comprehensive summary of the best AI SEO tools available today.",
+            metaDescription: "Discover the best AI SEO tools to automate your content strategy and boost organic traffic.",
+            sections: [
+                { heading: "Introduction to AI SEO", goal: "Explain AI SEO", tone: "analytical", evidenceType: "example", wordTarget: 200, keyEntities: ["AI SEO"] },
+                { heading: "Top Tools Overview", goal: "Review top tools", tone: "analytical", evidenceType: "comparison", wordTarget: 300, keyEntities: ["Tools"] },
+                { heading: "Key Features to Compare", goal: "Compare features", tone: "instructional", evidenceType: "data", wordTarget: 300, keyEntities: ["Features"] },
+                { heading: "Implementation Strategy", goal: "Provide steps", tone: "instructional", evidenceType: "how_to", wordTarget: 300, keyEntities: ["Strategy"] },
+                { heading: "Conclusion and Next Steps", goal: "Summarize findings", tone: "direct", evidenceType: "example", wordTarget: 200, keyEntities: ["Conclusion"] },
+            ],
+            estimatedTotal: 1300,
+        };
+
+        const aiClient = await import("@/lib/blog/ai-client");
+        const spyAi = vi.spyOn(aiClient, "generateWithFallback").mockResolvedValue(
+            "Paragraph 1 explaining AI SEO tools in extensive depth and detail.\n\n" +
+            "Paragraph 2 providing detailed analysis and strategic recommendations for practitioners."
+        );
+        const spyAiJson = vi.spyOn(aiClient, "generateWithFallbackJson").mockImplementation(async (opts) => {
+            const promptStr = typeof opts === "string" ? opts : JSON.stringify(opts);
+            if (promptStr.includes("Outline") || promptStr.includes("sections")) {
+                return mockOutline as any;
+            }
+            return mockBrainResponse as any;
+        });
+
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const { runFullPipeline } = await import("@/lib/blog/pipeline");
+        const result = await runFullPipeline({
+            keyword: "best ai seo tools",
+            serpContext: mockSerpContext,
+            ctx: testCtx,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+            siteId: undefined,
+        });
+
+        expect(result.researchPacket.existingSite).toBeUndefined();
+        expect(result.researchPacket.internalLinkOpportunities).toBeUndefined();
+
+        const analysis = analyzeDraftQuality("<h1>Best AI SEO Tools</h1>", mockBrain, result.researchPacket, testCtx);
+        expect(analysis.existingSiteFit.verdict).toBe("UNAVAILABLE");
+        expect(analysis.internalLinkReadiness.status).toBe("UNAVAILABLE");
+
+        spyAi.mockRestore();
+        spyAiJson.mockRestore();
+    });
+
+    it("58. Disambiguation: Analyzer strictly consumes packet.existingSite, ignoring gscEvidence.url ranking evidence", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        // gscEvidence contains ranking/competitor URL evidence
+        packet.gscEvidence = {
+            query: "best ai seo tools",
+            position: 2.0,
+            url: "https://example.com/blog/gsc-ranking-page",
+        };
+
+        // canonical existingSite snapshot indicates MISSING
+        packet.existingSite = {
+            verdict: "MISSING",
+            existingPage: null,
+            allCandidates: [],
+            recommendedAction: "CREATE_NEW",
+            recommendedCategory: "NEW_OPPORTUNITY",
+            reasoning: "No existing page found on site.",
+        };
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Draft content.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        // Must consume packet.existingSite (MISSING), NOT infer EXISTING_HEALTHY from gscEvidence.url position 2
+        expect(analysis.existingSiteFit.verdict).toBe("MISSING");
+        expect(analysis.existingSiteFit.hasStrategicConflict).toBe(false);
+    });
+
+    it("59. Disambiguation: gscEvidence.url cannot appear as an internal-link target unless present in internalLinkOpportunities", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.gscEvidence = {
+            query: "best ai seo tools",
+            url: "https://example.com/blog/ranking-evidence-only",
+        };
+
+        packet.internalLinkOpportunities = [
+            {
+                destination: "https://example.com/blog/real-internal-link",
+                relationship: "topical",
+                anchorConcept: "SEO Tools",
+                relevance: 0.95,
+                reason: "Topical cluster target",
+            },
+        ];
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Draft content.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.internalLinkReadiness.potentialTargets).toEqual(["https://example.com/blog/real-internal-link"]);
+        expect(analysis.internalLinkReadiness.potentialTargets).not.toContain("https://example.com/blog/ranking-evidence-only");
+    });
+
+    it("60. Bounded Invocations: resolvePageExistence is called at most once per runFullPipeline execution", async () => {
+        const mockBrainResponse = {
+            intent: "commercial",
+            searcherMindset: "Looking for best AI SEO tools",
+            contentGaps: ["Lack of benchmark testing"],
+            entities: ["AI SEO", "Keyword Research"],
+            contrarianAngles: ["More tools isn't always better"],
+            examplesNeeded: ["Case study"],
+            faqTargets: ["What is the best AI SEO tool?"],
+            commonMisconceptions: ["AI replaces humans"],
+            industryMyths: ["More keywords = higher rank"],
+            whatPeopleAvoidSaying: ["Tools are expensive"],
+        };
+
+        const mockOutline = {
+            title: "Best AI SEO Tools Guide for 2026",
+            slug: "best-ai-seo-tools-guide",
+            quickAnswer: "Here is a comprehensive summary of the best AI SEO tools available today.",
+            metaDescription: "Discover the best AI SEO tools to automate your content strategy and boost organic traffic.",
+            sections: [
+                { heading: "Introduction to AI SEO", goal: "Explain AI SEO", tone: "analytical", evidenceType: "example", wordTarget: 200, keyEntities: ["AI SEO"] },
+                { heading: "Top Tools Overview", goal: "Review top tools", tone: "analytical", evidenceType: "comparison", wordTarget: 300, keyEntities: ["Tools"] },
+                { heading: "Key Features to Compare", goal: "Compare features", tone: "instructional", evidenceType: "data", wordTarget: 300, keyEntities: ["Features"] },
+                { heading: "Implementation Strategy", goal: "Provide steps", tone: "instructional", evidenceType: "how_to", wordTarget: 300, keyEntities: ["Strategy"] },
+                { heading: "Conclusion and Next Steps", goal: "Summarize findings", tone: "direct", evidenceType: "example", wordTarget: 200, keyEntities: ["Conclusion"] },
+            ],
+            estimatedTotal: 1300,
+        };
+
+        const aiClient = await import("@/lib/blog/ai-client");
+        const spyAi = vi.spyOn(aiClient, "generateWithFallback").mockResolvedValue(
+            "Paragraph 1 explaining AI SEO tools in extensive depth and detail.\n\n" +
+            "Paragraph 2 providing detailed analysis and strategic recommendations for practitioners."
+        );
+        const spyAiJson = vi.spyOn(aiClient, "generateWithFallbackJson").mockImplementation(async (opts) => {
+            const promptStr = typeof opts === "string" ? opts : JSON.stringify(opts);
+            if (promptStr.includes("Outline") || promptStr.includes("sections")) {
+                return mockOutline as any;
+            }
+            return mockBrainResponse as any;
+        });
+
+        const pageResolver = await import("@/lib/opportunity-engine/page-existence-resolver");
+        const mockResolve = vi.spyOn(pageResolver, "resolvePageExistence").mockResolvedValue({
+            verdict: "MISSING",
+            existingPage: null,
+            allCandidates: [],
+            recommendedAction: "CREATE_NEW",
+            recommendedCategory: "NEW_OPPORTUNITY",
+            reasoning: "No existing page found.",
+        });
+
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const { runFullPipeline } = await import("@/lib/blog/pipeline");
+        await runFullPipeline({
+            keyword: "best ai seo tools",
+            serpContext: mockSerpContext,
+            ctx: testCtx,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+            siteId: "site-bounded-check",
+        });
+
+        expect(mockResolve).toHaveBeenCalledTimes(1);
+        mockResolve.mockRestore();
+        spyAi.mockRestore();
+        spyAiJson.mockRestore();
     });
 });
 
