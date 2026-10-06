@@ -438,12 +438,12 @@ describe("Blog Pipeline Production Audit Hardening", () => {
         expect(resolvedAuthor.localContext).toBe("Custom Market");
     });
 
-    it("18. Stage 5 Analyze -> Revise -> Re-analyze pass executes quality analysis and prevents truncation", async () => {
+    it("18. Stage 5 Analyze -> Revise -> Re-analyze pass executes commercial intent analysis and prevents truncation", async () => {
         const testCtx = buildPromptContext({
             keyword: "best ai seo tools",
             category: "best ai seo tools",
             siteDomain: "example.com",
-            intent: "transactional",
+            intent: "commercial",
             hasAuthorGrounding: true,
         });
 
@@ -455,25 +455,27 @@ describe("Blog Pipeline Production Audit Hardening", () => {
             groundedCtx: mockGroundedCtx,
         });
 
-        // Thin initial draft (300 words, missing entities, comparison table, and FAQ)
+        // Thin commercial draft (30 words, missing entities, comparison table, and FAQ)
         const thinDraft = "<h1>Best AI SEO Tools</h1><p>A quick overview of tools.</p>";
         const initialAnalysis = analyzeDraftQuality(thinDraft, mockBrain, researchPacket, testCtx);
 
         expect(initialAnalysis.needsRevision).toBe(true);
-        expect(initialAnalysis.defects.length).toBeGreaterThanOrEqual(2);
+        expect(initialAnalysis.defects.some(d => d.includes("1200+ words"))).toBe(true);
+        expect(initialAnalysis.defects.some(d => d.includes("Commercial/transactional decision intent"))).toBe(true);
         expect(initialAnalysis.repairDirective).toContain("REVISION DIRECTIVE");
 
-        // Comprehensive draft (1300 words, entity OptiAISEO included, comparison table present, FAQ included)
+        // Comprehensive commercial draft (1300 words, entity OptiAISEO included, comparison table present, FAQ included)
         const richDraft = `<h1>Best AI SEO Tools</h1><p>Quick Answer: OptiAISEO provides automated search intelligence for SaaS.</p>` +
             `<table><tr><th>Tool</th><th>Price</th></tr><tr><td>OptiAISEO</td><td>$99</td></tr></table>` +
             `<h3>Frequently Asked Questions</h3><p>What is OptiAISEO? It is an AI SEO tool.</p>` +
+            `[Official Source](https://example.com/source)` +
             ` `.repeat(6000); // 1200+ word count simulation
 
         const postAnalysis = analyzeDraftQuality(richDraft, mockBrain, researchPacket, testCtx);
         expect(postAnalysis.defects.length).toBeLessThan(initialAnalysis.defects.length);
 
         // Verify non-truncation safety check in applyTargetedRevision retains original content if revision truncates by >15%
-        const longArticle = "# Full Article\n" + "Word ".repeat(4000);
+        const longArticle = "## Overview\n" + "Word ".repeat(4000) + "\n[Link](https://example.com/a)";
         const aiClient = await import("@/lib/blog/ai-client");
         const spy = vi.spyOn(aiClient, "generateWithFallback").mockResolvedValue("Short truncated output");
 
@@ -519,6 +521,60 @@ describe("Blog Pipeline Production Audit Hardening", () => {
         expect(validation.score).toBeGreaterThan(0);
         expect(Array.isArray(validation.errors)).toBe(true);
         expect(Array.isArray(validation.warnings)).toBe(true);
+    });
+
+    it("21. Transactional intent receives decision-oriented depth and breakdown requirements", async () => {
+        const txCtx = buildPromptContext({
+            keyword: "buy ai seo software",
+            category: "ai seo software",
+            siteDomain: "example.com",
+            intent: "transactional",
+            hasAuthorGrounding: true,
+        });
+
+        const researchPacket = await buildResearchPacket({
+            keyword: "buy ai seo software",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        const thinTxDraft = "<h1>Buy AI SEO Software</h1><p>Buy our software now.</p>";
+        const txAnalysis = analyzeDraftQuality(thinTxDraft, mockBrain, researchPacket, txCtx);
+
+        expect(txAnalysis.needsRevision).toBe(true);
+        expect(txAnalysis.defects.some(d => d.includes("1200+ words"))).toBe(true);
+        expect(txAnalysis.defects.some(d => d.includes("Commercial/transactional decision intent"))).toBe(true);
+    });
+
+    it("22. Multi-layer structural non-truncation guards reject revisions stripping headers or links", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const originalDoc = "## Section 1\nContent 1 [Ref](https://example.com/1)\n\n## Section 2\nContent 2 [Ref](https://example.com/2)\n\n## Section 3\nContent 3 [Ref](https://example.com/3)\n" + "Text ".repeat(2000);
+        const aiClient = await import("@/lib/blog/ai-client");
+
+        // Scenario A: LLM strips H2 section headers
+        const strippedHeaders = "## Section 1\nContent 1\n" + "Text ".repeat(2000);
+        const spyA = vi.spyOn(aiClient, "generateWithFallback").mockResolvedValue(strippedHeaders);
+
+        const resultA = await applyTargetedRevision(originalDoc, "Fix gaps", testCtx);
+        expect(resultA).toBe(originalDoc); // Header guard rejected revision
+        spyA.mockRestore();
+
+        // Scenario B: LLM strips source links
+        const strippedLinks = "## Section 1\nContent 1\n\n## Section 2\nContent 2\n\n## Section 3\nContent 3\n" + "Text ".repeat(2000);
+        const spyB = vi.spyOn(aiClient, "generateWithFallback").mockResolvedValue(strippedLinks);
+
+        const resultB = await applyTargetedRevision(originalDoc, "Fix gaps", testCtx);
+        expect(resultB).toBe(originalDoc); // Link guard rejected revision
+        spyB.mockRestore();
     });
 });
 

@@ -1258,10 +1258,11 @@ export function analyzeDraftQuality(
 ): AnalysisResult {
     const defects: string[] = [];
     const lower = content.toLowerCase();
+    const isDecisionIntent = ctx.intent === "commercial" || ctx.intent === "transactional";
 
     // 1. Word Count & Search Intent Scope
     const wordCount = content.trim().split(/\s+/).length;
-    const targetWordCount = ctx.intent === "transactional" ? 1200 : 800;
+    const targetWordCount = isDecisionIntent ? 1200 : 800;
     if (wordCount < targetWordCount) {
         defects.push(`Word count is too low (${wordCount} words; target is ${targetWordCount}+ words for ${ctx.intent} intent).`);
     }
@@ -1288,8 +1289,8 @@ export function analyzeDraftQuality(
         defects.push("Missing direct Quick Answer / Key Takeaways summary block for search snippets.");
     }
 
-    if (ctx.intent === "transactional" && !/<table|\|.*\|/i.test(content)) {
-        defects.push("Transactional/comparison intent requires a structured comparison table or breakdown.");
+    if (isDecisionIntent && !/<table|\|.*\|/i.test(content)) {
+        defects.push("Commercial/transactional decision intent requires a structured comparison table or feature breakdown.");
     }
 
     // 5. Competitor Gap & Differentiation Opportunities
@@ -1307,6 +1308,14 @@ export function analyzeDraftQuality(
         const hasBrandFact = packet.firstPartyEvidence.brandFacts.some(f => lower.includes(f.value.toLowerCase()));
         if (!hasBrandFact) {
             defects.push("Missing verified first-party brand facts in article content.");
+        }
+    }
+
+    // 7. Evidence & Source Link Readiness
+    if (packet.sources && packet.sources.length > 0) {
+        const hasSourceLink = /\[.*?\]\(https?:\/\/[^\)]+\)/i.test(content) || /<a\s+href="https?:\/\//i.test(content);
+        if (!hasSourceLink) {
+            defects.push("Missing authoritative source evidence citations or links.");
         }
     }
 
@@ -1335,7 +1344,7 @@ ${directive}
 RULES:
 - Return ONLY the updated Markdown content.
 - Do NOT rewrite or truncate sections that are already working well.
-- Preserve all existing source links and schema scripts.`;
+- Preserve all existing headers, code blocks, source links, tables, and schema scripts.`;
 
         const revised = await generateWithFallback({
             prompt,
@@ -1343,10 +1352,28 @@ RULES:
             maxTokens: 8000,
         });
 
-        const trimmed = revised?.trim();
-        // Safety check: Reject revisions that drop below 85% of original length (prevent truncation)
+        const trimmed = revised?.trim().replace(/^```markdown\n?/i, "").replace(/^```html\n?/i, "").replace(/\n?```$/i, "") ?? "";
+
+        // Safety Check 1: Length Guard (Reject revisions dropping below 85% of original length)
         if (!trimmed || trimmed.length < content.length * 0.85) return content;
-        return trimmed.replace(/^```markdown\n?/i, "").replace(/^```html\n?/i, "").replace(/\n?```$/i, "");
+
+        // Safety Check 2: Header Structure Guard (Reject revisions dropping H2 sections)
+        const origH2Count = (content.match(/^##\s+|<h2/gm) || []).length;
+        const revH2Count = (trimmed.match(/^##\s+|<h2/gm) || []).length;
+        if (origH2Count > 0 && revH2Count < origH2Count - 1) return content;
+
+        // Safety Check 3: Source Link Guard (Reject revisions stripping source links)
+        const origLinkCount = (content.match(/\[.*?\]\(https?:\/\/[^\)]+\)/g) || []).length;
+        const revLinkCount = (trimmed.match(/\[.*?\]\(https?:\/\/[^\)]+\)/g) || []).length;
+        if (origLinkCount > 0 && revLinkCount < origLinkCount - 1) return content;
+
+        // Safety Check 4: Script / Schema Guard
+        if (content.includes("<script") && !trimmed.includes("<script")) return content;
+
+        // Safety Check 5: Comparison Table Guard
+        if ((content.includes("<table") || content.includes("|---|")) && (!trimmed.includes("<table") && !trimmed.includes("|---|"))) return content;
+
+        return trimmed;
     } catch {
         return content;
     }
