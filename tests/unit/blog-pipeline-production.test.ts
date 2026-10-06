@@ -576,5 +576,301 @@ describe("Blog Pipeline Production Audit Hardening", () => {
         expect(resultB).toBe(originalDoc); // Link guard rejected revision
         spyB.mockRestore();
     });
+
+    it("23. Case A: Commercial article missing several important research gaps -> analyzer identifies them", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const competitorAnalysis: CompetitorAnalysis = {
+            competitorDomain: "competitor.com",
+            differentiationOpportunities: ["Live real-time SERP tracking", "First-party evidence verification"],
+        };
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: { ...mockBrain, entities: ["OptiAISEO", "Perplexity"] },
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+            competitorAnalysis,
+        });
+
+        const thinDraft = "<h1>Best AI SEO Tools</h1><p>A quick summary of tools available.</p>";
+        const analysis = analyzeDraftQuality(thinDraft, { ...mockBrain, entities: ["OptiAISEO", "Perplexity"] }, packet, testCtx);
+
+        expect(analysis.needsRevision).toBe(true);
+        expect(analysis.defects.some(d => d.includes("Word count is too low"))).toBe(true);
+        expect(analysis.defects.some(d => d.includes("Commercial/transactional decision intent requires a structured comparison table"))).toBe(true);
+        expect(analysis.defects.some(d => d.includes("Missing key topic entities"))).toBe(true);
+        expect(analysis.defects.some(d => d.includes("Missing key competitor differentiation opportunities"))).toBe(true);
+        expect(analysis.competitorGapCoverage.coveredCount).toBeLessThan(analysis.competitorGapCoverage.totalCount);
+    });
+
+    it("24. Case B: Article covers most canonical gaps -> defect count/coverage improves", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const competitorAnalysis: CompetitorAnalysis = {
+            competitorDomain: "competitor.com",
+            differentiationOpportunities: ["Live real-time SERP tracking"],
+        };
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: { ...mockBrain, entities: ["OptiAISEO", "Google Search Console"] },
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+            competitorAnalysis,
+        });
+
+        const richDraft = `<h1>Best AI SEO Tools</h1><p>Quick Answer: OptiAISEO, Perplexity, and Google Search Console provide automated search intelligence.</p>` +
+            `<table><tr><th>Tool</th><th>Pricing</th></tr><tr><td>OptiAISEO</td><td>Starting at $99/mo</td></tr></table>` +
+            `<h2>Feature Breakdown and Differentiation</h2><p>OptiAISEO offers live real-time SERP tracking, integration capabilities, a real pricing comparison, and fast live GSC integration speed for agencies. Backed by a 14-day money back guarantee.</p>` +
+            `<p>Pure keyword density is obsolete — search intent and entity depth matter most.</p>` +
+            `<h3>Frequently Asked Questions</h3>` +
+            `<h4>What is the best AI SEO tool?</h4><p>OptiAISEO ranks as the best AI SEO tool.</p>` +
+            `<h4>What is OptiAISEO?</h4><p>OptiAISEO is an automated AI SEO tool.</p>` +
+            `<h4>How much does AI SEO software cost?</h4><p>Typically starting at $99/mo with full features.</p>` +
+            `<h4>How fast does indexing take?</h4><p>Indexing typically takes 24 hours with live telemetry.</p>` +
+            `[Competitor Review](https://competitor.com/best-tools)` +
+            `[Example Site](https://example.com)` +
+            ` Word`.repeat(1200);
+
+        const analysis = analyzeDraftQuality(richDraft, { ...mockBrain, entities: ["OptiAISEO", "Google Search Console"] }, packet, testCtx);
+
+        expect(analysis.entityCoverage.coverageRatio).toBeGreaterThanOrEqual(0.8);
+        expect(analysis.topicCoverage.tableStakesCovered).toBe(true);
+        expect(analysis.defects.length).toBe(0);
+        expect(analysis.needsRevision).toBe(false);
+    });
+
+    it("25. Case C: Revision improves coverage -> revision accepted", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        const initialDraft = "<h1>Best AI SEO Tools</h1><p>Quick summary.</p>";
+        const initialAnalysis = analyzeDraftQuality(initialDraft, mockBrain, packet, testCtx);
+        expect(initialAnalysis.needsRevision).toBe(true);
+
+        const revisedDraft = `<h1>Best AI SEO Tools</h1><p>Quick Answer: OptiAISEO and Perplexity are top tools.</p>` +
+            `<table><tr><th>Tool</th><th>Price</th></tr><tr><td>OptiAISEO</td><td>$99</td></tr></table>` +
+            `<h3>Frequently Asked Questions</h3><p>What is OptiAISEO? It is a tool.</p>` +
+            `[Source Link](https://example.com/source)` +
+            ` `.repeat(6000);
+
+        const postAnalysis = analyzeDraftQuality(revisedDraft, mockBrain, packet, testCtx);
+        expect(postAnalysis.defects.length).toBeLessThan(initialAnalysis.defects.length);
+    });
+
+    it("26. Case D: Revision looks longer but loses critical evidence -> revision rejected", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const originalDoc = "## Overview\nOptiAISEO provides automated search intelligence. [Source Citation](https://example.com/evidence-1)\n\n## Comparison\nDetails on features.\n" + "Word ".repeat(1500);
+
+        const aiClient = await import("@/lib/blog/ai-client");
+        const longerDocStrippedSource = "## Overview\nOptiAISEO provides automated search intelligence.\n\n## Comparison\nDetails on features.\n" + "Word ".repeat(2000);
+
+        const spy = vi.spyOn(aiClient, "generateWithFallback").mockResolvedValue(longerDocStrippedSource);
+
+        const result = await applyTargetedRevision(originalDoc, "Expand coverage", testCtx);
+        expect(result).toBe(originalDoc); // Source link safety guard rejected revision
+
+        spy.mockRestore();
+    });
+
+    it("27. Case E: Revision loses internal links -> revision rejected", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const originalDoc = "## Overview\nOptiAISEO provides automated search intelligence. See our [Pricing Guide](/pricing).\n\n## Features\nFull details.\n" + "Word ".repeat(1500);
+
+        const aiClient = await import("@/lib/blog/ai-client");
+        const strippedInternalLink = "## Overview\nOptiAISEO provides automated search intelligence. See our Pricing Guide.\n\n## Features\nFull details.\n" + "Word ".repeat(1800);
+
+        const spy = vi.spyOn(aiClient, "generateWithFallback").mockResolvedValue(strippedInternalLink);
+
+        const result = await applyTargetedRevision(originalDoc, "Expand coverage", testCtx);
+        expect(result).toBe(originalDoc); // Internal link safety guard rejected revision
+
+        spy.mockRestore();
+    });
+
+    it("28. Case F: Existing-site strategy says OPTIMIZE/CONSOLIDATE -> analyzer exposes strategic conflict", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const gscEvidence = {
+            query: "best ai seo tools",
+            position: 4.2,
+            clicks: 120,
+            impressions: 2500,
+        };
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+            gscEvidence,
+        });
+
+        const articleContent = "<h1>Best AI SEO Tools</h1><p>Full article content.</p>";
+        const analysis = analyzeDraftQuality(articleContent, mockBrain, packet, testCtx);
+
+        expect(analysis.existingSiteFit.hasStrategicConflict).toBe(true);
+        expect(analysis.existingSiteFit.verdict).toBe("EXISTING_HEALTHY");
+        expect(analysis.defects.some(d => d.includes("Strategic conflict"))).toBe(true);
+    });
+
+    it("29. Case G: Cannibalization signal exists -> analyzer reports it", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const gscEvidence = {
+            query: "best ai seo tools",
+            position: 8.5,
+            clicks: 80,
+            url: "https://example.com/blog/existing-ai-tools",
+        };
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+            gscEvidence,
+        });
+
+        const articleContent = "<h1>Best AI SEO Tools</h1><p>New article content.</p>";
+        const analysis = analyzeDraftQuality(articleContent, mockBrain, packet, testCtx);
+
+        expect(analysis.cannibalizationRisk.hasRisk).toBe(true);
+        expect(analysis.defects.some(d => d.includes("Cannibalization risk"))).toBe(true);
+    });
+
+    it("30. Case H: AEO question coverage is partial -> analyzer reports partial rather than PASS", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const brainWithMultipleFaqs: ResearchBrain = {
+            ...mockBrain,
+            faqTargets: [
+                "What is an AI SEO tool?",
+                "How much does AI SEO software cost?",
+                "Is AI SEO safe for SaaS companies?",
+                "Which AI SEO tool offers real-time GSC sync?",
+            ],
+        };
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: brainWithMultipleFaqs,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        // Article only answers 1 question ("What is an AI SEO tool?")
+        const partialDraft = `<h1>Best AI SEO Tools</h1><h3>What is an AI SEO tool?</h3><p>It is an automated tool.</p>`;
+        const analysis = analyzeDraftQuality(partialDraft, brainWithMultipleFaqs, packet, testCtx);
+
+        expect(analysis.questionCoverage.coverageRatio).toBeLessThan(1.0);
+        expect(analysis.questionCoverage.unaddressedQuestions.length).toBeGreaterThan(0);
+        expect(analysis.defects.some(d => d.includes("Unaddressed key search questions"))).toBe(true);
+    });
+
+    it("31. Case I: Evidence source exists but article does not actually use it -> analyzer does not mark evidence complete", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const sourceList = [
+            {
+                id: "src-101",
+                url: "https://example.com/research-study-2026",
+                title: "AI SEO Benchmark Study 2026",
+                publisher: "Search Research Institute",
+                retrievedAt: new Date().toISOString(),
+                claim: "AI SEO tools increase organic velocity by 3.4x",
+                evidence: "Data collected from 500 SaaS domains.",
+                sourceType: "research" as const,
+                confidence: 0.95,
+            }
+        ];
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+        packet.sources = sourceList;
+        packet.evidenceAvailability = "AVAILABLE";
+
+        // Article content has general text but NO citations or links to the source URL or publisher
+        const unbackedArticle = "<h1>Best AI SEO Tools</h1><p>Many companies use AI SEO tools to rank faster.</p>";
+        const analysis = analyzeDraftQuality(unbackedArticle, mockBrain, packet, testCtx);
+
+        expect(analysis.evidenceCoverage.citedSourcesCount).toBe(0);
+        expect(analysis.evidenceCoverage.hasValidCitations).toBe(false);
+        expect(analysis.defects.some(d => d.includes("Missing authoritative source evidence citations"))).toBe(true);
+    });
 });
 

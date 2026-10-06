@@ -27,9 +27,13 @@ import {
     type SectionResearch,
     type QueryDecomposition,
     type CompetitorAnalysis,
+    type SourceEvidence,
+    type EvidenceAvailability,
+    isValidFaqOpener,
     ResearchBrainSchema,
     OutlinePlanSchema,
 } from "./contracts";
+import type { PageExistenceVerdict } from "@/lib/opportunity-engine/types";
 import { extractEvidencePacket } from "./evidence-extractor";
 import {
     buildResearchPacket,
@@ -1244,10 +1248,378 @@ export async function runFullPipeline(params: {
     };
 }
 
-export interface AnalysisResult {
-    needsRevision: boolean;
+export interface ContentAnalysisReport {
+    intentSatisfaction: {
+        satisfied: boolean;
+        intentType: string;
+        details: string[];
+    };
+    topicCoverage: {
+        coveredCount: number;
+        totalCount: number;
+        missingTopics: string[];
+        tableStakesCovered: boolean;
+    };
+    entityCoverage: {
+        coveredCount: number;
+        totalCount: number;
+        missingEntities: string[];
+        coverageRatio: number;
+    };
+    questionCoverage: {
+        addressedCount: number;
+        totalCount: number;
+        unaddressedQuestions: string[];
+        coverageRatio: number;
+    };
+    serpFormatAlignment: {
+        aligned: boolean;
+        expectedFormat: string | null;
+        hasQuickAnswer: boolean;
+        hasComparisonTable: boolean;
+        details: string[];
+    };
+    contentGapCoverage: {
+        coveredCount: number;
+        totalCount: number;
+        missingGaps: string[];
+    };
+    competitorGapCoverage: {
+        coveredCount: number;
+        totalCount: number;
+        missingOpportunities: string[];
+    };
+    evidenceCoverage: {
+        status: "AVAILABLE" | "EMPTY" | "UNAVAILABLE";
+        citedSourcesCount: number;
+        totalSourcesCount: number;
+        uncitedSources: string[];
+        hasValidCitations: boolean;
+    };
+    aeoReadiness: {
+        score: number;
+        ready: boolean;
+        hasDirectAnswerBlock: boolean;
+        hasStructuredFaq: boolean;
+        conciseAnswerabilityScore: number;
+        details: string[];
+    };
+    originalValue: {
+        score: number;
+        uniqueAnglesCovered: string[];
+        informationGainPresent: boolean;
+    };
+    firstPartyCoverage: {
+        status: "AVAILABLE" | "EMPTY" | "UNAVAILABLE";
+        brandFactsUsed: number;
+        totalBrandFacts: number;
+        topKeywordsRef: number;
+    };
+    internalLinkReadiness: {
+        status: "AVAILABLE" | "EMPTY" | "UNAVAILABLE";
+        hasInternalLinks: boolean;
+        potentialTargets: string[];
+    };
+    existingSiteFit: {
+        verdict: PageExistenceVerdict | "UNAVAILABLE";
+        hasStrategicConflict: boolean;
+        details: string[];
+    };
+    cannibalizationRisk: {
+        hasRisk: boolean;
+        conflictingUrls: string[];
+        details: string[];
+    };
     defects: string[];
+    overallDefects: string[];
+    needsRevision: boolean;
     repairDirective: string | null;
+}
+
+export type AnalysisResult = ContentAnalysisReport;
+
+function escapeRegExp(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function checkEntityCoverage(content: string, entities: string[]) {
+    const lowerContent = content.toLowerCase();
+    const missing: string[] = [];
+    let covered = 0;
+
+    for (const rawEntity of entities) {
+        const entity = rawEntity.trim();
+        if (!entity) continue;
+        const lowerEntity = entity.toLowerCase();
+
+        let isMatched = false;
+        if (lowerEntity.includes(" ") || lowerEntity.includes("-") || lowerEntity.includes(".")) {
+            isMatched = lowerContent.includes(lowerEntity);
+        } else {
+            const regex = new RegExp(`\\b${escapeRegExp(lowerEntity)}\\b`, "i");
+            isMatched = regex.test(content);
+        }
+
+        if (isMatched) {
+            covered++;
+        } else {
+            missing.push(entity);
+        }
+    }
+
+    const total = entities.length;
+    const ratio = total > 0 ? covered / total : 1;
+    return { coveredCount: covered, totalCount: total, missingEntities: missing, coverageRatio: ratio };
+}
+
+function checkQuestionCoverage(content: string, questions: string[]) {
+    const lowerContent = content.toLowerCase();
+    const unaddressed: string[] = [];
+    let addressed = 0;
+
+    const stopWords = new Set(["what", "how", "why", "when", "where", "which", "does", "do", "is", "are", "can", "the", "a", "an", "and", "or", "for", "with", "about", "your", "this", "that"]);
+
+    for (const q of questions) {
+        const cleanQ = q.trim();
+        if (!cleanQ) continue;
+        const lowerQ = cleanQ.toLowerCase();
+
+        const keyWords = lowerQ
+            .replace(/[^\w\s]/g, "")
+            .split(/\s+/)
+            .filter(w => w.length > 3 && !stopWords.has(w));
+
+        let isAddressed = lowerContent.includes(lowerQ);
+
+        if (!isAddressed && keyWords.length > 0) {
+            const blocks = content.split(/(?=\n#{1,4}\s+|\n<h[1-4]|<\/p>|\n\n)/i);
+            for (const block of blocks) {
+                const lowerBlock = block.toLowerCase();
+                const matchedWords = keyWords.filter(w => lowerBlock.includes(w));
+                if (matchedWords.length >= Math.min(2, keyWords.length)) {
+                    isAddressed = true;
+                    break;
+                }
+            }
+        }
+
+        if (isAddressed) {
+            addressed++;
+        } else {
+            unaddressed.push(cleanQ);
+        }
+    }
+
+    const total = questions.length;
+    const ratio = total > 0 ? addressed / total : 1;
+    return { addressedCount: addressed, totalCount: total, unaddressedQuestions: unaddressed, coverageRatio: ratio };
+}
+
+function checkGapCoverage(content: string, gaps: string[]) {
+    const lowerContent = content.toLowerCase();
+    const missing: string[] = [];
+    let covered = 0;
+
+    const stopWords = new Set(["the", "a", "an", "and", "or", "for", "with", "about", "your", "this", "that", "how", "what", "why"]);
+
+    for (const gap of gaps) {
+        const cleanGap = gap.trim();
+        if (!cleanGap) continue;
+        const lowerGap = cleanGap.toLowerCase();
+
+        const keyTerms = lowerGap
+            .replace(/[^\w\s]/g, "")
+            .split(/\s+/)
+            .filter(w => w.length > 3 && !stopWords.has(w));
+
+        let isCovered = false;
+        if (lowerContent.includes(lowerGap) || (lowerGap.length > 20 && lowerContent.includes(lowerGap.slice(0, 20)))) {
+            isCovered = true;
+        } else if (keyTerms.length > 0) {
+            const matchedTerms = keyTerms.filter(t => lowerContent.includes(t));
+            if (matchedTerms.length / keyTerms.length >= 0.7) {
+                isCovered = true;
+            }
+        }
+
+        if (isCovered) {
+            covered++;
+        } else {
+            missing.push(cleanGap);
+        }
+    }
+
+    const total = gaps.length;
+    return { coveredCount: covered, totalCount: total, missing };
+}
+
+function checkEvidenceCoverage(content: string, sources: SourceEvidence[] = [], availability?: EvidenceAvailability) {
+    const status = availability ?? (sources.length > 0 ? "AVAILABLE" : "EMPTY");
+    if (status !== "AVAILABLE" || sources.length === 0) {
+        return {
+            status: status as "AVAILABLE" | "EMPTY" | "UNAVAILABLE",
+            citedSourcesCount: 0,
+            totalSourcesCount: sources.length,
+            uncitedSources: sources.map(s => s.title || s.url),
+            hasValidCitations: false,
+        };
+    }
+
+    const uncited: string[] = [];
+    let citedCount = 0;
+    const lowerContent = content.toLowerCase();
+
+    for (const source of sources) {
+        let isCited = false;
+        if (source.url && lowerContent.includes(source.url.toLowerCase())) {
+            isCited = true;
+        }
+        if (!isCited && source.url) {
+            try {
+                const domain = new URL(source.url).hostname.replace(/^www\./, "");
+                if (domain.length > 3 && lowerContent.includes(domain.toLowerCase())) {
+                    isCited = true;
+                }
+            } catch {
+                // Ignore URL parse error
+            }
+        }
+        if (!isCited && source.publisher && source.publisher.length > 3 && lowerContent.includes(source.publisher.toLowerCase())) {
+            isCited = true;
+        }
+        if (!isCited && source.id && lowerContent.includes(source.id.toLowerCase())) {
+            isCited = true;
+        }
+
+        if (isCited) {
+            citedCount++;
+        } else {
+            uncited.push(source.title || source.publisher || source.url);
+        }
+    }
+
+    return {
+        status: status as "AVAILABLE" | "EMPTY" | "UNAVAILABLE",
+        citedSourcesCount: citedCount,
+        totalSourcesCount: sources.length,
+        uncitedSources: uncited,
+        hasValidCitations: citedCount > 0,
+    };
+}
+
+function calculateAeoReadiness(
+    content: string,
+    questionResult: { addressedCount: number; totalCount: number; coverageRatio: number },
+    hasQuickAnswer: boolean,
+) {
+    const details: string[] = [];
+    let score = 0;
+
+    const hasDirectAnswerBlock = hasQuickAnswer || /quick answer|key takeaway|direct answer|in summary/i.test(content.slice(0, 3000));
+    if (hasDirectAnswerBlock) {
+        score += 25;
+        details.push("Direct answer summary block present.");
+    } else {
+        details.push("Missing direct answer summary block at beginning of article.");
+    }
+
+    const hasStructuredFaq = (/##\s*FAQ|<h[23][^>]*>.*(?:faq|frequently asked)/i.test(content)) && (/<h3[^>]*>|\n###\s+/i.test(content));
+    if (hasStructuredFaq) {
+        score += 25;
+        details.push("Structured FAQ section present.");
+    } else {
+        details.push("Missing structured FAQ section with Q&A headings.");
+    }
+
+    const questionPoints = Math.round(questionResult.coverageRatio * 25);
+    score += questionPoints;
+    if (questionResult.coverageRatio < 1) {
+        details.push(`Partial target question coverage (${questionResult.addressedCount}/${questionResult.totalCount} addressed).`);
+    } else {
+        details.push("All target search questions addressed.");
+    }
+
+    const answers = [...content.matchAll(/(?:###|<h3)[^>]*>.*?\n+([^#<]+)/gi)].map(m => m[1].trim());
+    let conciseOpenerCount = 0;
+    for (const ans of answers) {
+        if (isValidFaqOpener(ans)) {
+            conciseOpenerCount++;
+        }
+    }
+    const conciseRatio = answers.length > 0 ? conciseOpenerCount / answers.length : (hasStructuredFaq ? 0.5 : 0);
+    const concisePoints = Math.round(conciseRatio * 25);
+    score += concisePoints;
+    if (conciseRatio >= 0.5) {
+        details.push("Concise, extraction-friendly answer openers detected.");
+    } else {
+        details.push("Q&A answers lack direct, extraction-friendly opening structures.");
+    }
+
+    return {
+        score: Math.min(100, score),
+        ready: score >= 70,
+        hasDirectAnswerBlock,
+        hasStructuredFaq,
+        conciseAnswerabilityScore: concisePoints,
+        details,
+    };
+}
+
+function checkExistingSiteStrategy(
+    packet: ResearchPacket,
+    ctx: PromptContext
+) {
+    const details: string[] = [];
+    const cannibalizationDetails: string[] = [];
+    const conflictingUrls: string[] = [];
+
+    const gscPosition = typeof packet.gscEvidence?.position === "number" ? packet.gscEvidence.position : null;
+    const gscQuery = typeof packet.gscEvidence?.query === "string" ? packet.gscEvidence.query : ctx.keyword;
+
+    const topKeywords = packet.firstPartyEvidence?.topKeywords ?? [];
+    const matchedTopKw = topKeywords.find(k => k.keyword.toLowerCase() === ctx.keyword.toLowerCase() || ctx.keyword.toLowerCase().includes(k.keyword.toLowerCase()));
+
+    let verdict: PageExistenceVerdict | "UNAVAILABLE" = "UNAVAILABLE";
+    let hasStrategicConflict = false;
+    let hasCannibalizationRisk = false;
+
+    if (gscPosition !== null || matchedTopKw) {
+        const pos = gscPosition ?? matchedTopKw?.position ?? 99;
+        if (pos <= 10) {
+            verdict = "EXISTING_HEALTHY";
+            hasStrategicConflict = true;
+            details.push(`Existing page already ranks at position ${pos} for query '${gscQuery}'. Strategy indicates OPTIMIZE or CONSOLIDATE rather than creating a new page.`);
+        } else if (pos <= 20) {
+            verdict = "EXISTING_NEEDS_FIX";
+            hasStrategicConflict = true;
+            details.push(`Existing page ranks at position ${pos} for query '${gscQuery}'. Strategy indicates OPTIMIZE existing content.`);
+        } else {
+            verdict = "MISSING";
+        }
+
+        if (pos <= 20) {
+            hasCannibalizationRisk = true;
+            cannibalizationDetails.push(`Generated article targets query '${ctx.keyword}' which already has an existing ranking page at position ${pos}.`);
+            if (typeof packet.gscEvidence?.url === "string") {
+                conflictingUrls.push(packet.gscEvidence.url);
+            }
+        }
+    } else if (packet.gscEvidence || packet.firstPartyEvidence) {
+        verdict = "MISSING";
+    }
+
+    return {
+        existingSiteFit: {
+            verdict,
+            hasStrategicConflict,
+            details,
+        },
+        cannibalizationRisk: {
+            hasRisk: hasCannibalizationRisk,
+            conflictingUrls,
+            details: cannibalizationDetails,
+        },
+    };
 }
 
 export function analyzeDraftQuality(
@@ -1255,77 +1627,181 @@ export function analyzeDraftQuality(
     brain: ResearchBrain,
     packet: ResearchPacket,
     ctx: PromptContext
-): AnalysisResult {
+): ContentAnalysisReport {
     const defects: string[] = [];
     const lower = content.toLowerCase();
     const isDecisionIntent = ctx.intent === "commercial" || ctx.intent === "transactional";
 
-    // 1. Word Count & Search Intent Scope
+    // 1. Intent & Word Count
     const wordCount = content.trim().split(/\s+/).length;
     const targetWordCount = isDecisionIntent ? 1200 : 800;
-    if (wordCount < targetWordCount) {
+    const intentSatisfied = wordCount >= targetWordCount;
+    const intentDetails: string[] = [];
+
+    if (!intentSatisfied) {
         defects.push(`Word count is too low (${wordCount} words; target is ${targetWordCount}+ words for ${ctx.intent} intent).`);
+        intentDetails.push(`Word count (${wordCount}) below target (${targetWordCount}).`);
+    } else {
+        intentDetails.push(`Word count requirement satisfied (${wordCount}/${targetWordCount}).`);
     }
 
-    // 2. Key Topic Entity & Subtopic Coverage
-    const missingEntities = (brain.entities ?? [])
-        .filter(e => !lower.includes(e.toLowerCase()))
-        .slice(0, 3);
-    if (missingEntities.length > 0) {
-        defects.push(`Missing key topic entities: ${missingEntities.join(", ")}.`);
-    }
-
-    // 3. Question & FAQ Coverage
-    if (brain.faqTargets && brain.faqTargets.length > 0) {
-        const hasFaq = /<h3[^>]*>|\bfaq\b|\bfrequently asked\b/i.test(content);
-        if (!hasFaq) {
-            defects.push(`Missing dedicated FAQ section addressing key questions.`);
-        }
-    }
-
-    // 4. SERP Format & Answer Block Alignment
+    // 2. SERP Format Alignment & Quick Answer / Comparison Table
     const hasQuickAnswer = /quick answer|key takeaway|direct answer|in summary/i.test(content);
+    const hasComparisonTable = /<table|\|.*\|/i.test(content);
+    const serpFormatDetails: string[] = [];
+    let formatAligned = true;
+
     if (!hasQuickAnswer && ctx.intent === "informational") {
         defects.push("Missing direct Quick Answer / Key Takeaways summary block for search snippets.");
+        serpFormatDetails.push("Missing Quick Answer summary block.");
+        formatAligned = false;
     }
 
-    if (isDecisionIntent && !/<table|\|.*\|/i.test(content)) {
+    if (isDecisionIntent && !hasComparisonTable) {
         defects.push("Commercial/transactional decision intent requires a structured comparison table or feature breakdown.");
+        serpFormatDetails.push("Missing comparison table or feature breakdown for decision intent.");
+        formatAligned = false;
     }
 
-    // 5. Competitor Gap & Differentiation Opportunities
-    if (packet.competitorAnalysis?.differentiationOpportunities?.length) {
-        const missingOpportunities = packet.competitorAnalysis.differentiationOpportunities
-            .filter(opp => !lower.includes(opp.toLowerCase().slice(0, 15)))
-            .slice(0, 2);
-        if (missingOpportunities.length > 0) {
-            defects.push(`Missing key competitor differentiation opportunities: ${missingOpportunities.join("; ")}.`);
+    // 3. Entity Coverage
+    const allEntities = Array.from(new Set([
+        ...(packet.entities?.map(e => e.entity) ?? []),
+        ...(brain.entities ?? []),
+    ]));
+    const entityResult = checkEntityCoverage(content, allEntities);
+    if (entityResult.missingEntities.length > 0 && entityResult.coverageRatio < 0.8) {
+        defects.push(`Missing key topic entities: ${entityResult.missingEntities.slice(0, 3).join(", ")}.`);
+    }
+
+    // 4. Question & PAA Coverage
+    const allQuestions = Array.from(new Set([
+        ...(packet.serp.paa?.map(p => p.question) ?? []),
+        ...(brain.faqTargets ?? []),
+        ...(packet.serp.unansweredQuestions ?? []),
+    ]));
+    const questionResult = checkQuestionCoverage(content, allQuestions);
+    if (allQuestions.length > 0 && questionResult.unaddressedQuestions.length > 0 && questionResult.coverageRatio < 0.75) {
+        defects.push(`Unaddressed key search questions: ${questionResult.unaddressedQuestions.slice(0, 3).join("; ")}.`);
+    } else if (brain.faqTargets && brain.faqTargets.length > 0) {
+        const hasFaqSection = /<h3[^>]*>|\bfaq\b|\bfrequently asked\b/i.test(content);
+        if (!hasFaqSection) {
+            defects.push("Missing dedicated FAQ section addressing key questions.");
         }
     }
 
-    // 6. First-Party Evidence Backing
-    if (packet.firstPartyEvidence?.brandFacts?.length) {
-        const hasBrandFact = packet.firstPartyEvidence.brandFacts.some(f => lower.includes(f.value.toLowerCase()));
-        if (!hasBrandFact) {
+    // 5. Topics & Table Stakes Coverage
+    const tableStakes = packet.serp.tableStakes ?? packet.competitorAnalysis?.headings ?? [];
+    const topicResult = checkGapCoverage(content, tableStakes);
+
+    // 6. Content Gaps & Competitor Differentiation Opportunities
+    const contentGaps = packet.contentGaps ?? brain.contentGaps ?? [];
+    const gapResult = checkGapCoverage(content, contentGaps);
+
+    const diffOpportunities = packet.competitorAnalysis?.differentiationOpportunities ?? packet.serp.opportunities ?? [];
+    const oppResult = checkGapCoverage(content, diffOpportunities);
+    if (diffOpportunities.length > 0 && oppResult.missing.length > 0) {
+        defects.push(`Missing key competitor differentiation opportunities: ${oppResult.missing.slice(0, 2).join("; ")}.`);
+    }
+
+    // 7. Evidence & Source Link Coverage
+    const evidenceResult = checkEvidenceCoverage(content, packet.sources, packet.evidenceAvailability);
+    if (evidenceResult.status === "AVAILABLE" && evidenceResult.totalSourcesCount > 0 && !evidenceResult.hasValidCitations) {
+        defects.push("Missing authoritative source evidence citations or links.");
+    }
+
+    // 8. AEO Readiness
+    const aeoResult = calculateAeoReadiness(content, questionResult, hasQuickAnswer);
+
+    // 9. First-Party Evidence Coverage
+    const brandFacts = packet.firstPartyEvidence?.brandFacts ?? [];
+    let brandFactsUsed = 0;
+    if (brandFacts.length > 0) {
+        brandFactsUsed = brandFacts.filter(f => lower.includes(f.value.toLowerCase())).length;
+        if (brandFactsUsed === 0) {
             defects.push("Missing verified first-party brand facts in article content.");
         }
     }
 
-    // 7. Evidence & Source Link Readiness
-    if (packet.sources && packet.sources.length > 0) {
-        const hasSourceLink = /\[.*?\]\(https?:\/\/[^\)]+\)/i.test(content) || /<a\s+href="https?:\/\//i.test(content);
-        if (!hasSourceLink) {
-            defects.push("Missing authoritative source evidence citations or links.");
-        }
+    // 10. Internal Link Readiness
+    const topKws = packet.firstPartyEvidence?.topKeywords ?? [];
+    const hasInternalLinks = Boolean(content.match(/\[.*?\]\(\/[^\)]*\)/g) || content.match(/\[.*?\]\(https?:\/\/[^\)]*example\.com[^\)]*\)/gi));
+
+    // 11. Existing Site Fit & Cannibalization Risk
+    const siteStrategy = checkExistingSiteStrategy(packet, ctx);
+    if (siteStrategy.existingSiteFit.hasStrategicConflict) {
+        defects.push(`Strategic conflict: Existing site strategy indicates this page should be OPTIMIZED or CONSOLIDATED.`);
+    }
+    if (siteStrategy.cannibalizationRisk.hasRisk) {
+        defects.push(`Cannibalization risk: Generated article overlaps heavily with existing site ranking for '${ctx.keyword}'.`);
     }
 
-    if (defects.length === 0) {
-        return { needsRevision: false, defects: [], repairDirective: null };
-    }
+    // 12. Original Value & Information Gain
+    const contrarianAngles = packet.contrarianAngles ?? brain.contrarianAngles ?? [];
+    const contrarianResult = checkGapCoverage(content, contrarianAngles);
+    const informationGainPresent = Boolean(packet.informationGain || brain.informationGainDirective || contrarianResult.coveredCount > 0);
+    const originalValueScore = (informationGainPresent ? 50 : 20) + Math.round((contrarianResult.totalCount > 0 ? contrarianResult.coveredCount / contrarianResult.totalCount : 1) * 50);
 
-    const repairDirective = `REVISION DIRECTIVE: The article has these specific quality and coverage gaps:\n${defects.map(d => `- ${d}`).join("\n")}\nAdd missing details, sections, tables, or direct answer blocks cleanly into the Markdown content. Preserve all existing headers, code blocks, and source citations without truncating existing content.`;
+    const needsRevision = defects.length > 0;
+    const repairDirective = needsRevision
+        ? `REVISION DIRECTIVE: The article has these specific quality and coverage gaps:\n${defects.map(d => `- ${d}`).join("\n")}\nAdd missing details, sections, tables, or direct answer blocks cleanly into the Markdown content. Preserve all existing headers, code blocks, and source citations without truncating existing content.`
+        : null;
 
-    return { needsRevision: true, defects, repairDirective };
+    return {
+        intentSatisfaction: {
+            satisfied: intentSatisfied,
+            intentType: ctx.intent,
+            details: intentDetails,
+        },
+        topicCoverage: {
+            coveredCount: topicResult.coveredCount,
+            totalCount: topicResult.totalCount,
+            missingTopics: topicResult.missing,
+            tableStakesCovered: topicResult.missing.length === 0,
+        },
+        entityCoverage: entityResult,
+        questionCoverage: questionResult,
+        serpFormatAlignment: {
+            aligned: formatAligned,
+            expectedFormat: packet.serp.format ?? (isDecisionIntent ? "comparison" : "guide"),
+            hasQuickAnswer,
+            hasComparisonTable,
+            details: serpFormatDetails,
+        },
+        contentGapCoverage: {
+            coveredCount: gapResult.coveredCount,
+            totalCount: gapResult.totalCount,
+            missingGaps: gapResult.missing,
+        },
+        competitorGapCoverage: {
+            coveredCount: oppResult.coveredCount,
+            totalCount: oppResult.totalCount,
+            missingOpportunities: oppResult.missing,
+        },
+        evidenceCoverage: evidenceResult,
+        aeoReadiness: aeoResult,
+        originalValue: {
+            score: originalValueScore,
+            uniqueAnglesCovered: contrarianAngles.filter((_, idx) => !contrarianResult.missing.includes(contrarianAngles[idx])),
+            informationGainPresent,
+        },
+        firstPartyCoverage: {
+            status: packet.firstPartyEvidence ? "AVAILABLE" : "UNAVAILABLE",
+            brandFactsUsed,
+            totalBrandFacts: brandFacts.length,
+            topKeywordsRef: topKws.length,
+        },
+        internalLinkReadiness: {
+            status: topKws.length > 0 ? "AVAILABLE" : "UNAVAILABLE",
+            hasInternalLinks,
+            potentialTargets: topKws.map(k => k.keyword),
+        },
+        existingSiteFit: siteStrategy.existingSiteFit,
+        cannibalizationRisk: siteStrategy.cannibalizationRisk,
+        defects,
+        overallDefects: defects,
+        needsRevision,
+        repairDirective,
+    };
 }
 
 export async function applyTargetedRevision(
@@ -1344,7 +1820,7 @@ ${directive}
 RULES:
 - Return ONLY the updated Markdown content.
 - Do NOT rewrite or truncate sections that are already working well.
-- Preserve all existing headers, code blocks, source links, tables, and schema scripts.`;
+- Preserve all existing headers, code blocks, source links, internal links, CTA sections, tables, and schema scripts.`;
 
         const revised = await generateWithFallback({
             prompt,
@@ -1360,18 +1836,33 @@ RULES:
         // Safety Check 2: Header Structure Guard (Reject revisions dropping H2 sections)
         const origH2Count = (content.match(/^##\s+|<h2/gm) || []).length;
         const revH2Count = (trimmed.match(/^##\s+|<h2/gm) || []).length;
-        if (origH2Count > 0 && revH2Count < origH2Count - 1) return content;
+        if (origH2Count > 0 && revH2Count < origH2Count) return content;
 
-        // Safety Check 3: Source Link Guard (Reject revisions stripping source links)
-        const origLinkCount = (content.match(/\[.*?\]\(https?:\/\/[^\)]+\)/g) || []).length;
-        const revLinkCount = (trimmed.match(/\[.*?\]\(https?:\/\/[^\)]+\)/g) || []).length;
-        if (origLinkCount > 0 && revLinkCount < origLinkCount - 1) return content;
+        // Safety Check 3: External Source Link Guard (Reject revisions stripping source links)
+        const origExtLinks = (content.match(/\[.*?\]\(https?:\/\/[^\)]+\)/g) || []).length;
+        const revExtLinks = (trimmed.match(/\[.*?\]\(https?:\/\/[^\)]+\)/g) || []).length;
+        if (origExtLinks > 0 && revExtLinks < origExtLinks) return content;
 
-        // Safety Check 4: Script / Schema Guard
+        // Safety Check 4: Internal Link Guard (Reject revisions stripping internal links)
+        const origIntLinks = (content.match(/\[.*?\]\(\/[^\)]*\)/g) || []).length;
+        const revIntLinks = (trimmed.match(/\[.*?\]\(\/[^\)]*\)/g) || []).length;
+        if (origIntLinks > 0 && revIntLinks < origIntLinks) return content;
+
+        // Safety Check 5: Script / Schema Guard
         if (content.includes("<script") && !trimmed.includes("<script")) return content;
 
-        // Safety Check 5: Comparison Table Guard
+        // Safety Check 6: Comparison Table Guard
         if ((content.includes("<table") || content.includes("|---|")) && (!trimmed.includes("<table") && !trimmed.includes("|---|"))) return content;
+
+        // Safety Check 7: FAQ Section Guard
+        const origHasFaq = /##\s*FAQ|<h[23][^>]*>.*(?:faq|frequently asked)/i.test(content);
+        const revHasFaq = /##\s*FAQ|<h[23][^>]*>.*(?:faq|frequently asked)/i.test(trimmed);
+        if (origHasFaq && !revHasFaq) return content;
+
+        // Safety Check 8: CTA Guard (Reject revisions stripping Call to Action sections/links)
+        const origHasCta = /##\s*(?:cta|call to action)|\[.*?\]\([^)]*(?:cta|signup|contact|demo)[^)]*\)/i.test(content);
+        const revHasCta = /##\s*(?:cta|call to action)|\[.*?\]\([^)]*(?:cta|signup|contact|demo)[^)]*\)/i.test(trimmed);
+        if (origHasCta && !revHasCta) return content;
 
         return trimmed;
     } catch {
