@@ -2096,7 +2096,7 @@ describe("Blog Pipeline Production Audit Hardening", () => {
             }
         );
 
-        expect(spyBlog).toHaveBeenCalledTimes(1);
+        expect(spyBlog.mock.calls.length).toBeGreaterThanOrEqual(1);
         expect(results.length).toBeGreaterThan(0);
         expect(results[0].destination).toBe("https://example.com/blog/content-strategy-guide");
         expect(results[0].relationship).toBe("keyword");
@@ -2366,6 +2366,277 @@ describe("Blog Pipeline Production Audit Hardening", () => {
         expect(result.linked).toBe(true);
         expect(result.html).toContain('href="https://example.com/blog/b2b-growth-guide"');
         expect(result.html).toContain('b2b content strategy');
+    });
+
+    it("68. Authoritative Placement: buildPost uses ResearchPacket opportunities exclusively for final link placement", async () => {
+        const { prisma } = await import("@/lib/prisma");
+        const { buildPost } = await import("@/lib/blog");
+        const { buildResearchPacket } = await import("@/lib/blog/research-packet");
+
+        const spyBlog = vi.spyOn(prisma.blog, "findMany").mockResolvedValue([
+            {
+                slug: "canonical-guide",
+                title: "Canonical Guide",
+                targetKeywords: ["canonical guide"],
+            },
+        ] as any);
+
+        const mockBrainResponse = {
+            intent: "commercial",
+            searcherMindset: "Looking for test keyword",
+            contentGaps: ["Benchmark testing"],
+            entities: ["Test"],
+            contrarianAngles: ["Different view"],
+            examplesNeeded: ["Example"],
+            faqTargets: ["What is test keyword?"],
+            commonMisconceptions: ["Misconception"],
+            industryMyths: ["Myth"],
+            whatPeopleAvoidSaying: ["Reality"],
+        };
+
+        const packet = await buildResearchPacket({
+            keyword: "test keyword",
+            author: mockAuthor,
+            serpContext: null,
+            brain: mockBrainResponse,
+            internalLinkOpportunities: [
+                {
+                    destination: "https://example.com/blog/canonical-guide",
+                    relationship: "topical",
+                    anchorConcept: "canonical guide",
+                    relevance: 95,
+                    reason: "Topical match",
+                },
+            ],
+        });
+
+        const syntheticResponse: any = {
+            title: "Test Blog Title",
+            slug: "test-blog-title",
+            content: "Paragraph about canonical guide in deep detail.\n\nParagraph 2 about marketing.",
+            excerpt: "Quick answer excerpt.",
+            metaDescription: "Test meta description for canonical guide keyword.",
+            targetKeywords: ["test keyword"],
+            faqs: [],
+            sections: [],
+            quickAnswer: "Quick answer summary.",
+            comparisonTable: [],
+        };
+
+        const testCtx = buildPromptContext({
+            keyword: "test keyword",
+            category: "test keyword",
+            siteDomain: "example.com",
+            intent: "informational",
+            hasAuthorGrounding: true,
+        });
+
+        const result = await buildPost(syntheticResponse, mockAuthor, testCtx, "site-auth-test", packet);
+
+        expect(spyBlog).toHaveBeenCalledTimes(1);
+        expect(spyBlog).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    slug: { in: ["canonical-guide"] },
+                }),
+            })
+        );
+        expect(result.content).toContain('href="https://example.com/blog/canonical-guide"');
+
+        spyBlog.mockRestore();
+    });
+
+    it("69. Unlisted & External Rejection: buildPost does NOT inject published blogs or external URLs not in ResearchPacket", async () => {
+        const { prisma } = await import("@/lib/prisma");
+        const { buildPost } = await import("@/lib/blog");
+        const { buildResearchPacket } = await import("@/lib/blog/research-packet");
+
+        const spyBlog = vi.spyOn(prisma.blog, "findMany").mockResolvedValue([]);
+
+        const mockBrainResponse = {
+            intent: "commercial",
+            searcherMindset: "Looking for test keyword",
+            contentGaps: ["Benchmark testing"],
+            entities: ["Test"],
+            contrarianAngles: ["Different view"],
+            examplesNeeded: ["Example"],
+            faqTargets: ["What is test keyword?"],
+            commonMisconceptions: ["Misconception"],
+            industryMyths: ["Myth"],
+            whatPeopleAvoidSaying: ["Reality"],
+        };
+
+        const packet = await buildResearchPacket({
+            keyword: "test keyword",
+            author: mockAuthor,
+            serpContext: null,
+            brain: mockBrainResponse,
+            internalLinkOpportunities: [
+                {
+                    destination: "https://external-competitor.com/blog/unrelated-page",
+                    relationship: "topical",
+                    anchorConcept: "unrelated page",
+                    relevance: 90,
+                    reason: "External match",
+                },
+            ],
+        });
+
+        const syntheticResponse: any = {
+            title: "Test Blog Title",
+            slug: "test-blog-title",
+            content: "Paragraph mentioning unrelated page and external links.",
+            excerpt: "Quick answer.",
+            metaDescription: "Test meta description.",
+            targetKeywords: ["test keyword"],
+            faqs: [],
+            sections: [],
+            quickAnswer: "Quick answer.",
+            comparisonTable: [],
+        };
+
+        const testCtx = buildPromptContext({
+            keyword: "test keyword",
+            category: "test keyword",
+            siteDomain: "example.com",
+            intent: "informational",
+            hasAuthorGrounding: true,
+        });
+
+        const result = await buildPost(syntheticResponse, mockAuthor, testCtx, "site-auth-test", packet);
+
+        expect(result.content).not.toContain("external-competitor.com");
+
+        spyBlog.mockRestore();
+    });
+
+    it("70. Self-Link & Duplicate Prevention: resolveCanonicalInternalLinks rejects current slug and deduplicates destinations", async () => {
+        const { prisma } = await import("@/lib/prisma");
+        const { resolveCanonicalInternalLinks } = await import("@/lib/blog/internalLinks");
+
+        const spyBlog = vi.spyOn(prisma.blog, "findMany").mockResolvedValue([
+            {
+                slug: "target-one",
+                title: "Target One",
+                targetKeywords: ["target one"],
+            },
+        ] as any);
+
+        const opps = [
+            {
+                destination: "https://example.com/blog/current-article-slug",
+                relationship: "topical" as const,
+                anchorConcept: "current article",
+                relevance: 99,
+                reason: "Self link",
+            },
+            {
+                destination: "https://example.com/blog/target-one",
+                relationship: "topical" as const,
+                anchorConcept: "target one",
+                relevance: 90,
+                reason: "Match 1",
+            },
+            {
+                destination: "/blog/target-one",
+                relationship: "topical" as const,
+                anchorConcept: "target one",
+                relevance: 85,
+                reason: "Match duplicate",
+            },
+        ];
+
+        const resolved = await resolveCanonicalInternalLinks("site-dedup", opps, "current-article-slug", "example.com");
+
+        expect(resolved).toHaveLength(1);
+        expect(resolved[0].slug).toBe("target-one");
+
+        spyBlog.mockRestore();
+    });
+
+    it("71. Older Page Recall: findInternalLinkOpportunitiesForTopic retrieves title-matching older pages past recency window", async () => {
+        const { prisma } = await import("@/lib/prisma");
+        const { findInternalLinkOpportunitiesForTopic } = await import("@/lib/blog/internalLinks");
+
+        const olderMatchingBlog = {
+            id: "older-blog-999",
+            slug: "older-content-strategy",
+            title: "Ultimate B2B Content Strategy Playbook",
+            targetKeywords: ["b2b content strategy"],
+        };
+
+        const spyBlog = (vi.spyOn(prisma.blog, "findMany") as any).mockImplementation(async (opts: any) => {
+            if (opts?.where?.OR) {
+                return [olderMatchingBlog];
+            }
+            return [
+                { id: "recent-1", slug: "recent-1", title: "Unrelated Recent 1", targetKeywords: ["unrelated"] },
+            ];
+        });
+
+        const results = await findInternalLinkOpportunitiesForTopic("b2b content strategy", "site-recall", "example.com");
+
+        expect(spyBlog).toHaveBeenCalledTimes(2);
+        expect(results.some(r => r.destination.includes("older-content-strategy"))).toBe(true);
+
+        spyBlog.mockRestore();
+    });
+
+    it("72. No Opportunities or SiteId: buildPost does not query database or fabricate internal links when opportunities are empty", async () => {
+        const { prisma } = await import("@/lib/prisma");
+        const { buildPost } = await import("@/lib/blog");
+        const { buildResearchPacket } = await import("@/lib/blog/research-packet");
+
+        const spyBlog = vi.spyOn(prisma.blog, "findMany");
+
+        const mockBrainResponse = {
+            intent: "commercial",
+            searcherMindset: "Looking for test keyword",
+            contentGaps: ["Benchmark testing"],
+            entities: ["Test"],
+            contrarianAngles: ["Different view"],
+            examplesNeeded: ["Example"],
+            faqTargets: ["What is test keyword?"],
+            commonMisconceptions: ["Misconception"],
+            industryMyths: ["Myth"],
+            whatPeopleAvoidSaying: ["Reality"],
+        };
+
+        const packet = await buildResearchPacket({
+            keyword: "test keyword",
+            author: mockAuthor,
+            serpContext: null,
+            brain: mockBrainResponse,
+            internalLinkOpportunities: [],
+        });
+
+        const syntheticResponse: any = {
+            title: "Test Blog Title",
+            slug: "test-blog-title",
+            content: "Paragraph content without injected links.",
+            excerpt: "Quick answer.",
+            metaDescription: "Test meta description.",
+            targetKeywords: ["test keyword"],
+            faqs: [],
+            sections: [],
+            quickAnswer: "Quick answer.",
+            comparisonTable: [],
+        };
+
+        const testCtx = buildPromptContext({
+            keyword: "test keyword",
+            category: "test keyword",
+            siteDomain: "example.com",
+            intent: "informational",
+            hasAuthorGrounding: true,
+        });
+
+        const result = await buildPost(syntheticResponse, mockAuthor, testCtx, "site-no-opps", packet);
+
+        expect(spyBlog).not.toHaveBeenCalled();
+        expect(result.content).not.toContain('<a href="/blog');
+
+        spyBlog.mockRestore();
     });
 });
 

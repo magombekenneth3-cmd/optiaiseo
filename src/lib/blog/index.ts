@@ -2,7 +2,7 @@ import { logger } from "@/lib/logger";
 import { Type, Schema } from "@google/genai";
 import { getAiClient } from "./ai-client";
 import { SiteContext } from "./context";
-import { injectInternalLinks } from "./internalLinks";
+import { injectSpecificInternalLink, resolveCanonicalInternalLinks } from "./internalLinks";
 import { getFunnelForIntent, SearchIntent as FunnelIntent } from "../aeo/funnels";
 import {
     getSerpContextForKeyword,
@@ -472,14 +472,31 @@ export async function buildPost(
         ctx,
     });
 
-    if (siteId) {
-        assembled = await injectInternalLinks(assembled, siteId, slug, ctx.siteDomain);
-    }
-
     const authoritativeResearchPacket = researchPacket ?? await buildUnavailableResearchPacket(
         targetKeywords[0] ?? ctx.keyword ?? title,
         author,
     );
+
+    if (siteId && authoritativeResearchPacket.internalLinkOpportunities && authoritativeResearchPacket.internalLinkOpportunities.length > 0) {
+        const canonicalTargets = await resolveCanonicalInternalLinks(
+            siteId,
+            authoritativeResearchPacket.internalLinkOpportunities,
+            slug,
+            ctx.siteDomain
+        );
+
+        let linksInjected = 0;
+        const MAX_INJECTED = 3;
+        for (const target of canonicalTargets) {
+            if (linksInjected >= MAX_INJECTED) break;
+            const res = injectSpecificInternalLink(assembled, target, ctx.siteDomain);
+            if (res.linked) {
+                assembled = res.html;
+                linksInjected++;
+            }
+        }
+    }
+
     const evidencePacket = extractEvidencePacket(authoritativeResearchPacket, assembled);
 
     const rhythmWarnings = auditRhythm(assembled);

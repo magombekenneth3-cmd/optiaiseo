@@ -1069,7 +1069,37 @@ export async function findInternalLinkOpportunitiesForTopic(
     try {
         const excludeSlugs = new Set(topicContext?.excludeSlugs || []);
 
-        const otherBlogs = await prisma.blog.findMany({
+        const searchTerms = uniqueStrings([
+            primaryKeyword,
+            ...(topicContext?.secondaryKeywords || []),
+            topicContext?.title || "",
+        ]).filter(t => t.length >= MIN_TERM_LENGTH);
+
+        let relevantPool: Array<{ id: string; slug: string; title: string; targetKeywords: string[] }> = [];
+        if (searchTerms.length > 0) {
+            try {
+                relevantPool = await prisma.blog.findMany({
+                    where: {
+                        siteId,
+                        status: "PUBLISHED",
+                        OR: searchTerms.slice(0, 5).map(term => ({
+                            title: { contains: term, mode: "insensitive" as const },
+                        })),
+                    },
+                    take: 100,
+                    select: {
+                        id: true,
+                        slug: true,
+                        title: true,
+                        targetKeywords: true,
+                    },
+                });
+            } catch {
+                relevantPool = [];
+            }
+        }
+
+        const recencyPool = await prisma.blog.findMany({
             where: {
                 siteId,
                 status: "PUBLISHED",
@@ -1077,7 +1107,7 @@ export async function findInternalLinkOpportunitiesForTopic(
             orderBy: {
                 createdAt: "desc",
             },
-            take: MAX_BLOG_CANDIDATES,
+            take: 100,
             select: {
                 id: true,
                 slug: true,
@@ -1085,6 +1115,16 @@ export async function findInternalLinkOpportunitiesForTopic(
                 targetKeywords: true,
             },
         });
+
+        const candidateMap = new Map<string, typeof recencyPool[0]>();
+        for (const blog of relevantPool) {
+            candidateMap.set(blog.id, blog);
+        }
+        for (const blog of recencyPool) {
+            candidateMap.set(blog.id, blog);
+        }
+
+        const otherBlogs = Array.from(candidateMap.values());
 
         if (otherBlogs.length === 0) {
             return [];
@@ -1272,6 +1312,111 @@ export async function findInternalLinkOpportunitiesForTopic(
             { error: formatError(error) }
         );
 
+        return [];
+    }
+}
+
+export async function resolveCanonicalInternalLinks(
+    siteId: string,
+    opportunities: InternalLinkSuggestion[],
+    currentSlug?: string,
+    siteDomain?: string | null
+): Promise<Array<{ slug: string; title: string; targetKeywords: string[] }>> {
+    if (!siteId || !Array.isArray(opportunities) || opportunities.length === 0) {
+        return [];
+    }
+
+    const domain = normalizeDomain(siteDomain);
+    const targetSlugToOpp = new Map<string, InternalLinkSuggestion>();
+    const orderedSlugs: string[] = [];
+
+    for (const opp of opportunities) {
+        if (typeof opp?.destination !== "string" || !opp.destination.trim()) {
+            continue;
+        }
+
+        const dest = opp.destination.trim();
+        let extractedSlug: string | null = null;
+
+        if (dest.startsWith("/")) {
+            const match = dest.match(/^\/(?:blog|services)\/([^/?#]+)/i);
+            if (match) {
+                extractedSlug = match[1];
+            }
+        } else {
+            try {
+                const parsed = new URL(dest);
+                const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+                if (domain && host !== domain && !domain.includes(host)) {
+                    continue;
+                }
+                const match = parsed.pathname.match(/^\/(?:blog|services)\/([^/?#]+)/i);
+                if (match) {
+                    extractedSlug = match[1];
+                }
+            } catch {
+                continue;
+            }
+        }
+
+        if (!extractedSlug) {
+            continue;
+        }
+
+        const normSlug = extractedSlug.toLowerCase().trim();
+        const normCurrentSlug = currentSlug ? currentSlug.toLowerCase().trim() : "";
+
+        if (normCurrentSlug && normSlug === normCurrentSlug) {
+            continue;
+        }
+
+        if (!targetSlugToOpp.has(normSlug)) {
+            targetSlugToOpp.set(normSlug, opp);
+            orderedSlugs.push(normSlug);
+        }
+    }
+
+    if (orderedSlugs.length === 0) {
+        return [];
+    }
+
+    try {
+        const matchedBlogs = await prisma.blog.findMany({
+            where: {
+                siteId,
+                status: "PUBLISHED",
+                slug: {
+                    in: orderedSlugs,
+                },
+            },
+            select: {
+                slug: true,
+                title: true,
+                targetKeywords: true,
+            },
+        });
+
+        const blogMap = new Map(matchedBlogs.map(b => [b.slug.toLowerCase().trim(), b]));
+
+        const resolved: Array<{ slug: string; title: string; targetKeywords: string[] }> = [];
+
+        for (const slug of orderedSlugs) {
+            const blog = blogMap.get(slug);
+            if (blog) {
+                resolved.push({
+                    slug: blog.slug,
+                    title: blog.title,
+                    targetKeywords: blog.targetKeywords || [],
+                });
+            }
+        }
+
+        return resolved;
+    } catch (error: unknown) {
+        logger.error(
+            "[Internal Links] resolveCanonicalInternalLinks failed:",
+            { error: formatError(error) }
+        );
         return [];
     }
 }
