@@ -2194,6 +2194,34 @@ describe("Blog Pipeline Production Audit Hardening", () => {
     });
 
     it("65. Pipeline Integration: runFullPipeline(siteId) places topic opportunities into ResearchPacket", async () => {
+        const mockBrainResponse = {
+            intent: "commercial",
+            searcherMindset: "Looking for b2b content strategy",
+            contentGaps: ["Lack of execution frameworks"],
+            entities: ["B2B", "Content Strategy"],
+            contrarianAngles: ["More content isn't better"],
+            examplesNeeded: ["Case study"],
+            faqTargets: ["What is B2B content strategy?"],
+            commonMisconceptions: ["Strategy equals blogging"],
+            industryMyths: ["Publish daily"],
+            whatPeopleAvoidSaying: ["Quality takes time"],
+        };
+
+        const mockOutline = {
+            title: "B2B Content Strategy Guide",
+            slug: "b2b-content-strategy-guide",
+            quickAnswer: "Comprehensive summary of B2B content strategy.",
+            metaDescription: "Master B2B content strategy for organic growth.",
+            sections: [
+                { heading: "Introduction", goal: "Explain topic", tone: "analytical", evidenceType: "example", wordTarget: 200, keyEntities: ["B2B"] },
+                { heading: "Strategy Overview", goal: "Review strategy", tone: "analytical", evidenceType: "comparison", wordTarget: 300, keyEntities: ["Strategy"] },
+                { heading: "Key Elements", goal: "Detail elements", tone: "instructional", evidenceType: "data", wordTarget: 300, keyEntities: ["Elements"] },
+                { heading: "Execution Plan", goal: "Provide steps", tone: "instructional", evidenceType: "how_to", wordTarget: 300, keyEntities: ["Execution"] },
+                { heading: "Conclusion", goal: "Summarize", tone: "direct", evidenceType: "example", wordTarget: 200, keyEntities: ["Conclusion"] },
+            ],
+            estimatedTotal: 1300,
+        };
+
         const aiClient = await import("@/lib/blog/ai-client");
         const spyAi = vi.spyOn(aiClient, "generateWithFallback").mockResolvedValue(
             "Paragraph 1 explaining B2B content strategy in extensive depth and detail.\n\n" +
@@ -2255,6 +2283,34 @@ describe("Blog Pipeline Production Audit Hardening", () => {
     });
 
     it("66. No-SiteId Safety: runFullPipeline without siteId does not invoke topic opportunity provider or fabricate links", async () => {
+        const mockBrainResponse = {
+            intent: "commercial",
+            searcherMindset: "Looking for b2b content strategy",
+            contentGaps: ["Lack of execution frameworks"],
+            entities: ["B2B", "Content Strategy"],
+            contrarianAngles: ["More content isn't better"],
+            examplesNeeded: ["Case study"],
+            faqTargets: ["What is B2B content strategy?"],
+            commonMisconceptions: ["Strategy equals blogging"],
+            industryMyths: ["Publish daily"],
+            whatPeopleAvoidSaying: ["Quality takes time"],
+        };
+
+        const mockOutline = {
+            title: "B2B Content Strategy Guide",
+            slug: "b2b-content-strategy-guide",
+            quickAnswer: "Comprehensive summary of B2B content strategy.",
+            metaDescription: "Master B2B content strategy for organic growth.",
+            sections: [
+                { heading: "Introduction", goal: "Explain topic", tone: "analytical", evidenceType: "example", wordTarget: 200, keyEntities: ["B2B"] },
+                { heading: "Strategy Overview", goal: "Review strategy", tone: "analytical", evidenceType: "comparison", wordTarget: 300, keyEntities: ["Strategy"] },
+                { heading: "Key Elements", goal: "Detail elements", tone: "instructional", evidenceType: "data", wordTarget: 300, keyEntities: ["Elements"] },
+                { heading: "Execution Plan", goal: "Provide steps", tone: "instructional", evidenceType: "how_to", wordTarget: 300, keyEntities: ["Execution"] },
+                { heading: "Conclusion", goal: "Summarize", tone: "direct", evidenceType: "example", wordTarget: 200, keyEntities: ["Conclusion"] },
+            ],
+            estimatedTotal: 1300,
+        };
+
         const aiClient = await import("@/lib/blog/ai-client");
         const spyAi = vi.spyOn(aiClient, "generateWithFallback").mockResolvedValue(
             "Paragraph 1 explaining B2B content strategy in extensive depth and detail.\n\n" +
