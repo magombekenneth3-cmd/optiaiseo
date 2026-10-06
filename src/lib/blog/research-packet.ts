@@ -13,6 +13,8 @@ import {
     SourceEvidenceSchema,
     type SourceEvidence,
     type SourceType,
+    type PageExistenceResult,
+    type InternalLinkSuggestion,
 } from "./contracts";
 
 // Each section is 300–400 words and can meaningfully cite at most 2–3 sources.
@@ -143,9 +145,11 @@ export async function buildResearchPacket(params: {
     groundedCtx?: GroundedSiteContext | null;
     competitorAnalysis?: CompetitorAnalysis | null;
     gscEvidence?: Record<string, unknown> | null;
+    existingSite?: PageExistenceResult | null;
+    internalLinkOpportunities?: InternalLinkSuggestion[] | null;
 }): Promise<ResearchPacket> {
     const retrievedAt = new Date().toISOString();
-    const { keyword, brain, serpContext, author, sections = [], groundedCtx, competitorAnalysis, gscEvidence } = params;
+    const { keyword, brain, serpContext, author, sections = [], groundedCtx, competitorAnalysis, gscEvidence, existingSite, internalLinkOpportunities } = params;
     const serpSources = (serpContext?.results ?? [])
         .map((result, index) => sourceFromSerpResult(result, `serp-${index + 1}`, retrievedAt))
         .filter((source): source is SourceEvidence => source !== null);
@@ -245,6 +249,8 @@ export async function buildResearchPacket(params: {
         firstPartyEvidence,
         ...(competitorAnalysis ? { competitorAnalysis } : {}),
         ...(gscEvidence ? { gscEvidence } : {}),
+        ...(existingSite ? { existingSite } : {}),
+        ...(internalLinkOpportunities ? { internalLinkOpportunities } : {}),
         ...(brain.informationGainDirective ? { informationGain: brain.informationGainDirective } : {}),
         contentGaps: compact(brain.contentGaps),
         misconceptions: compact(brain.commonMisconceptions),

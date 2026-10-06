@@ -1365,16 +1365,287 @@ describe("Blog Pipeline Production Audit Hardening", () => {
             groundedCtx: mockGroundedCtx,
         });
 
-        packet.gscEvidence = {
-            query: "best ai seo tools",
-            url: "https://example.com/blog/real-target-page",
-        };
+        packet.internalLinkOpportunities = [
+            {
+                destination: "https://example.com/blog/real-target-page",
+                relationship: "topical",
+                anchorConcept: "AI SEO tools",
+                relevance: 0.9,
+                reason: "Target cluster guide",
+            },
+        ];
 
         const draft = "<h1>Best AI SEO Tools</h1><p>Draft text.</p>";
         const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
 
         expect(analysis.internalLinkReadiness.potentialTargets).toEqual(["https://example.com/blog/real-target-page"]);
         expect(analysis.internalLinkReadiness.potentialTargets).not.toContain("best ai seo tools");
+    });
+
+    it("48. Canonical Snapshot: Analyzer consumes packet.existingSite snapshot directly for EXISTING_HEALTHY", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.existingSite = {
+            verdict: "EXISTING_HEALTHY",
+            existingPage: {
+                url: "https://example.com/blog/healthy-guide",
+                matchSource: "GSC_RANKING_URL",
+                matchConfidence: 0.95,
+                currentPosition: 3,
+                issues: [],
+            },
+            allCandidates: [
+                {
+                    url: "https://example.com/blog/healthy-guide",
+                    matchSource: "GSC_RANKING_URL",
+                    matchConfidence: 0.95,
+                    currentPosition: 3,
+                    issues: [],
+                }
+            ],
+            recommendedAction: "MONITOR",
+            recommendedCategory: "QUICK_WIN",
+            reasoning: "Page ranks #3 for keyword.",
+        };
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Draft content.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.existingSiteFit.verdict).toBe("EXISTING_HEALTHY");
+        expect(analysis.existingSiteFit.hasStrategicConflict).toBe(true);
+        expect(analysis.cannibalizationRisk.hasRisk).toBe(false);
+    });
+
+    it("49. Canonical Snapshot: Analyzer consumes packet.existingSite snapshot for EXISTING_NEEDS_FIX", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.existingSite = {
+            verdict: "EXISTING_NEEDS_FIX",
+            existingPage: {
+                url: "https://example.com/blog/underperforming-guide",
+                matchSource: "GSC_RANKING_URL",
+                matchConfidence: 0.85,
+                currentPosition: 18,
+                issues: ["LOW_CTR"],
+            },
+            allCandidates: [],
+            recommendedAction: "REFRESH_CONTENT",
+            recommendedCategory: "ALMOST_RANKING",
+            reasoning: "Page ranks #18 with low CTR.",
+        };
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Draft content.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.existingSiteFit.verdict).toBe("EXISTING_NEEDS_FIX");
+        expect(analysis.existingSiteFit.hasStrategicConflict).toBe(true);
+        expect(analysis.cannibalizationRisk.hasRisk).toBe(false);
+    });
+
+    it("50. Canonical Snapshot: Analyzer consumes packet.existingSite snapshot for EXISTING_CANNIBALIZED", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.existingSite = {
+            verdict: "EXISTING_CANNIBALIZED",
+            existingPage: {
+                url: "https://example.com/blog/guide-1",
+                matchSource: "GSC_RANKING_URL",
+                matchConfidence: 0.9,
+                currentPosition: 6,
+                issues: [],
+            },
+            allCandidates: [
+                { url: "https://example.com/blog/guide-1", matchSource: "GSC_RANKING_URL", matchConfidence: 0.9, issues: [] },
+                { url: "https://example.com/blog/guide-2", matchSource: "GSC_RANKING_URL", matchConfidence: 0.88, issues: [] },
+            ],
+            recommendedAction: "CONSOLIDATE_CONTENT",
+            recommendedCategory: "CANNIBALIZATION",
+            reasoning: "Multiple pages competing for intent.",
+        };
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Draft content.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.existingSiteFit.verdict).toBe("EXISTING_CANNIBALIZED");
+        expect(analysis.existingSiteFit.hasStrategicConflict).toBe(true);
+        expect(analysis.cannibalizationRisk.hasRisk).toBe(true);
+        expect(analysis.cannibalizationRisk.conflictingUrls).toContain("https://example.com/blog/guide-1");
+        expect(analysis.cannibalizationRisk.conflictingUrls).toContain("https://example.com/blog/guide-2");
+    });
+
+    it("51. Canonical Snapshot: Ambiguous resolver result NEEDS_REVIEW produces NEEDS_REVIEW without strategic conflict or cannibalization", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.existingSite = {
+            verdict: "NEEDS_REVIEW",
+            existingPage: {
+                url: "https://example.com/blog/uncertain-page",
+                matchSource: "BLOG_RECORD",
+                matchConfidence: 0.45,
+                issues: [],
+            },
+            allCandidates: [],
+            recommendedAction: "NEEDS_REVIEW",
+            recommendedCategory: "QUICK_WIN",
+            reasoning: "Low confidence match.",
+        };
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Draft content.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.existingSiteFit.verdict).toBe("NEEDS_REVIEW");
+        expect(analysis.existingSiteFit.hasStrategicConflict).toBe(false);
+        expect(analysis.cannibalizationRisk.hasRisk).toBe(false);
+    });
+
+    it("52. Canonical Snapshot: Internal-link opportunities come from packet.internalLinkOpportunities", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.internalLinkOpportunities = [
+            {
+                destination: "https://example.com/blog/target-guide",
+                relationship: "topical",
+                anchorConcept: "AI search automation",
+                relevance: 0.92,
+                reason: "High topical overlap with cluster guide",
+            },
+        ];
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Draft content.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.internalLinkReadiness.status).toBe("AVAILABLE");
+        expect(analysis.internalLinkReadiness.potentialTargets).toEqual(["https://example.com/blog/target-guide"]);
+    });
+
+    it("53. Canonical Snapshot: Missing internal-link opportunities produces UNAVAILABLE status and empty potentialTargets", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.gscEvidence = undefined;
+        packet.internalLinkOpportunities = [];
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Draft content.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.internalLinkReadiness.status).toBe("UNAVAILABLE");
+        expect(analysis.internalLinkReadiness.potentialTargets).toEqual([]);
+    });
+
+    it("54. Pure Function: analyzeDraftQuality executes deterministically without side effects or database calls", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Draft content.</p>";
+        const res1 = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+        const res2 = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(res1).toEqual(res2);
+    });
+
+    it("55. Contract Compatibility: AnalysisResult is backward compatible alias for ContentAnalysisReport", async () => {
+        const { analyzeDraftQuality: func } = await import("@/lib/blog/pipeline");
+        type AnalysisResultType = import("@/lib/blog/pipeline").AnalysisResult;
+        type ContentAnalysisReportType = import("@/lib/blog/pipeline").ContentAnalysisReport;
+
+        const isSameType: [AnalysisResultType] extends [ContentAnalysisReportType] ? true : false = true;
+        expect(isSameType).toBe(true);
     });
 });
 

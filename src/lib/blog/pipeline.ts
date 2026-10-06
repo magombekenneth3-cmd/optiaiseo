@@ -1677,12 +1677,11 @@ function checkInternalLinkReadiness(
     }
 
     const potentialTargets: string[] = [];
-    if (typeof packet.gscEvidence?.url === "string" && packet.gscEvidence.url.trim()) {
-        potentialTargets.push(packet.gscEvidence.url.trim());
-    }
-    if (Array.isArray(packet.gscEvidence?.competingUrls)) {
-        for (const u of packet.gscEvidence.competingUrls as unknown[]) {
-            if (typeof u === "string" && u.trim()) potentialTargets.push(u.trim());
+    if (Array.isArray(packet.internalLinkOpportunities)) {
+        for (const opp of packet.internalLinkOpportunities) {
+            if (typeof opp?.destination === "string" && opp.destination.trim()) {
+                potentialTargets.push(opp.destination.trim());
+            }
         }
     }
 
@@ -1703,6 +1702,50 @@ function checkExistingSiteStrategy(
     const details: string[] = [];
     const cannibalizationDetails: string[] = [];
     const conflictingUrls: string[] = [];
+
+    if (packet.existingSite) {
+        const decision = packet.existingSite;
+        const verdict = decision.verdict;
+        let hasStrategicConflict = false;
+        let hasCannibalizationRisk = false;
+
+        if (verdict === "EXISTING_HEALTHY") {
+            hasStrategicConflict = true;
+            hasCannibalizationRisk = false;
+            details.push(`Existing page (${decision.existingPage?.url ?? "unknown"}) already ranks healthy for query '${ctx.keyword}'. Strategy indicates MONITOR or REFRESH rather than creating new content.`);
+        } else if (verdict === "EXISTING_NEEDS_FIX") {
+            hasStrategicConflict = true;
+            hasCannibalizationRisk = false;
+            details.push(`Existing page (${decision.existingPage?.url ?? "unknown"}) underperforms for query '${ctx.keyword}'. Strategy indicates OPTIMIZE existing page.`);
+        } else if (verdict === "EXISTING_CANNIBALIZED") {
+            hasStrategicConflict = true;
+            hasCannibalizationRisk = true;
+            details.push(`Multiple pages conflict for query '${ctx.keyword}'. Strategy indicates CONSOLIDATE.`);
+            const competing = decision.allCandidates.map(c => c.url).filter(Boolean);
+            conflictingUrls.push(...competing);
+            cannibalizationDetails.push(`Multiple ranking pages (${competing.join(", ")}) target the same query '${ctx.keyword}'.`);
+        } else if (verdict === "NEEDS_REVIEW") {
+            hasStrategicConflict = false;
+            hasCannibalizationRisk = false;
+            details.push(`Ambiguous or low-confidence existing page matches for query '${ctx.keyword}'. Manual review recommended.`);
+        } else if (verdict === "MISSING") {
+            hasStrategicConflict = false;
+            hasCannibalizationRisk = false;
+        }
+
+        return {
+            existingSiteFit: {
+                verdict,
+                hasStrategicConflict,
+                details,
+            },
+            cannibalizationRisk: {
+                hasRisk: hasCannibalizationRisk,
+                conflictingUrls,
+                details: cannibalizationDetails,
+            },
+        };
+    }
 
     const candidates: ExistingPageEvidence[] = [];
 

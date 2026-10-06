@@ -166,6 +166,36 @@ export const CompetitorAnalysisSchema = z.object({
     differentiationOpportunities: z.array(z.string().trim().max(500)).max(20).optional(),
 });
 
+export const InternalLinkSuggestionSchema = z.object({
+    destination: z.string().trim().min(1),
+    relationship: z.enum(["topical", "entity", "keyword", "title"]),
+    anchorConcept: z.string().trim(),
+    relevance: z.number(),
+    reason: z.string().trim(),
+});
+
+export const ExistingPageEvidenceSchema = z.object({
+    url: z.string(),
+    matchSource: z.string(),
+    matchConfidence: z.number(),
+    matchType: z.string().optional(),
+    currentPosition: z.number().optional(),
+    currentImpressions: z.number().optional(),
+    currentClicks: z.number().optional(),
+    canonicalUrl: z.string().optional(),
+    isNoindex: z.boolean().optional(),
+    issues: z.array(z.string()),
+});
+
+export const PageExistenceResultSchema = z.object({
+    verdict: z.enum(["EXISTING_HEALTHY", "EXISTING_NEEDS_FIX", "EXISTING_CANNIBALIZED", "MISSING", "NEEDS_REVIEW"]),
+    existingPage: ExistingPageEvidenceSchema.nullable(),
+    allCandidates: z.array(ExistingPageEvidenceSchema),
+    recommendedAction: z.string(),
+    recommendedCategory: z.string(),
+    reasoning: z.string(),
+});
+
 export const ResearchPacketSchema = z.object({
     /** Stable snapshot timestamp for the research used by this generation. */
     collectedAt: z.string().datetime(),
@@ -188,6 +218,8 @@ export const ResearchPacketSchema = z.object({
     firstPartyEvidence: FirstPartyEvidenceSchema.optional(),
     competitorAnalysis: CompetitorAnalysisSchema.optional(),
     gscEvidence: z.record(z.string(), z.unknown()).optional(),
+    existingSite: PageExistenceResultSchema.optional(),
+    internalLinkOpportunities: z.array(InternalLinkSuggestionSchema).optional(),
     informationGain: z.string().trim().max(2_000).optional(),
     contentGaps: StringList,
     misconceptions: StringList,
@@ -442,6 +474,9 @@ export type EntityEvidence = z.infer<typeof EntityEvidenceSchema>;
 export type AuthorEvidence = z.infer<typeof AuthorEvidenceSchema>;
 export type FirstPartyEvidence = z.infer<typeof FirstPartyEvidenceSchema>;
 export type CompetitorAnalysis = z.infer<typeof CompetitorAnalysisSchema>;
+export type InternalLinkSuggestion = z.infer<typeof InternalLinkSuggestionSchema>;
+export type ExistingPageEvidence = z.infer<typeof ExistingPageEvidenceSchema>;
+export type PageExistenceResult = z.infer<typeof PageExistenceResultSchema>;
 export type ResearchPacket = z.infer<typeof ResearchPacketSchema>;
 export type OutlineTone = z.infer<typeof OutlineToneSchema>;
 export type EvidenceType = z.infer<typeof EvidenceTypeSchema>;
