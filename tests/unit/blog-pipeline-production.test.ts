@@ -872,5 +872,378 @@ describe("Blog Pipeline Production Audit Hardening", () => {
         expect(analysis.evidenceCoverage.hasValidCitations).toBe(false);
         expect(analysis.defects.some(d => d.includes("Missing authoritative source evidence citations"))).toBe(true);
     });
+
+    it("32. Semantic Test 1: Competitor heading alone does NOT become a required table-stakes topic", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const competitorAnalysis: CompetitorAnalysis = {
+            competitorDomain: "competitor.com",
+            headings: ["Why Competitor Heading 1 Matters", "Competitor Heading 2"],
+        };
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+            competitorAnalysis,
+        });
+
+        packet.serp.tableStakes = undefined;
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>General overview of tools.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.topicCoverage.totalCount).toBe(0);
+        expect(analysis.topicCoverage.tableStakesCovered).toBe(true);
+        expect(analysis.defects.some(d => d.includes("table-stakes"))).toBe(false);
+    });
+
+    it("33. Semantic Test 2: Mentioning a publisher/domain does NOT automatically mean evidence is fully used", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.sources = [
+            {
+                id: "src-gartner",
+                url: "https://gartner.com/en/newsroom/press-releases/2026-seo-report",
+                title: "2026 Search Intelligence Report",
+                publisher: "Gartner",
+                retrievedAt: new Date().toISOString(),
+                claim: "AI search acceleration",
+                evidence: "Data on 1000 brands",
+                sourceType: "research" as const,
+                confidence: 0.9,
+            },
+        ];
+        packet.evidenceAvailability = "AVAILABLE";
+
+        const textWithPlainMention = "<h1>Best AI SEO Tools</h1><p>Gartner is a well known analyst firm in tech.</p>";
+        const analysis = analyzeDraftQuality(textWithPlainMention, mockBrain, packet, testCtx);
+
+        expect(analysis.evidenceCoverage.citedSourcesCount).toBe(0);
+        expect(analysis.evidenceCoverage.hasValidCitations).toBe(false);
+    });
+
+    it("34. Semantic Test 3: Ranking keywords do NOT become internal-link targets", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.firstPartyEvidence = {
+            domain: "example.com",
+            topKeywords: [{ keyword: "ai tools", position: 5 }],
+            brandFacts: [],
+        };
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Overview of software.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.internalLinkReadiness.potentialTargets).not.toContain("ai tools");
+    });
+
+    it("35. Semantic Test 4: Relative and real first-party absolute links are recognized correctly", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "mysite.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        const relativeDraft = "<h1>Best AI SEO Tools</h1><p>Check [our guide](/blog/seo-guide) for details.</p>";
+        const relativeAnalysis = analyzeDraftQuality(relativeDraft, mockBrain, packet, testCtx);
+        expect(relativeAnalysis.internalLinkReadiness.hasInternalLinks).toBe(true);
+
+        const absoluteFirstPartyDraft = "<h1>Best AI SEO Tools</h1><p>Check [our guide](https://mysite.com/blog/seo-guide) for details.</p>";
+        const absAnalysis = analyzeDraftQuality(absoluteFirstPartyDraft, mockBrain, packet, testCtx);
+        expect(absAnalysis.internalLinkReadiness.hasInternalLinks).toBe(true);
+
+        const externalDraft = "<h1>Best AI SEO Tools</h1><p>Check [external site](https://otherdomain.com/blog/guide) for details.</p>";
+        const extAnalysis = analyzeDraftQuality(externalDraft, mockBrain, packet, testCtx);
+        expect(extAnalysis.internalLinkReadiness.hasInternalLinks).toBe(false);
+    });
+
+    it("36. Semantic Test 5: ResearchPacket information-gain directive alone does NOT produce high original-value coverage", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.informationGain = "Include original proprietary benchmark test data.";
+
+        const genericDraft = "<h1>Best AI SEO Tools</h1><p>AI SEO tools help websites rank better by optimizing content keywords.</p>";
+        const analysis = analyzeDraftQuality(genericDraft, mockBrain, packet, testCtx);
+
+        expect(analysis.originalValue.informationGainPresent).toBe(false);
+        expect(analysis.originalValue.score).toBeLessThan(50);
+    });
+
+    it("37. Semantic Test 6: Existing-site strategy uses existing resolver semantics rather than raw GSC position only", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.gscEvidence = {
+            query: "best ai seo tools",
+            position: 15.4,
+            clicks: 12,
+            impressions: 400,
+            url: "https://example.com/blog/old-tools-guide",
+        };
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Content draft.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.existingSiteFit.verdict).toBe("EXISTING_HEALTHY");
+        expect(analysis.existingSiteFit.hasStrategicConflict).toBe(true);
+    });
+
+    it("38. Semantic Test 7: Position 4 alone does not automatically imply consolidation", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.gscEvidence = {
+            query: "best ai seo tools",
+            position: 4.0,
+            clicks: 250,
+            impressions: 3000,
+            url: "https://example.com/blog/top-tools",
+        };
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Content draft.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.existingSiteFit.verdict).toBe("EXISTING_HEALTHY");
+        expect(analysis.existingSiteFit.verdict).not.toBe("EXISTING_CANNIBALIZED");
+    });
+
+    it("39. Semantic Test 8: Partial question coverage remains partial", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const cleanBrain = { ...mockBrain, faqTargets: [] };
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: cleanBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.serp.paa = [
+            { question: "What is an AI SEO tool?" },
+            { question: "How much does AI SEO software cost?" },
+        ];
+
+        const partialDraft = "<h1>Best AI SEO Tools</h1><h3>What is an AI SEO tool?</h3><p>An AI SEO tool automates content and search optimization.</p>";
+        const analysis = analyzeDraftQuality(partialDraft, cleanBrain, packet, testCtx);
+
+        expect(analysis.questionCoverage.coverageRatio).toBeLessThan(1.0);
+        expect(analysis.questionCoverage.addressedCount).toBe(1);
+        expect(analysis.questionCoverage.unaddressedQuestions.length).toBeGreaterThan(0);
+    });
+
+    it("40. Semantic Test 9: Lexical overlap without relevant answer context does not falsely produce full question coverage", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "enterprise ai search tool pricing",
+            category: "ai search tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "enterprise ai search tool pricing",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.serp.paa = [
+            { question: "What is the average pricing model for enterprise AI search software?" },
+        ];
+
+        // Isolated words scattered across unrelated paragraphs without an answer passage block
+        const scatteredDraft = `<h1>Enterprise Tools</h1>` +
+            `<p>Section 1: Our enterprise platform is built for modern teams.</p>` +
+            `<p>Section 2: The pricing tier offers flexibility.</p>` +
+            `<p>Section 3: Each model handles large scale deployments.</p>` +
+            `<p>Section 4: Advanced AI capabilities are included.</p>` +
+            `<p>Section 5: Search functionality is fast.</p>`;
+
+        const analysis = analyzeDraftQuality(scatteredDraft, mockBrain, packet, testCtx);
+
+        expect(analysis.questionCoverage.coverageRatio).toBeLessThan(1.0);
+        expect(analysis.questionCoverage.unaddressedQuestions).toContain("What is the average pricing model for enterprise AI search software?");
+    });
+
+    it("41. Semantic Test 10: Missing canonical research data returns unavailable/empty rather than fabricated requirements", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.sources = [];
+        packet.evidenceAvailability = "EMPTY";
+        packet.serp.tableStakes = undefined;
+        packet.serp.paa = [];
+        packet.firstPartyEvidence = undefined;
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Generic text.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.evidenceCoverage.status).toBe("EMPTY");
+        expect(analysis.topicCoverage.totalCount).toBe(0);
+        expect(analysis.firstPartyCoverage.status).toBe("UNAVAILABLE");
+        expect(analysis.internalLinkReadiness.status).toBe("UNAVAILABLE");
+    });
+
+    it("42. Semantic Test 11: Revision that improves lexical coverage but removes evidence is rejected", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const originalDoc = "## Overview\nOptiAISEO automated engine. [Source Citation](https://example.com/source)\n\n" + "Word ".repeat(1500);
+
+        const aiClient = await import("@/lib/blog/ai-client");
+        const longerDocStrippedSource = "## Overview\nOptiAISEO automated engine with extra descriptive words.\n\n" + "Word ".repeat(2000);
+
+        const spy = vi.spyOn(aiClient, "generateWithFallback").mockResolvedValue(longerDocStrippedSource);
+
+        const result = await applyTargetedRevision(originalDoc, "Expand coverage", testCtx);
+        expect(result).toBe(originalDoc);
+
+        spy.mockRestore();
+    });
+
+    it("43. Semantic Test 12: Analyzer exposes strategic/cannibalization defects when existing-site evidence exists", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.gscEvidence = {
+            query: "best ai seo tools",
+            position: 5.0,
+            clicks: 100,
+            impressions: 2000,
+            url: "https://example.com/blog/existing-tools-guide",
+        };
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Draft text.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.defects.some(d => d.includes("Strategic conflict"))).toBe(true);
+        expect(analysis.defects.some(d => d.includes("Cannibalization risk"))).toBe(true);
+    });
 });
 

@@ -699,7 +699,7 @@ async function findMatchingPageAudits(
 
 // ── Decision Logic ──────────────────────────────────────────────────────────
 
-function makeDecision(
+export function makeDecision(
   candidates: ExistingPageEvidence[],
   topicKeyword: string,
 ): PageExistenceResult {
