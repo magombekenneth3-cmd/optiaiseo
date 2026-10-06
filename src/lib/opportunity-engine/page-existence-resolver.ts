@@ -757,7 +757,7 @@ export function makeDecision(
 
   // 3. Cannibalization check (Phase 5: Check intent similarity!)
   const gscCandidates = sorted.filter(
-    (c) => c.matchSource === "GSC_RANKING_URL" && c.currentImpressions !== undefined && c.currentImpressions > 0,
+    (c) => c.matchSource === "GSC_RANKING_URL" && (c.currentImpressions === undefined || c.currentImpressions > 0),
   );
 
   if (gscCandidates.length >= 2) {

@@ -1676,13 +1676,22 @@ function checkInternalLinkReadiness(
         }
     }
 
-    const fpPages: unknown[] = (packet.firstPartyEvidence as any)?.urls ?? (packet.firstPartyEvidence as any)?.existingPages ?? [];
-    const potentialTargets: string[] = Array.from(new Set(fpPages)).filter((u): u is string => typeof u === "string" && (u.startsWith("/") || u.startsWith("http")));
+    const potentialTargets: string[] = [];
+    if (typeof packet.gscEvidence?.url === "string" && packet.gscEvidence.url.trim()) {
+        potentialTargets.push(packet.gscEvidence.url.trim());
+    }
+    if (Array.isArray(packet.gscEvidence?.competingUrls)) {
+        for (const u of packet.gscEvidence.competingUrls as unknown[]) {
+            if (typeof u === "string" && u.trim()) potentialTargets.push(u.trim());
+        }
+    }
+
+    const uniqueTargets = Array.from(new Set(potentialTargets));
 
     return {
-        status: (potentialTargets.length > 0 || hasInternalLinks) ? "AVAILABLE" : "UNAVAILABLE" as "AVAILABLE" | "UNAVAILABLE",
+        status: (uniqueTargets.length > 0 || hasInternalLinks) ? "AVAILABLE" : "UNAVAILABLE" as "AVAILABLE" | "UNAVAILABLE",
         hasInternalLinks,
-        potentialTargets,
+        potentialTargets: uniqueTargets,
         foundLinks,
     };
 }
@@ -1698,35 +1707,42 @@ function checkExistingSiteStrategy(
     const candidates: ExistingPageEvidence[] = [];
 
     if (packet.gscEvidence) {
-        const gscUrl = (typeof packet.gscEvidence.url === "string" && packet.gscEvidence.url)
-            ? packet.gscEvidence.url
-            : `https://${ctx.siteDomain || "site.com"}/existing-page`;
-        const pos = typeof packet.gscEvidence.position === "number" ? packet.gscEvidence.position : 99;
-        candidates.push({
-            url: gscUrl,
-            matchSource: "GSC_RANKING_URL",
-            matchConfidence: pos <= 20 ? 0.95 : 0.6,
-            matchType: "GSC_MATCH",
-            currentPosition: pos,
-            currentImpressions: (typeof packet.gscEvidence.impressions === "number" ? packet.gscEvidence.impressions : 100),
-            currentClicks: (typeof packet.gscEvidence.clicks === "number" ? packet.gscEvidence.clicks : 10),
-            issues: [],
-        });
-    }
+        const mainUrl = (typeof packet.gscEvidence.url === "string" && packet.gscEvidence.url.trim())
+            ? packet.gscEvidence.url.trim()
+            : undefined;
+        const pos = typeof packet.gscEvidence.position === "number" ? packet.gscEvidence.position : undefined;
+        const impressions = typeof packet.gscEvidence.impressions === "number" ? packet.gscEvidence.impressions : undefined;
+        const clicks = typeof packet.gscEvidence.clicks === "number" ? packet.gscEvidence.clicks : undefined;
 
-    if (packet.firstPartyEvidence?.topKeywords && packet.firstPartyEvidence.topKeywords.length > 0) {
-        for (const kw of packet.firstPartyEvidence.topKeywords) {
-            if (kw.keyword.toLowerCase() === ctx.keyword.toLowerCase() || ctx.keyword.toLowerCase().includes(kw.keyword.toLowerCase())) {
-                const pageUrl = (kw as any).url || (kw as any).pageUrl || `https://${ctx.siteDomain || "site.com"}/blog/${kw.keyword.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-                const pos = kw.position ?? 99;
+        if (mainUrl) {
+            candidates.push({
+                url: mainUrl,
+                matchSource: "GSC_RANKING_URL",
+                matchConfidence: (pos !== undefined && pos <= 20) ? 0.95 : 0.6,
+                matchType: "GSC_MATCH",
+                currentPosition: pos,
+                currentImpressions: impressions,
+                currentClicks: clicks,
+                issues: [],
+            });
+        }
+
+        const competingUrls = Array.isArray(packet.gscEvidence.competingUrls)
+            ? (packet.gscEvidence.competingUrls as unknown[]).filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+            : Array.isArray(packet.gscEvidence.urls)
+            ? (packet.gscEvidence.urls as unknown[]).filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+            : [];
+
+        for (const compUrl of competingUrls) {
+            if (compUrl !== mainUrl) {
                 candidates.push({
-                    url: pageUrl,
-                    matchSource: "BLOG_RECORD",
-                    matchConfidence: pos <= 20 ? 0.85 : 0.5,
-                    matchType: "BLOG_MATCH",
+                    url: compUrl,
+                    matchSource: "GSC_RANKING_URL",
+                    matchConfidence: 0.9,
+                    matchType: "GSC_MATCH",
                     currentPosition: pos,
-                    currentImpressions: (kw as any).impressions ?? 50,
-                    currentClicks: (kw as any).clicks ?? 5,
+                    currentImpressions: impressions,
+                    currentClicks: clicks,
                     issues: [],
                 });
             }
@@ -1743,22 +1759,26 @@ function checkExistingSiteStrategy(
 
         if (verdict === "EXISTING_HEALTHY") {
             hasStrategicConflict = true;
+            hasCannibalizationRisk = false;
             details.push(`Existing page (${decision.existingPage?.url}) already ranks healthy for query '${ctx.keyword}'. Strategy indicates MONITOR or REFRESH rather than creating new content.`);
         } else if (verdict === "EXISTING_NEEDS_FIX") {
             hasStrategicConflict = true;
+            hasCannibalizationRisk = false;
             details.push(`Existing page (${decision.existingPage?.url}) underperforms for query '${ctx.keyword}'. Strategy indicates OPTIMIZE existing page.`);
         } else if (verdict === "EXISTING_CANNIBALIZED") {
             hasStrategicConflict = true;
             hasCannibalizationRisk = true;
             details.push(`Multiple pages conflict for query '${ctx.keyword}'. Strategy indicates CONSOLIDATE.`);
+            const competing = decision.allCandidates.map(c => c.url).filter(Boolean);
+            conflictingUrls.push(...competing);
+            cannibalizationDetails.push(`Multiple ranking pages (${competing.join(", ")}) target the same query '${ctx.keyword}'.`);
         } else if (verdict === "NEEDS_REVIEW") {
+            hasStrategicConflict = false;
+            hasCannibalizationRisk = false;
             details.push(`Ambiguous or low-confidence existing page matches for query '${ctx.keyword}'. Manual review recommended.`);
-        }
-
-        if (decision.existingPage?.currentPosition !== undefined && decision.existingPage.currentPosition <= 20) {
-            hasCannibalizationRisk = true;
-            cannibalizationDetails.push(`Target query '${ctx.keyword}' has an existing ranking page at position ${decision.existingPage.currentPosition} (${decision.existingPage.url}).`);
-            conflictingUrls.push(decision.existingPage.url);
+        } else if (verdict === "MISSING") {
+            hasStrategicConflict = false;
+            hasCannibalizationRisk = false;
         }
     }
 

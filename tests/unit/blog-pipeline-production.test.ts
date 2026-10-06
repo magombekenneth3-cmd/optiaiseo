@@ -744,6 +744,7 @@ describe("Blog Pipeline Production Audit Hardening", () => {
             position: 4.2,
             clicks: 120,
             impressions: 2500,
+            url: "https://example.com/blog/existing-tools",
         };
 
         const packet = await buildResearchPacket({
@@ -776,7 +777,8 @@ describe("Blog Pipeline Production Audit Hardening", () => {
             query: "best ai seo tools",
             position: 8.5,
             clicks: 80,
-            url: "https://example.com/blog/existing-ai-tools",
+            url: "https://example.com/blog/existing-ai-tools-1",
+            competingUrls: ["https://example.com/blog/existing-ai-tools-2"],
         };
 
         const packet = await buildResearchPacket({
@@ -1214,7 +1216,41 @@ describe("Blog Pipeline Production Audit Hardening", () => {
         spy.mockRestore();
     });
 
-    it("43. Semantic Test 12: Analyzer exposes strategic/cannibalization defects when existing-site evidence exists", async () => {
+    it("43. Existing-site Test: Single page ranking #4 produces EXISTING_HEALTHY with strategic conflict but NO cannibalization risk", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.gscEvidence = {
+            query: "best ai seo tools",
+            position: 4.0,
+            url: "https://example.com/blog/existing-tools-guide",
+        };
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Draft text.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.existingSiteFit.verdict).toBe("EXISTING_HEALTHY");
+        expect(analysis.existingSiteFit.hasStrategicConflict).toBe(true);
+        expect(analysis.cannibalizationRisk.hasRisk).toBe(false);
+        expect(analysis.cannibalizationRisk.conflictingUrls).toHaveLength(0);
+        expect(analysis.defects.some(d => d.includes("Strategic conflict"))).toBe(true);
+        expect(analysis.defects.some(d => d.includes("Cannibalization risk"))).toBe(false);
+    });
+
+    it("44. Existing-site Test: Two GSC pages competing for same intent produces EXISTING_CANNIBALIZED with cannibalization risk", async () => {
         const testCtx = buildPromptContext({
             keyword: "best ai seo tools",
             category: "best ai seo tools",
@@ -1234,16 +1270,111 @@ describe("Blog Pipeline Production Audit Hardening", () => {
         packet.gscEvidence = {
             query: "best ai seo tools",
             position: 5.0,
-            clicks: 100,
-            impressions: 2000,
-            url: "https://example.com/blog/existing-tools-guide",
+            url: "https://example.com/blog/existing-tools-guide-1",
+            competingUrls: ["https://example.com/blog/existing-tools-guide-2"],
         };
 
         const draft = "<h1>Best AI SEO Tools</h1><p>Draft text.</p>";
         const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
 
-        expect(analysis.defects.some(d => d.includes("Strategic conflict"))).toBe(true);
+        expect(analysis.existingSiteFit.verdict).toBe("EXISTING_CANNIBALIZED");
+        expect(analysis.existingSiteFit.hasStrategicConflict).toBe(true);
+        expect(analysis.cannibalizationRisk.hasRisk).toBe(true);
+        expect(analysis.cannibalizationRisk.conflictingUrls).toContain("https://example.com/blog/existing-tools-guide-1");
+        expect(analysis.cannibalizationRisk.conflictingUrls).toContain("https://example.com/blog/existing-tools-guide-2");
         expect(analysis.defects.some(d => d.includes("Cannibalization risk"))).toBe(true);
+    });
+
+    it("45. Existing-site Test: Missing URL in gscEvidence does NOT create synthetic candidate or fake site.com URL", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.gscEvidence = {
+            query: "best ai seo tools",
+            position: 10.0,
+            // url is omitted intentionally
+        };
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Draft text.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.existingSiteFit.verdict).toBe("UNAVAILABLE");
+        expect(analysis.existingSiteFit.hasStrategicConflict).toBe(false);
+        expect(analysis.cannibalizationRisk.hasRisk).toBe(false);
+        expect(analysis.cannibalizationRisk.conflictingUrls).toHaveLength(0);
+    });
+
+    it("46. Existing-site Test: topKeywords without page URL cannot become page evidence", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.gscEvidence = undefined;
+        packet.firstPartyEvidence = {
+            domain: "example.com",
+            topKeywords: [{ keyword: "best ai seo tools", position: 5.0 }],
+        };
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Draft text.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.existingSiteFit.verdict).toBe("UNAVAILABLE");
+        expect(analysis.existingSiteFit.hasStrategicConflict).toBe(false);
+        expect(analysis.cannibalizationRisk.hasRisk).toBe(false);
+    });
+
+    it("47. Internal-link Test: Potential targets are populated strictly from real URLs without synthetic URLs or keyword strings", async () => {
+        const testCtx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        packet.gscEvidence = {
+            query: "best ai seo tools",
+            url: "https://example.com/blog/real-target-page",
+        };
+
+        const draft = "<h1>Best AI SEO Tools</h1><p>Draft text.</p>";
+        const analysis = analyzeDraftQuality(draft, mockBrain, packet, testCtx);
+
+        expect(analysis.internalLinkReadiness.potentialTargets).toEqual(["https://example.com/blog/real-target-page"]);
+        expect(analysis.internalLinkReadiness.potentialTargets).not.toContain("best ai seo tools");
     });
 });
 
