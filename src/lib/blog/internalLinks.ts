@@ -45,7 +45,7 @@ const ENTITY_STOPWORDS = new Set([
 const MIN_TERM_LENGTH = 4;
 const SEMANTIC_THRESHOLD = 0.6;
 const MAX_INJECTED_LINKS = 3;
-const MAX_BLOG_CANDIDATES = 50;
+const MAX_BLOG_CANDIDATES = 200;
 const MAX_LINK_SUGGESTIONS = 10;
 const MAX_ENTITY_SUGGESTIONS = 5;
 
@@ -426,6 +426,9 @@ export async function injectInternalLinks(
                     not: currentSlug,
                 },
             },
+            orderBy: {
+                createdAt: "desc",
+            },
             take: MAX_BLOG_CANDIDATES,
             select: {
                 slug: true,
@@ -599,6 +602,9 @@ export async function suggestInternalLinks(
                 slug: {
                     not: currentSlug,
                 },
+            },
+            orderBy: {
+                createdAt: "desc",
             },
             take: MAX_BLOG_CANDIDATES,
             select: {
@@ -1039,6 +1045,230 @@ export async function suggestEntityLinks(
     } catch (error: unknown) {
         logger.error(
             "[Entity Links] suggestEntityLinks failed:",
+            { error: formatError(error) }
+        );
+
+        return [];
+    }
+}
+
+export interface TopicLinkContext {
+    secondaryKeywords?: string[];
+    entities?: string[];
+    title?: string;
+    excludeSlugs?: string[];
+}
+
+export async function findInternalLinkOpportunitiesForTopic(
+    primaryKeyword: string,
+    siteId: string,
+    siteDomain?: string | null,
+    topicContext?: TopicLinkContext,
+    vectorScores?: Map<string, number>
+): Promise<InternalLinkSuggestion[]> {
+    try {
+        const excludeSlugs = new Set(topicContext?.excludeSlugs || []);
+
+        const otherBlogs = await prisma.blog.findMany({
+            where: {
+                siteId,
+                status: "PUBLISHED",
+            },
+            orderBy: {
+                createdAt: "desc",
+            },
+            take: MAX_BLOG_CANDIDATES,
+            select: {
+                id: true,
+                slug: true,
+                title: true,
+                targetKeywords: true,
+            },
+        });
+
+        if (otherBlogs.length === 0) {
+            return [];
+        }
+
+        const normPrimaryKw = primaryKeyword ? normalizeText(primaryKeyword) : "";
+        const topicSecondaryKws = uniqueStrings(
+            (topicContext?.secondaryKeywords || []).filter(
+                k => typeof k === "string" && k.trim().length >= MIN_TERM_LENGTH
+            )
+        );
+        const topicTitle = topicContext?.title ? normalizeText(topicContext.title) : "";
+        const topicEntitiesFromContext = uniqueStrings(topicContext?.entities || []);
+
+        const topicEntities = extractEntities(
+            `${primaryKeyword} ${topicSecondaryKws.join(" ")} ${topicContext?.title || ""}`
+        );
+        for (const e of topicEntitiesFromContext) {
+            topicEntities.add(e.toLowerCase());
+        }
+
+        const topicKeywordsList = uniqueStrings([
+            primaryKeyword,
+            ...topicSecondaryKws,
+        ]);
+
+        const suggestions: (InternalLinkSuggestion & { _score: number })[] = [];
+        const seenDestinations = new Set<string>();
+
+        for (const blog of otherBlogs) {
+            if (excludeSlugs.has(blog.slug)) {
+                continue;
+            }
+
+            const destination = buildBlogUrl(blog.slug, siteDomain);
+            if (seenDestinations.has(destination)) {
+                continue;
+            }
+
+            const candidateTargetKeywords = uniqueStrings(
+                (blog.targetKeywords || []).filter(
+                    k => typeof k === "string" && k.trim().length >= MIN_TERM_LENGTH
+                )
+            );
+
+            const [candPrimaryKw] = candidateTargetKeywords;
+
+            const topicKeywordMatches = topicKeywordsList.filter(
+                tk =>
+                    containsTerm(blog.title, tk) ||
+                    candidateTargetKeywords.some(ck => containsTerm(ck, tk) || containsTerm(tk, ck))
+            );
+
+            const candidateKeywordMatches = candidateTargetKeywords.filter(
+                ck =>
+                    (normPrimaryKw && containsTerm(ck, normPrimaryKw)) ||
+                    (topicTitle && containsTerm(topicTitle, ck)) ||
+                    topicSecondaryKws.some(sk => containsTerm(ck, sk) || containsTerm(sk, ck))
+            );
+
+            const allKeywordOverlap = uniqueStrings([
+                ...topicKeywordMatches,
+                ...candidateKeywordMatches,
+            ]);
+
+            const candidateEntities = extractEntities(
+                `${blog.title} ${candidateTargetKeywords.join(" ")}`
+            );
+
+            const entityOverlap = computeEntityOverlap(topicEntities, candidateEntities);
+
+            const titleMatch =
+                (normPrimaryKw && containsTerm(blog.title, normPrimaryKw)) ||
+                (topicTitle && containsTerm(topicTitle, blog.title)) ||
+                (topicTitle && containsTerm(blog.title, topicTitle));
+
+            const hasVectorScore = vectorScores?.has(blog.id) ?? false;
+            const rawVectorScore = hasVectorScore
+                ? Number(vectorScores?.get(blog.id) ?? 0)
+                : 0;
+            const vectorScore = Number.isFinite(rawVectorScore)
+                ? Math.max(0, Math.min(1, rawVectorScore))
+                : 0;
+
+            const hasSemanticMatch = hasVectorScore && vectorScore >= SEMANTIC_THRESHOLD;
+
+            if (
+                allKeywordOverlap.length === 0 &&
+                entityOverlap.shared.length === 0 &&
+                !titleMatch &&
+                !hasSemanticMatch
+            ) {
+                continue;
+            }
+
+            let matchType: MatchType = "title";
+            let anchorConcept = blog.title;
+
+            if (candPrimaryKw && (topicKeywordMatches.includes(candPrimaryKw) || (normPrimaryKw && containsTerm(candPrimaryKw, normPrimaryKw)))) {
+                matchType = "primary_keyword";
+                anchorConcept = candPrimaryKw;
+            } else if (normPrimaryKw && containsTerm(blog.title, normPrimaryKw)) {
+                matchType = "primary_keyword";
+                anchorConcept = normPrimaryKw;
+            } else if (allKeywordOverlap.length > 0) {
+                matchType = "secondary_keyword";
+                anchorConcept = allKeywordOverlap[0];
+            } else if (entityOverlap.shared.length > 0) {
+                matchType = "entity";
+                anchorConcept = entityOverlap.shared[0];
+            } else if (titleMatch) {
+                matchType = "title";
+                anchorConcept = blog.title;
+            } else if (hasSemanticMatch) {
+                matchType = "semantic";
+                anchorConcept = blog.title;
+            }
+
+            const keywordScore = scoreLinkRelevance(matchType, allKeywordOverlap.length);
+
+            let relevance: number;
+            if (hasVectorScore) {
+                relevance = Math.round(
+                    keywordScore * 0.5 +
+                    entityOverlap.score * 100 * 0.25 +
+                    vectorScore * 100 * 0.25
+                );
+            } else {
+                relevance = Math.round(
+                    keywordScore * 0.65 +
+                    entityOverlap.score * 100 * 0.35
+                );
+            }
+
+            if (titleMatch) {
+                relevance += 2;
+            }
+
+            relevance = Math.max(0, Math.min(100, relevance));
+
+            const relationship = classifyRelationship(matchType, entityOverlap.score);
+
+            const reasonParts: string[] = [];
+            if (allKeywordOverlap.length > 0) {
+                reasonParts.push(`topic keyword match: ${allKeywordOverlap.slice(0, 3).join(", ")}`);
+            }
+            if (entityOverlap.shared.length > 0) {
+                reasonParts.push(`shared entities: ${entityOverlap.shared.slice(0, 3).join(", ")}`);
+            }
+            if (titleMatch) {
+                reasonParts.push(`title match with "${blog.title}"`);
+            }
+            if (hasVectorScore) {
+                reasonParts.push(`semantic similarity ${vectorScore.toFixed(2)}`);
+            }
+
+            const reason = reasonParts.length > 0
+                ? reasonParts.join("; ")
+                : `Topic match with "${blog.title}"`;
+
+            suggestions.push({
+                destination,
+                relationship,
+                anchorConcept,
+                relevance,
+                reason,
+                _score: relevance,
+            });
+
+            seenDestinations.add(destination);
+        }
+
+        return suggestions
+            .sort(
+                (a, b) =>
+                    b._score - a._score ||
+                    b.relevance - a.relevance ||
+                    a.destination.localeCompare(b.destination)
+            )
+            .slice(0, MAX_LINK_SUGGESTIONS)
+            .map(({ _score, ...suggestion }) => suggestion);
+    } catch (error: unknown) {
+        logger.error(
+            "[Internal Links] findInternalLinkOpportunitiesForTopic failed:",
             { error: formatError(error) }
         );
 

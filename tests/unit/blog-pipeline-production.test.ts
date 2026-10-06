@@ -1795,12 +1795,12 @@ describe("Blog Pipeline Production Audit Hardening", () => {
             reasoning: "Healthy page ranks position 4.",
         });
 
-        const mockSuggest = vi.spyOn(internalLinkModule, "suggestInternalLinks").mockResolvedValue([
+        const mockSuggest = vi.spyOn(internalLinkModule, "findInternalLinkOpportunitiesForTopic").mockResolvedValue([
             {
                 destination: "https://example.com/blog/canonical-target",
                 relationship: "topical",
                 anchorConcept: "AI SEO automation",
-                relevance: 0.9,
+                relevance: 90,
                 reason: "Cluster relevance",
             },
         ]);
@@ -2065,6 +2065,251 @@ describe("Blog Pipeline Production Audit Hardening", () => {
         mockResolve.mockRestore();
         spyAi.mockRestore();
         spyAiJson.mockRestore();
+    });
+
+    it("61. Topic Internal-Link Discovery: findInternalLinkOpportunitiesForTopic matches real published blog targets by topic", async () => {
+        const { prisma } = await import("@/lib/prisma");
+        const { findInternalLinkOpportunitiesForTopic } = await import("@/lib/blog/internalLinks");
+
+        const spyBlog = vi.spyOn(prisma.blog, "findMany").mockResolvedValue([
+            {
+                id: "blog-1",
+                slug: "content-strategy-guide",
+                title: "Ultimate B2B Content Strategy Guide",
+                targetKeywords: ["b2b content strategy", "content marketing"],
+            },
+            {
+                id: "blog-2",
+                slug: "seo-keyword-research",
+                title: "How to do Keyword Research",
+                targetKeywords: ["keyword research", "seo tools"],
+            },
+        ] as any);
+
+        const results = await findInternalLinkOpportunitiesForTopic(
+            "b2b content strategy",
+            "site-topic-test",
+            "example.com",
+            {
+                secondaryKeywords: ["content marketing"],
+                title: "B2B Content Strategy Masterclass",
+            }
+        );
+
+        expect(spyBlog).toHaveBeenCalledTimes(1);
+        expect(results.length).toBeGreaterThan(0);
+        expect(results[0].destination).toBe("https://example.com/blog/content-strategy-guide");
+        expect(results[0].relationship).toBe("keyword");
+        expect(results[0].anchorConcept).toBe("b2b content strategy");
+        expect(results[0].relevance).toBeGreaterThan(50);
+        expect(results[0].reason).toContain("topic keyword match");
+
+        spyBlog.mockRestore();
+    });
+
+    it("62. Irrelevant Exclusion: findInternalLinkOpportunitiesForTopic excludes unrelated published blogs", async () => {
+        const { prisma } = await import("@/lib/prisma");
+        const { findInternalLinkOpportunitiesForTopic } = await import("@/lib/blog/internalLinks");
+
+        const spyBlog = vi.spyOn(prisma.blog, "findMany").mockResolvedValue([
+            {
+                id: "blog-irrelevant",
+                slug: "best-pasta-recipes",
+                title: "10 Easy Homemade Pasta Recipes",
+                targetKeywords: ["pasta recipes", "cooking Italian food"],
+            },
+        ] as any);
+
+        const results = await findInternalLinkOpportunitiesForTopic(
+            "b2b content strategy",
+            "site-topic-test",
+            "example.com"
+        );
+
+        expect(results).toHaveLength(0);
+        spyBlog.mockRestore();
+    });
+
+    it("63. GSC Ranking URL Exclusion: topic opportunity provider only queries published site blogs and excludes external/competitor/GSC ranking URLs", async () => {
+        const { prisma } = await import("@/lib/prisma");
+        const { findInternalLinkOpportunitiesForTopic } = await import("@/lib/blog/internalLinks");
+
+        const spyBlog = vi.spyOn(prisma.blog, "findMany").mockResolvedValue([
+            {
+                id: "blog-site",
+                slug: "site-internal-page",
+                title: "B2B Content Strategy Insights",
+                targetKeywords: ["b2b content strategy"],
+            },
+        ] as any);
+
+        const results = await findInternalLinkOpportunitiesForTopic(
+            "b2b content strategy",
+            "site-topic-test",
+            "example.com"
+        );
+
+        expect(spyBlog).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    siteId: "site-topic-test",
+                    status: "PUBLISHED",
+                }),
+            })
+        );
+        expect(results.every(r => r.destination.includes("example.com"))).toBe(true);
+        expect(results.some(r => r.destination.includes("google.com") || r.destination.includes("competitor"))).toBe(false);
+
+        spyBlog.mockRestore();
+    });
+
+    it("64. Determinism: findInternalLinkOpportunitiesForTopic produces identical relevance/reason and stable sorting", async () => {
+        const { prisma } = await import("@/lib/prisma");
+        const { findInternalLinkOpportunitiesForTopic } = await import("@/lib/blog/internalLinks");
+
+        const mockBlogs = [
+            {
+                id: "b1",
+                slug: "alpha-guide",
+                title: "B2B Content Strategy Playbook",
+                targetKeywords: ["b2b content strategy"],
+            },
+            {
+                id: "b2",
+                slug: "beta-guide",
+                title: "B2B Content Strategy Framework",
+                targetKeywords: ["b2b content strategy"],
+            },
+        ] as any;
+
+        const spyBlog = vi.spyOn(prisma.blog, "findMany").mockResolvedValue(mockBlogs);
+
+        const res1 = await findInternalLinkOpportunitiesForTopic("b2b content strategy", "site-1", "example.com");
+        const res2 = await findInternalLinkOpportunitiesForTopic("b2b content strategy", "site-1", "example.com");
+
+        expect(res1).toEqual(res2);
+        expect(res1[0].destination).toBe("https://example.com/blog/alpha-guide");
+
+        spyBlog.mockRestore();
+    });
+
+    it("65. Pipeline Integration: runFullPipeline(siteId) places topic opportunities into ResearchPacket", async () => {
+        const aiClient = await import("@/lib/blog/ai-client");
+        const spyAi = vi.spyOn(aiClient, "generateWithFallback").mockResolvedValue(
+            "Paragraph 1 explaining B2B content strategy in extensive depth and detail.\n\n" +
+            "Paragraph 2 providing detailed analysis and strategic recommendations for practitioners."
+        );
+        const spyAiJson = vi.spyOn(aiClient, "generateWithFallbackJson").mockImplementation(async (opts) => {
+            const promptStr = typeof opts === "string" ? opts : JSON.stringify(opts);
+            if (promptStr.includes("Outline") || promptStr.includes("sections")) {
+                return mockOutline as any;
+            }
+            return mockBrainResponse as any;
+        });
+
+        const internalLinkModule = await import("@/lib/blog/internalLinks");
+        const spyTopicOpps = vi.spyOn(internalLinkModule, "findInternalLinkOpportunitiesForTopic").mockResolvedValue([
+            {
+                destination: "https://example.com/blog/topic-target",
+                relationship: "keyword",
+                anchorConcept: "b2b content strategy",
+                relevance: 85,
+                reason: "topic keyword match",
+            },
+        ]);
+
+        const testCtx = buildPromptContext({
+            keyword: "b2b content strategy",
+            category: "b2b content strategy",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const { runFullPipeline } = await import("@/lib/blog/pipeline");
+        const result = await runFullPipeline({
+            keyword: "b2b content strategy",
+            serpContext: mockSerpContext,
+            ctx: testCtx,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+            siteId: "site-pipeline-topic",
+        });
+
+        expect(spyTopicOpps).toHaveBeenCalledTimes(1);
+        expect(spyTopicOpps).toHaveBeenCalledWith(
+            "b2b content strategy",
+            "site-pipeline-topic",
+            "example.com",
+            expect.objectContaining({
+                secondaryKeywords: expect.any(Array),
+                title: expect.any(String),
+            })
+        );
+        expect(result.researchPacket.internalLinkOpportunities).toBeDefined();
+        expect(result.researchPacket.internalLinkOpportunities?.[0].destination).toBe("https://example.com/blog/topic-target");
+
+        spyTopicOpps.mockRestore();
+        spyAi.mockRestore();
+        spyAiJson.mockRestore();
+    });
+
+    it("66. No-SiteId Safety: runFullPipeline without siteId does not invoke topic opportunity provider or fabricate links", async () => {
+        const aiClient = await import("@/lib/blog/ai-client");
+        const spyAi = vi.spyOn(aiClient, "generateWithFallback").mockResolvedValue(
+            "Paragraph 1 explaining B2B content strategy in extensive depth and detail.\n\n" +
+            "Paragraph 2 providing detailed analysis and strategic recommendations for practitioners."
+        );
+        const spyAiJson = vi.spyOn(aiClient, "generateWithFallbackJson").mockImplementation(async (opts) => {
+            const promptStr = typeof opts === "string" ? opts : JSON.stringify(opts);
+            if (promptStr.includes("Outline") || promptStr.includes("sections")) {
+                return mockOutline as any;
+            }
+            return mockBrainResponse as any;
+        });
+
+        const internalLinkModule = await import("@/lib/blog/internalLinks");
+        const spyTopicOpps = vi.spyOn(internalLinkModule, "findInternalLinkOpportunitiesForTopic");
+
+        const testCtx = buildPromptContext({
+            keyword: "b2b content strategy",
+            category: "b2b content strategy",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+
+        const { runFullPipeline } = await import("@/lib/blog/pipeline");
+        const result = await runFullPipeline({
+            keyword: "b2b content strategy",
+            serpContext: mockSerpContext,
+            ctx: testCtx,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+        });
+
+        expect(spyTopicOpps).not.toHaveBeenCalled();
+        expect(result.researchPacket.internalLinkOpportunities).toBeUndefined();
+
+        spyTopicOpps.mockRestore();
+        spyAi.mockRestore();
+        spyAiJson.mockRestore();
+    });
+
+    it("67. Primitive Independence: injectSpecificInternalLink injects link into HTML independently", async () => {
+        const { injectSpecificInternalLink } = await import("@/lib/blog/internalLinks");
+
+        const html = "<p>Learn more about our b2b content strategy for growth.</p>";
+        const target = {
+            slug: "b2b-growth-guide",
+            title: "B2B Growth Guide",
+            targetKeywords: ["b2b content strategy"],
+        };
+
+        const result = injectSpecificInternalLink(html, target, "example.com");
+
+        expect(result.linked).toBe(true);
+        expect(result.html).toContain('href="https://example.com/blog/b2b-growth-guide"');
+        expect(result.html).toContain('b2b content strategy');
     });
 });
 

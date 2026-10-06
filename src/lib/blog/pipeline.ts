@@ -44,7 +44,7 @@ import {
 } from "./research-packet";
 import type { ResearchEvidenceLedger } from "./evidence-ledger";
 import { buildClaimPlan, renderClaimPlanForSection, type ClaimPlan, type SectionClaimPlan } from "./claim-plan";
-import { suggestInternalLinks } from "./internalLinks";
+import { findInternalLinkOpportunitiesForTopic, suggestInternalLinks } from "./internalLinks";
 
 export interface ResearchBrain {
     intent: string;
@@ -1182,12 +1182,14 @@ export async function runFullPipeline(params: {
     if (!internalLinkOpportunities && siteId) {
         try {
             const domain = ctx.siteDomain ?? groundedCtx?.data.domain ?? null;
-            internalLinkOpportunities = await suggestInternalLinks(
-                "",
-                [keyword],
+            internalLinkOpportunities = await findInternalLinkOpportunitiesForTopic(
+                keyword,
                 siteId,
-                "",
-                domain
+                domain,
+                {
+                    secondaryKeywords: outline.sections.flatMap(s => s.keyEntities || []),
+                    title: outline.title,
+                }
             );
         } catch (err) {
             logger.warn("[Pipeline] Internal link suggestion fetch failed — proceeding without suggestions", {
