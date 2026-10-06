@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { buildResearchPacket } from "@/lib/blog/research-packet";
 import type { GroundedSiteContext } from "@/lib/prompt-context/build-site-context";
 import type { CompetitorAnalysis } from "@/lib/blog/contracts";
@@ -474,9 +474,15 @@ describe("Blog Pipeline Production Audit Hardening", () => {
 
         // Verify non-truncation safety check in applyTargetedRevision retains original content if revision truncates by >15%
         const longArticle = "# Full Article\n" + "Word ".repeat(4000);
-        // applyTargetedRevision returns original content if AI returned empty/severely truncated content (<85%)
+        const aiClient = await import("@/lib/blog/ai-client");
+        const spy = vi.spyOn(aiClient, "generateWithFallback").mockResolvedValue("Short truncated output");
+
         const result = await applyTargetedRevision(longArticle, "Add FAQ", testCtx);
-        expect(result.length).toBeGreaterThanOrEqual(longArticle.length * 0.85);
+        // Safety guard detects truncation (<85% length) and retains original content verbatim
+        expect(result).toBe(longArticle);
+        expect(result.length).toBe(longArticle.length);
+
+        spy.mockRestore();
     });
 
     it("19. Schema-aware citation template scoring evaluates combined HTML + JSON-LD script", async () => {
