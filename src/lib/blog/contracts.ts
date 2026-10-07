@@ -151,6 +151,16 @@ export const FirstPartyEvidenceSchema = z.object({
 
 export const CompetitorAnalysisSchema = z.object({
     competitorDomain: z.string().trim().max(300),
+    /**
+     * AVAILABLE only when the competitor's own page was found in the SERP and
+     * scraped, so every strength/weakness below is backed by measured evidence.
+     * UNAVAILABLE means no competitor-specific claims may be made.
+     * Omitted for legacy/hand-built analyses.
+     */
+    availability: z.enum(["AVAILABLE", "UNAVAILABLE"]).optional(),
+    unavailableReason: z.string().trim().max(500).optional(),
+    /** Measured observations backing the gap/weakness claims (counts, ranks, dates). */
+    evidence: z.array(z.string().trim().max(500)).max(30).optional(),
     searchVolume: z.number().optional(),
     difficulty: z.number().optional(),
     competitorRankingUrl: z.string().trim().max(1000).optional(),

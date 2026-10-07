@@ -631,6 +631,7 @@ export async function generateTrendingPost(
 
 import type { GroundedSiteContext } from "@/lib/prompt-context/build-site-context";
 import type { CompetitorAnalysis } from "./contracts";
+import { analyzeCompetitorGap } from "./competitor-gap-analyzer";
 
 export async function generateEvergreenPost(
     category: string,
@@ -798,30 +799,23 @@ export async function generateBlogFromCompetitorGap(
         logger.error("[Blog Engine] SERP context failed:", { error: (e as Error)?.message });
     }
 
-    const competitorMatch = serpContext?.results.find(r => r.link.includes(competitorDomain));
-    const competitorAnalysis: CompetitorAnalysis = {
+    const competitorAnalysis: CompetitorAnalysis = analyzeCompetitorGap({
+        keyword,
         competitorDomain,
+        serpContext,
         searchVolume,
         difficulty,
-        competitorRankingUrl: competitorMatch?.link,
-        competitorTitle: competitorMatch?.title,
-        headings: competitorMatch?.scrapedHeadings ?? [],
-        scrapedText: competitorMatch?.scrapedContent || competitorMatch?.snippet,
-        wordCount: competitorMatch?.wordCount,
-        structuralStrengths: competitorMatch?.wordCount
-            ? [`In-depth ranking page (~${competitorMatch.wordCount} words)`, ...(competitorMatch.scrapedHeadings?.length ? [`Structured into ${competitorMatch.scrapedHeadings.length} section headings`] : [])]
-            : [`Page 1 ranking competitor for ${keyword}`],
-        contentWeaknesses: [
-            ...(competitorMatch?.scrapedContent && !/experience|testing|data|result/i.test(competitorMatch.scrapedContent) ? ["Lacks verified first-party experience/testing evidence"] : ["Relies primarily on generic advice"]),
-            ...(competitorMatch?.scrapedSchemaTypes?.length === 0 ? ["Lacks structured JSON-LD schema markup"] : []),
-            `Omits proprietary telemetry and live searcher data`,
-        ],
-        differentiationOpportunities: [
-            `Provide verified first-party telemetry and original data`,
-            `Directly answer searcher intent in opening paragraph`,
-            `Outrank ${competitorDomain} on structural depth and schema completeness`,
-        ],
-    };
+    });
+
+    logger.info("[Blog Engine] Competitor gap analysis", {
+        keyword,
+        competitorDomain,
+        availability: competitorAnalysis.availability,
+        unavailableReason: competitorAnalysis.unavailableReason,
+        missingSubtopics: competitorAnalysis.missingSubtopics?.length ?? 0,
+        missingQuestions: competitorAnalysis.missingQuestions?.length ?? 0,
+        weaknesses: competitorAnalysis.contentWeaknesses?.length ?? 0,
+    });
 
     const pipeline = await runFullPipeline({
         keyword,

@@ -2582,6 +2582,45 @@ describe("Blog Pipeline Production Audit Hardening", () => {
         spyBlog.mockRestore();
     });
 
+    it("73. Keyword-Pool Recall: relevant pool queries targetKeywords (bounded hasSome) and retrieves older pages whose title lacks the topic", async () => {
+        const { prisma } = await import("@/lib/prisma");
+        const { findInternalLinkOpportunitiesForTopic } = await import("@/lib/blog/internalLinks");
+
+        const keywordOnlyBlog = {
+            id: "older-keyword-only",
+            slug: "growth-playbook",
+            title: "The Complete Growth Playbook",
+            targetKeywords: ["B2B Content Strategy"],
+        };
+
+        const spyBlog = (vi.spyOn(prisma.blog, "findMany") as any).mockImplementation(async (opts: any) => {
+            if (opts?.where?.OR) {
+                const hasKeywordCondition = opts.where.OR.some((c: any) => c.targetKeywords?.hasSome);
+                return hasKeywordCondition ? [keywordOnlyBlog] : [];
+            }
+            return [
+                { id: "recent-1", slug: "recent-1", title: "Unrelated Recent 1", targetKeywords: ["unrelated"] },
+            ];
+        });
+
+        const results = await findInternalLinkOpportunitiesForTopic("B2B Content Strategy", "site-kw-recall", "example.com");
+
+        const relevantCall = spyBlog.mock.calls.find((c: any[]) => c[0]?.where?.OR)![0];
+        const kwCondition = relevantCall.where.OR.find((c: any) => c.targetKeywords?.hasSome);
+
+        expect(kwCondition.targetKeywords.hasSome).toEqual(
+            expect.arrayContaining(["B2B Content Strategy", "b2b content strategy"])
+        );
+        expect(kwCondition.targetKeywords.hasSome.length).toBeLessThanOrEqual(10);
+        expect(relevantCall.take).toBe(100);
+        expect(relevantCall.where.siteId).toBe("site-kw-recall");
+        expect(relevantCall.where.status).toBe("PUBLISHED");
+        expect(results.some(r => r.destination.includes("growth-playbook"))).toBe(true);
+
+        spyBlog.mockRestore();
+    });
+
+
     it("72. No Opportunities or SiteId: buildPost does not query database or fabricate internal links when opportunities are empty", async () => {
         const { prisma } = await import("@/lib/prisma");
         const { buildPost } = await import("@/lib/blog");

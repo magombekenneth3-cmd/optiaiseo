@@ -1078,13 +1078,34 @@ export async function findInternalLinkOpportunitiesForTopic(
         let relevantPool: Array<{ id: string; slug: string; title: string; targetKeywords: string[] }> = [];
         if (searchTerms.length > 0) {
             try {
+                const boundedTerms = searchTerms.slice(0, 5);
+
+                // Prisma's `hasSome` on String[] is an exact, case-sensitive match
+                // (same representation used by page-existence-resolver). Include the
+                // original and lower-cased forms so keyword casing differences don't
+                // cause misses. Bounded: at most 5 terms x 2 variants.
+                const keywordVariants = Array.from(
+                    new Set(
+                        boundedTerms.flatMap(term => [
+                            term.trim(),
+                            term.trim().toLowerCase(),
+                        ])
+                    )
+                ).filter(Boolean);
+
                 relevantPool = await prisma.blog.findMany({
                     where: {
                         siteId,
                         status: "PUBLISHED",
-                        OR: searchTerms.slice(0, 5).map(term => ({
-                            title: { contains: term, mode: "insensitive" as const },
-                        })),
+                        OR: [
+                            ...boundedTerms.map(term => ({
+                                title: { contains: term, mode: "insensitive" as const },
+                            })),
+                            { targetKeywords: { hasSome: keywordVariants } },
+                        ],
+                    },
+                    orderBy: {
+                        createdAt: "desc",
                     },
                     take: 100,
                     select: {

@@ -175,6 +175,33 @@ SERP STRUCTURE SIGNALS:
 // ─── Stage 1: Research Brain ──────────────────────────────────────────────────
 
 /**
+ * Renders a competitor analysis for prompts. UNAVAILABLE analyses forbid any
+ * competitor-specific claims; AVAILABLE analyses pass only measured gaps with
+ * their evidence so the model cannot invent weaknesses.
+ */
+export function renderCompetitorAnalysisBlock(analysis: CompetitorAnalysis, label: string): string {
+    if (analysis.availability === "UNAVAILABLE") {
+        return `${label} (${analysis.competitorDomain}): UNAVAILABLE
+- Reason: ${analysis.unavailableReason ?? "Competitor page was not analysed."}
+- Do NOT make any claims about ${analysis.competitorDomain}'s content, weaknesses, or omissions.
+- Differentiate against the SERP as a whole (table-stakes topics, unanswered questions) instead.`;
+    }
+
+    const lines = [
+        `${label} (${analysis.competitorDomain}):`,
+        analysis.competitorRankingUrl ? `- Competitor ranking page: ${analysis.competitorRankingUrl}` : "",
+        `- Competitor headings: ${analysis.headings?.slice(0, 10).join(" → ") || "N/A"}`,
+        analysis.structuralStrengths?.length ? `- Measured strengths (match or exceed these): ${analysis.structuralStrengths.join("; ")}` : "",
+        analysis.contentWeaknesses?.length ? `- Measured weaknesses: ${analysis.contentWeaknesses.join("; ")}` : "",
+        analysis.missingSubtopics?.length ? `- Subtopics other ranking pages cover but the competitor omits (cover each): ${analysis.missingSubtopics.join("; ")}` : "",
+        analysis.missingQuestions?.length ? `- Searcher questions the competitor leaves unanswered (answer each directly): ${analysis.missingQuestions.join("; ")}` : "",
+        analysis.evidence?.length ? `- Evidence:\n${analysis.evidence.slice(0, 12).map(e => `  • ${e}`).join("\n")}` : "",
+        `- Only the gaps listed above are verified. Do not claim the competitor is wrong, outdated, or missing anything not listed here.`,
+    ];
+    return lines.filter(Boolean).join("\n");
+}
+
+/**
  * Produces a structured research object before any writing begins.
  * Uses Flash — fast, cheap, no creative output needed.
  */
@@ -211,10 +238,7 @@ export async function runResearchBrain(
         : "";
 
     const competitorBlock = competitorAnalysis
-        ? `\nTARGET COMPETITOR ANALYSIS (${competitorAnalysis.competitorDomain}):
-- Competitor Headings: ${competitorAnalysis.headings?.slice(0, 10).join(" | ") || "N/A"}
-- Weaknesses: ${competitorAnalysis.contentWeaknesses?.join("; ") || "N/A"}
-- Differentiation: ${competitorAnalysis.differentiationOpportunities?.join("; ") || "N/A"}\n`
+        ? `\n${renderCompetitorAnalysisBlock(competitorAnalysis, "TARGET COMPETITOR ANALYSIS")}\n`
         : "";
 
     const prompt = `You are an editorial research analyst. Your job is NOT to write content — it is to produce a structured research brief that a writer will use.
@@ -360,12 +384,7 @@ export async function runOutlinePlanner(
         : "";
 
     const competitorInstruction = competitorAnalysis
-        ? `COMPETITOR ATTACK/GAP MANDATE:
-- Competitor domain to outperform: ${competitorAnalysis.competitorDomain}
-- Competitor Headings: ${competitorAnalysis.headings?.slice(0, 8).join(" → ") || "N/A"}
-- Competitor Content Weaknesses: ${competitorAnalysis.contentWeaknesses?.join("; ") || "N/A"}
-- Differentiation Opportunities: ${competitorAnalysis.differentiationOpportunities?.join("; ") || "N/A"}
-- Create sections that directly cover what ${competitorAnalysis.competitorDomain} missed or stated incorrectly.`
+        ? renderCompetitorAnalysisBlock(competitorAnalysis, "COMPETITOR ATTACK/GAP MANDATE")
         : "";
 
     const groundedBlock = groundedCtx?.data ? `
