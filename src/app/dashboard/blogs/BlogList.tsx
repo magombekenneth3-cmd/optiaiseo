@@ -204,10 +204,11 @@ function getStatusConfig(blog: Blog) {
         };
     }
     if (blog.status === "DRAFT") {
+        const isReady = blog.validationScore != null && Number(blog.validationScore) >= 60;
         return {
-            label: "Ready",
-            className: "border-amber-500/20 bg-amber-500/10 text-amber-400",
-            dot: "bg-amber-400",
+            label: isReady ? "Ready" : "Draft",
+            className: isReady ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : "border-border bg-muted text-muted-foreground",
+            dot: isReady ? "bg-emerald-400" : "bg-muted-foreground",
         };
     }
     if (blog.status === "EVIDENCE_REVIEW") {
@@ -333,11 +334,7 @@ function QualityScore({ blog }: { blog: Blog }) {
 
 function EvidenceBadgeTrigger({ blog }: { blog: Blog }) {
     const coverage: number | null =
-        blog.evidenceCoverage != null
-            ? Math.max(0, Math.min(100, Number(blog.evidenceCoverage)))
-            : blog.status === "EVIDENCE_REVIEW"
-              ? 35
-              : null;
+        blog.evidenceCoverage != null ? Math.max(0, Math.min(100, Number(blog.evidenceCoverage))) : null;
 
     if (coverage === null) {
         return (
@@ -660,13 +657,7 @@ function EmptyState({
     );
 }
 
-function SnippetOptimizeButton({
-    blogId,
-    keyword,
-}: {
-    blogId: string;
-    keyword?: string;
-}) {
+function SnippetOptimizeButton({ blogId, keyword, triggerRef }: { blogId: string; keyword?: string; triggerRef?: React.RefObject<HTMLButtonElement | null>; }) {
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<{
@@ -706,6 +697,7 @@ function SnippetOptimizeButton({
     return (
         <>
             <button
+                ref={triggerRef}
                 type="button"
                 onClick={open}
                 title="Optimize for Featured Snippet"
@@ -869,6 +861,7 @@ function ActionMenu({
     onRetry: () => void;
 }) {
     const [open, setOpen] = useState(false);
+    const snippetTriggerRef = useRef<HTMLButtonElement>(null);
 
     useEffect(() => {
         if (!open) return;
@@ -887,6 +880,7 @@ function ActionMenu({
 
     return (
         <div className="relative" data-blog-action-menu>
+            {canPublishActions && <span className="sr-only" aria-hidden="true"><SnippetOptimizeButton blogId={blog.id} keyword={blog.targetKeywords?.[0]} triggerRef={snippetTriggerRef} /></span>}
             <button
                 type="button"
                 onClick={() => setOpen((value) => !value)}
@@ -947,6 +941,7 @@ function ActionMenu({
                                 type="button"
                                 onClick={() => {
                                     setOpen(false);
+                                    snippetTriggerRef.current?.click();
                                     onSnippet();
                                 }}
                                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-foreground transition-colors hover:bg-muted"
@@ -1000,11 +995,13 @@ export function BlogList({
     success,
     initialReviewId,
     pipelineFilter,
+    onClearPipelineFilter,
 }: {
     blogs: Blog[];
     success: boolean;
     initialReviewId?: string;
     pipelineFilter?: string;
+    onClearPipelineFilter?: () => void;
 }) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -1348,9 +1345,10 @@ export function BlogList({
     const clearFilters = useCallback(() => {
         setSearch("");
         setStatusFilter("ALL");
+        onClearPipelineFilter?.();
         setHealthFilter("ALL");
         setPage(1);
-    }, []);
+    }, [onClearPipelineFilter]);
 
     const toggleSelect = useCallback((id: string) => {
         setSelected((prev) => {
@@ -1549,7 +1547,7 @@ export function BlogList({
                                                         <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-40" />
                                                     </a>
                                                 ) : (
-                                                    blog.title
+                                                    <button type="button" onClick={() => setPreviewBlog(blog)} className="text-left transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{blog.title}</button>
                                                 )}
                                             </p>
                                             <StatusBadge blog={blog} />
@@ -1687,7 +1685,7 @@ export function BlogList({
                                                                         <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-40" />
                                                                     </a>
                                                                 ) : (
-                                                                    blog.title
+                                                                    <button type="button" onClick={() => setPreviewBlog(blog)} className="text-left transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{blog.title}</button>
                                                                 )}
                                                             </p>
                                                             {showReadiness && (

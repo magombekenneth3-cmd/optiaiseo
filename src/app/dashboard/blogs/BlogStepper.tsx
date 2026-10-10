@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
     Loader2,
     X,
@@ -54,12 +55,14 @@ const inputCls =
     "w-full bg-zinc-900/80 border border-white/10 hover:border-white/20 focus:border-emerald-500/60 rounded-xl px-3.5 py-2.5 text-sm text-foreground placeholder:text-zinc-600 outline-none transition-all";
 
 function Field({
+    id,
     icon,
     label,
     hint,
     required,
     children,
 }: {
+    id: string;
     icon: React.ReactNode;
     label: string;
     hint?: string;
@@ -68,7 +71,7 @@ function Field({
 }) {
     return (
         <div className="space-y-1.5">
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
+            <label htmlFor={id} className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
                 <span className="text-emerald-400">{icon}</span>
                 {label}
                 {required && <span className="text-emerald-400">*</span>}
@@ -109,7 +112,7 @@ function StepIndicator({ current }: { current: number }) {
                                 )}
                             </div>
                             <span
-                                className={`whitespace-nowrap text-[11px] font-bold ${
+                                className={`hidden text-center text-[11px] font-bold sm:block ${
                                     active ? "text-white" : done ? "text-emerald-400" : "text-zinc-500"
                                 }`}
                             >
@@ -118,8 +121,7 @@ function StepIndicator({ current }: { current: number }) {
                         </div>
                         {i < STEPS.length - 1 && (
                             <div
-                                className="mb-4 mx-2 h-0.5 flex-1 transition-all duration-500"
-                                style={{ background: i < current ? "#10b981" : "rgba(255,255,255,0.08)" }}
+                                className={`mb-4 mx-2 h-0.5 flex-1 transition-all duration-500 ${i < current ? "bg-emerald-500" : "bg-white/10"}`}
                             />
                         )}
                     </div>
@@ -197,6 +199,8 @@ function KeywordStep({
             <div className="relative mb-4">
                 <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                 <input
+                    id="target-keyword"
+                    aria-label="Target keyword"
                     type="text"
                     value={custom}
                     onChange={(e) => {
@@ -410,11 +414,11 @@ function AuthorStep({
                     {/* E-E-A-T Evidence Completeness Badge */}
                     <div
                         className="flex shrink-0 items-center gap-2 rounded-xl border border-purple-500/30 bg-purple-500/10 px-3 py-1.5"
-                        title="Completeness score based on captured author credentials and first-party experience signals."
+                        title="Percentage of author and experience fields completed. This does not verify the evidence."
                     >
                         <Award className="h-4 w-4 text-purple-400" />
                         <div>
-                            <div className="text-[9px] font-bold uppercase tracking-wider text-purple-300">Evidence Completeness</div>
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-purple-300">Details completed</div>
                             <div className="font-mono text-xs font-black text-emerald-400">
                                 {eeatCompleteness.percentage}% ({eeatCompleteness.filledCount}/{eeatCompleteness.total} Signals)
                             </div>
@@ -443,9 +447,10 @@ function AuthorStep({
 
             <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Field icon={<User className="h-3.5 w-3.5" />} label="Author Name" required>
+                    <Field id="author-name" icon={<User className="h-3.5 w-3.5" />} label="Author Name" required>
                         <input
                             type="text"
+                            id="author-name"
                             name="authorName"
                             value={form.authorName}
                             onChange={handleChange}
@@ -456,9 +461,10 @@ function AuthorStep({
                         />
                     </Field>
 
-                    <Field icon={<Briefcase className="h-3.5 w-3.5" />} label="Role / Title">
+                    <Field id="author-role" icon={<Briefcase className="h-3.5 w-3.5" />} label="Role / Title">
                         <input
                             type="text"
+                            id="author-role"
                             name="authorRole"
                             value={form.authorRole}
                             onChange={handleChange}
@@ -469,12 +475,14 @@ function AuthorStep({
                 </div>
 
                 <Field
+                    id="author-bio"
                     icon={<FileText className="h-3.5 w-3.5" />}
                     label="Author Biography"
                     hint="2–3 sentences highlighting credentials and domain authority."
                 >
                     <textarea
-                        name="authorBio"
+                        id="author-bio"
+                            name="authorBio"
                         value={form.authorBio}
                         onChange={handleChange}
                         placeholder="e.g. 8 years leading SEO engineering & AI Search visibility strategy for growth companies."
@@ -490,11 +498,13 @@ function AuthorStep({
                     </div>
 
                     <Field
+                        id="real-experience"
                         icon={<Award className="h-3.5 w-3.5" />}
                         label="Verbatim Experience / Case Result"
                         hint="A specific result achieved. This is injected as a verifiable case study block."
                     >
                         <textarea
+                            id="real-experience"
                             name="realExperience"
                             value={form.realExperience}
                             onChange={handleChange}
@@ -506,13 +516,15 @@ function AuthorStep({
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <Field
+                            id="real-numbers"
                             icon={<Hash className="h-3.5 w-3.5" />}
                             label="Real Figures & Metrics"
                             hint="Costs, yields, rates used verbatim."
                         >
                             <input
                                 type="text"
-                                name="realNumbers"
+                                id="real-numbers"
+                            name="realNumbers"
                                 value={form.realNumbers}
                                 onChange={handleChange}
                                 placeholder="e.g. $450/mo saved, 85% CTR, 4.2s LCP"
@@ -521,13 +533,15 @@ function AuthorStep({
                         </Field>
 
                         <Field
+                            id="local-context"
                             icon={<MapPin className="h-3.5 w-3.5" />}
                             label="Local & Regional Context"
                             hint="Location & regional market factors."
                         >
                             <input
                                 type="text"
-                                name="localContext"
+                                id="local-context"
+                            name="localContext"
                                 value={form.localContext}
                                 onChange={handleChange}
                                 placeholder="e.g. Kampala, East Africa region"
@@ -652,13 +666,13 @@ export function GenerateBlogModal({
         });
     }, [siteId, initialAuthor]);
 
-    useEffect(() => {
-        const handler = (e: KeyboardEvent) => {
-            if (e.key === "Escape") onClose();
-        };
-        window.addEventListener("keydown", handler);
-        return () => window.removeEventListener("keydown", handler);
-    }, [onClose]);
+    const isDirty = keyword.trim() !== (initialKeyword ?? "").trim() ||
+        Object.values(form).some((value) => value.trim().length > 0);
+
+    const requestClose = useCallback(() => {
+        if (isDirty && !window.confirm("Discard this article draft? Your entered details will be lost.")) return;
+        onClose();
+    }, [isDirty, onClose]);
 
     const handleChangeField = useCallback(
         (field: keyof AuthorInput, value: string) => setForm((prev) => ({ ...prev, [field]: value })),
@@ -689,20 +703,12 @@ export function GenerateBlogModal({
     const isDataReport = pipelineType === "DATA_REPORT";
 
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
-            onClick={(e) => {
-                if (e.target === e.currentTarget) onClose();
-            }}
-        >
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-md" aria-hidden="true" />
-
-            <div
-                role="dialog"
-                aria-modal="true"
-                aria-label={isDataReport ? "Data Report" : "Create article"}
-                className="relative w-full max-w-xl animate-in fade-in zoom-in-95 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/95 shadow-[0_0_80px_rgba(16,185,129,0.15)] backdrop-blur-2xl duration-200"
-            >
+        <Dialog open onOpenChange={(open) => { if (!open) requestClose(); }}>
+            <DialogContent className="max-h-[95dvh] w-[calc(100%-2rem)] max-w-xl overflow-hidden border-white/10 bg-zinc-950/95 p-0 text-foreground shadow-2xl backdrop-blur-2xl sm:w-full" onEscapeKeyDown={(event) => { if (isDirty) { event.preventDefault(); requestClose(); } }} onPointerDownOutside={(event) => { if (isDirty) { event.preventDefault(); requestClose(); } }}>
+                <DialogHeader className="sr-only">
+                    <DialogTitle>{isDataReport ? "Data Report Creator" : "Create Article Studio"}</DialogTitle>
+                    <DialogDescription>Choose a topic, add author details, and create the article.</DialogDescription>
+                </DialogHeader>
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-white/10 bg-zinc-900/60 px-6 py-4">
                     <div>
@@ -718,8 +724,8 @@ export function GenerateBlogModal({
                     </div>
                     <button
                         type="button"
-                        onClick={onClose}
-                        aria-label="Close"
+                        onClick={requestClose}
+                        aria-label="Close article creator"
                         className="rounded-xl p-2 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
                     >
                         <X className="h-5 w-5" />
@@ -782,7 +788,7 @@ export function GenerateBlogModal({
                         <span className="text-[11px] text-zinc-500 font-mono">Deducted when generation is confirmed</span>
                     </div>
                 )}
-            </div>
-        </div>
+            </DialogContent>
+        </Dialog>
     );
 }

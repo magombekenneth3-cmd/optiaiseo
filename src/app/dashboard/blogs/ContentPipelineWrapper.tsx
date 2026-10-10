@@ -51,6 +51,7 @@ export function ContentPipelineWithList({
                     success={success}
                     initialReviewId={initialReviewId}
                     pipelineFilter={filter}
+                    onClearPipelineFilter={() => setFilter("ALL")}
                 />
             </Suspense>
         </>

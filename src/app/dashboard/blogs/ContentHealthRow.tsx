@@ -50,6 +50,9 @@ interface NextAction {
 }
 
 function findNextAction(blogs: BlogData[]): NextAction | null {
+    const failedBlog = blogs.find(b => b.status === "FAILED");
+    if (failedBlog) return { type: "Generation failed", title: failedBlog.title || "Untitled article", blogId: failedBlog.id, detail: "Retry this article before continuing the content queue", ctaLabel: "Retry generation", insight: "Generation stopped before the article was completed. Open the article queue and retry it." };
+
     const evidenceReview = blogs.find(b => b.status === "EVIDENCE_REVIEW");
     if (evidenceReview) {
         const coverage = evidenceReview.evidenceCoverage != null ? Math.round(Number(evidenceReview.evidenceCoverage)) : null;
