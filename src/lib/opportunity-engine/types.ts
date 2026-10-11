@@ -1,3 +1,5 @@
+import type { InterventionEvidence } from "@/lib/growth/empirical-calibration";
+
 export type OpportunityCategory = 
     | "DECLINING"           // Traffic dropped >15% over 90 days
     | "QUICK_WIN"            // Positions 4–15 with high impressions
@@ -159,6 +161,8 @@ export interface OpportunityIntelligence {
     serpConsensus?: SerpConsensus;
     intentAlignment: number; // 0-100
     commercialValueScore: number; // 0-100
+    /** Historical outcome evidence for this action type; null/undefined → heuristic baseline only. */
+    interventionEvidence?: InterventionEvidence | null;
 }
 
 export interface DecisionTraceability {

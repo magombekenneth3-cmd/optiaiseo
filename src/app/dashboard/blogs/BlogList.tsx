@@ -657,7 +657,7 @@ function EmptyState({
     );
 }
 
-function SnippetOptimizeButton({ blogId, keyword, triggerRef }: { blogId: string; keyword?: string; triggerRef?: React.RefObject<HTMLButtonElement | null>; }) {
+function SnippetOptimizeButton({ blogId, keyword, triggerRef }: { blogId: string; keyword?: string; triggerRef?: React.Ref<HTMLButtonElement>; }) {
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<{

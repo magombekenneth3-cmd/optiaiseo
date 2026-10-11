@@ -140,13 +140,59 @@ export async function runSeoGuardrailCheck(target: GuardrailTarget): Promise<Gua
     };
 }
 
-if (require.main === module) {
+export function formatGuardrailReport(res: GuardrailCheckResult): string {
+    const lines: string[] = [];
+    lines.push("════════════════════════════════════════════════════════════");
+    lines.push(" OptiAISEO SEO / Core Web Vitals Guardrail Report");
+    lines.push("════════════════════════════════════════════════════════════");
+    lines.push(` URL:    ${res.url}`);
+    lines.push(` Result: ${res.passed ? "PASS ✅" : "FAIL ❌"}`);
+    lines.push("");
+    lines.push(` Errors (${res.errors.length}):`);
+    if (res.errors.length === 0) lines.push("   (none)");
+    for (const e of res.errors) lines.push(`   ❌ ${e}`);
+    lines.push("");
+    lines.push(` Warnings (${res.warnings.length}):`);
+    if (res.warnings.length === 0) lines.push("   (none)");
+    for (const w of res.warnings) lines.push(`   ⚠️  ${w}`);
+    lines.push("");
+    lines.push(" Metrics:");
+    lines.push(`   title:           ${res.metrics.title ?? "(missing)"}`);
+    lines.push(`   metaDescription: ${res.metrics.metaDescription ?? "(missing)"}`);
+    lines.push(`   canonical:       ${res.metrics.canonical ?? "(missing)"}`);
+    lines.push(`   og:title:        ${res.metrics.hasOgTitle ? "present" : "missing"}`);
+    lines.push(`   og:image:        ${res.metrics.hasOgImage ? "present" : "missing"}`);
+    lines.push(`   noindex:         ${res.metrics.isNoIndex}`);
+    lines.push(`   estimatedLcpMs:  ${res.metrics.estimatedLcpMs}`);
+    lines.push(`   estimatedCls:    ${res.metrics.estimatedCls}`);
+    lines.push("════════════════════════════════════════════════════════════");
+    return lines.join("\n");
+}
+
+// CLI entry. Uses argv-based detection rather than `require.main === module`,
+// which throws a ReferenceError when tsx loads this file as an ES module.
+const isCliEntry =
+    typeof process !== "undefined" &&
+    Array.isArray(process.argv) &&
+    typeof process.argv[1] === "string" &&
+    /guardrails[\\/]ci-check\.(ts|js|mjs|cjs)$/.test(process.argv[1]);
+
+if (isCliEntry) {
     const targetUrl = process.argv[2] || process.env.DEPLOYMENT_URL || "https://optiaiseo.online";
-    runSeoGuardrailCheck({ url: targetUrl }).then(res => {
-        if (!res.passed) {
+    runSeoGuardrailCheck({ url: targetUrl })
+        .then((res) => {
+            const report = formatGuardrailReport(res);
+            if (res.passed) {
+                console.log(report);
+                process.exit(0);
+            } else {
+                console.error(report);
+                process.exit(1);
+            }
+        })
+        .catch((err: unknown) => {
+            console.error(`Guardrail check crashed for ${targetUrl}:`);
+            console.error(err instanceof Error ? err.stack ?? err.message : String(err));
             process.exit(1);
-        } else {
-            process.exit(0);
-        }
-    }).catch(() => process.exit(1));
+        });
 }

@@ -23,24 +23,26 @@ describe("28-Day Automated ROI & Revenue Lift Prover Unit Tests", () => {
         expect(exp.baseline.clicks).toBeGreaterThan(0);
     });
 
-    it("should evaluate 28-day experiment lift and compute revenue gains", async () => {
+    // Phase 5 (BUG-5C): a seed/synthetic baseline with no real GSC post-data
+    // must NOT be turned into a fabricated WIN. Previously this test asserted
+    // invented +position/+revenue lift, which corrupted calibration win rates.
+    it("does not fabricate lift for a synthetic seed baseline (INSUFFICIENT_DATA)", async () => {
         const exp = await evaluate28DayExperimentLift("exp-dec-101");
 
         expect(exp).toBeDefined();
-        expect(exp.status).toBe("COMPLETED");
-        expect(exp.lift).toBeDefined();
-        expect(exp.lift?.positionDelta).toBeGreaterThan(0);
-        expect(exp.lift?.revenueLiftAmount).toBeGreaterThan(0);
-        expect(exp.lift?.clicksLiftPercent).toBeGreaterThan(0);
+        expect(exp.status).toBe("INSUFFICIENT_DATA");
+        expect(exp.lift).toBeFalsy();
     });
 
-    it("should calculate aggregated site experiment summary ROI metrics", async () => {
+    it("site summary counts the experiment but reports no synthetic ROI", async () => {
         const summary = await getSiteExperimentSummary("site-123");
 
         expect(summary).toBeDefined();
         expect(summary.siteId).toBe("site-123");
         expect(summary.totalExperimentsExecuted).toBeGreaterThan(0);
-        expect(summary.averagePositionGain).toBeGreaterThan(0);
-        expect(summary.totalRevenueGenerated).toBeGreaterThan(0);
+        // Only COMPLETED experiments with real lift contribute to ROI.
+        expect(summary.completedExperiments).toBe(0);
+        expect(summary.averagePositionGain).toBe(0);
+        expect(summary.totalRevenueGenerated).toBe(0);
     });
 });

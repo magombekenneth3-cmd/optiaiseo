@@ -704,7 +704,7 @@ export function GenerateBlogModal({
 
     return (
         <Dialog open onOpenChange={(open) => { if (!open) requestClose(); }}>
-            <DialogContent className="max-h-[95dvh] w-[calc(100%-2rem)] max-w-xl overflow-hidden border-white/10 bg-zinc-950/95 p-0 text-foreground shadow-2xl backdrop-blur-2xl sm:w-full" onEscapeKeyDown={(event) => { if (isDirty) { event.preventDefault(); requestClose(); } }} onPointerDownOutside={(event) => { if (isDirty) { event.preventDefault(); requestClose(); } }}>
+            <DialogContent className="max-h-[95dvh] w-[calc(100%-2rem)] max-w-xl overflow-hidden border-white/10 bg-zinc-950/95 p-0 text-foreground shadow-2xl backdrop-blur-2xl sm:w-full">
                 <DialogHeader className="sr-only">
                     <DialogTitle>{isDataReport ? "Data Report Creator" : "Create Article Studio"}</DialogTitle>
                     <DialogDescription>Choose a topic, add author details, and create the article.</DialogDescription>

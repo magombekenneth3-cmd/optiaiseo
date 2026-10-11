@@ -1,15 +1,36 @@
 name: Autonomous SEO & Core Web Vitals Guardrails
 
+# Two independent jobs with clearly separated failure semantics:
+#
+#   1. blog-regression-tests — runs on PRs and pushes. Pure unit tests; a
+#      failure here means a code regression in blog generation, NOT a live SEO
+#      regression.
+#
+#   2. production-seo-audit — runs ONLY after a successful deployment (or on
+#      manual dispatch), against the URL that was actually deployed. A failure
+#      here means the deployed page is missing critical SEO signals.
+#
+# The live production audit deliberately does NOT run on pull_request events:
+# auditing the current production site cannot tell us anything about a PR's
+# unmerged code, and would block PRs on unrelated production state.
+
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
   deployment_status:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "URL to audit (defaults to https://optiaiseo.online)"
+        required: false
+        default: "https://optiaiseo.online"
 
 jobs:
-  seo-guardrails:
-    name: Audit Meta Tags & CWV Regressions
+  blog-regression-tests:
+    name: Blog Generation Regression Tests
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -29,14 +50,54 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
       - name: Run Blog Generation Regression Tests
-        run: pnpm exec vitest run tests/unit/blog-evidence-governance.test.ts tests/unit/blog-claim-ledger.test.ts tests/unit/blog-content-lint.test.ts tests/unit/serp-gate-integration.test.ts
+        run: >
+          pnpm exec vitest run
+          tests/unit/blog-evidence-governance.test.ts
+          tests/unit/blog-content-lint.test.ts
+          tests/unit/serp-gate-integration.test.ts
+          --reporter=verbose
 
-      - name: Run Autonomous Guardrails Audit
-        run: pnpm exec tsx src/lib/guardrails/ci-check.ts "${{ github.event.deployment_status.target_url || 'https://optiaiseo.online' }}"
-
-      - name: Handle Guardrail Regression & Stage Rollback PR
+      - name: Report test failure
         if: failure()
         run: |
-          echo "SEO / Core Web Vitals regression caught by OptiAISEO Guardrails!"
-          echo "Staging automated rollback PR payload."
+          echo "::error title=Blog regression tests failed::One or more blog-generation unit tests failed. This is a code regression in this change — it is NOT a live SEO/production regression. See the test output above."
+
+  production-seo-audit:
+    name: Audit Deployed Meta Tags & CWV
+    if: >
+      (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success')
+      || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      TARGET_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url || inputs.target_url || 'https://optiaiseo.online' }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Guardrails Audit against deployed URL
+        run: |
+          echo "Auditing: $TARGET_URL"
+          pnpm exec tsx src/lib/guardrails/ci-check.ts "$TARGET_URL"
+
+      - name: Report SEO regression on deployed URL
+        if: failure()
+        run: |
+          echo "::error title=SEO guardrail failed on deployed URL::The guardrail audit of $TARGET_URL failed. See the guardrail report above for the exact errors and metrics."
