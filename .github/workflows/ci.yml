@@ -40,18 +40,8 @@ jobs:
       - name: Security regression tests
         run: pnpm exec vitest run tests/security/ --reporter=verbose
 
-      - name: TypeScript type check (hardening-scoped files only)
-        run: |
-          pnpm exec tsc --noEmit \
-            src/lib/growth/execution-engine.ts \
-            src/lib/experiments/tracker.ts \
-            src/lib/opportunity-engine/decision-ranker.ts \
-            src/lib/opportunity-engine/findings-to-opportunities.ts \
-            src/lib/env.ts \
-            src/lib/cron-auth.ts \
-            2>&1 || true
-          # Full tsc --noEmit has pre-existing errors in BlogList/BlogStepper
-          # that predate this PR. Scoping to hardening-affected files only.
+      - name: TypeScript type check (full project, blocking)
+        run: pnpm exec tsc --noEmit
 
       # ── Informational checks — failures logged but don't block merge ────
       - name: Unit tests (informational)
