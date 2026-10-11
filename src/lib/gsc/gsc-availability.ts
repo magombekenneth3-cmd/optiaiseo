@@ -68,11 +68,12 @@ export function classifyGscError(err: unknown): Exclude<GscDataStatus, "AVAILABL
     // Not connected
     if (msg.includes("gsc_not_connected")) return "NOT_CONNECTED";
 
-    // Auth revoked / refresh failed
+    // Auth revoked / refresh failed / token expired mid-session
     if (
         msg.includes("gsc_refresh_token_missing") ||
         msg.includes("gsc_token_refresh_failed") ||
         msg.includes("gsc_reauthorization_required") ||
+        msg.includes("gsc_token_expired") ||
         msg.includes("invalid_grant")
     ) {
         return "AUTH_REVOKED";

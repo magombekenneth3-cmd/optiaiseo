@@ -8,6 +8,7 @@ import {
     DecisionTraceability
 } from "./types";
 import { buildExecutionPlan } from "@/lib/growth/execution-planner";
+import { calculateSampleWeightedConfidence } from "@/lib/growth/empirical-calibration";
 
 export function rankGrowthDecisions(
     siteId: string,
@@ -29,7 +30,16 @@ export function rankGrowthDecisions(
         const linkOpp = opp.inboundInternalLinksCount < 2 ? 85 : 20;
 
         const impact = Math.round((rankingOpp + trafficOpp) / 2);
-        const confidence = 88; // 0-100 scale
+        // Phase 5 fix (BUG-5A): Replace hardcoded confidence: 88 with empirical
+        // confidence from the calibration pipeline. When no evidence is available,
+        // the calibration returns a lower baseline instead of a misleading 88%.
+        const baseHeuristicConfidence = 70; // Reasonable starting point for heuristic
+        const empiricalEvidence = intel?.interventionEvidence ?? null;
+        const calibration = calculateSampleWeightedConfidence(
+            baseHeuristicConfidence,
+            empiricalEvidence,
+        );
+        const confidence = calibration.calibratedConfidence;
         const effort = opp.categories.includes("STALE") ? 35 : 20;
 
         // Normalized weighted formula (0-100 scale)

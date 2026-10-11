@@ -241,9 +241,13 @@ export async function handleSubscriptionDeleted(subscription: Stripe.Subscriptio
 export async function handlePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
     const customerId = invoice.customer as string
 
-    await prisma.subscription.updateMany({
+    await prisma.subscription.update({
         where: { stripeCustomerId: customerId },
         data: { status: "past_due" },
+    }).catch((err: unknown) => {
+        // P2025: no record for this customer — nothing to mark past_due
+        if ((err as { code?: string })?.code !== "P2025") throw err
+        logger.warn("[Webhook] payment_failed: no subscription for customer", { customerId })
     })
 
     const sub = await prisma.subscription.findFirst({
@@ -329,9 +333,24 @@ export async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> 
         const commissionCents = Math.round(amountPaid * 0.3)
         const month = new Date().toISOString().slice(0, 7)
 
-        const commission = await prisma.commission.upsert({
+        // Only create a commission if one doesn't already exist for this invoice.
+        // Using findUnique + create instead of upsert so we know whether a new row
+        // was actually created — we only increment the conversion counter on new rows.
+        const existingCommission = await prisma.commission.findUnique({
             where: { stripeInvoiceId: invoiceId },
-            create: {
+            select: { id: true },
+        })
+
+        if (existingCommission) {
+            logger.info("[Affiliate] Commission already exists for invoice — skipping", {
+                invoiceId,
+                commissionId: existingCommission.id,
+            })
+            return
+        }
+
+        const commission = await prisma.commission.create({
+            data: {
                 referralId: referral.id,
                 referrerId: referral.ownerId,
                 amountCents: commissionCents,
@@ -339,9 +358,10 @@ export async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> 
                 stripeInvoiceId: invoiceId,
                 status: "pending",
             },
-            update: {},
         })
 
+        // Only increment conversions when a NEW commission was created —
+        // not on Stripe retries of the same invoice.
         await prisma.referral.update({
             where: { id: referral.id },
             data: { conversions: { increment: 1 } },

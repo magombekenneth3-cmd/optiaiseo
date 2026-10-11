@@ -61,19 +61,47 @@ export async function POST(req: NextRequest) {
      
     } catch (e: unknown) {
         if (e instanceof PrismaClientKnownRequestError && e.code === "P2002") {
-            logger.info(`[Webhook] Duplicate event ${event.id} — skipping`)
-            return NextResponse.json({ received: true })
+            // Check if this is a retry of a previously-failed event
+            const existing = await prisma.webhookEvent.findUnique({
+                where: {
+                    provider_providerEventId: { provider: "stripe", providerEventId: event.id },
+                },
+                select: { status: true },
+            })
+
+            if (existing?.status === "RETRY_PENDING") {
+                // Allow Stripe's retry: reset status so processWebhookEvent runs again
+                await prisma.webhookEvent.update({
+                    where: {
+                        provider_providerEventId: { provider: "stripe", providerEventId: event.id },
+                    },
+                    data: { status: "RECEIVED" },
+                })
+                logger.info(`[Webhook] Retrying previously-failed event ${event.id}`)
+                // Fall through to processWebhookEvent below
+            } else {
+                // Already processed successfully — true dedup
+                logger.info(`[Webhook] Duplicate event ${event.id} — skipping`)
+                return NextResponse.json({ received: true })
+            }
+        } else {
+            throw e
         }
-        throw e
     }
 
-    // Process sequentially so the serverless function doesn't terminate prematurely
-    await processWebhookEvent(event)
+    // Process sequentially so the serverless function doesn't terminate prematurely.
+    // If processing fails, return 500 so Stripe retries delivery.
+    // The deduplication guard above will prevent double-processing on retry:
+    // the P2002 catch returns 200 immediately for already-seen event IDs.
+    const processed = await processWebhookEvent(event)
+    if (!processed) {
+        return NextResponse.json({ error: "Processing failed" }, { status: 500 })
+    }
 
     return NextResponse.json({ received: true })
 }
 
-async function processWebhookEvent(event: Stripe.Event): Promise<void> {
+async function processWebhookEvent(event: Stripe.Event): Promise<boolean> {
     try {
         switch (event.type) {
             case "checkout.session.completed":
@@ -102,16 +130,23 @@ async function processWebhookEvent(event: Stripe.Event): Promise<void> {
              
             data: { status: "PROCESSED", processedAt: new Date() },
         })
-     
+
+        return true
     } catch (err: unknown) {
         logger.error(`[Webhook] Failed to process event ${event.id}`, { error: (err as Error)?.message || String(err) })
+
+        // Mark as RETRY_PENDING so the dedup guard allows Stripe's next delivery attempt.
+        // The dedup INSERT will P2002, but we check the existing row's status and
+        // allow re-processing if it's RETRY_PENDING (see retry logic below).
         await prisma.webhookEvent
             .update({
                 where: {
                     provider_providerEventId: { provider: "stripe", providerEventId: event.id },
                 },
-                data: { status: "FAILED" },
+                data: { status: "RETRY_PENDING" },
             })
             .catch((e) => logger.error(`[Webhook] Failed to update event status ${event.id}`, { error: (e as Error)?.message || String(e) }))
+
+        return false
     }
 }

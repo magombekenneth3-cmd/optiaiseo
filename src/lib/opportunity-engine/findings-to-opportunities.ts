@@ -341,6 +341,12 @@ export async function generateOpportunitiesFromFindings(
       });
     }
 
+    // Phase 5 fix (BUG-5B): Use impression-based CTR curve for traffic
+    // potential instead of score * multiplier. Score is 0–100 priority,
+    // not traffic volume. The CTR curve approach matches decision-ranker.ts
+    // and produces estimates grounded in real impression data.
+    const estImpressions = estimateImpressionsFromFinding(finding);
+
     const decisionData = {
       siteId,
       url,
@@ -372,9 +378,15 @@ export async function generateOpportunitiesFromFindings(
       },
       impact: {
         trafficPotential: {
-          low: Math.round(finalScore * 0.5),
-          expected: Math.round(finalScore * 2),
-          high: Math.round(finalScore * 5),
+          low: estImpressions > 0
+            ? Math.round(estImpressions * 0.04)
+            : Math.max(1, Math.round(finalScore * 0.5)),
+          expected: estImpressions > 0
+            ? Math.round(estImpressions * 0.12)
+            : Math.max(1, Math.round(finalScore * 2)),
+          high: estImpressions > 0
+            ? Math.round(estImpressions * 0.22)
+            : Math.max(1, Math.round(finalScore * 5)),
           confidence: finding.confidence,
         },
       },
@@ -452,6 +464,21 @@ export async function generateOpportunitiesFromFindings(
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Extracts raw impression count from a finding's evidence for CTR-curve
+ * traffic potential estimation. Returns 0 if no impression data is available,
+ * allowing the caller to fall back to score-based estimation.
+ */
+function estimateImpressionsFromFinding(finding: AgentFinding): number {
+  for (const ev of finding.evidence) {
+    if (ev.metric === "impressions" && ev.value) {
+      const impressions = parseInt(ev.value, 10);
+      if (!isNaN(impressions) && impressions > 0) return impressions;
+    }
+  }
+  return 0;
+}
 
 /**
  * Extract cluster queries from a TOPIC_OPPORTUNITY finding's evidence metadata.

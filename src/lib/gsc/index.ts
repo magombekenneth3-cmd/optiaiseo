@@ -265,8 +265,22 @@ async function fetchWithRetry(
         return fetchWithRetry(url, options, attempt + 1);
     }
 
-    const err = await res.text();
-    throw new Error(`GSC API ${res.status}: ${err}`);
+    // Read the raw error for server-side logging only
+    const rawErr = await res.text().catch(() => "(unreadable body)");
+
+    // 401: Token expired/revoked mid-session — throw typed error so callers
+    // can invalidate the token cache and retry with a fresh token.
+    if (res.status === 401) {
+        // Log details server-side for debugging
+        const { logger: gscLogger } = await import("@/lib/logger");
+        gscLogger.warn("[GSC API] 401 — token expired or revoked mid-request", { url, rawErr });
+        throw new Error("GSC_TOKEN_EXPIRED");
+    }
+
+    // Log the full raw error server-side, throw a sanitized message
+    const { logger: gscLogger } = await import("@/lib/logger");
+    gscLogger.error("[GSC API] Request failed", { url, status: res.status, rawErr });
+    throw new Error(`GSC API error (${res.status})`);
 }
 
 async function queryGSC(

@@ -38,29 +38,51 @@ gcloud services enable \
   secretmanager.googleapis.com \
   --project="$PROJECT_ID" --quiet
 
-# ── Seed secrets from local .env if they don't exist yet ──────────────────
-if [ -f ".env" ]; then
+# ── Seed secrets from local .env if explicitly requested ──────────────────
+# Phase 6 fix (BUG-6B): Do NOT blindly sync .env to production.
+# Local .env may contain sk_test_* Stripe keys, dev DATABASE_URL, and
+# placeholder values that would overwrite real production secrets.
+# Require explicit --sync-env flag to opt in.
+SYNC_ENV=false
+for arg in "$@"; do
+  if [ "$arg" = "--sync-env" ]; then
+    SYNC_ENV=true
+  fi
+done
+
+if [ "$SYNC_ENV" = "true" ] && [ -f ".env" ]; then
   echo ""
   echo "── Syncing .env secrets to GCP Secret Manager ──────────────────────"
-  while IFS='=' read -r key value; do
-    # Skip comments, blank lines, and lines without a value
-    [[ "$key" =~ ^#.*$ || -z "$key" || -z "$value" ]] && continue
-    # Strip surrounding quotes from value
-    value="${value%\"}"
-    value="${value#\"}"
-    value="${value%\'}"
-    value="${value#\'}"
-    # Create or update the secret
-    if gcloud secrets describe "$key" --project="$PROJECT_ID" &>/dev/null; then
-      echo -n "$value" | gcloud secrets versions add "$key" --data-file=- --project="$PROJECT_ID" --quiet
-    else
-      echo -n "$value" | gcloud secrets create "$key" --data-file=- --replication-policy=automatic --project="$PROJECT_ID" --quiet
-    fi
-    echo "  ✓ $key"
-  done < .env
-  echo "  Secrets synced."
+  echo "⚠️  WARNING: This will create/update secrets from your LOCAL .env file."
+
+  # Safety: warn if .env contains test keys
+  if grep -q "sk_test_\|whsec_test_\|localhost" .env 2>/dev/null; then
+    echo "❌ DANGER: Your .env contains test/localhost values!"
+    echo "   These should NOT be synced to production. Aborting env sync."
+    echo "   Remove test values from .env or use production values before syncing."
+  else
+    while IFS='=' read -r key value; do
+      # Skip comments, blank lines, and lines without a value
+      [[ "$key" =~ ^#.*$ || -z "$key" || -z "$value" ]] && continue
+      # Strip surrounding quotes from value
+      value="${value%\"}"
+      value="${value#\"}"
+      value="${value%\'}"
+      value="${value#\'}"
+      # Create or update the secret
+      if gcloud secrets describe "$key" --project="$PROJECT_ID" &>/dev/null; then
+        echo -n "$value" | gcloud secrets versions add "$key" --data-file=- --project="$PROJECT_ID" --quiet
+      else
+        echo -n "$value" | gcloud secrets create "$key" --data-file=- --replication-policy=automatic --project="$PROJECT_ID" --quiet
+      fi
+      echo "  ✓ $key"
+    done < .env
+    echo "  Secrets synced."
+  fi
+elif [ "$SYNC_ENV" = "true" ]; then
+  echo "⚠️  --sync-env specified but no .env file found."
 else
-  echo "⚠️  No .env file found — skipping secret sync. Secrets must already exist in GCP Secret Manager."
+  echo "ℹ️  Skipping .env sync (use --sync-env to opt in). Secrets must already exist in GCP Secret Manager."
 fi
 
 # ── Authenticate & set project ─────────────────────────────────────────────

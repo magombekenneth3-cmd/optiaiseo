@@ -17,6 +17,7 @@ import {
     MutationBlockedError,
     ConcurrentModificationError,
 } from "@/lib/mutations";
+import { assertAllKillSwitchesClear } from "@/lib/mutations/kill-switch";
 
 
 
@@ -101,17 +102,41 @@ export async function executeGrowthDecision(
         let actionExecuted = decision?.action || "IMPROVE_SEARCH_INTENT";
         let primaryKeyword = decision?.primaryKeyword || "SEO Optimization";
 
-        // Try DB directly if not found in active list
+        // Approval integrity: the authoritative DB record must exist, belong
+        // to the site being mutated, and be APPROVED. A cached/persisted list
+        // entry alone is NOT proof of approval, and a decision from another
+        // site must never drive a mutation here (or be marked EXECUTED).
         let dbRecord: any = null;
         try {
             dbRecord = await (prisma as any).growthDecision.findUnique({
                 where: { id: decisionId },
             });
         } catch (dbErr) {
-            logger.warn("[ExecutionEngine] DB decision lookup failed", { decisionId, error: (dbErr as Error)?.message });
+            logger.warn("[ExecutionEngine] DB decision lookup failed — refusing execution", { decisionId, error: (dbErr as Error)?.message });
+            return {
+                decisionId,
+                siteId,
+                actionExecuted,
+                targetUrl,
+                success: false,
+                details: "Decision lookup failed — refusing execution without an approval record.",
+                executedAt
+            };
         }
 
-        if (dbRecord) {
+        if (!dbRecord || dbRecord.siteId !== siteId) {
+            return {
+                decisionId,
+                siteId,
+                actionExecuted,
+                targetUrl,
+                success: false,
+                details: "Decision not found for this site — refusing execution.",
+                executedAt
+            };
+        }
+
+        {
             targetUrl = dbRecord.url;
             actionExecuted = dbRecord.action;
             primaryKeyword = dbRecord.primaryKeyword;
@@ -130,7 +155,7 @@ export async function executeGrowthDecision(
             }
 
             // P0: Early-exit if decision is not in APPROVED state
-            if (dbRecord.status !== "APPROVED" && dbRecord.status !== "EXECUTED") {
+            if (dbRecord.status !== "APPROVED") {
                 return {
                     decisionId,
                     siteId,
@@ -164,7 +189,7 @@ export async function executeGrowthDecision(
         }
 
         // ── 3. Build Mutation Payload ────────────────────────────────────────
-        const mutationResult = buildMutationPayload(actionExecuted, blog, primaryKeyword, targetUrl, siteId);
+        const mutationResult = await buildMutationPayload(actionExecuted, blog, primaryKeyword, targetUrl, siteId);
 
         if (!mutationResult.success) {
             return {
@@ -179,6 +204,43 @@ export async function executeGrowthDecision(
         }
 
         if (mutationResult.directAction) {
+            // Phase 4 fix (BUG-4C): Direct-action mutations must still respect
+            // kill switches and REPORT_ONLY mode. Without this check, actions
+            // like BUILD_INTERNAL_LINKS bypass all safety layers.
+            try {
+                await assertAllKillSwitchesClear(siteId);
+            } catch (ksErr) {
+                if (ksErr instanceof MutationBlockedError) {
+                    return {
+                        decisionId,
+                        siteId,
+                        actionExecuted: "BLOCKED",
+                        targetUrl,
+                        success: false,
+                        details: `Kill switch active: ${(ksErr as Error).message}`,
+                        executedAt,
+                    };
+                }
+                throw ksErr;
+            }
+
+            // REPORT_ONLY check for system-initiated direct actions
+            const siteRecord = await prisma.site.findUnique({
+                where: { id: siteId },
+                select: { operatingMode: true },
+            });
+            if (siteRecord?.operatingMode === "REPORT_ONLY") {
+                return {
+                    decisionId,
+                    siteId,
+                    actionExecuted,
+                    targetUrl,
+                    success: false,
+                    details: "Site is in REPORT_ONLY mode — direct actions are blocked.",
+                    executedAt,
+                };
+            }
+
             await mutationResult.directAction();
             await markDecisionExecuted(decisionId, siteId, targetUrl);
 
@@ -412,13 +474,13 @@ interface MutationPayloadResult {
  * This is the canonical description of WHAT will change — the mutation operation
  * lifecycle handles HOW it's applied (versioned, snapshotted, audited).
  */
-function buildMutationPayload(
+async function buildMutationPayload(
     action: string,
     blog: any,
     primaryKeyword: string,
     targetUrl: string,
     siteId: string,
-): MutationPayloadResult {
+): Promise<MutationPayloadResult> {
     switch (action) {
         case "BUILD_INTERNAL_LINKS": {
             if (!blog) {
@@ -487,7 +549,33 @@ function buildMutationPayload(
                     details: "",
                 };
             }
-            const fixResult = performOneClickAutoFix(blog.content, `https://site.com${targetUrl}`);
+
+            // Phase 4 fix (BUG-4A): Resolve the actual site domain from the DB
+            // instead of using a hardcoded "site.com". The canonical URL and
+            // og:url injected by performOneClickAutoFix must point to the real
+            // domain, otherwise every IMPROVE_SEARCH_INTENT mutation actively
+            // damages the site's search presence.
+            let siteDomain = "";
+            try {
+                const siteForDomain = await prisma.site.findUnique({
+                    where: { id: siteId },
+                    select: { domain: true },
+                });
+                siteDomain = siteForDomain?.domain || "";
+            } catch {
+                // Domain lookup failed — use empty string, autofix will skip canonical
+            }
+
+            // Normalise domain to a full URL base
+            let fullBaseUrl = siteDomain;
+            if (fullBaseUrl && !fullBaseUrl.startsWith("http")) {
+                fullBaseUrl = `https://${fullBaseUrl}`;
+            }
+            // Remove trailing slash before appending targetUrl path
+            fullBaseUrl = fullBaseUrl.replace(/\/$/, "");
+
+            const autoFixUrl = fullBaseUrl ? `${fullBaseUrl}${targetUrl}` : targetUrl;
+            const fixResult = performOneClickAutoFix(blog.content, autoFixUrl);
             const schemaMarkup = JSON.stringify({
                 "@context": "https://schema.org",
                 "@type": "FAQPage",
@@ -528,13 +616,19 @@ function buildMutationPayload(
         }
 
         default: {
-            // Unknown action — return as a direct pass-through
+            // Phase 4 fix (BUG-4B): Unknown actions must NOT silently succeed.
+            // The old code returned success: true with a no-op, which marked the
+            // decision EXECUTED without doing any work. This gave the user a
+            // false "success" signal in their dashboard.
+            logger.warn("[ExecutionEngine] Unrecognized action type — refusing execution", {
+                action,
+                targetUrl,
+                siteId,
+            });
             return {
-                success: true,
-                details: `Applied optimization action ${action} to ${targetUrl}`,
-                directAction: async () => {
-                    // No-op for unknown actions
-                },
+                success: false,
+                error: `Unrecognized action type: ${action}`,
+                details: "",
             };
         }
     }
@@ -552,7 +646,7 @@ async function markDecisionExecuted(
     try {
         await (prisma as any).$transaction(async (tx: any) => {
             const result = await tx.growthDecision.updateMany({
-                where: { id: decisionId, status: "APPROVED" },
+                where: { id: decisionId, siteId, status: "APPROVED" },
                 data: { status: "EXECUTED" }
             });
             if (result.count === 0) {

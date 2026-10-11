@@ -1,37 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { logger } from "@/lib/logger";
 import { inngest } from "@/lib/inngest/client";
-import { PseoBatchRequest } from "@/lib/pseo/generator";
+import { getAuthUser } from "@/lib/auth/get-auth-user";
+import { assertSiteAccess } from "@/lib/auth/require-user";
+
+/**
+ * POST /api/pseo/batch-generate
+ *
+ * Security: previously unauthenticated — anyone could enqueue LLM generation
+ * against an arbitrary siteId/domain. Now requires an authenticated user with
+ * EDIT access to the target site; the domain is taken from the site record,
+ * never from the request body, and batch size is bounded.
+ */
+
+const MAX_BATCH_ROWS = 200;
+
+const BatchRequestSchema = z.object({
+    siteId: z.string().trim().min(1).max(50),
+    pattern: z.string().trim().min(1).max(500),
+    dataset: z.array(z.record(z.string(), z.unknown())).min(1).max(MAX_BATCH_ROWS),
+    authorName: z.string().trim().max(120).optional(),
+});
 
 export async function POST(req: NextRequest) {
+    const user = await getAuthUser(req);
+    if (!user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    let raw: unknown;
     try {
-        const body = (await req.json()) as PseoBatchRequest;
+        raw = await req.json();
+    } catch {
+        return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
 
-        if (!body.pattern || !Array.isArray(body.dataset) || body.dataset.length === 0) {
-            return NextResponse.json(
-                { error: "Pattern string and dataset array are required." },
-                { status: 400 }
-            );
-        }
+    const parsed = BatchRequestSchema.safeParse(raw);
+    if (!parsed.success) {
+        return NextResponse.json(
+            { error: `siteId, pattern and a dataset of 1-${MAX_BATCH_ROWS} rows are required.` },
+            { status: 400 },
+        );
+    }
+    const body = parsed.data;
 
+    const site = await assertSiteAccess(body.siteId, user.id, "EDIT");
+    if (!site) {
+        return NextResponse.json({ error: "Site not found or unauthorized" }, { status: 404 });
+    }
+
+    try {
         const batchJobId = `pseo-job-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        const siteDomain = body.siteDomain || "example.com";
 
         // Dispatch background processing event to Inngest
         await inngest.send({
             name: "pseo/batch.requested",
             data: {
-                ...body,
-                siteDomain,
-                siteId: body.siteId || "default-site",
+                pattern: body.pattern,
+                dataset: body.dataset,
+                siteId: site.id,
+                siteDomain: site.domain,
                 authorName: body.authorName || "OptiAISEO Engine",
                 batchJobId,
-            }
+            },
         });
 
         logger.info("[pSEO/API] Dispatched async batch generation job", {
             batchJobId,
-            pattern: body.pattern,
+            siteId: site.id,
             rowCount: body.dataset.length,
         });
 
