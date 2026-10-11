@@ -349,32 +349,36 @@ export async function evaluate28DayExperimentLift(
             && exp.baseline.clicks === 10
             && exp.baseline.impressions === 500;
 
+        // Phase 5 fix (BUG-5C): Do NOT fabricate positive synthetic lift.
+        // The old code manufactured a WIN for every seed-baseline experiment,
+        // which corrupted the empirical calibration pipeline's win rates.
+        // Instead, mark as INSUFFICIENT_DATA to preserve data integrity.
+        // Real interventions will be evaluated when real GSC data arrives.
         if (baselineIsSeed) {
-            // Synthetic post-metrics: position improved by ~7, clicks up 50%, CTR doubled
-            postMetrics = {
-                position: 18.0,
-                clicks: 15,
-                impressions: 700,
-                ctr: 0.04,
-                dataDays: MIN_DATA_DAYS,
-            };
-        } else {
-            logger.info("[ExperimentTracker] Insufficient post-optimization data", {
+            logger.info("[ExperimentTracker] Both baseline and post are synthetic — marking INSUFFICIENT_DATA", {
                 experimentId,
-                hasPostMetrics: !!postMetrics,
-                dataDays: postMetrics?.dataDays ?? 0,
-                required: MIN_DATA_DAYS,
+                reason: "Cannot evaluate lift without real GSC data",
             });
-
-            // If past evaluation date and still insufficient, mark as INSUFFICIENT_DATA
-            if (new Date() > addDays(exp.evaluationDate, 7)) {
-                exp.status = "INSUFFICIENT_DATA";
-                await persistExperimentUpdate(exp);
-            } else {
-                exp.status = "EVALUATING";
-            }
+            exp.status = "INSUFFICIENT_DATA";
+            await persistExperimentUpdate(exp);
             return exp;
         }
+
+        logger.info("[ExperimentTracker] Insufficient post-optimization data", {
+            experimentId,
+            hasPostMetrics: !!postMetrics,
+            dataDays: postMetrics?.dataDays ?? 0,
+            required: MIN_DATA_DAYS,
+        });
+
+        // If past evaluation date and still insufficient, mark as INSUFFICIENT_DATA
+        if (new Date() > addDays(exp.evaluationDate, 7)) {
+            exp.status = "INSUFFICIENT_DATA";
+            await persistExperimentUpdate(exp);
+        } else {
+            exp.status = "EVALUATING";
+        }
+        return exp;
     }
 
     if (exp.baseline.impressions === 0) {

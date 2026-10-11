@@ -1,12 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { executeGrowthDecision } from "@/lib/growth/execution-engine";
+import { getAuthUser } from "@/lib/auth/get-auth-user";
+import { assertSiteAccess } from "@/lib/auth/require-user";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
+/**
+ * GET /api/growth/stream-execution?decisionId=...
+ *
+ * Security: previously unauthenticated with demo defaults — anyone could
+ * execute any growth decision against any site. Now requires an authenticated
+ * user with EDIT access to the decision's site. The siteId is derived from the
+ * decision record, never trusted from the query string.
+ */
 export async function GET(req: NextRequest) {
-    const { searchParams } = new URL(req.url);
-    const decisionId = searchParams.get("decisionId") || "dec-stream-1";
-    const siteId = searchParams.get("siteId") || "site-stream-1";
+    const user = await getAuthUser(req);
+    if (!user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const decisionId = req.nextUrl.searchParams.get("decisionId");
+    if (!decisionId || decisionId.length > 64) {
+        return NextResponse.json({ error: "decisionId required" }, { status: 400 });
+    }
+
+    const decision = await prisma.growthDecision.findUnique({
+        where: { id: decisionId },
+        select: { id: true, siteId: true },
+    });
+    const requestedSiteId = req.nextUrl.searchParams.get("siteId");
+    if (!decision || (requestedSiteId && requestedSiteId !== decision.siteId)) {
+        return NextResponse.json({ error: "Decision not found or unauthorized" }, { status: 404 });
+    }
+
+    const site = await assertSiteAccess(decision.siteId, user.id, "EDIT");
+    if (!site) {
+        return NextResponse.json({ error: "Decision not found or unauthorized" }, { status: 404 });
+    }
+    const siteId = decision.siteId;
 
     const encoder = new TextEncoder();
 
@@ -27,12 +59,12 @@ export async function GET(req: NextRequest) {
                 sendEvent(3, "Instant IndexNow Ping", "Pinging Bing & Google Indexing API endpoints...");
                 await new Promise((r) => setTimeout(r, 200));
 
-                const result = await executeGrowthDecision(decisionId, siteId);
+                const result = await executeGrowthDecision(decision.id, siteId);
 
-                sendEvent(4, "28-Day Baseline Lock", result.details || "Locked in T0 metrics.");
+                sendEvent(4, result.success ? "28-Day Baseline Lock" : "Execution Not Completed", result.details || "Locked in T0 metrics.");
                 controller.close();
-            } catch (err: unknown) {
-                sendEvent(4, "Execution Failed", (err as Error)?.message || String(err));
+            } catch {
+                sendEvent(4, "Execution Failed", "Execution failed. Check the dashboard for details.");
                 controller.close();
             }
         },

@@ -70,16 +70,18 @@ export async function consumeCredits(
         };
     }
 
-    // Atomic deduct: only updates if credits >= cost
-    const result = await prisma.$executeRaw`
+    // Atomic deduct: only updates if credits >= cost. Use RETURNING to get
+    // the accurate post-deduction balance in one round-trip (avoids stale reads).
+    const rows: { credits: number }[] = await prisma.$queryRaw`
         UPDATE "User"
         SET credits = credits - ${cost}
         WHERE id = ${userId}
         AND credits >= ${cost}
         AND "creditsLockedAt" IS NULL
+        RETURNING credits
     `;
 
-    if (result === 0) {
+    if (rows.length === 0) {
         const user = await prisma.user.findUnique({
             where: { id: userId },
             select: { credits: true },
@@ -89,12 +91,7 @@ export async function consumeCredits(
         return { allowed: false, remaining, cost, reason: "insufficient_credits" };
     }
 
-    const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { credits: true },
-    });
-
-    const remaining = user?.credits ?? 0;
+    const remaining = rows[0].credits;
 
     // Fire-and-forget ledger write — never blocks or throws for the caller.
     prisma.creditHistory.create({
@@ -163,13 +160,29 @@ export async function addCreditPackCredits(
         return;
     }
 
-    await prisma.$executeRaw`
+    const rows: { credits: number }[] = await prisma.$queryRaw`
         UPDATE "User"
         SET credits = credits + ${creditsToAdd}
         WHERE id = ${userId}
+        RETURNING credits
     `;
 
-    logger.info("[Credits] Added credit pack credits", { userId, creditsToAdd });
+    const newBalance = rows[0]?.credits ?? creditsToAdd;
+
+    // Write audit trail — credit pack purchases were previously invisible in the ledger.
+    prisma.creditHistory.create({
+        data: {
+            userId,
+            action: "credit_pack_purchase",
+            label: "Credit Pack Purchase",
+            cost: -creditsToAdd,  // Negative cost = credits added
+            balanceAfter: newBalance,
+        },
+    }).catch((err: unknown) => {
+        logger.warn("[Credits] Failed to write credit pack ledger:", { error: (err as Error)?.message });
+    });
+
+    logger.info("[Credits] Added credit pack credits", { userId, creditsToAdd, newBalance });
 }
 
 /**

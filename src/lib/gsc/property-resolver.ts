@@ -160,12 +160,15 @@ export async function resolveGscProperty(
     }
 
     // 4. Fuzzy bare-domain fallback
+    // Require a boundary before the bare domain to prevent partial matches
+    // (e.g. "example.com" must not match "notexample.com" or "example.com.au").
     const bare = domain
         .replace(/^https?:\/\//, "")
         .replace(/^www\./, "")
         .replace(/\/$/, "");
 
-    const fuzzyMatch = sites.find((s) => s.includes(bare));
+    const barePattern = new RegExp(`(?:^|[:/])${bare.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:[/]|$)`, "i");
+    const fuzzyMatch = sites.find((s) => barePattern.test(s));
     if (fuzzyMatch) {
         const resolution: GscPropertyResolution = {
             property: fuzzyMatch,

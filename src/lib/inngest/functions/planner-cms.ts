@@ -79,8 +79,11 @@ export const publishBlogToCmsJob = inngest.createFunction(
 
         const { blog, site } = await step.run("fetch-blog-and-site", async () => {
             const [b, s] = await Promise.all([
-                prisma.blog.findUnique({
-                    where: { id: blogId },
+                // Tenant boundary: the blog must belong to the event's site.
+                // Event payload IDs are not authorization — a mismatched pair
+                // must never push one tenant's blog to another tenant's CMS.
+                prisma.blog.findFirst({
+                    where: { id: blogId, siteId },
                     select: {
                         id: true, title: true, slug: true, content: true,
                         metaDescription: true, targetKeywords: true, status: true,
@@ -98,7 +101,7 @@ export const publishBlogToCmsJob = inngest.createFunction(
                     },
                 }),
             ]);
-            if (!b) throw new NonRetriableError(`Blog ${blogId} not found`);
+            if (!b) throw new NonRetriableError(`Blog ${blogId} not found for site ${siteId}`);
             if (!s) throw new NonRetriableError(`Site ${siteId} not found`);
             return { blog: b, site: s };
         });

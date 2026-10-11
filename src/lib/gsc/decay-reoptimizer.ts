@@ -72,6 +72,10 @@ function validateDecayEvidence(evidence: DecayEvidence): void {
  * - Hardcoded/stub decay signals from triggering content mutations
  * - API errors or missing data from being misinterpreted as decay
  * - Audit-only signals from triggering autonomous CMS publishing
+ *
+ * Phase 3 fix: The CMS publish path now uses stored-connection resolution
+ * and checks kill switches instead of reading raw site config and hardcoding
+ * the platform to WORDPRESS.
  */
 export async function reoptimizeDecayedPost(
     blogId: string,
@@ -121,23 +125,63 @@ export async function reoptimizeDecayedPost(
     let publishedUrl = "";
     if (blog.site) {
         try {
-            const pubRes = await dispatchMultiCmsPublish(
-                {
-                    id: blog.id,
-                    title: blog.title,
-                    content: updatedContent,
-                    slug: blog.slug,
-                    metaDescription: blog.metaDescription,
-                    targetKeywords: keywords,
-                },
-                {
-                    platform: "WORDPRESS",
-                    wordPressConfig: (blog.site as Record<string, unknown>).wordPressConfig,
+            // Phase 3 fix: Use stored-connection resolution instead of raw site config.
+            // This respects per-site CMS kill switches and avoids reading credentials
+            // directly from the site record (which was the Phase 1 vulnerability).
+            // Determine which platform the site has connected (check in priority order).
+            const { resolveStoredConnection } = await import("@/lib/publishers/stored-connection");
+            const siteRecord = blog.site as Record<string, unknown>;
+
+            // Try each supported platform in order — use the first connected one
+            type CmsPlatform = "WORDPRESS" | "GHOST";
+            const platformsToTry: CmsPlatform[] = ["WORDPRESS", "GHOST"];
+            let resolved = false;
+
+            for (const platform of platformsToTry) {
+                const result = resolveStoredConnection(platform, {
+                    id: blog.site.id,
+                    wordPressConfig: siteRecord.wordPressConfig,
+                    ghostConfig: siteRecord.ghostConfig,
+                });
+
+                if (result.ok) {
+                    const pubRes = await dispatchMultiCmsPublish(
+                        {
+                            id: blog.id,
+                            title: blog.title,
+                            content: updatedContent,
+                            slug: blog.slug,
+                            metaDescription: blog.metaDescription,
+                            targetKeywords: keywords,
+                        },
+                        result.config
+                    );
+                    publishedUrl = pubRes.publishedUrl;
+                    resolved = true;
+                    break;
                 }
-            );
-            publishedUrl = pubRes.publishedUrl;
-        } catch {
-            logger.warn("[Decay Reoptimizer] CMS republish deferred", { blogId: blog.id });
+            }
+
+            if (!resolved) {
+                logger.info("[Decay Reoptimizer] No CMS connection configured — skipping republish", {
+                    blogId: blog.id,
+                    siteId: blog.site.id,
+                });
+            }
+        } catch (pubErr: unknown) {
+            // Check if this is a kill-switch block (409) vs a real error
+            const errMsg = (pubErr as Error)?.message || String(pubErr);
+            if (errMsg.includes("kill_switch") || errMsg.includes("KILL_SWITCH")) {
+                logger.warn("[Decay Reoptimizer] CMS kill switch active — republish blocked", {
+                    blogId: blog.id,
+                    siteId: blog.site.id,
+                });
+            } else {
+                logger.warn("[Decay Reoptimizer] CMS republish failed", {
+                    blogId: blog.id,
+                    error: errMsg,
+                });
+            }
         }
     }
 
@@ -155,3 +199,4 @@ export async function reoptimizeDecayedPost(
         decayEvidence: evidence,
     };
 }
+
