@@ -86,9 +86,7 @@ const envSchema = z.object({
     MOZ_API_TOKEN: z.string().optional(),
     MOZ_ACCESS_ID: z.string().optional(),
     MOZ_SECRET_KEY: z.string().optional(),
-    // Blog publishing
-    HASHNODE_TOKEN: z.string().optional(),
-    HASHNODE_PUBLICATION_ID: z.string().optional(),
+    // Blog integrations are configured per site to preserve tenant isolation.
     // Missing entries — gap 1.4 fix
     SERPAPI_KEY: z.string().optional(),
     NEXT_PUBLIC_SITE_URL: z.string().url().optional(),
