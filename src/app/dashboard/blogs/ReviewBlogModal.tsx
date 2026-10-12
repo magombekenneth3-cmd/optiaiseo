@@ -202,7 +202,7 @@ function SerpResearchPanel({
                 <div className="flex items-center gap-2">
                     <Search className="h-4 w-4 text-primary" />
                     <h3 className="text-xs font-semibold">SERP competitive research</h3>
-                    <span className={\`ml-auto text-[10px] font-semibold \${statusTone}\`}>
+                    <span className={`ml-auto text-[10px] font-semibold ${statusTone}`}>
                         {brief.retrieval.confidence.toUpperCase()} CONFIDENCE
                     </span>
                 </div>
@@ -225,7 +225,7 @@ function SerpResearchPanel({
                         <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Preferred format</p>
                         <p className="mt-1 text-xs font-semibold capitalize">{brief.recommendedFormat.replace(/_/g, " ")}</p>
                         <p className="mt-1 text-[10px] text-muted-foreground">
-                            {brief.dominantFormats[0] ? \`\${Math.round(brief.dominantFormats[0].share * 100)}% of sampled results\` : "No dominant format"}
+                            {brief.dominantFormats[0] ? `${Math.round(brief.dominantFormats[0].share * 100)}% of sampled results` : "No dominant format"}
                         </p>
                     </div>
                 </div>
@@ -276,7 +276,7 @@ function SerpResearchPanel({
                                         </a>
                                         <p className="mt-1 text-[10px] text-muted-foreground">
                                             {page.pageType.replace(/_/g, " ")} · {page.scrapeStatus.replace(/_/g, " ").toLowerCase()}
-                                            {page.publishedAt ? \` · date \${page.publishedAt.slice(0, 10)}\` : ""}
+                                            {page.publishedAt ? ` · date ${page.publishedAt.slice(0, 10)}` : ""}
                                         </p>
                                         {page.headings.length > 0 && (
                                             <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">
@@ -320,7 +320,7 @@ function SerpResearchPanel({
                             <div key={opportunity.id} className="rounded-lg border border-border p-2.5">
                                 <div className="flex items-start justify-between gap-2">
                                     <p className="text-[11px] font-medium leading-relaxed">{opportunity.description}</p>
-                                    <span className={\`shrink-0 rounded border px-1.5 py-0.5 text-[9px] uppercase \${opportunity.verificationStatus === "observed" ? "border-emerald-500/20 text-emerald-400" : "border-amber-500/20 text-amber-300"}\`}>
+                                    <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] uppercase ${opportunity.verificationStatus === "observed" ? "border-emerald-500/20 text-emerald-400" : "border-amber-500/20 text-amber-300"}`}>
                                         {opportunity.verificationStatus.replace(/_/g, " ")}
                                     </span>
                                 </div>
