@@ -298,6 +298,7 @@ export const SiteContentLibraryEntrySchema = z.object({
     updatedAt: z.string().datetime(),
     headings: z.array(z.string().trim().min(1).max(200)).max(12),
     excerpt: z.string().trim().max(1_000),
+    comparisonText: z.string().trim().max(3_500).optional(),
     relevance: z.number().min(0).max(1),
     matchedTerms: z.array(z.string().trim().max(100)).max(20),
 });
