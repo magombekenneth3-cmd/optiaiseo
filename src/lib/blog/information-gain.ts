@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import { fetchGoogleSerp, scrapePageData, SerpResult } from "./serp";
+import { fetchGoogleSerp, scrapePageData, type SerpResult } from "./serp";
 import { checkPerplexityCitation } from "@/lib/aeo/perplexity-citation-check";
 import { callGeminiJson } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
@@ -219,6 +219,18 @@ export async function runInformationGainAlgorithm(
             evidence: [item.answer ? "SERP-provided answer snippet: " + item.answer.slice(0, 250) : "Question was returned by the People Also Ask feature."],
         });
     }
+    for (const query of relatedSearches.slice(0, 6)) {
+        const question = query.trim();
+        if (!question) continue;
+        observations.push({
+            observation: "SERP returned related query: " + question.slice(0, 200),
+            classification: "observed",
+            confidence: 0.65,
+            sourceUrls: sourceUrls.slice(0, 5),
+            evidence: ["This query was returned by the live SERP provider; it is a reader-interest signal, not proof of a competitor omission."],
+        });
+    }
+
     if (saturatedTopics.length > 0) {
         observations.push({
             observation: "Repeated topics among successfully scraped results: " + saturatedTopics.join("; "),
