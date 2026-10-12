@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { buildResearchPacket } from "@/lib/blog/research-packet";
 import type { GroundedSiteContext } from "@/lib/prompt-context/build-site-context";
 import type { CompetitorAnalysis } from "@/lib/blog/contracts";
-import { ResearchBrain, analyzeDraftQuality, applyTargetedRevision } from "@/lib/blog/pipeline";
+import { ResearchBrain, analyzeDraftQuality, applyTargetedRevision, wordCountTarget } from "@/lib/blog/pipeline";
 import { buildPromptContext } from "@/lib/blog/prompt-context";
 import { extractEvidencePacket } from "@/lib/blog/evidence-extractor";
 import { buildPublicationDecision, evaluatePublicationGate } from "@/lib/blog/publication-gate";
@@ -2676,6 +2676,30 @@ describe("Blog Pipeline Production Audit Hardening", () => {
         expect(result.content).not.toContain('<a href="/blog');
 
         spyBlog.mockRestore();
+    });
+
+    it("74. Article depth is not increased just to exceed competitor word counts", () => {
+        const ctx = buildPromptContext({
+            keyword: "best ai seo tools",
+            category: "best ai seo tools",
+            siteDomain: "example.com",
+            intent: "commercial",
+            hasAuthorGrounding: true,
+        });
+        const shortCompetitor = {
+            ...mockSerpContext,
+            results: mockSerpContext.results.map(result => ({ ...result, wordCount: 450 })),
+        };
+        const longCompetitor = {
+            ...mockSerpContext,
+            results: mockSerpContext.results.map(result => ({ ...result, wordCount: 12_000 })),
+        };
+
+        const shortTarget = wordCountTarget(ctx, shortCompetitor, mockBrain);
+        const longTarget = wordCountTarget(ctx, longCompetitor, mockBrain);
+
+        expect(shortTarget).toBe(longTarget);
+        expect(shortTarget).toBeLessThanOrEqual(4_800);
     });
 
     it("73. Validated competitive brief is retained in the research packet with source-ranked pages", async () => {
