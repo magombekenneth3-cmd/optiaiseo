@@ -5,10 +5,15 @@ import * as cheerio from "cheerio";
 import { computeContentGapsFromOpportunities, type SeoOpportunityAnalysis } from "./seo-opportunity";
 export type { SeoOpportunityAnalysis };
 
+export type SerpScrapeStatus = "ANALYZED" | "SNIPPET_ONLY" | "UNSCRAPPABLE" | "FAILED";
+
 export interface SerpResult {
   title: string;
   link: string;
   snippet: string;
+  rank?: number;
+  scrapeStatus?: SerpScrapeStatus;
+  scrapeFailureReason?: string;
   scrapedContent?: string;
   scrapedHeadings?: string[];
   scrapedSchemaTypes?: string[];
@@ -127,17 +132,36 @@ export async function fetchGoogleSerp(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: any = await res.json();
 
-    // Organic results
+    // Keep the original rank while deduplicating URLs so repeated SERP variants
+    // never inflate coverage or dominate the competitive brief.
+    const seenUrls = new Set<string>();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const organic: SerpResult[] = (data.organic ?? [])
       .slice(0, numResults)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .map((item: any) => ({
+      .map((item: any, index: number) => ({
         title: item.title ?? "",
         link: item.link ?? "",
         snippet: item.snippet ?? "",
+        rank: index + 1,
       }))
-      .filter((r: SerpResult) => r.snippet.length > 30); // drop low-signal stubs
+      .filter((result: SerpResult) => {
+        if (!result.link || result.snippet.length <= 30) return false;
+        try {
+          const url = new URL(result.link);
+          if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+          url.hash = "";
+          for (const key of [...url.searchParams.keys()]) {
+            if (/^(utm_|gclid$|fbclid$|ref$)/i.test(key)) url.searchParams.delete(key);
+          }
+          const normalized = `${url.hostname.toLowerCase()}${url.pathname.replace(/\/$/, "")}${url.search}`;
+          if (seenUrls.has(normalized)) return false;
+          seenUrls.add(normalized);
+          return true;
+        } catch {
+          return false;
+        }
+      });
 
     // People Also Ask
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -176,6 +200,8 @@ export interface ScrapedPage {
   schemaTypes: string[];
   /** ISO date string from datePublished / dateModified / meta tags, or null */
   publishedDate: string | null;
+  status?: SerpScrapeStatus;
+  failureReason?: string;
 }
 
 
@@ -273,8 +299,8 @@ export async function scrapePageData(
   url: string,
   maxChars: number = BUDGET.scrapedContentPerResult
 ): Promise<ScrapedPage> {
-  const empty: ScrapedPage = { text: "", headings: [], schemaTypes: [], publishedDate: null };
-  if (isUnscrappable(url)) return empty;
+  const empty: ScrapedPage = { text: "", headings: [], schemaTypes: [], publishedDate: null, status: "FAILED" };
+  if (isUnscrappable(url)) return { ...empty, status: "UNSCRAPPABLE", failureReason: "This domain is excluded from page scraping." };
 
   try {
     const res = await fetchWithRetry(
@@ -290,7 +316,7 @@ export async function scrapePageData(
       }
     );
 
-    if (!res.ok) return empty;
+    if (!res.ok) return { ...empty, failureReason: `HTTP ${res.status} ${res.statusText}`.slice(0, 250) };
 
     const lastModifiedHeader = res.headers.get("last-modified");
     const html = await res.text();
@@ -321,14 +347,20 @@ export async function scrapePageData(
       .join(" ");
 
     const raw = semanticText.trim() || $("body").text();
+    const text = truncate(raw.replace(/\s+/g, " ").trim(), maxChars);
     return {
-      text: truncate(raw.replace(/\s+/g, " ").trim(), maxChars),
+      text,
       headings: headings.slice(0, 12),
       schemaTypes,
       publishedDate,
+      status: text.length > 200 ? "ANALYZED" : "SNIPPET_ONLY",
+      ...(text.length <= 200 ? { failureReason: "Fetched page did not expose enough readable article text." } : {}),
     };
-  } catch {
-    return empty;
+  } catch (error: unknown) {
+    return {
+      ...empty,
+      failureReason: (error instanceof Error ? error.message : String(error)).slice(0, 250),
+    };
   }
 }
 
@@ -417,36 +449,54 @@ export async function getSerpContextForKeyword(
   logger.debug(`[SERP] Fetching context for: "${keyword}"…`);
 
   const { organic, peopleAlsoAsk, featuredSnippet, relatedSearches } =
-    await fetchGoogleSerp(keyword, 7); // 7 results → reliably get 5 after unscrappable domains dropped
+    await fetchGoogleSerp(keyword, 10);
 
   if (organic.length === 0) return null;
 
-  // Scrape with limited concurrency to respect host rate limits.
-  // 3 concurrent requests across different domains is safe and cuts scrape time
-  // from ~24s (3 batches of 2) to ~16s (2 batches of 3) for 5 results.
+  // Scrape up to ten useful organic results, preserving rank and documenting
+  // which pages were inaccessible instead of silently dropping them.
   if (scrapeTopPages) {
-    const queue = organic.filter((r) => !isUnscrappable(r.link));
+    const queue = organic.filter((result) => {
+      if (isUnscrappable(result.link)) {
+        result.scrapeStatus = "UNSCRAPPABLE";
+        result.scrapeFailureReason = "This domain is excluded from page scraping.";
+        return false;
+      }
+      return true;
+    });
     const CONCURRENCY = 3;
 
     for (let i = 0; i < queue.length; i += CONCURRENCY) {
       const batch = queue.slice(i, i + CONCURRENCY);
       await Promise.allSettled(
         batch.map(async (result) => {
-          const page = await scrapePageData(result.link);
-          result.scrapedContent = page.text;
-          result.scrapedHeadings = page.headings;
-          result.scrapedSchemaTypes = page.schemaTypes;
-          result.scrapedPublishedDate = page.publishedDate;
-          result.wordCount = page.text ? page.text.split(/\s+/).filter(Boolean).length : 0;
+          try {
+            const page = await scrapePageData(result.link);
+            result.scrapedContent = page.text;
+            result.scrapedHeadings = page.headings;
+            result.scrapedSchemaTypes = page.schemaTypes;
+            result.scrapedPublishedDate = page.publishedDate;
+            result.wordCount = page.text ? page.text.split(/\s+/).filter(Boolean).length : 0;
+            result.scrapeStatus = page.status ?? (page.text.length > 200 ? "ANALYZED" : "SNIPPET_ONLY");
+            if (page.failureReason) result.scrapeFailureReason = page.failureReason;
+          } catch (error: unknown) {
+            result.scrapeStatus = "FAILED";
+            result.scrapeFailureReason = (error instanceof Error ? error.message : String(error)).slice(0, 250);
+          }
         })
       );
     }
 
-    // Fix 4: Log how many full articles were actually scraped
-    const fullyScraped = organic.filter(r => (r.wordCount ?? 0) > 800);
-    logger.info(`[SERP] Scraped ${fullyScraped.length}/${organic.length} full articles for "${keyword}"`, {
-      wordCounts: organic.map(r => r.wordCount ?? 0),
+    const analyzed = organic.filter(r => r.scrapeStatus === "ANALYZED");
+    logger.info(`[SERP] Analysed ${analyzed.length}/${organic.length} organic pages for "${keyword}"`, {
+      statuses: organic.reduce<Record<string, number>>((counts, result) => {
+        const status = result.scrapeStatus ?? "SNIPPET_ONLY";
+        counts[status] = (counts[status] ?? 0) + 1;
+        return counts;
+      }, {}),
     });
+  } else {
+    for (const result of organic) result.scrapeStatus = "SNIPPET_ONLY";
   }
 
   const gapAnalysis = computeContentGapsFromOpportunities(keyword, organic, peopleAlsoAsk);
@@ -709,6 +759,8 @@ export interface CompetitorProfile {
   rank: number;
   schemaTypes: string[];
   publishedDate: string | null;
+  pageType?: SerpFormat;
+  scrapeStatus?: SerpScrapeStatus;
 }
 
 /**
@@ -717,18 +769,19 @@ export interface CompetitorProfile {
  */
 export function buildCompetitorProfiles(results: SerpResult[]): CompetitorProfile[] {
   return results
-    .filter(r => r.scrapedContent && r.scrapedContent.length > 200)
+    .filter(r => r.scrapeStatus === "ANALYZED" || (r.scrapedContent?.length ?? 0) > 200)
     .map((r, i) => ({
       url: r.link,
       title: r.title,
-      // Prefer real DOM-extracted headings; fall back to markdown regex on text
       headings: (r.scrapedHeadings && r.scrapedHeadings.length > 0)
         ? r.scrapedHeadings
         : extractCompetitorHeadings(r.scrapedContent ?? ""),
       estimatedWords: estimateWordCount(r.scrapedContent ?? ""),
-      rank: i + 1,
+      rank: r.rank ?? i + 1,
       schemaTypes: r.scrapedSchemaTypes ?? [],
       publishedDate: r.scrapedPublishedDate ?? null,
+      pageType: classifySerpFormat([r]).format,
+      scrapeStatus: r.scrapeStatus ?? "ANALYZED",
     }));
 }
 
@@ -744,104 +797,61 @@ export function buildCompetitorBeatStrategy(
   profiles: CompetitorProfile[],
   keyword: string
 ): string {
-  if (profiles.length === 0) return "";
-
-  const avgWords = Math.round(
-    profiles.reduce((sum, p) => sum + p.estimatedWords, 0) / profiles.length
-  );
-  const targetWords = Math.min(Math.max(avgWords + 400, 2000), 4000);
-
-  const allHeadings = profiles.flatMap(p => p.headings.map(h => h.toLowerCase()));
-  const headingFreq = new Map<string, number>();
-  for (const h of allHeadings) {
-    headingFreq.set(h, (headingFreq.get(h) ?? 0) + 1);
+  if (profiles.length === 0) {
+    return `COMPETITIVE RESEARCH FOR "${keyword}": no competitor pages were successfully analysed. Do not claim specific competitor gaps. Use query intent and verified sources, and route for review if the SERP coverage remains low.\n`;
   }
 
-  const totalProfiles = profiles.length;
-  // 50% threshold: with 5 results, 3+ must agree; with 2 scraped, 1+ agree.
-  // Lower than the old 60% so niche keywords with varied structures still get signal.
-  let tableStakeHeadings = [...headingFreq.entries()]
-    .filter(([, count]) => count >= Math.ceil(totalProfiles * 0.5))
-    .map(([h]) => h)
-    .slice(0, 5);
-
-  // Fallback for very niche keywords where all competitors have unique structures:
-  // treat rank-1's top headings as the mandatory baseline — they define the floor.
-  if (tableStakeHeadings.length === 0 && profiles[0]?.headings.length > 0) {
-    tableStakeHeadings = profiles[0].headings.slice(0, 3);
+  const analyzed = profiles.filter(p => p.scrapeStatus === "ANALYZED" || p.headings.length > 0);
+  const headingFreq = new Map<string, { label: string; count: number; urls: string[] }>();
+  for (const profile of analyzed) {
+    for (const heading of profile.headings) {
+      const key = heading.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+      if (!key) continue;
+      const entry = headingFreq.get(key) ?? { label: heading, count: 0, urls: [] };
+      entry.count += 1;
+      entry.urls.push(profile.url);
+      headingFreq.set(key, entry);
+    }
   }
 
-  const rareHeadings = [...headingFreq.entries()]
-    .filter(([, count]) => count === 1)
-    .map(([h]) => h)
-    .slice(0, 5);
+  const recurringCoverage = [...headingFreq.values()]
+    .filter(item => analyzed.length >= 3 && item.count / analyzed.length >= 0.4)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
 
-  const allSchemas = profiles.flatMap(p => p.schemaTypes);
-  const schemaFreq = new Map<string, number>();
-  for (const s of allSchemas) {
-    schemaFreq.set(s, (schemaFreq.get(s) ?? 0) + 1);
-  }
-  const commonSchemas = [...schemaFreq.entries()]
-    .filter(([, c]) => c >= Math.ceil(totalProfiles * 0.5))
-    .map(([s]) => s);
-  // High-value schema types that differentiate content in AI results
-  const VALUABLE_SCHEMAS = ["FAQPage", "HowTo", "Article", "NewsArticle",
-    "BlogPosting", "Review", "Product", "BreadcrumbList"];
-  const missingSchemas = VALUABLE_SCHEMAS.filter(
-    s => !commonSchemas.includes(s) && !allSchemas.includes(s)
-  ).slice(0, 3);
-
-  const dates = profiles
-    .map(p => p.publishedDate)
-    .filter((d): d is string => !!d)
-    .map(d => { try { return new Date(d); } catch { return null; } })
-    .filter((d): d is Date => d !== null && !isNaN(d.getTime()));
-  const oldestDate = dates.length > 0
-    ? new Date(Math.min(...dates.map(d => d.getTime())))
-    : null;
-  const newestDate = dates.length > 0
-    ? new Date(Math.max(...dates.map(d => d.getTime())))
+  const pagesWithDates = analyzed
+    .filter(p => p.publishedDate && Number.isFinite(Date.parse(p.publishedDate)))
+    .map(p => ({ url: p.url, date: new Date(p.publishedDate!) }));
+  const newestDate = pagesWithDates.length
+    ? new Date(Math.max(...pagesWithDates.map(p => p.date.getTime())))
     : null;
 
-  let strategy = `COMPETITOR BEAT STRATEGY FOR "${keyword}":\n`;
-  strategy += `- Top ${profiles.length} pages average ~${avgWords} words → write at least ${targetWords} words to outrank\n`;
+  const strategy: string[] = [
+    `COMPETITIVE CONTENT STRATEGY FOR "${keyword}":`,
+    `- Successful page analyses: ${analyzed.length}/${profiles.length}. Use the retrieved pages as evidence, not as a script to imitate.`,
+    "- Choose article depth from search intent, essential reader tasks, material subtopics, available evidence, and practical usefulness. Do not pad the article to exceed competitor word counts.",
+    "- Compare only the observed headings, snippets, dates, content excerpts, and schema signals. An inaccessible page provides no evidence of its content or omissions.",
+    "- A repeated heading is a candidate topic requirement, not an automatic section title. Include it only when it helps complete the reader's task.",
+  ];
 
-  if (profiles.length > 0) {
-    strategy += `- Rank #1 "${profiles[0].title}" covers: ${profiles[0].headings.slice(0, 4).join(" | ") || "unknown structure"}\n`;
-  }
-  if (tableStakeHeadings.length > 0) {
-    strategy += `- Table-stakes sections (every competitor covers these — you must too): ${tableStakeHeadings.join(", ")}\n`;
-  }
-  if (rareHeadings.length > 0) {
-    strategy += `- Underserved angles (only 1 competitor covers — differentiate here): ${rareHeadings.join(", ")}\n`;
-  }
-
-  // Schema signals
-  if (commonSchemas.length > 0) {
-    strategy += `- Competitors use these schema types: ${commonSchemas.join(", ")} — your post must include them\n`;
-  }
-  if (missingSchemas.length > 0) {
-    strategy += `- Schema gap opportunity: none of the top pages use ${missingSchemas.join(", ")} — adding these gives you a structured data advantage\n`;
+  if (recurringCoverage.length > 0) {
+    strategy.push(`- Recurring observed coverage (${analyzed.length} pages were analysable): ${recurringCoverage.map(item => `${item.label} (${item.count}/${analyzed.length}; ${item.urls.slice(0, 2).join(", ")})`).join("; ")}.`);
+  } else {
+    strategy.push("- No sufficiently repeated headings were established; infer no mandatory heading list from this sample.");
   }
 
-  // Freshness signals
   if (newestDate) {
-    const monthsOld = Math.round((Date.now() - newestDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
-    if (monthsOld > 6) {
-      strategy += `- Content freshness gap: the newest competitor page is ~${monthsOld} months old — explicitly date your content and cover any developments since ${newestDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}\n`;
-    } else {
-      strategy += `- Freshness: top competitor updated ${monthsOld <= 1 ? "recently" : `~${monthsOld} months ago`} (${newestDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}) — match or beat this with a clear "Updated [current date]" and recent examples\n`;
-    }
-  }
-  if (oldestDate && newestDate && oldestDate.getTime() !== newestDate.getTime()) {
-    const spreadMonths = Math.round((newestDate.getTime() - oldestDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
-    if (spreadMonths > 12) {
-      strategy += `- Freshness spread: competitors range from ${oldestDate.getFullYear()} to ${newestDate.getFullYear()} — older pages are vulnerable to freshness displacement\n`;
-    }
+    strategy.push(`- Latest date exposed by analysed pages: ${newestDate.toISOString().slice(0, 10)}. Treat dates as page metadata, not proof that all claims are current or stale.`);
+  } else {
+    strategy.push("- Publication/update dates were unavailable for the analysed sample; verify freshness-sensitive claims independently.");
   }
 
-  strategy += `- Take at least one clear editorial position the top pages avoid\n`;
-  strategy += `- Include one "Honest take:" paragraph with a frank professional opinion\n`;
+  const schemaTypes = [...new Set(analyzed.flatMap(p => p.schemaTypes))];
+  if (schemaTypes.length > 0) {
+    strategy.push(`- Observed schema types: ${schemaTypes.slice(0, 10).join(", ")}. Do not copy schemas for competitive advantage; add structured data only when the page content meets the relevant search-engine guidelines.`);
+  }
 
-  return strategy;
+  strategy.push("- Differentiate by answering surfaced reader questions with relevant evidence, explaining methods and criteria, adding practical steps and limitations, and using first-party examples only when documented.");
+  strategy.push("- State whether any proposed gap is observed, inferred from sampled headings/excerpts, or still requires research. Never claim a competitor is wrong, outdated, or omits a topic without supporting evidence.");
+  return strategy.join("\n") + "\n";
 }
