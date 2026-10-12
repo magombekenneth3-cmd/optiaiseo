@@ -706,7 +706,7 @@ export function formatToPromptHint(signal: SerpFormatSignal, keyword: string): s
       break;
   }
 
-  return base.join("\\n");
+  return base.join("\n");
 }
 
 
