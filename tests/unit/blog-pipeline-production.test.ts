@@ -2677,5 +2677,30 @@ describe("Blog Pipeline Production Audit Hardening", () => {
 
         spyBlog.mockRestore();
     });
+
+    it("73. Validated competitive brief is retained in the research packet with source-ranked pages", async () => {
+        const { buildSerpCompetitiveBrief } = await import("@/lib/blog/serp-competitive-brief");
+        const brief = buildSerpCompetitiveBrief({
+            keyword: "best ai seo tools",
+            serpContext: mockSerpContext,
+            priorIntent: "commercial",
+        });
+
+        const packet = await buildResearchPacket({
+            keyword: "best ai seo tools",
+            brain: mockBrain,
+            serpContext: mockSerpContext,
+            author: mockAuthor,
+            groundedCtx: mockGroundedCtx,
+            serpCompetitiveBrief: brief,
+        });
+
+        expect(packet.serpCompetitiveBrief?.keyword).toBe("best ai seo tools");
+        expect(packet.serpCompetitiveBrief?.retrieval.confidence).toBe("low");
+        expect(packet.serpCompetitiveBrief?.pages[0].url).toBe("https://competitor.com/best-tools");
+        expect(packet.serp.competitors[0].rank).toBe(1);
+        expect(packet.serp.competitors[0].scrapeStatus).toBe("SNIPPET_ONLY");
+        expect(packet.serpCompetitiveBrief?.siteFit?.humanReviewRequired).toBe(true);
+    });
 });
 
