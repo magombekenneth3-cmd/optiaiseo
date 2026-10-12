@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { prisma } from "@/lib/prisma";
-import { syndicateToHashnode } from "@/lib/blog/hashnode";
+import { resolveHashnodePublicationId, syndicateToHashnode } from "@/lib/blog/hashnode";
 
 /**
  * POST /api/blogs/[id]/hashnode-sync
@@ -46,12 +46,17 @@ export async function POST(
     const publicationId = blog.site.hashnodePublicationId;
     if (!hashnodeToken || !publicationId) {
         return NextResponse.json(
-            { error: "Connect Hashnode for this site by saving both a personal access token and publication ID in Site Settings." },
+            { error: "Connect Hashnode for this site by saving a personal access token and a publication ID or hostname in Site Settings." },
             { status: 400 }
         );
     }
 
     try {
+        const resolution = await resolveHashnodePublicationId(hashnodeToken, publicationId);
+        if (!resolution.success) {
+            return NextResponse.json({ error: resolution.error }, { status: 400 });
+        }
+
         // Convert HTML → Markdown (strip <script> blocks first)
         const cleanedHtml = blog.content.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
         const TurndownService = (await import("turndown")).default;
@@ -59,7 +64,7 @@ export async function POST(
         const contentMarkdown = td.turndown(cleanedHtml);
 
         const result = await syndicateToHashnode({
-            publicationId,
+            publicationId: resolution.publicationId,
             token: hashnodeToken,
             canonicalUrl: `https://${blog.site.domain}/blog/${blog.slug}`,
             draft: {
