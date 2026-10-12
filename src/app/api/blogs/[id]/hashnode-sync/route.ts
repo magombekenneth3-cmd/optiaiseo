@@ -6,36 +6,6 @@ import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { prisma } from "@/lib/prisma";
 import { syndicateToHashnode } from "@/lib/blog/hashnode";
 
-const HASHNODE_GQL = "https://gql.hashnode.com/";
-
-const ME_QUERY = `
-  query {
-    me {
-      publications(first: 1) {
-        edges {
-          node { id }
-        }
-      }
-    }
-  }
-`;
-
-async function resolvePublicationId(token: string): Promise<string | null> {
-    try {
-        const res = await fetch(HASHNODE_GQL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: token },
-            body: JSON.stringify({ query: ME_QUERY }),
-        });
-        const json = await res.json();
-        const id: string | undefined =
-            json.data?.me?.publications?.edges?.[0]?.node?.id;
-        return id ?? null;
-    } catch {
-        return null;
-    }
-}
-
 /**
  * POST /api/blogs/[id]/hashnode-sync
  * Re-syndicates an already-published blog to Hashnode.
@@ -48,15 +18,8 @@ export async function POST(
     const { id } = await params;
 
     const user = await getAuthUser(req);
-    if (!user?.email) {
+    if (!user?.id || !user?.email) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const dbUser = await prisma.user.findUnique({
-        where: { email: user!.email },
-    });
-    if (!user) {
-        return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     const blog = await prisma.blog.findFirst({
@@ -68,22 +31,22 @@ export async function POST(
         return NextResponse.json({ error: "Blog not found or unauthorized" }, { status: 404 });
     }
 
-    const hashnodeToken = blog.site.hashnodeToken || process.env.HASHNODE_TOKEN;
-    if (!hashnodeToken) {
+    if (blog.status !== "PUBLISHED") {
         return NextResponse.json(
-            { error: "No Hashnode token configured. Add HASHNODE_TOKEN to your environment or set it in Site Settings." },
-            { status: 400 }
+            { error: "Publish the article on your website before syndicating it to Hashnode." },
+            { status: 409 }
         );
     }
 
-    const publicationId =
-        blog.site.hashnodePublicationId ||
-        (await resolvePublicationId(hashnodeToken)) ||
-        process.env.HASHNODE_PUBLICATION_ID;
+    if (blog.hashnodeUrl) {
+        return NextResponse.json({ success: true, hashnodeUrl: blog.hashnodeUrl, alreadySynced: true });
+    }
 
-    if (!publicationId) {
+    const hashnodeToken = blog.site.hashnodeToken;
+    const publicationId = blog.site.hashnodePublicationId;
+    if (!hashnodeToken || !publicationId) {
         return NextResponse.json(
-            { error: "Could not resolve Hashnode publication ID. Check your token has access to a publication." },
+            { error: "Connect Hashnode for this site by saving both a personal access token and publication ID in Site Settings." },
             { status: 400 }
         );
     }
@@ -98,6 +61,7 @@ export async function POST(
         const result = await syndicateToHashnode({
             publicationId,
             token: hashnodeToken,
+            canonicalUrl: `https://${blog.site.domain}/blog/${blog.slug}`,
             draft: {
                 title: blog.title,
                 content: contentMarkdown,
