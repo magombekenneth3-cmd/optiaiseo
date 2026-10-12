@@ -65,7 +65,7 @@ describe("SERP competitive brief", () => {
         ];
         const brief = buildSerpCompetitiveBrief({
             keyword,
-            serpContext: context(pages),
+            serpContext: context(pages, { featuredSnippet: "A technical SEO audit compares crawlability, indexation, and rendering." }),
             priorIntent: "commercial",
         });
 
@@ -82,6 +82,15 @@ describe("SERP competitive brief", () => {
             need.question === "How do you compare technical SEO tools?" &&
             need.source === "people_also_ask",
         )).toBe(true);
+        expect(brief.serpFeatures.some(feature =>
+            feature.type === "featured_snippet" &&
+            feature.classification === "observed",
+        )).toBe(true);
+        expect(brief.serpFeatures.some(feature =>
+            feature.type === "people_also_ask" &&
+            feature.evidence.some(question => question.includes("How do you compare technical SEO tools?")),
+        )).toBe(true);
+        expect(brief.serpFeatures.some(feature => feature.type === "related_searches")).toBe(true);
         expect(brief.opportunities.every(opportunity =>
             opportunity.supportingObservations.every(observation =>
                 observation.sourceUrls.every(url => /^https?:\/\//.test(url)),
