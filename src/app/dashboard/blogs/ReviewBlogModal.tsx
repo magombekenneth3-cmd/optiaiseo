@@ -11,6 +11,7 @@ import {
     Info,
     Loader2,
     Save,
+    Search,
     ShieldCheck,
     Sparkles,
     X,
