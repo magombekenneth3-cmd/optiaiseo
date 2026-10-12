@@ -271,6 +271,15 @@ export const SerpCompetitiveIntentSchema = z.object({
     signals: z.array(z.string().trim().max(400)).max(10),
 });
 
+export const SerpFeatureObservationSchema = z.object({
+    type: z.enum(["featured_snippet", "people_also_ask", "related_searches", "video_result", "interactive_tool_result"]),
+    classification: z.enum(["observed", "inferred"]),
+    description: ShortString,
+    confidence: z.number().min(0).max(1),
+    sourceUrls: z.array(z.string().url()).max(10),
+    evidence: z.array(z.string().trim().max(500)).max(8),
+});
+
 export const SerpCompetitiveRetrievalSchema = z.object({
     status: z.enum(["AVAILABLE", "PARTIAL", "UNAVAILABLE"]),
     organicResultsReceived: z.number().int().nonnegative(),
@@ -325,6 +334,7 @@ export const SerpCompetitiveBriefSchema = z.object({
         count: z.number().int().nonnegative(),
         share: z.number().min(0).max(1),
     })).max(7),
+    serpFeatures: z.array(SerpFeatureObservationSchema).max(12),
     pages: z.array(SerpCompetitivePageSchema).max(10),
     requiredCoverage: z.array(z.object({
         topic: ShortString,
