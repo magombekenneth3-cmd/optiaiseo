@@ -150,6 +150,7 @@ export async function loadRelevantSiteContentLibrary(params: {
                 updatedAt: row.updatedAt.toISOString(),
                 headings: heading,
                 excerpt: readableExcerpt(row.content ?? ""),
+                comparisonText: readableExcerpt(row.content ?? "", 3_500),
                 relevance,
                 matchedTerms,
                 exactKeyword,
