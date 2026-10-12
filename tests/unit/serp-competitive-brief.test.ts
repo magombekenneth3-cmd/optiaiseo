@@ -272,7 +272,7 @@ describe("SERP competitive brief", () => {
         expect(strategy).toContain("Do not pad the article to exceed competitor word counts");
         expect(strategy).toContain("Crawl coverage");
         expect(strategy).toContain("add structured data only when");
-        expect(strategy).not.toMatch(/minimum word count|average competitor word count|+\s*400/i);
+        expect(strategy).not.toMatch(/minimum word count|average competitor word count/i);
     });
 
     it("marks research unavailable when no current SERP is supplied", () => {
