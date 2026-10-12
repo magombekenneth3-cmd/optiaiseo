@@ -96,7 +96,7 @@ describe("Hashnode syndication", () => {
         }));
 
         const result = await syndicateToHashnode({
-            publicationId: "publication-id",
+            publicationId: "6769f1a59c13c4f98d3b7a2e",
             token: "secret-token",
             canonicalUrl: "https://example.com/blog/practical-seo-audits",
             draft,
@@ -113,7 +113,7 @@ describe("Hashnode syndication", () => {
         const payload = JSON.parse(String(init.body));
         expect(payload.query).toContain("publishPost(input: $input)");
         expect(payload.variables.input).toMatchObject({
-            publicationId: "publication-id",
+            publicationId: "6769f1a59c13c4f98d3b7a2e",
             title: "Practical SEO Audits",
             contentMarkdown: draft.content,
             originalArticleURL: "https://example.com/blog/practical-seo-audits",
@@ -133,16 +133,18 @@ describe("Hashnode syndication", () => {
     });
 
     it("fails fast when credentials or required content are missing", async () => {
-        const noToken = await syndicateToHashnode({ publicationId: "publication-id", token: "", draft });
+        const noToken = await syndicateToHashnode({ publicationId: "6769f1a59c13c4f98d3b7a2e", token: "", draft });
         const noPublication = await syndicateToHashnode({ publicationId: "", token: "token", draft });
+        const unresolvedHost = await syndicateToHashnode({ publicationId: "my-publication.hashnode.dev", token: "token", draft });
         const noContent = await syndicateToHashnode({
-            publicationId: "publication-id",
+            publicationId: "6769f1a59c13c4f98d3b7a2e",
             token: "token",
             draft: { ...draft, content: "   " },
         });
 
         expect(noToken.success).toBe(false);
         expect(noPublication.success).toBe(false);
+        expect(unresolvedHost.success).toBe(false);
         expect(noContent.success).toBe(false);
         expect(mockFetch).not.toHaveBeenCalled();
     });
@@ -153,7 +155,7 @@ describe("Hashnode syndication", () => {
         }));
 
         const result = await syndicateToHashnode({
-            publicationId: "publication-id",
+            publicationId: "6769f1a59c13c4f98d3b7a2e",
             token: "token",
             draft,
         });
@@ -169,7 +171,7 @@ describe("Hashnode syndication", () => {
         }));
 
         const result = await syndicateToHashnode({
-            publicationId: "publication-id",
+            publicationId: "6769f1a59c13c4f98d3b7a2e",
             token: "token",
             draft,
         });
