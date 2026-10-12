@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { syndicateToHashnode } from "@/lib/blog/hashnode";
+import { resolveHashnodePublicationId, syndicateToHashnode } from "@/lib/blog/hashnode";
 
 vi.mock("@/lib/logger", () => ({
     logger: {
@@ -35,6 +35,58 @@ beforeEach(() => {
 afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+});
+
+describe("Hashnode publication resolution", () => {
+    it("uses an existing 24-character publication ID without making a network request", async () => {
+        const result = await resolveHashnodePublicationId(
+            "secret-token",
+            "6769f1a59c13c4f98d3b7a2e",
+        );
+
+        expect(result).toEqual({
+            success: true,
+            publicationId: "6769f1a59c13c4f98d3b7a2e",
+        });
+        expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("resolves a publication hostname to its Hashnode publication ID", async () => {
+        mockFetch.mockResolvedValue(apiResponse({
+            data: { publication: { id: "6769f1a59c13c4f98d3b7a2e" } },
+        }));
+
+        const result = await resolveHashnodePublicationId(
+            "secret-token",
+            "https://my-publication.hashnode.dev/",
+        );
+
+        expect(result).toEqual({
+            success: true,
+            publicationId: "6769f1a59c13c4f98d3b7a2e",
+        });
+
+        const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+        expect(url).toBe("https://gql.hashnode.com/");
+        expect(new Headers(init.headers).get("Authorization")).toBe("Bearer secret-token");
+        const payload = JSON.parse(String(init.body));
+        expect(payload.query).toContain("publication(host: $host)");
+        expect(payload.variables.host).toBe("my-publication.hashnode.dev");
+    });
+
+    it("returns an actionable error when a publication hostname cannot be resolved", async () => {
+        mockFetch.mockResolvedValue(apiResponse({
+            data: { publication: null },
+        }));
+
+        const result = await resolveHashnodePublicationId(
+            "secret-token",
+            "missing-publication.hashnode.dev",
+        );
+
+        expect(result.success).toBe(false);
+        if (!result.success) expect(result.error).toContain("No Hashnode publication was found");
+    });
 });
 
 describe("Hashnode syndication", () => {
