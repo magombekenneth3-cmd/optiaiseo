@@ -1,6 +1,8 @@
 import { logger } from "@/lib/logger";
 import type { BlogPostDraft } from "./index";
 
+const HASHNODE_GQL = "https://gql.hashnode.com/";
+
 export type HashnodeDraft = Pick<
     BlogPostDraft,
     "title" | "content" | "excerpt" | "metaDescription" | "targetKeywords" | "heroImage"
@@ -17,6 +19,85 @@ export interface HashnodeResult {
     success: boolean;
     postUrl?: string;
     error?: string;
+}
+
+export type HashnodePublicationResolution =
+    | { success: true; publicationId: string }
+    | { success: false; error: string };
+
+export async function resolveHashnodePublicationId(
+    token: string,
+    configuredPublication: string,
+): Promise<HashnodePublicationResolution> {
+    const value = configuredPublication.trim();
+    if (!token.trim() || !value) {
+        return { success: false, error: "A Hashnode token and publication ID or hostname are required." };
+    }
+
+    if (/^[a-f0-9]{24}$/i.test(value)) {
+        return { success: true, publicationId: value };
+    }
+
+    let host: string;
+    try {
+        const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+        const url = new URL(candidate);
+        if (url.protocol !== "https:" && url.protocol !== "http:") {
+            return { success: false, error: "Use a Hashnode publication hostname or a 24-character publication ID." };
+        }
+        host = url.hostname.toLowerCase();
+    } catch {
+        return { success: false, error: "Use a valid Hashnode publication hostname or a 24-character publication ID." };
+    }
+
+    const query = `
+        query PublicationByHost($host: String!) {
+            publication(host: $host) {
+                id
+            }
+        }
+    `;
+
+    try {
+        const response = await fetch(HASHNODE_GQL, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ query, variables: { host } }),
+            signal: AbortSignal.timeout(10000),
+        });
+
+        if (!response.ok) {
+            const message = (await response.text()).slice(0, 500);
+            return { success: false, error: `Hashnode returned HTTP ${response.status}: ${message}` };
+        }
+
+        const data = await response.json() as {
+            errors?: Array<{ message?: string }>;
+            data?: { publication?: { id?: string } | null };
+        };
+
+        if (data.errors?.length) {
+            const message = data.errors.map(error => error.message).filter(Boolean).join("; ");
+            return {
+                success: false,
+                error: message || "Hashnode could not resolve that publication. Check the domain and API access.",
+            };
+        }
+
+        const publicationId = data.data?.publication?.id;
+        if (!publicationId) {
+            return { success: false, error: `No Hashnode publication was found for ${host}.` };
+        }
+
+        return { success: true, publicationId };
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Network error resolving the Hashnode publication";
+        logger.error("[Hashnode] Publication lookup failed", { host, error: message });
+        return { success: false, error: message };
+    }
 }
 
 export async function syndicateToHashnode(options: HashnodePublishOptions): Promise<HashnodeResult> {
@@ -75,7 +156,7 @@ export async function syndicateToHashnode(options: HashnodePublishOptions): Prom
     };
 
     try {
-        const response = await fetch("https://gql.hashnode.com/", {
+        const response = await fetch(HASHNODE_GQL, {
             method: "POST",
             headers: {
                 Authorization: `Bearer ${token}`,
