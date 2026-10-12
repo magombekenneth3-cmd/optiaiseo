@@ -868,11 +868,11 @@ Violating these rules produces fabricated content that will be caught by the pub
     const evidenceInstructions: Record<OutlineSection["evidenceType"], string> = {
         case_study: "Anchor in a real example. Pattern: '[Type of company] doing [X] saw [Y]'. Never invent statistics.",
         data:       "Lead with a specific statistic from the REAL FACTS below. If none fits, write the insight without a number.",
-        example:    "Use at least one concrete, named example. Generic advice without a named example is not acceptable.",
+        example:    "Use a documented example only when a source supports it. Otherwise label a hypothetical scenario clearly; never invent a named company, person, or outcome.",
         opinion:    "Take a clear editorial stance. 'In practice\u2026', 'What works better is\u2026'",
         comparison: "Compare two approaches or tools directly. Declare a winner for at least one use case.",
         how_to:     "Number the steps. Be specific \u2014 'do X' not 'consider doing X'.",
-        faq:        "5-7 Q&A pairs. Each answer MUST open with: Yes / No / a number / a tool name / a time frame. Max 3 sentences.",
+        faq:        "Answer only the highest-value reader questions that fit the intent; do not force every PAA query into a separate question. Each answer should lead directly with a clear answer and stay under 3 sentences.",
     };
 
     const sectionCompetitivePlan = `
