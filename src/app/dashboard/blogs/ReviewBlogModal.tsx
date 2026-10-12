@@ -25,6 +25,7 @@ import { ScoreRadarGauge } from "@/components/blog/ScoreRadarGauge";
 import { AiDiffInspector } from "@/components/blog/AiDiffInspector";
 import type { ContentScoreResult } from "@/lib/content-scoring";
 import type { CitationCriterion } from "@/lib/blog/ai-citation-template";
+import type { SerpCompetitiveBrief } from "@/lib/blog/contracts";
 import { logger } from "@/lib/logger";
 
 interface Blog {
@@ -35,6 +36,10 @@ interface Blog {
     targetKeywords: string[];
     citationScore?: number | null;
     citationCriteria?: unknown;
+    serpCompetitiveBrief?: SerpCompetitiveBrief | null;
+    publicationGates?: Array<{ name: string; status: string; issues?: string[]; warnings?: string[] }> | null;
+    validationErrors?: string[] | null;
+    validationWarnings?: string[] | null;
 }
 
 type ReviewMode = "write" | "review";
@@ -143,6 +148,209 @@ function ReadinessCard({ score, criteria }: { score: number; criteria: CitationC
                             <Check className="h-3.5 w-3.5 text-emerald-400" />
                             {passed.length} criteria already passing
                         </div>
+                    </div>
+                )}
+            </div>
+        </section>
+    );
+}
+
+function SerpResearchPanel({
+    brief,
+    publicationGates,
+    validationErrors,
+    validationWarnings,
+}: {
+    brief?: SerpCompetitiveBrief | null;
+    publicationGates?: Array<{ name: string; status: string; issues?: string[]; warnings?: string[] }> | null;
+    validationErrors?: string[] | null;
+    validationWarnings?: string[] | null;
+}) {
+    const issues = [...(validationErrors ?? []), ...(publicationGates ?? []).flatMap(gate =>
+        gate.status !== "PASS" ? [...(gate.issues ?? []), ...(gate.warnings ?? [])] : [],
+    )];
+    const warnings = [...(validationWarnings ?? []), ...(publicationGates ?? []).flatMap(gate => gate.warnings ?? [])];
+
+    if (!brief) {
+        return (
+            <section className="rounded-xl border border-amber-500/20 bg-card p-4">
+                <div className="flex items-center gap-2">
+                    <Info className="h-4 w-4 text-amber-400" />
+                    <h3 className="text-xs font-semibold">SERP research</h3>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                    No competitive research snapshot is saved for this article. Verify search intent, ranking formats,
+                    existing-page overlap, and source-backed differentiation manually before publishing.
+                </p>
+            </section>
+        );
+    }
+
+    const intent = brief.intent;
+    const analyzed = brief.pages.filter(page => page.scrapeStatus === "ANALYZED");
+    const toolShare = brief.dominantFormats.find(format => format.format === "tool")?.share ?? 0;
+    const statusTone = brief.retrieval.confidence === "high"
+        ? "text-emerald-400"
+        : brief.retrieval.confidence === "medium"
+            ? "text-amber-400"
+            : "text-rose-400";
+
+    return (
+        <section className="rounded-xl border border-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+                <div className="flex items-center gap-2">
+                    <Search className="h-4 w-4 text-primary" />
+                    <h3 className="text-xs font-semibold">SERP competitive research</h3>
+                    <span className={\`ml-auto text-[10px] font-semibold \${statusTone}\`}>
+                        {brief.retrieval.confidence.toUpperCase()} CONFIDENCE
+                    </span>
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                    Query: <span className="font-medium text-foreground">{brief.keyword}</span>
+                </p>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                    Researched {brief.researchedAt.slice(0, 10)} · {analyzed.length}/{brief.pages.length} readable result pages · {brief.retrieval.status.toLowerCase()}
+                </p>
+            </div>
+
+            <div className="space-y-4 p-4">
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg border border-border bg-background/50 p-3">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Intent</p>
+                        <p className="mt-1 text-xs font-semibold capitalize">{intent.label}</p>
+                        <p className="mt-1 text-[10px] text-muted-foreground">{Math.round(intent.confidence * 100)}% confidence</p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background/50 p-3">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Preferred format</p>
+                        <p className="mt-1 text-xs font-semibold capitalize">{brief.recommendedFormat.replace(/_/g, " ")}</p>
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                            {brief.dominantFormats[0] ? \`\${Math.round(brief.dominantFormats[0].share * 100)}% of sampled results\` : "No dominant format"}
+                        </p>
+                    </div>
+                </div>
+
+                {toolShare >= 0.4 && (
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-[11px] leading-relaxed text-amber-300">
+                        Interactive tools dominate a material share of this SERP. A conventional article may not complete the main user task; review the appropriate format before publishing.
+                    </div>
+                )}
+
+                <div>
+                    <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Ranking pages analysed ({brief.pages.length})
+                    </h4>
+                    <div className="space-y-2">
+                        {brief.pages.map(page => (
+                            <div key={page.url} className="rounded-lg border border-border p-2.5">
+                                <div className="flex items-start gap-2">
+                                    <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded bg-muted px-1 text-[10px] font-semibold tabular-nums">
+                                        {page.rank}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                        <a href={page.url} target="_blank" rel="noreferrer" className="line-clamp-2 text-[11px] font-medium leading-relaxed text-foreground hover:text-primary hover:underline">
+                                            {page.title}
+                                        </a>
+                                        <p className="mt-1 text-[10px] text-muted-foreground">
+                                            {page.pageType.replace(/_/g, " ")} · {page.scrapeStatus.replace(/_/g, " ").toLowerCase()}
+                                            {page.publishedAt ? \` · date \${page.publishedAt.slice(0, 10)}\` : ""}
+                                        </p>
+                                        {page.headings.length > 0 && (
+                                            <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">
+                                                Headings observed: {page.headings.slice(0, 4).join(" · ")}
+                                            </p>
+                                        )}
+                                        {page.snippet && <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">{page.snippet}</p>}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div>
+                    <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Coverage requirements</h4>
+                    {brief.requiredCoverage.length > 0 ? (
+                        <div className="space-y-2">
+                            {brief.requiredCoverage.slice(0, 8).map(item => (
+                                <div key={item.topic} className="border-l-2 border-primary/40 pl-2.5">
+                                    <p className="text-[11px] font-medium">{item.topic}</p>
+                                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                        {item.classification.replace(/_/g, " ")} · observed on {item.supportCount}/{item.totalAnalyzed} analysed pages
+                                    </p>
+                                    {item.observedOn.slice(0, 3).map(url => {
+                                        const page = brief.pages.find(candidate => candidate.url === url);
+                                        return <a key={url} href={url} target="_blank" rel="noreferrer" className="mr-2 mt-1 inline-block text-[10px] text-primary hover:underline">{page?.title.slice(0, 36) ?? url}</a>;
+                                    })}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-[11px] text-muted-foreground">No recurring coverage requirement could be established from enough readable result pages.</p>
+                    )}
+                </div>
+
+                <div>
+                    <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Reader needs and opportunities</h4>
+                    <div className="space-y-2">
+                        {brief.opportunities.slice(0, 6).map(opportunity => (
+                            <div key={opportunity.id} className="rounded-lg border border-border p-2.5">
+                                <div className="flex items-start justify-between gap-2">
+                                    <p className="text-[11px] font-medium leading-relaxed">{opportunity.description}</p>
+                                    <span className={\`shrink-0 rounded border px-1.5 py-0.5 text-[9px] uppercase \${opportunity.verificationStatus === "observed" ? "border-emerald-500/20 text-emerald-400" : "border-amber-500/20 text-amber-300"}\`}>
+                                        {opportunity.verificationStatus.replace(/_/g, " ")}
+                                    </span>
+                                </div>
+                                <p className="mt-1 text-[10px] text-muted-foreground">
+                                    Confidence {Math.round(opportunity.confidence * 100)}% · {opportunity.type.replace(/_/g, " ")}
+                                </p>
+                                <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{opportunity.additionalValue}</p>
+                                {opportunity.sourceUrls.slice(0, 3).map(url => (
+                                    <a key={url} href={url} target="_blank" rel="noreferrer" className="mr-2 mt-1 inline-block text-[10px] text-primary hover:underline">
+                                        Source
+                                    </a>
+                                ))}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div>
+                    <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Differentiation plan</h4>
+                    <ul className="space-y-1.5">
+                        {brief.differentiationPlan.slice(0, 6).map((item, index) => (
+                            <li key={index} className="flex items-start gap-2 text-[11px] leading-relaxed">
+                                <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" />
+                                <span>{item}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+
+                {brief.siteFit && (
+                    <div className="rounded-lg border border-border bg-background/50 p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Content action decision</p>
+                        <p className="mt-1 text-xs font-semibold">{brief.siteFit.recommendedAction.replace(/_/g, " ")}</p>
+                        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{brief.siteFit.rationale}</p>
+                        {brief.siteFit.matchingPageUrl && <a href={brief.siteFit.matchingPageUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[10px] text-primary hover:underline">Open matched site page</a>}
+                    </div>
+                )}
+
+                {(brief.retrieval.notes.length > 0 || brief.retrieval.scrapeFailures.length > 0) && (
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-300">Research limitations</p>
+                        <ul className="mt-1 space-y-1">
+                            {[...brief.retrieval.notes, ...brief.retrieval.scrapeFailures.map(failure => failure.url + ": " + failure.reason)].slice(0, 8).map((item, index) => (
+                                <li key={index} className="text-[10px] leading-relaxed text-muted-foreground">{item}</li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+
+                {(issues.length > 0 || warnings.length > 0) && (
+                    <div className="rounded-lg border border-amber-500/20 p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Unresolved quality issues</p>
+                        {issues.slice(0, 6).map((item, index) => <p key={"i" + index} className="mt-1 text-[10px] text-rose-300">{item}</p>)}
+                        {warnings.slice(0, 6).map((item, index) => <p key={"w" + index} className="mt-1 text-[10px] text-amber-300">{item}</p>)}
                     </div>
                 )}
             </div>
@@ -499,6 +707,13 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                                     </button>
                                 </section>
                             )}
+
+                            <SerpResearchPanel
+                                brief={blog.serpCompetitiveBrief}
+                                publicationGates={blog.publicationGates}
+                                validationErrors={blog.validationErrors}
+                                validationWarnings={blog.validationWarnings}
+                            />
 
                             {/* Publishing checklist */}
                             <section className="rounded-xl border border-border bg-card p-4">
