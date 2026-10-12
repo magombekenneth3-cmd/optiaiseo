@@ -88,6 +88,33 @@ function evaluateResearchGate(input: PublicationGateInput): IndependentGateResul
         issues.push("Research evidence is not available. Evidence availability must be AVAILABLE before publication.");
     }
 
+    const competitiveBrief = input.researchPacket.serpCompetitiveBrief;
+    if (!competitiveBrief) {
+        warnings.push("Validated SERP competitive brief is missing. Confirm search intent, competing result formats, coverage, and differentiation manually before publication.");
+    } else {
+        if (competitiveBrief.retrieval.confidence === "low" || competitiveBrief.retrieval.status !== "AVAILABLE") {
+            warnings.push(
+                "SERP retrieval confidence is " + competitiveBrief.retrieval.confidence +
+                " (" + competitiveBrief.retrieval.analyzedPages + "/" + competitiveBrief.retrieval.uniqueResults +
+                " readable results). Competitive gaps are not sufficiently established for automatic publication.",
+            );
+        }
+        if (competitiveBrief.siteFit?.humanReviewRequired) {
+            warnings.push("Competitive brief requires human review: " + competitiveBrief.siteFit.rationale);
+        }
+        if (competitiveBrief.siteFit?.recommendedAction === "UPDATE_EXISTING" ||
+            competitiveBrief.siteFit?.recommendedAction === "REQUEST_REVIEW") {
+            warnings.push(
+                "Recommended content action is " + competitiveBrief.siteFit.recommendedAction +
+                ". The current draft pipeline must not automatically create a competing published URL.",
+            );
+        }
+        if (competitiveBrief.recommendedFormat === "tool" &&
+            (competitiveBrief.dominantFormats.find(item => item.format === "tool")?.share ?? 0) >= 0.4) {
+            warnings.push("The observed SERP is dominated by interactive tools. Review product format before publishing a conventional article.");
+        }
+    }
+
     if (input.researchPacket.sources.length === 0) {
         issues.push("Research packet contains no sources.");
     }
@@ -245,6 +272,49 @@ async function evaluateOriginalityGate(input: PublicationGateInput): Promise<Ind
             warnings: [],
         };
     }
+}
+
+function evaluateCompetitiveStrategyGate(input: PublicationGateInput): IndependentGateResult {
+    const issues: string[] = [];
+    const warnings: string[] = [];
+    const brief = input.researchPacket.serpCompetitiveBrief;
+
+    if (!brief) {
+        warnings.push("No persisted SERP competitive brief is available; route this legacy article to review rather than assuming competitive research passed.");
+    } else {
+        if (brief.retrieval.confidence === "low") {
+            warnings.push("Competitive research coverage is too low to support confident claims about ranking-page gaps.");
+        }
+        for (const opportunity of brief.opportunities) {
+            if (opportunity.verificationStatus === "requires_research" &&
+                input.content.toLowerCase().includes(opportunity.description.toLowerCase().slice(0, 45))) {
+                warnings.push("Draft may state a research task as fact: " + opportunity.description.slice(0, 180));
+            }
+        }
+        if (brief.siteFit?.recommendedAction === "UPDATE_EXISTING" ||
+            brief.siteFit?.recommendedAction === "REQUEST_REVIEW") {
+            warnings.push("Do not publish this generated draft as a new URL until the existing-page recommendation has been reviewed.");
+        }
+        const text = input.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").toLowerCase();
+        for (const topic of brief.requiredCoverage.slice(0, 10)) {
+            const significant = topic.topic.toLowerCase().split(/\s+/).filter(word => word.length > 3);
+            if (significant.length >= 2 && !significant.some(word => text.includes(word))) {
+                warnings.push("Required-coverage candidate may be missing from the draft: " + topic.topic.slice(0, 160));
+            }
+        }
+        if (brief.retrieval.confidence === "high" && brief.requiredCoverage.length > 0) {
+            const missing = brief.requiredCoverage.filter(topic => {
+                const words = topic.topic.toLowerCase().split(/\s+/).filter(word => word.length > 3);
+                return words.length >= 2 && !words.some(word => text.includes(word));
+            });
+            if (missing.length > 0) {
+                warnings.push("Draft omits " + missing.length + " observed SERP coverage candidate(s); review relevance before publishing.");
+            }
+        }
+    }
+
+    const status: GateStatus = issues.length > 0 ? "FAIL" : warnings.length > 0 ? "REVIEW" : "PASS";
+    return { name: "CompetitiveStrategy", status, isHard: false, issues, warnings };
 }
 
 function evaluateSeoGate(input: PublicationGateInput): IndependentGateResult {
@@ -531,6 +601,7 @@ export async function evaluatePublicationGate(
     gates.push(evaluateEvidenceGate(input));
     gates.push(evaluateClaimsGate(input));
     gates.push(await evaluateOriginalityGate(input));
+    gates.push(evaluateCompetitiveStrategyGate(input));
     gates.push(evaluateSeoGate(input));
     gates.push(evaluateSchemaGate(input));
     gates.push(evaluateEditorialGate(input));
