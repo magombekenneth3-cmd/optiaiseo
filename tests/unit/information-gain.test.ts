@@ -88,8 +88,8 @@ describe("buildCompactDirective", () => {
 
         expect(result.length).toBeLessThan(500);
         expect(result).toContain("Hypothesis to verify: gap");
-        expect(result).toContain("- metric");
-        expect(result).toContain("- quote");
+        expect(result).toContain("metric");
+        expect(result).toContain("quotation relevant to: quote");
         expect(result).toContain("- framework");
     });
 
