@@ -81,15 +81,15 @@ describe("buildCompactDirective", () => {
         const result = buildCompactDirective({
             saturatedTopics: ["one"],
             uniqueContentGaps: ["gap"],
-            missingDataMetrics: ["metric"],
-            recommendedQuotes: ["quote"],
+            missingDataMetrics: ["tool cost comparison"],
+            recommendedQuotes: ["concrete quotation topic"],
             originalInsightsBlueprint: ["framework"],
         });
 
         expect(result.length).toBeLessThan(500);
         expect(result).toContain("Hypothesis to verify: gap");
-        expect(result).toContain("metric");
-        expect(result).toContain("quotation relevant to: quote");
+        expect(result).toContain("tool cost comparison");
+        expect(result).toContain("quotation relevant to: concrete quotation topic");
         expect(result).toContain("- framework");
     });
 
