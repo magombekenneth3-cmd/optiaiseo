@@ -125,7 +125,7 @@ function parseJsonSafe<T>(text: string, fallback: T): T {
     }
 }
 
-function wordCountTarget(
+export function wordCountTarget(
     ctx: PromptContext,
     serpContext: SerpContext | null,
     brain: ResearchBrain,
@@ -147,17 +147,21 @@ function wordCountTarget(
         ? Math.min(3, serpContext.results.filter(result => (result.scrapedContent?.length ?? 0) > 1_000).length)
         : 0;
 
+    const requiredTopicCount = brief?.requiredCoverage.length ?? 0;
+    const readerNeedCount = brief?.readerNeeds.length ?? 0;
+    const evidenceRequirementCount = brief?.evidenceRequirements.length ?? 0;
+
     const complexity =
         Math.min(questionCount, 8) * 90 +
         Math.min(decisionCount, 5) * 110 +
         Math.min(comparisonCount, 5) * 100 +
         Math.min(riskCount, 4) * 100 +
+        Math.min(requiredTopicCount, 6) * 80 +
+        Math.min(readerNeedCount, 6) * 45 +
+        Math.min(evidenceRequirementCount, 5) * 70 +
         evidenceSections * 120;
 
-    const format = serpContext ? classifySerpFormat(serpContext.results).format : null;
-    const formatAdjustment = format === "comparison" ? 250 : format === "listicle" ? 150 : 0;
-
-    return Math.min(Math.max(base, base + complexity + formatAdjustment), 4800);
+    return Math.min(Math.max(base, base + complexity), 4800);
 }
 
 /** Builds a full competitor depth benchmark string for the Outline Planner. */
