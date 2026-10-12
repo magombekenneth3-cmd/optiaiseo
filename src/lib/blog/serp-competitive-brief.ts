@@ -79,7 +79,7 @@ function headingsFromBlog(content: string): string[] {
 function normalizeLibraryStatus(status: string): SiteContentLibraryEntry["status"] {
     const known: SiteContentLibraryEntry["status"][] = [
         "PUBLISHED", "DRAFT", "NEEDS_REVIEW", "EVIDENCE_REVIEW", "REVIEW",
-        "REJECTED", "FAILED", "GENERATING",
+        "REJECTED", "FAILED", "GENERATING", "QUEUED", "PENDING",
     ];
     return known.includes(status as SiteContentLibraryEntry["status"])
         ? status as SiteContentLibraryEntry["status"]
@@ -98,7 +98,7 @@ export async function loadRelevantSiteContentLibrary(params: {
                 siteId: params.siteId,
                 deletedAt: null,
                 status: {
-                    in: ["PUBLISHED", "DRAFT", "NEEDS_REVIEW", "EVIDENCE_REVIEW", "REVIEW", "REJECTED", "FAILED", "GENERATING"],
+                    in: ["PUBLISHED", "DRAFT", "NEEDS_REVIEW", "EVIDENCE_REVIEW", "REVIEW", "REJECTED", "FAILED", "GENERATING", "QUEUED", "PENDING"],
                 },
             },
             orderBy: [{ updatedAt: "desc" }],
