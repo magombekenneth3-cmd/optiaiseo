@@ -62,8 +62,8 @@ export function buildCompactDirective(params: {
             title: "2. GAP HYPOTHESES TO VERIFY (NOT CONFIRMED COMPETITOR OMISSIONS)",
             items: params.uniqueContentGaps.map(item => "Hypothesis to verify: " + item),
         },
-        { title: "3. METRIC RESEARCH TASKS (NEVER INVENT VALUES)", items: params.missingDataMetrics },
-        { title: "4. QUOTE RESEARCH TASKS (NEVER FABRICATE QUOTATIONS)", items: params.recommendedQuotes },
+        { title: "3. METRIC RESEARCH TASKS (NEVER INVENT VALUES)", items: safeMetricResearchTasks(params.missingDataMetrics) },
+        { title: "4. QUOTE RESEARCH TASKS (NEVER FABRICATE QUOTATIONS)", items: safeQuoteResearchTasks(params.recommendedQuotes, "the target query") },
         { title: "5. POSSIBLE ORIGINAL CONTRIBUTIONS (VERIFY BEFORE ASSERTING)", items: params.originalInsightsBlueprint },
     ];
 
@@ -91,6 +91,42 @@ export function buildCompactDirective(params: {
 
     const result = parts.join("\n").trim();
     return result.length <= max ? result : result.slice(0, max - 3).trimEnd() + "...";
+}
+
+function safeMetricResearchTasks(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const result: string[] = [];
+    for (const raw of value) {
+        if (typeof raw !== "string") continue;
+        const item = raw.replace(/\s+/g, " ").trim().slice(0, MAX_ITEM_LENGTH);
+        if (item.length < 8) continue;
+        if (/\b\d+(?:[,.]\d+)*(?:\s?%|\s?(?:percent|x|times|million|billion))\b|\$\s?\d/i.test(item)) {
+            result.push("Find a current, authoritative source and verify any metric before stating a numeric value.");
+        } else {
+            result.push(/\b(find|search|research|locate|identify|verify|source|retrieve|check|confirm|measure|calculate|collect)\b/i.test(item)
+                ? item
+                : "Find and verify an authoritative source for: " + item);
+        }
+    }
+    return [...new Set(result)].slice(0, MAX_LIST_ITEMS);
+}
+
+function safeQuoteResearchTasks(value: unknown, keyword: string): string[] {
+    if (!Array.isArray(value)) return [];
+    const result: string[] = [];
+    for (const raw of value) {
+        if (typeof raw !== "string") continue;
+        const item = raw.replace(/\s+/g, " ").trim().slice(0, MAX_ITEM_LENGTH);
+        if (item.length < 8) continue;
+        if (/["“”‘’]|\bsaid\b|\bsays\b|\bstated\b|\baccording to\b|\btold\b|\bquoted\b/i.test(item)) {
+            result.push("Find a real, attributable quotation relevant to \"" + keyword.slice(0, 80) + "\" and verify it against the original source before use.");
+        } else {
+            result.push(/\b(find|search|research|locate|identify|verify|source|retrieve|interview|check|confirm)\b/i.test(item)
+                ? item
+                : "Find a real, attributable quotation relevant to: " + item);
+        }
+    }
+    return [...new Set(result)].slice(0, MAX_LIST_ITEMS);
 }
 
 export async function runInformationGainAlgorithm(
@@ -296,8 +332,8 @@ export async function runInformationGainAlgorithm(
                     .slice(0, 3)
                 : [];
             modelOutput.uniqueContentGaps = cleanList(generated.uniqueContentGaps);
-            modelOutput.missingDataMetrics = cleanList(generated.missingDataMetrics);
-            modelOutput.recommendedQuotes = cleanList(generated.recommendedQuotes);
+            modelOutput.missingDataMetrics = safeMetricResearchTasks(generated.missingDataMetrics);
+            modelOutput.recommendedQuotes = safeQuoteResearchTasks(generated.recommendedQuotes, keyword);
             modelOutput.originalInsightsBlueprint = cleanList(generated.originalInsightsBlueprint);
             providerAvailable = true;
         } catch (error: unknown) {
