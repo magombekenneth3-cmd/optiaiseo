@@ -1269,6 +1269,62 @@ ${content}`;
         return content;
     }
 }
+function findCompetitiveCoverageGaps(
+    content: string,
+    brief: SerpCompetitiveBrief | undefined,
+): string[] {
+    if (!brief || brief.retrieval.confidence !== "high" || brief.retrieval.analyzedPages < 3) return [];
+
+    const normalizedContent = content
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .toLowerCase()
+        .replace(/[^a-z0-9 ]/g, " ")
+        .replace(/\s+/g, " ");
+    const observedRequirements = brief.requiredCoverage
+        .filter(item =>
+            item.classification === "observed_pattern" &&
+            item.supportCount >= 3 &&
+            item.confidence >= 0.65,
+        );
+
+    return observedRequirements.filter(item => {
+        const significantTerms = [...new Set(
+            item.topic.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/)
+                .filter(term => term.length > 3 && !["overview", "introduction", "conclusion", "summary", "guide"].includes(term)),
+        )];
+        if (significantTerms.length < 2) return false;
+        const present = significantTerms.filter(term => normalizedContent.includes(term)).length;
+        return present / significantTerms.length < 0.5;
+    }).slice(0, 4).map(item =>
+        item.topic + " (observed on " + item.supportCount + "/" + item.totalAnalyzed +
+        " analysed pages; sources: " + item.observedOn.slice(0, 3).join(", ") + ")",
+    );
+}
+
+function addCoverageGapsToAnalysis(
+    analysis: ContentAnalysisReport,
+    coverageGaps: string[],
+): ContentAnalysisReport {
+    if (coverageGaps.length === 0) return analysis;
+    const newDefects = coverageGaps.map(gap => "Missing essential observed SERP coverage: " + gap);
+    const directive = [
+        analysis.repairDirective ?? "",
+        "TARGETED COMPETITIVE-COVERAGE REVISION:",
+        "Add or improve only the missing reader-relevant topics listed below. Do not pad length, copy competitor phrasing, or add a heading where the topic would not help the reader. Use the existing source packet; if a topic cannot be supported, qualify it or explain what remains unknown.",
+        ...coverageGaps.map(gap => "- " + gap),
+    ].filter(Boolean).join("\n");
+
+    return {
+        ...analysis,
+        needsRevision: true,
+        defects: [...new Set([...analysis.defects, ...newDefects])],
+        overallDefects: [...new Set([...analysis.overallDefects, ...newDefects])],
+        repairDirective: directive.slice(0, 6_000),
+    };
+}
+
 // ─── Convenience: Full Pipeline ───────────────────────────────────────────────
 
 export interface PipelineResult {
@@ -1440,27 +1496,45 @@ export async function runFullPipeline(params: {
     if (truncated) logger.warn("[Pipeline] Editorial rewrite was truncated", { keyword });
 
     const repairedMarkdown = await repairUnsupportedClaims(polishedMarkdown, researchPacket, ctx);
-    const initialAnalysis = analyzeDraftQuality(repairedMarkdown, brain, researchPacket, ctx);
+    const initialQualityAnalysis = analyzeDraftQuality(repairedMarkdown, brain, researchPacket, ctx);
+    const initialCoverageGaps = findCompetitiveCoverageGaps(repairedMarkdown, serpCompetitiveBrief);
+    const initialAnalysis = addCoverageGapsToAnalysis(initialQualityAnalysis, initialCoverageGaps);
     let finalMarkdown = repairedMarkdown;
+
     if (initialAnalysis.needsRevision && initialAnalysis.repairDirective) {
         logger.info("[Pipeline] Stage 5 — Targeted revision pass triggered", {
             keyword,
             defects: initialAnalysis.defects,
+            competitiveCoverageGaps: initialCoverageGaps,
         });
         const revisedMarkdown = await applyTargetedRevision(repairedMarkdown, initialAnalysis.repairDirective, ctx);
-        const postRevisionAnalysis = analyzeDraftQuality(revisedMarkdown, brain, researchPacket, ctx);
-        if (!postRevisionAnalysis.needsRevision || postRevisionAnalysis.defects.length < initialAnalysis.defects.length) {
+        const postQualityAnalysis = analyzeDraftQuality(revisedMarkdown, brain, researchPacket, ctx);
+        const postCoverageGaps = findCompetitiveCoverageGaps(revisedMarkdown, serpCompetitiveBrief);
+        const postRevisionAnalysis = addCoverageGapsToAnalysis(postQualityAnalysis, postCoverageGaps);
+        const defectCountImproved = postRevisionAnalysis.defects.length < initialAnalysis.defects.length;
+        const gapsImproved = postCoverageGaps.length < initialCoverageGaps.length;
+        if (!postRevisionAnalysis.needsRevision || defectCountImproved || gapsImproved) {
             logger.info("[Pipeline] Stage 5 — Targeted revision accepted", {
                 keyword,
                 initialDefects: initialAnalysis.defects.length,
                 postDefects: postRevisionAnalysis.defects.length,
+                initialCoverageGaps: initialCoverageGaps.length,
+                postCoverageGaps: postCoverageGaps.length,
             });
             finalMarkdown = revisedMarkdown;
+            if (postCoverageGaps.length > 0) {
+                logger.warn("[Pipeline] Material SERP coverage gaps remain after the bounded revision; publication gate will route the draft for review.", {
+                    keyword,
+                    gaps: postCoverageGaps,
+                });
+            }
         } else {
-            logger.warn("[Pipeline] Stage 5 — Targeted revision rejected (did not reduce defects)", {
+            logger.warn("[Pipeline] Stage 5 — Targeted revision rejected (did not reduce defects or coverage gaps)", {
                 keyword,
                 initialDefects: initialAnalysis.defects.length,
                 postDefects: postRevisionAnalysis.defects.length,
+                initialCoverageGaps: initialCoverageGaps.length,
+                postCoverageGaps: postCoverageGaps.length,
             });
         }
     }
