@@ -3,7 +3,7 @@ import {
     SiteContentLibrarySchema,
     type PageExistenceResult,
 } from "@/lib/blog/contracts";
-import type { SerpContext } from "@/lib/blog/serp";
+import { buildCompetitorBeatStrategy, type CompetitorProfile, type SerpContext } from "@/lib/blog/serp";
 import { buildSerpCompetitiveBrief } from "@/lib/blog/serp-competitive-brief";
 import { enrichOutlineWithCompetitiveBrief, type OutlinePlan } from "@/lib/blog/pipeline";
 
@@ -231,6 +231,48 @@ describe("SERP competitive brief", () => {
         expect(brief.siteFit?.recommendedAction).toBe("UPDATE_EXISTING");
         expect(brief.siteFit?.matchingPageUrl).toBe("https://mysite.example.com/blog/best-technical-seo-tools");
         expect(brief.siteFit?.humanReviewRequired).toBe(false);
+    });
+
+    it("bases the competitor beat strategy on useful coverage rather than word-count padding or missing schema", () => {
+        const profiles: CompetitorProfile[] = [
+            {
+                url: "https://one.example.com/guide",
+                title: "Technical SEO Tool Guide",
+                headings: ["Crawl coverage", "Indexing diagnostics", "Pricing and limits"],
+                estimatedWords: 900,
+                rank: 1,
+                schemaTypes: ["Article"],
+                publishedDate: "2026-07-10",
+                scrapeStatus: "ANALYZED",
+            },
+            {
+                url: "https://two.example.com/guide",
+                title: "Technical SEO Comparison",
+                headings: ["Crawl coverage", "Indexing diagnostics", "Features"],
+                estimatedWords: 2_400,
+                rank: 2,
+                schemaTypes: [],
+                publishedDate: "2026-08-12",
+                scrapeStatus: "ANALYZED",
+            },
+            {
+                url: "https://three.example.com/guide",
+                title: "Technical SEO Tutorial",
+                headings: ["Crawl coverage", "Indexing diagnostics", "Implementation"],
+                estimatedWords: 1_600,
+                rank: 3,
+                schemaTypes: ["Article"],
+                publishedDate: "2026-09-01",
+                scrapeStatus: "ANALYZED",
+            },
+        ];
+
+        const strategy = buildCompetitorBeatStrategy(profiles, keyword);
+
+        expect(strategy).toContain("Do not pad the article to exceed competitor word counts");
+        expect(strategy).toContain("Crawl coverage");
+        expect(strategy).toContain("Use structured data only when");
+        expect(strategy).not.toMatch(/minimum word count|average competitor word count|+\s*400/i);
     });
 
     it("marks research unavailable when no current SERP is supplied", () => {
