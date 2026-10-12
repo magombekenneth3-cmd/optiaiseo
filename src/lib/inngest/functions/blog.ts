@@ -1273,6 +1273,9 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 // Evidence pipeline — feeds the dashboard EvidenceBadge
                 evidenceCoverage: liveBlogPost.evidenceCoverage,
                 missingEvidence: liveBlogPost.missingEvidence ?? [],
+                // Persist the exact validated SERP brief used for research, writing, and gating.
+                // This supports post-generation auditability and the Content Studio research panel.
+                serpCompetitiveBrief: liveBlogPost.researchPacket.serpCompetitiveBrief ?? undefined,
                 // GSC opportunity evidence — immutable provenance snapshot
                 // Null for non-GSC pipelines (USER_KEYWORD, COMPETITOR_GAP, etc.)
                 gscEvidence: gscEvidence ? (gscEvidence as Record<string, string | number | boolean | null>) : undefined,
