@@ -140,11 +140,11 @@ export async function loadRelevantSiteContentLibrary(params: {
 
             return {
                 id: row.id,
-                title: row.title,
-                slug: row.slug,
+                title: row.title.slice(0, 500),
+                slug: row.slug.slice(0, 200),
                 ...(url ? { url } : {}),
                 status: normalizeLibraryStatus(row.status),
-                targetKeywords: (row.targetKeywords ?? []).slice(0, 20),
+                targetKeywords: (row.targetKeywords ?? []).slice(0, 20).map(keyword => keyword.slice(0, 200)),
                 ...(row.metaDescription ? { metaDescription: row.metaDescription.slice(0, 200) } : {}),
                 publishedAt: row.publishedAt?.toISOString() ?? null,
                 updatedAt: row.updatedAt.toISOString(),
@@ -501,7 +501,7 @@ export function buildSerpCompetitiveBrief(params: {
     for (const need of readerNeeds.slice(0, 8)) {
         opportunities.push({
             id: `reader-${opportunities.length + 1}`,
-            description: `Answer the surfaced reader query: “${need.question}”`,
+            description: `Answer the surfaced reader query: “${need.question}”`.slice(0, 500),
             type: "reader_need",
             verificationStatus: "observed",
             confidence: need.confidence,
