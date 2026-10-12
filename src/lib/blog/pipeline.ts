@@ -276,6 +276,7 @@ VALIDATED COMPETITIVE BRIEF (status/confidence must remain visible):
 - Intent: ${serpCompetitiveBrief.intent.label} (confidence ${serpCompetitiveBrief.intent.confidence.toFixed(2)}): ${serpCompetitiveBrief.intent.rationale}
 - Retrieval: ${serpCompetitiveBrief.retrieval.status}; ${serpCompetitiveBrief.retrieval.analyzedPages}/${serpCompetitiveBrief.retrieval.uniqueResults} pages analysed; confidence ${serpCompetitiveBrief.retrieval.confidence}
 - Dominant result formats: ${serpCompetitiveBrief.dominantFormats.slice(0, 4).map(item => `${item.format} (${item.count}, share ${item.share.toFixed(2)})`).join("; ") || "not observed"}
+- Observed SERP feature signals: ${serpCompetitiveBrief.serpFeatures.slice(0, 6).map(feature => `${feature.type} [${feature.classification}; confidence ${feature.confidence.toFixed(2)}]`).join("; ") || "no explicit SERP feature returned"}
 - Required coverage candidates: ${serpCompetitiveBrief.requiredCoverage.slice(0, 8).map(item => `${item.topic} [${item.classification}, ${item.supportCount}/${item.totalAnalyzed}; sources: ${item.observedOn.slice(0, 2).join(", ")}]`).join("; ") || "none confirmed"}
 - Reader needs: ${serpCompetitiveBrief.readerNeeds.slice(0, 8).map(item => `${item.question} [${item.source}, confidence ${item.confidence.toFixed(2)}]`).join("; ") || "none returned"}
 - Opportunities: ${serpCompetitiveBrief.opportunities.slice(0, 6).map(item => `${item.description} [${item.verificationStatus}; ${item.confidence.toFixed(2)}; sources: ${item.sourceUrls.slice(0, 2).join(", ")}]`).join("; ") || "none substantiated"}
@@ -470,6 +471,7 @@ VALIDATED SERP COMPETITIVE BRIEF:
 - Intent: ${brief.intent.label} (confidence ${brief.intent.confidence.toFixed(2)}): ${brief.intent.rationale}
 - Research retrieval: ${brief.retrieval.status}, ${brief.retrieval.analyzedPages}/${brief.retrieval.uniqueResults} pages analysed, confidence ${brief.retrieval.confidence}.
 - Dominant formats: ${brief.dominantFormats.slice(0, 4).map(item => `${item.format} (${item.share.toFixed(2)})`).join("; ")}
+- Observed SERP features: ${brief.serpFeatures.slice(0, 6).map(feature => `${feature.type} [${feature.classification}; ${feature.confidence.toFixed(2)}]`).join("; ") || "none explicitly returned"}
 - Recommended format: ${brief.recommendedFormat}. Do not force conventional article format when the reader's task suggests a tool, video, or other format.
 - Required-coverage candidates: ${brief.requiredCoverage.slice(0, 8).map(item => `${item.topic} [${item.classification}; sources: ${item.observedOn.slice(0, 2).join(", ")}]`).join("; ") || "not established"}
 - Reader needs: ${brief.readerNeeds.slice(0, 8).map(item => item.question).join("; ") || "not available"}
