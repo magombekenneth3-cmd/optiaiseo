@@ -175,6 +175,15 @@ function passageSimilarity(a: string, b: string): number {
     return intersection / (aTokens.size + bTokens.size - intersection);
 }
 
+function headingSimilarity(a: string, b: string): number {
+    const aTokens = normalizedPassageTokens(a);
+    const bTokens = normalizedPassageTokens(b);
+    if (aTokens.size < 3 || bTokens.size < 3) return 0;
+    let intersection = 0;
+    for (const token of aTokens) if (bTokens.has(token)) intersection++;
+    return intersection / Math.min(aTokens.size, bTokens.size);
+}
+
 function passageSentences(value: string): string[] {
     return value.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
         .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
@@ -193,14 +202,14 @@ function deterministicNearDuplicateIssues(
     researchPacket: ResearchPacket,
 ): string[] {
     const draftSentences = passageSentences(content);
-    const corpus: Array<{ label: string; url?: string; text: string; kind: "competitor" | "site" }> = [];
+    const corpus: Array<{ label: string; url?: string; sentences: string[]; kind: "competitor" | "site" }> = [];
 
     for (const page of (serpContext?.results ?? []).slice(0, 5)) {
         if ((page.scrapedContent?.length ?? 0) > 200) {
             corpus.push({
                 label: page.title,
                 url: page.link,
-                text: page.scrapedContent!.slice(0, 25_000),
+                sentences: passageSentences(page.scrapedContent!.slice(0, 25_000)),
                 kind: "competitor",
             });
         }
@@ -211,7 +220,7 @@ function deterministicNearDuplicateIssues(
             corpus.push({
                 label: page.title,
                 ...(page.url ? { url: page.url } : {}),
-                text: text.slice(0, 3_500),
+                sentences: passageSentences(text.slice(0, 3_500)),
                 kind: "site",
             });
         }
@@ -221,7 +230,7 @@ function deterministicNearDuplicateIssues(
     for (let i = 0; i < draftSentences.length; i++) {
         const sentence = draftSentences[i];
         for (const source of corpus) {
-            const match = passageSentences(source.text).some(sourceSentence => passageSimilarity(sentence, sourceSentence) >= 0.86);
+            const match = source.sentences.some(sourceSentence => passageSimilarity(sentence, sourceSentence) >= 0.86);
             if (match) {
                 issues.push(
                     (source.kind === "site"
@@ -252,7 +261,7 @@ function deterministicNearDuplicateIssues(
     for (const page of (researchPacket.siteContentLibrary?.relatedPages ?? []).slice(0, 5)) {
         const sourceHeadings = page.headings.filter(heading => !genericHeading.has(heading.toLowerCase()));
         const overlaps = articleHeadings.filter(heading =>
-            sourceHeadings.some(sourceHeading => passageSimilarity(heading + " more details are discussed here", sourceHeading + " more details are discussed here") >= 0.7),
+            sourceHeadings.some(sourceHeading => headingSimilarity(heading, sourceHeading) >= 0.75),
         );
         if (overlaps.length >= 2) {
             issues.push("Potential same-site structural overlap with \"" + page.title.slice(0, 100) + "\"; review search intent and contextual internal links." + (page.url ? " " + page.url : ""));
