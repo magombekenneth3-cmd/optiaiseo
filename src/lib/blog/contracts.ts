@@ -104,6 +104,12 @@ export const CompetitorResearchSchema = z.object({
     url: z.string().url(),
     snippet: z.string().trim().max(2_000),
     headings: z.array(z.string().trim().min(1).max(300)).max(50),
+    rank: z.number().int().positive().optional(),
+    pageType: z.enum(["interactive_tool", "comparison", "listicle", "tutorial", "product_page", "video", "news", "forum", "article", "other"]).optional(),
+    scrapeStatus: z.enum(["ANALYZED", "SNIPPET_ONLY", "UNSCRAPPABLE", "FAILED"]).optional(),
+    publishedAt: z.string().trim().max(100).optional(),
+    schemaTypes: z.array(z.string().trim().max(100)).max(20).optional(),
+    contentExcerpt: z.string().trim().max(900).optional(),
     wordCount: z.number().int().nonnegative().optional(),
 });
 
@@ -206,6 +212,157 @@ export const PageExistenceResultSchema = z.object({
     reasoning: z.string(),
 });
 
+export const SerpIntentLabelSchema = z.enum([
+    "informational", "commercial", "transactional", "navigational", "local", "mixed", "unknown",
+]);
+
+export const SerpFormatSchema = z.enum([
+    "tool", "listicle", "comparison", "guide", "product", "video", "general",
+]);
+
+export const SerpPageTypeSchema = z.enum([
+    "interactive_tool", "comparison", "listicle", "tutorial", "product_page",
+    "video", "news", "forum", "article", "other",
+]);
+
+export const SerpResearchConfidenceSchema = z.enum(["high", "medium", "low"]);
+
+export const SerpCompetitivePageSchema = z.object({
+    rank: z.number().int().positive(),
+    title: ShortString,
+    url: z.string().url(),
+    snippet: z.string().trim().max(1_000),
+    pageType: SerpPageTypeSchema,
+    dominantFormat: SerpFormatSchema,
+    headings: z.array(z.string().trim().min(1).max(200)).max(12),
+    publishedAt: z.string().trim().max(100).nullable().optional(),
+    schemaTypes: z.array(z.string().trim().max(100)).max(12),
+    wordCount: z.number().int().nonnegative().optional(),
+    scrapeStatus: z.enum(["ANALYZED", "SNIPPET_ONLY", "UNSCRAPPABLE", "FAILED"]),
+    contentExcerpt: z.string().trim().max(900).optional(),
+});
+
+export const SerpCompetitiveObservationSchema = z.object({
+    observation: ShortString,
+    classification: z.enum(["observed", "inference", "hypothesis"]),
+    confidence: z.number().min(0).max(1),
+    sourceUrls: z.array(z.string().url()).max(10),
+    evidence: z.array(z.string().trim().max(500)).max(8),
+});
+
+export const SerpCompetitiveOpportunitySchema = z.object({
+    id: z.string().trim().min(1).max(100),
+    description: ShortString,
+    type: z.enum([
+        "reader_need", "coverage_requirement", "inferred_coverage_gap",
+        "freshness_check", "decision_criteria", "research_task",
+    ]),
+    verificationStatus: z.enum(["observed", "inferred", "requires_research"]),
+    confidence: z.number().min(0).max(1),
+    sourceUrls: z.array(z.string().url()).max(10),
+    supportingObservations: z.array(SerpCompetitiveObservationSchema).max(8),
+    additionalValue: z.string().trim().max(700),
+});
+
+export const SerpCompetitiveIntentSchema = z.object({
+    label: SerpIntentLabelSchema,
+    confidence: z.number().min(0).max(1),
+    rationale: z.string().trim().max(1_000),
+    signals: z.array(z.string().trim().max(400)).max(10),
+});
+
+export const SerpCompetitiveRetrievalSchema = z.object({
+    status: z.enum(["AVAILABLE", "PARTIAL", "UNAVAILABLE"]),
+    organicResultsReceived: z.number().int().nonnegative(),
+    uniqueResults: z.number().int().nonnegative(),
+    scrapeAttempts: z.number().int().nonnegative(),
+    analyzedPages: z.number().int().nonnegative(),
+    scrapeFailures: z.array(z.object({
+        url: z.string().url(),
+        reason: z.string().trim().max(300),
+    })).max(10),
+    coverageRatio: z.number().min(0).max(1),
+    confidence: SerpResearchConfidenceSchema,
+    notes: z.array(z.string().trim().max(400)).max(10),
+});
+
+export const SiteContentLibraryEntrySchema = z.object({
+    id: z.string().trim().min(1).max(100),
+    title: ShortString,
+    slug: z.string().trim().max(200),
+    url: z.string().url().optional(),
+    status: z.enum(["PUBLISHED", "DRAFT", "NEEDS_REVIEW", "EVIDENCE_REVIEW", "REVIEW", "REJECTED", "FAILED", "GENERATING"]),
+    targetKeywords: z.array(z.string().trim().min(1).max(200)).max(20),
+    metaDescription: z.string().trim().max(200).optional(),
+    publishedAt: z.string().datetime().nullable().optional(),
+    updatedAt: z.string().datetime(),
+    headings: z.array(z.string().trim().min(1).max(200)).max(12),
+    excerpt: z.string().trim().max(1_000),
+    relevance: z.number().min(0).max(1),
+    matchedTerms: z.array(z.string().trim().max(100)).max(20),
+});
+
+export const SiteContentLibrarySchema = z.object({
+    retrievalStatus: z.enum(["AVAILABLE", "EMPTY", "UNAVAILABLE"]),
+    capturedAt: z.string().datetime(),
+    consideredCount: z.number().int().nonnegative(),
+    relatedPages: z.array(SiteContentLibraryEntrySchema).max(10),
+    warnings: z.array(z.string().trim().max(400)).max(10),
+});
+
+export const ContentActionSchema = z.enum([
+    "UPDATE_EXISTING", "SUPPORTING_ARTICLE", "CREATE_PILLAR", "REQUEST_REVIEW",
+]);
+
+export const SerpCompetitiveBriefSchema = z.object({
+    version: z.literal(1),
+    keyword: ShortString,
+    researchedAt: z.string().datetime(),
+    intent: SerpCompetitiveIntentSchema,
+    dominantFormats: z.array(z.object({
+        format: SerpFormatSchema,
+        count: z.number().int().nonnegative(),
+        share: z.number().min(0).max(1),
+    })).max(7),
+    pages: z.array(SerpCompetitivePageSchema).max(10),
+    requiredCoverage: z.array(z.object({
+        topic: ShortString,
+        reason: z.string().trim().max(800),
+        observedOn: z.array(z.string().url()).max(10),
+        supportCount: z.number().int().nonnegative(),
+        totalAnalyzed: z.number().int().nonnegative(),
+        classification: z.enum(["observed_pattern", "reader_need", "inference"]),
+        confidence: z.number().min(0).max(1),
+    })).max(15),
+    readerNeeds: z.array(z.object({
+        question: ShortString,
+        source: z.enum(["people_also_ask", "related_search", "query_decomposition"]),
+        answerSnippetObserved: z.string().trim().max(800).optional(),
+        relatedUrls: z.array(z.string().url()).max(10),
+        confidence: z.number().min(0).max(1),
+    })).max(20),
+    decisionCriteria: z.array(z.object({
+        criterion: ShortString,
+        reason: z.string().trim().max(500),
+        sourceUrls: z.array(z.string().url()).max(10),
+        classification: z.enum(["observed", "inference", "requires_research"]),
+    })).max(12),
+    opportunities: z.array(SerpCompetitiveOpportunitySchema).max(15),
+    recommendedFormat: SerpFormatSchema,
+    outlineGuidance: z.array(z.string().trim().min(1).max(600)).max(12),
+    differentiationPlan: z.array(z.string().trim().min(1).max(700)).max(10),
+    evidenceRequirements: z.array(z.string().trim().min(1).max(600)).max(15),
+    retrieval: SerpCompetitiveRetrievalSchema,
+    siteFit: z.object({
+        recommendedAction: ContentActionSchema,
+        rationale: z.string().trim().max(1_000),
+        matchingPageUrl: z.string().url().optional(),
+        matchingPageTitle: z.string().trim().max(300).optional(),
+        relatedLibraryPageUrls: z.array(z.string().url()).max(10),
+        humanReviewRequired: z.boolean(),
+    }).optional(),
+});
+
 export const ResearchPacketSchema = z.object({
     /** Stable snapshot timestamp for the research used by this generation. */
     collectedAt: z.string().datetime(),
@@ -229,6 +386,8 @@ export const ResearchPacketSchema = z.object({
     competitorAnalysis: CompetitorAnalysisSchema.optional(),
     gscEvidence: z.record(z.string(), z.unknown()).optional(),
     existingSite: PageExistenceResultSchema.optional(),
+    siteContentLibrary: SiteContentLibrarySchema.optional(),
+    serpCompetitiveBrief: SerpCompetitiveBriefSchema.optional(),
     internalLinkOpportunities: z.array(InternalLinkSuggestionSchema).optional(),
     informationGain: z.string().trim().max(2_000).optional(),
     contentGaps: StringList,
@@ -271,6 +430,12 @@ export const OutlineSectionSchema = z.object({
     evidenceType: EvidenceTypeSchema,
     wordTarget: z.number().int().min(80).max(1_800),
     keyEntities: StringList,
+    readerTask: z.string().trim().max(500).optional(),
+    observedCompetitorCoverage: z.array(z.string().trim().max(500)).max(8).optional(),
+    additionalValue: z.string().trim().max(700).optional(),
+    evidenceRequirements: z.array(z.string().trim().max(500)).max(8).optional(),
+    contributionStatus: z.enum(["verified", "inferential", "requires_research"]).optional(),
+    competitiveSourceUrls: z.array(z.string().url()).max(8).optional(),
     isIntro: z.boolean().optional(),
     isOutro: z.boolean().optional(),
     caseStudyAvailable: z.boolean().optional(),
@@ -487,6 +652,17 @@ export type CompetitorAnalysis = z.infer<typeof CompetitorAnalysisSchema>;
 export type InternalLinkSuggestion = z.infer<typeof InternalLinkSuggestionSchema>;
 export type ExistingPageEvidence = z.infer<typeof ExistingPageEvidenceSchema>;
 export type PageExistenceResult = z.infer<typeof PageExistenceResultSchema>;
+export type SerpIntentLabel = z.infer<typeof SerpIntentLabelSchema>;
+export type SerpFormatType = z.infer<typeof SerpFormatSchema>;
+export type SerpPageType = z.infer<typeof SerpPageTypeSchema>;
+export type SerpResearchConfidence = z.infer<typeof SerpResearchConfidenceSchema>;
+export type SerpCompetitivePage = z.infer<typeof SerpCompetitivePageSchema>;
+export type SerpCompetitiveObservation = z.infer<typeof SerpCompetitiveObservationSchema>;
+export type SerpCompetitiveOpportunity = z.infer<typeof SerpCompetitiveOpportunitySchema>;
+export type SerpCompetitiveBrief = z.infer<typeof SerpCompetitiveBriefSchema>;
+export type SiteContentLibraryEntry = z.infer<typeof SiteContentLibraryEntrySchema>;
+export type SiteContentLibrary = z.infer<typeof SiteContentLibrarySchema>;
+export type ContentAction = z.infer<typeof ContentActionSchema>;
 export type ResearchPacket = z.infer<typeof ResearchPacketSchema>;
 export type OutlineTone = z.infer<typeof OutlineToneSchema>;
 export type EvidenceType = z.infer<typeof EvidenceTypeSchema>;
