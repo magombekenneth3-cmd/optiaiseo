@@ -100,7 +100,7 @@ function safeMetricResearchTasks(value: unknown): string[] {
         if (typeof raw !== "string") continue;
         const item = raw.replace(/\s+/g, " ").trim().slice(0, MAX_ITEM_LENGTH);
         if (item.length < 8) continue;
-        if (/\b\d+(?:[,.]\d+)*(?:\s?%|\s?(?:percent|x|times|million|billion))\b|\$\s?\d/i.test(item)) {
+        if (/\d/.test(item)) {
             result.push("Find a current, authoritative source and verify any metric before stating a numeric value.");
         } else {
             result.push(/\b(find|search|research|locate|identify|verify|source|retrieve|check|confirm|measure|calculate|collect)\b/i.test(item)
