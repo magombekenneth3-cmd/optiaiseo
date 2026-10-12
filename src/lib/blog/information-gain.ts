@@ -19,6 +19,8 @@ export interface InformationGainObservation {
 export interface InformationGainGapAnalysis {
     keyword: string;
     researchStatus: InformationGainResearchStatus;
+    providerStatus: "AVAILABLE" | "UNAVAILABLE";
+    researchWarnings: string[];
     researchTimestamp: string;
     crawledResultCount: number;
     scrapeFailureCount: number;
@@ -381,9 +383,17 @@ export async function runInformationGainAlgorithm(
         });
     }
 
+    const researchWarnings: string[] = [];
+    if (!serpAvailable) researchWarnings.push("SERP retrieval returned no usable current organic results.");
+    if (scrapeFailureCount > 0) researchWarnings.push(scrapeFailureCount + " ranking page(s) could not be fully analysed.");
+    if (modelFailed) researchWarnings.push("The information-gain model/provider was unavailable; only directly observed SERP features are retained.");
+    if (validPages.length < 3) researchWarnings.push("Fewer than three readable ranking pages were available; do not present competitive gaps as confirmed.");
+
     return {
         keyword,
         researchStatus,
+        providerStatus: providerAvailable ? "AVAILABLE" : "UNAVAILABLE",
+        researchWarnings: researchWarnings.slice(0, 8),
         researchTimestamp,
         crawledResultCount: validPages.length,
         scrapeFailureCount,
