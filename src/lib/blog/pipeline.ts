@@ -424,8 +424,14 @@ export async function runOutlinePlanner(
     groundedCtx?: GroundedSiteContext | null,
     competitorAnalysis?: CompetitorAnalysis | null,
     pipelineType?: string,
+    researchContext?: {
+        serpCompetitiveBrief?: SerpCompetitiveBrief;
+        siteContentLibrary?: SiteContentLibrary | null;
+        existingSite?: PageExistenceResult | null;
+    },
 ): Promise<OutlinePlan> {
-    const targetWords = wordCountTarget(ctx, serpContext, brain);
+    const brief = researchContext?.serpCompetitiveBrief;
+    const targetWords = wordCountTarget(ctx, serpContext, brain, brief);
     const depthBenchmark = buildDepthBenchmark(serpContext);
     const serpHeadings = serpContext?.results.slice(0, 3)
         .flatMap(r => r.scrapedHeadings ?? [])
@@ -434,11 +440,17 @@ export async function runOutlinePlanner(
 
     // Match the SERP format signal so structure aligns with what ranks
     const formatSignal = serpContext ? classifySerpFormat(serpContext.results) : null;
-    const formatInstruction = formatSignal?.format === "listicle"
-        ? "Structure must use a numbered list as the primary content vehicle — this SERP rewards lists."
-        : formatSignal?.format === "comparison"
-        ? "Include a direct comparison table — this SERP rewards comparative structure."
-        : "";
+    const observedFormat = brief?.recommendedFormat ?? formatSignal?.format;
+    const formatShare = brief?.dominantFormats[0]?.share ?? 0;
+    const formatInstruction = observedFormat === "listicle"
+        ? "The observed SERP has a meaningful listicle signal. Consider a list only if it best completes the reader's task."
+        : observedFormat === "comparison"
+            ? "The observed SERP has a comparison signal. Include explicit evaluation criteria and a comparison table only where it improves the answer."
+            : observedFormat === "tool" && formatShare >= 0.4
+                ? "A conventional article may not satisfy the dominant interactive-tool task. Do not pretend an article is equivalent to a working tool; clearly flag this for human review and propose the most useful article/hybrid scope."
+                : observedFormat === "video" && formatShare >= 0.4
+                    ? "Video is a dominant observed SERP format. Explain what a supporting article can add and flag format mismatch for review rather than claiming the article replaces video."
+                    : "";
 
     const dataReportInstruction = pipelineType === "DATA_REPORT"
         ? `DATA REPORT PIPELINE MANDATE:
@@ -451,6 +463,29 @@ export async function runOutlinePlanner(
         ? renderCompetitorAnalysisBlock(competitorAnalysis, "COMPETITOR ATTACK/GAP MANDATE")
         : "";
 
+    const competitiveBriefBlock = brief ? `
+VALIDATED SERP COMPETITIVE BRIEF:
+- Intent: ${brief.intent.label} (confidence ${brief.intent.confidence.toFixed(2)}): ${brief.intent.rationale}
+- Research retrieval: ${brief.retrieval.status}, ${brief.retrieval.analyzedPages}/${brief.retrieval.uniqueResults} pages analysed, confidence ${brief.retrieval.confidence}.
+- Dominant formats: ${brief.dominantFormats.slice(0, 4).map(item => `${item.format} (${item.share.toFixed(2)})`).join("; ")}
+- Recommended format: ${brief.recommendedFormat}. Do not force conventional article format when the reader's task suggests a tool, video, or other format.
+- Required-coverage candidates: ${brief.requiredCoverage.slice(0, 8).map(item => `${item.topic} [${item.classification}; sources: ${item.observedOn.slice(0, 2).join(", ")}]`).join("; ") || "not established"}
+- Reader needs: ${brief.readerNeeds.slice(0, 8).map(item => item.question).join("; ") || "not available"}
+- Differentiation plan: ${brief.differentiationPlan.slice(0, 5).join("; ")}
+- Evidence requirements: ${brief.evidenceRequirements.slice(0, 6).join("; ")}
+- Retrieval caveats: ${brief.retrieval.notes.slice(0, 5).join("; ") || "none"}
+Treat absence from sampled excerpts as an inference, not a verified omission. Ranking pages are research input, not a source for copied prose.
+` : "No validated SERP brief is available; do not invent competitor gaps.";
+    const siteLibraryBlock = researchContext?.siteContentLibrary ? `
+SITE LIBRARY OVERLAP:
+${researchContext.siteContentLibrary.relatedPages.slice(0, 5).map(page => `- ${page.title} [${page.status}; relevance ${page.relevance.toFixed(2)}]; URL: ${page.url ?? page.slug}; matching terms: ${page.matchedTerms.join(", ")}`).join("\n") || "- No related page found."}
+` : "";
+    const contentActionBlock = brief?.siteFit ? `
+CONTENT ACTION DECISION:
+- ${brief.siteFit.recommendedAction}: ${brief.siteFit.rationale}
+- Human review required: ${brief.siteFit.humanReviewRequired}
+` : "";
+
     const groundedBlock = groundedCtx?.data ? `
 SITE GROUNDING FACTS:
 - Core Services: ${groundedCtx.data.coreServices || "N/A"}
@@ -459,11 +494,11 @@ SITE GROUNDING FACTS:
 - Brand Facts: ${groundedCtx.data.brandFacts.slice(0, 5).map(f => `${f.factType}: ${f.value}`).join("; ") || "N/A"}
 ` : "";
 
-    const gapSignal = serpContext
-        ? `Table-stakes topics (every competitor covers these — you must too): ${
-            serpContext.results.flatMap(r => r.scrapedHeadings ?? []).slice(0, 8).join(", ")}
-Differentiation opportunities (none of them cover these well): ${brain.contentGaps.slice(0, 4).join(", ")}`
-        : `Content gaps: ${brain.contentGaps.slice(0, 4).join(", ")}`;
+    const gapSignal = brief
+        ? `Observed coverage candidates: ${brief.requiredCoverage.slice(0, 8).map(item => `${item.topic} (${item.supportCount}/${item.totalAnalyzed}, ${item.classification})`).join("; ") || "none confirmed"}
+Reader needs returned by the SERP: ${brief.readerNeeds.slice(0, 8).map(item => `${item.question} [${item.source}]`).join("; ") || "none returned"}
+Opportunities requiring judgement or research: ${brief.opportunities.slice(0, 6).map(item => `${item.description} [${item.verificationStatus}, confidence ${item.confidence.toFixed(2)}]`).join("; ") || "none established"}`
+        : `Reader needs or hypotheses to validate: ${brain.contentGaps.slice(0, 4).join("; ") || "no verified gaps available"}`;
 
     const prompt = `You are a content strategist planning an article structure. You do NOT write the article — you plan it.
 
@@ -476,6 +511,9 @@ ${pipelineType ? `PIPELINE TYPE: ${pipelineType}` : ""}
 
 ${groundedBlock}
 ${depthBenchmark}
+${competitiveBriefBlock}
+${siteLibraryBlock}
+${contentActionBlock}
 ${dataReportInstruction}
 ${competitorInstruction}
 
@@ -512,7 +550,7 @@ Produce an outline as JSON with this exact shape:
   "title": "Article title — primary keyword in first 60 chars, no clickbait",
   "slug": "lowercase-hyphenated-slug-primary-keyword-only",
   "quickAnswer": "40-60 word direct answer to the keyword query. First word: Yes/No/a number/a tool name/a time frame.",
-  "thesis": "A single argumentative sentence stating this article's unique editorial position — what it believes that most content on this topic gets wrong or ignores. This is NOT a summary. Example: 'Most teams fail at X because they skip Y, and no ranking article addresses this.'",
+  "thesis": "A concise editorial position based on verified evidence, first-party data, or clearly labelled reasoning. Do not assert that ranking pages all get something wrong unless the brief provides direct evidence.",
   "metaDescription": "140-160 chars. Keyword within first 120 chars. Written as ad copy.",
   "sections": [
     {
@@ -522,6 +560,12 @@ Produce an outline as JSON with this exact shape:
       "evidenceType": "case_study|data|example|opinion|comparison|how_to|faq",
       "wordTarget": 300,
       "keyEntities": ["entity1", "entity2"],
+      "readerTask": "The concrete reader question or task completed by this section",
+      "observedCompetitorCoverage": ["What the sampled SERP pages already cover, with source URLs kept in competitiveSourceUrls"],
+      "additionalValue": "The specific additional useful value this section contributes without copying competitor text",
+      "evidenceRequirements": ["Factual claims or comparisons that need verification and the type of evidence required"],
+      "contributionStatus": "verified|inferential|requires_research",
+      "competitiveSourceUrls": ["https://example.com/observed-ranking-page"],
       "isIntro": true
     }
   ],
@@ -532,10 +576,13 @@ RULES:
 - First section: isIntro=true, tone="direct", wordTarget=120-150. Open with the single most useful fact.
 - Last section if FAQ: isOutro=true, evidenceType="faq", 5-7 questions.
 - At least one section with tone="contrarian" — challenge an industry assumption.
-- At least one section with evidenceType="case_study" — real example (or placeholder).
+- Use a case study only when documented evidence is available. Otherwise use a clearly labelled hypothetical example or omit the case-study framing.
 - Vary tones across sections — no two consecutive sections with the same tone.
 - 5-8 sections total.
-- wordTargets should be driven by task complexity and evidence needs, not competitor word counts.
+- wordTargets should be driven by searcher task complexity and evidence needs, never by competitor word counts.
+- Every section must say what reader task it completes, what the sampled ranking pages already cover, its additional value, which claims need evidence, and whether its contribution is verified, inferential, or still requires research.
+- Do not force every competitor heading or People Also Ask question into a separate section.
+- Preserve the confidence and retrieval limitations of the competitive brief.
 - Every required question that materially affects the task must be assigned to a section or the FAQ.
 - Every decision criterion or comparison dimension must appear in the outline when relevant.
 - Avoid sections that exist only to increase word count.
