@@ -188,14 +188,20 @@ function pageTypeForResult(result: SerpResult): SerpPageType {
     const url = (result.link ?? "").toLowerCase();
     const title = result.title.toLowerCase();
     const snippet = result.snippet.toLowerCase();
+    const combined = \`\${title} \${snippet}\`;
+
     if (/youtube\.com|youtu\.be|vimeo\.com/.test(url)) return "video";
     if (/reddit\.com|quora\.com|stackoverflow\.com/.test(url)) return "forum";
-    if (/news|press release|announces|breaking/.test(`${title} ${snippet}`) && /news|press/.test(url)) return "news";
+    if (/news|press release|announces|breaking/.test(combined) && /news|press/.test(url)) return "news";
     if (/\/pricing|\/product|\/features|\/platform/.test(url)) return "product_page";
-    if (/calculator|generator|checker|audit|tool/.test(`${title} ${url}`)) return "interactive_tool";
-    if (/\b(vs\.?|versus|alternative|comparison|compare)\b/.test(`${title} ${snippet}`)) return "comparison";
-    if (/\b(top \d+|best \d+|\d+ best|\blist\b|alternatives)\b/.test(title)) return "listicle";
-    if (/\b(how to|step by step|tutorial|guide)\b/.test(`${title} ${snippet}`)) return "tutorial";
+    if (/\b(vs\.?|versus|compare|comparison|alternative|alternatives)\b/.test(combined)) return "comparison";
+    if (/\b(best|top\s+\d+|\d+\s+best|alternatives|ranked|listicle)\b/.test(title)) return "listicle";
+    if (/\b(how to|step by step|tutorial|guide)\b/.test(combined)) return "tutorial";
+    if (/\b(calculator|generator|checker)\b/.test(combined) ||
+        /\b(free|online|interactive)\b.{0,35}\b(tool|audit|checker|calculator)\b/.test(combined) ||
+        /\/(tools?|calculators?|checkers?|audits?)\/?$/i.test(url)) {
+        return "interactive_tool";
+    }
     return "article";
 }
 
