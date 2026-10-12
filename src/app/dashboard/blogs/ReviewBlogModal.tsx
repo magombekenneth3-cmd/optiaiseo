@@ -230,6 +230,29 @@ function SerpResearchPanel({
                     </div>
                 </div>
 
+                {brief.serpFeatures.length > 0 && (
+                    <div>
+                        <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Observed SERP features</h4>
+                        <div className="space-y-2">
+                            {brief.serpFeatures.slice(0, 5).map((feature, index) => (
+                                <div key={feature.type + index} className="rounded-lg border border-border bg-background/50 p-2.5">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-[11px] font-medium capitalize">{feature.type.replace(/_/g, " ")}</p>
+                                        <span className="text-[10px] text-muted-foreground">{feature.classification} · {Math.round(feature.confidence * 100)}%</span>
+                                    </div>
+                                    <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{feature.description}</p>
+                                    {feature.evidence.slice(0, 3).map((item, itemIndex) => (
+                                        <p key={itemIndex} className="mt-1 text-[10px] text-muted-foreground">· {item}</p>
+                                    ))}
+                                    {feature.sourceUrls.slice(0, 3).map(url => (
+                                        <a key={url} href={url} target="_blank" rel="noreferrer" className="mr-2 mt-1 inline-block text-[10px] text-primary hover:underline">Source</a>
+                                    ))}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {toolShare >= 0.4 && (
                     <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-[11px] leading-relaxed text-amber-300">
                         Interactive tools dominate a material share of this SERP. A conventional article may not complete the main user task; review the appropriate format before publishing.
