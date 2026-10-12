@@ -325,7 +325,6 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
         try {
             const result = await onPublish(blog.id);
             if (result.success) {
-                toast.success("Article published");
                 onClose();
             }
         } catch (error) {
