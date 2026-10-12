@@ -24,7 +24,7 @@ describe("buildCompactDirective", () => {
         });
 
         expect(result.length).toBeLessThanOrEqual(MAX_INFORMATION_GAIN_DIRECTIVE_LENGTH);
-        expect(result).toContain("INFORMATION-GAIN MANDATE");
+        expect(result).toContain("INFORMATION-GAIN RESEARCH DIRECTIVE");
         expect(result).toContain("Gap one is short");
         expect(result).toContain("Framework two");
     });
@@ -103,8 +103,8 @@ describe("buildCompactDirective", () => {
         });
 
         expect(result.length).toBeLessThanOrEqual(MAX_INFORMATION_GAIN_DIRECTIVE_LENGTH);
-        expect(result).toContain("INFORMATION-GAIN MANDATE");
-        expect(result).toContain("generic overviews");
+        expect(result).toContain("INFORMATION-GAIN RESEARCH DIRECTIVE");
+        expect(result).toContain("No repeated heading pattern was established");
     });
 
     it("respects a custom maxChars parameter", () => {
