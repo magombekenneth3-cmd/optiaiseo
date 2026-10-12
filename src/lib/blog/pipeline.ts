@@ -129,11 +129,13 @@ function wordCountTarget(
     ctx: PromptContext,
     serpContext: SerpContext | null,
     brain: ResearchBrain,
+    brief?: SerpCompetitiveBrief,
 ): number {
+    const briefIntent = brief && brief.intent.confidence >= 0.65 ? brief.intent.label : ctx.intent;
     const base =
-        ctx.intent === "transactional" ? 1400
-        : ctx.intent === "commercial" ? 1900
-        : ctx.intent === "local" ? 1600
+        briefIntent === "transactional" ? 1400
+        : briefIntent === "commercial" ? 1900
+        : briefIntent === "local" ? 1600
         : 1800;
 
     const decomposition = brain.queryDecomposition;
@@ -1284,29 +1286,75 @@ export async function runFullPipeline(params: {
     pipelineType?: string;
     ledger?: ResearchEvidenceLedger | null;
     siteId?: string;
-    existingSite?: import("./contracts").PageExistenceResult | null;
+    existingSite?: PageExistenceResult | null;
+    siteContentLibrary?: SiteContentLibrary | null;
+    serpCompetitiveBrief?: SerpCompetitiveBrief;
     internalLinkOpportunities?: import("./contracts").InternalLinkSuggestion[] | null;
 }): Promise<PipelineResult> {
-    const { keyword, serpContext, ctx, author, tone, groundedCtx, competitorAnalysis, gscEvidence, pipelineType, ledger, siteId } = params;
+    const {
+        keyword, serpContext, ctx, author, tone, groundedCtx, competitorAnalysis,
+        gscEvidence, pipelineType, ledger, siteId,
+    } = params;
 
-    logger.debug("[Pipeline] Stage 1 — Research Brain", { keyword });
-    const brain = await runResearchBrain(keyword, serpContext, ctx, groundedCtx, competitorAnalysis, pipelineType);
-
-    logger.debug("[Pipeline] Stage 2 — Outline Planner", { keyword });
-    const outline = await runOutlinePlanner(keyword, brain, serpContext, ctx, tone, groundedCtx, competitorAnalysis, pipelineType);
-
+    // Resolve existing-page and site-library evidence before research planning.
     let existingSite = params.existingSite ?? null;
     if (!existingSite && siteId) {
         try {
             existingSite = await resolvePageExistence(siteId, keyword);
         } catch (err) {
-            logger.warn("[Pipeline] Page existence resolution failed — proceeding without snapshot", {
+            logger.warn("[Pipeline] Existing-page resolution failed", {
                 siteId,
                 keyword,
-                error: (err as Error)?.message,
+                error: err instanceof Error ? err.message : String(err),
             });
+            existingSite = {
+                verdict: "NEEDS_REVIEW",
+                existingPage: null,
+                allCandidates: [],
+                recommendedAction: "REQUEST_REVIEW",
+                recommendedCategory: "EXISTING_PAGE_RESOLUTION_UNAVAILABLE",
+                reasoning: "Existing-page resolution failed; a duplicate-safe content action could not be selected.",
+            };
         }
     }
+
+    let siteContentLibrary = params.siteContentLibrary ?? null;
+    if (!siteContentLibrary && siteId) {
+        siteContentLibrary = await loadRelevantSiteContentLibrary({
+            siteId,
+            keyword,
+            domain: ctx.siteDomain ?? groundedCtx?.data.domain ?? null,
+        });
+    }
+
+    const serpCompetitiveBrief = params.serpCompetitiveBrief ?? buildSerpCompetitiveBrief({
+        keyword,
+        serpContext,
+        priorIntent: ctx.intent,
+        siteContentLibrary: siteContentLibrary ?? undefined,
+        existingSite,
+    });
+    logger.info("[Pipeline] Competitive research prepared before planning", {
+        keyword,
+        analyzedPages: serpCompetitiveBrief.retrieval.analyzedPages,
+        retrievalConfidence: serpCompetitiveBrief.retrieval.confidence,
+        recommendedAction: serpCompetitiveBrief.siteFit?.recommendedAction ?? "REQUEST_REVIEW",
+        humanReviewRequired: serpCompetitiveBrief.siteFit?.humanReviewRequired ?? true,
+        libraryPages: siteContentLibrary?.relatedPages.length ?? 0,
+    });
+
+    const researchContext = { serpCompetitiveBrief, siteContentLibrary, existingSite };
+
+    logger.debug("[Pipeline] Stage 1 — Research Brain", { keyword });
+    const brain = await runResearchBrain(
+        keyword, serpContext, ctx, groundedCtx, competitorAnalysis, pipelineType, researchContext,
+    );
+
+    logger.debug("[Pipeline] Stage 2 — Outline Planner", { keyword });
+    const plannedOutline = await runOutlinePlanner(
+        keyword, brain, serpContext, ctx, tone, groundedCtx, competitorAnalysis, pipelineType, researchContext,
+    );
+    const outline = enrichOutlineWithCompetitiveBrief(plannedOutline, serpCompetitiveBrief);
 
     let internalLinkOpportunities = params.internalLinkOpportunities ?? null;
     if (!internalLinkOpportunities && siteId) {
@@ -1317,7 +1365,7 @@ export async function runFullPipeline(params: {
                 siteId,
                 domain,
                 {
-                    secondaryKeywords: outline.sections.flatMap(s => s.keyEntities || []),
+                    secondaryKeywords: outline.sections.flatMap(section => section.keyEntities || []),
                     title: outline.title,
                 }
             );
@@ -1325,7 +1373,7 @@ export async function runFullPipeline(params: {
             logger.warn("[Pipeline] Internal link suggestion fetch failed — proceeding without suggestions", {
                 siteId,
                 keyword,
-                error: (err as Error)?.message,
+                error: err instanceof Error ? err.message : String(err),
             });
         }
     }
@@ -1344,6 +1392,8 @@ export async function runFullPipeline(params: {
         competitorAnalysis,
         gscEvidence,
         existingSite,
+        siteContentLibrary,
+        serpCompetitiveBrief,
         internalLinkOpportunities,
     });
     const sectionResearch = await buildSectionResearchMap(outline.sections, researchPacket);
@@ -1359,7 +1409,7 @@ export async function runFullPipeline(params: {
         });
     } catch (e) {
         logger.warn("[Pipeline] Claim plan failed — proceeding without", {
-            error: (e as Error).message,
+            error: e instanceof Error ? e.message : String(e),
         });
     }
 
@@ -1368,13 +1418,9 @@ export async function runFullPipeline(params: {
 
     logger.debug("[Pipeline] Stage 4 — Editorial Rewrite", { keyword, chunks: Math.ceil(rawDraft.length / 18000) });
     const { content: polishedMarkdown, truncated } = await runEditorialRewrite(rawDraft, ctx, groundedCtx ?? undefined);
-    if (truncated) {
-        logger.warn("[Pipeline] Editorial rewrite was truncated", { keyword });
-    }
+    if (truncated) logger.warn("[Pipeline] Editorial rewrite was truncated", { keyword });
 
     const repairedMarkdown = await repairUnsupportedClaims(polishedMarkdown, researchPacket, ctx);
-
-    // ── Stage 5: Analyze → Revise → Re-analyze (Max 1 bounded revision attempt) ──
     const initialAnalysis = analyzeDraftQuality(repairedMarkdown, brain, researchPacket, ctx);
     let finalMarkdown = repairedMarkdown;
     if (initialAnalysis.needsRevision && initialAnalysis.repairDirective) {
@@ -1384,8 +1430,6 @@ export async function runFullPipeline(params: {
         });
         const revisedMarkdown = await applyTargetedRevision(repairedMarkdown, initialAnalysis.repairDirective, ctx);
         const postRevisionAnalysis = analyzeDraftQuality(revisedMarkdown, brain, researchPacket, ctx);
-
-        // Retain revision only if it passed quality checks or reduced overall defect count
         if (!postRevisionAnalysis.needsRevision || postRevisionAnalysis.defects.length < initialAnalysis.defects.length) {
             logger.info("[Pipeline] Stage 5 — Targeted revision accepted", {
                 keyword,
@@ -1418,6 +1462,90 @@ export async function runFullPipeline(params: {
         claimPlan,
         degraded: outline.degraded === true,
     };
+}
+
+function normalizedCompetitiveTerms(value: string): string[] {
+    return [...new Set(value.toLowerCase().replace(/<[^>]+>/g, " ").replace(/[^a-z0-9 ]/g, " ")
+        .split(/\s+/).filter(word => word.length > 2))];
+}
+
+function competitiveOverlap(a: string, b: string): number {
+    const aTerms = normalizedCompetitiveTerms(a);
+    if (aTerms.length === 0) return 0;
+    const uniqueTerms = new Set(aTerms);
+    const bTerms = new Set(normalizedCompetitiveTerms(b));
+    return [...uniqueTerms].filter(term => bTerms.has(term)).length / uniqueTerms.size;
+}
+
+export function enrichOutlineWithCompetitiveBrief(
+    outline: OutlinePlan,
+    brief: SerpCompetitiveBrief | undefined,
+): OutlinePlan {
+    if (!brief) return outline;
+    const sections = outline.sections.map(section => {
+        const sectionTopic = [section.heading, section.goal, ...(section.keyEntities ?? [])].join(" ");
+        const relevantPages = brief.pages
+            .map(page => ({
+                url: page.url,
+                relevance: competitiveOverlap(sectionTopic, [page.title, page.snippet, ...page.headings].join(" ")),
+            }))
+            .filter(page => page.relevance >= 0.12)
+            .sort((a, b) => b.relevance - a.relevance)
+            .slice(0, 5);
+        const observedTopics = brief.requiredCoverage
+            .map(item => ({ item, relevance: competitiveOverlap(sectionTopic, item.topic) }))
+            .filter(candidate => candidate.relevance >= 0.18)
+            .sort((a, b) => b.relevance - a.relevance)
+            .slice(0, 4)
+            .map(candidate => candidate.item.topic);
+        const relevantNeeds = brief.readerNeeds
+            .map(item => ({ item, relevance: competitiveOverlap(sectionTopic, item.question) }))
+            .filter(candidate => candidate.relevance >= 0.12)
+            .sort((a, b) => b.relevance - a.relevance)
+            .slice(0, 3);
+        const sourceUrls = [...new Set([
+            ...(section.competitiveSourceUrls ?? []),
+            ...relevantPages.map(page => page.url),
+        ])].slice(0, 8);
+        const evidenceRequirements = [...new Set([
+            ...(section.evidenceRequirements ?? []),
+            ...brief.evidenceRequirements.filter(requirement =>
+                competitiveOverlap(sectionTopic, requirement) >= 0.1 ||
+                section.evidenceType === "data" ||
+                section.evidenceType === "comparison",
+            ).slice(0, 4),
+        ])].slice(0, 8);
+        const additionalValue = section.additionalValue?.trim()
+            || (section.evidenceType === "how_to"
+                ? "Give the reader an actionable sequence with prerequisites, validation steps, and failure cases rather than a generic list."
+                : section.evidenceType === "comparison"
+                    ? "Define fair decision criteria, cite current facts, and state limitations of the comparison."
+                    : section.evidenceType === "data"
+                        ? "Explain the method and evidence behind numbers; omit unsupported metrics."
+                        : section.evidenceType === "case_study"
+                            ? "Use documented outcomes only, or clearly label a hypothetical example and avoid invented metrics."
+                            : "Add reasoning, caveats, concrete choices, or practical examples beyond a surface-level summary.");
+        const contributionStatus = sourceUrls.length > 0 && observedTopics.length > 0 && relevantNeeds.length > 0
+            ? "inferential" as const
+            : "requires_research" as const;
+
+        return {
+            ...section,
+            readerTask: section.readerTask || section.goal,
+            observedCompetitorCoverage: [...new Set([
+                ...(section.observedCompetitorCoverage ?? []),
+                ...observedTopics,
+            ])].slice(0, 8),
+            additionalValue,
+            evidenceRequirements: evidenceRequirements.length > 0 ? evidenceRequirements : [
+                "Verify factual and freshness-sensitive claims against cited sources; omit claims that cannot be verified.",
+            ],
+            contributionStatus,
+            competitiveSourceUrls: sourceUrls,
+        };
+    });
+
+    return { ...outline, sections };
 }
 
 export interface ContentAnalysisReport {
