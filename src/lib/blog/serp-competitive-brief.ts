@@ -589,6 +589,74 @@ export function buildSerpCompetitiveBrief(params: {
             ? "PARTIAL"
             : "AVAILABLE";
 
+    const serpFeatures: Array<{
+        type: "featured_snippet" | "people_also_ask" | "related_searches" | "video_result" | "interactive_tool_result";
+        classification: "observed" | "inferred";
+        description: string;
+        confidence: number;
+        sourceUrls: string[];
+        evidence: string[];
+    }> = [];
+
+    const featuredSnippet = serpContext?.featuredSnippet?.trim();
+    if (featuredSnippet) {
+        serpFeatures.push({
+            type: "featured_snippet",
+            classification: "observed",
+            description: "The SERP provider returned a featured-snippet answer.",
+            confidence: 0.9,
+            sourceUrls: [],
+            evidence: [featuredSnippet.slice(0, 500)],
+        });
+    }
+    const paaQuestions = (serpContext?.peopleAlsoAsk ?? []).slice(0, 6);
+    if (paaQuestions.length > 0) {
+        const paaUrls = [...new Set(paaQuestions.flatMap(item =>
+            sourceUrlsRelevantTo(item.question, pagesForMatching, 2),
+        ))].slice(0, 10);
+        serpFeatures.push({
+            type: "people_also_ask",
+            classification: "observed",
+            description: "People Also Ask questions were returned by the SERP provider.",
+            confidence: 0.9,
+            sourceUrls: paaUrls,
+            evidence: paaQuestions.map(item => item.question.slice(0, 250)).slice(0, 6),
+        });
+    }
+    const relatedQueries = (serpContext?.relatedSearches ?? []).slice(0, 6);
+    if (relatedQueries.length > 0) {
+        serpFeatures.push({
+            type: "related_searches",
+            classification: "observed",
+            description: "Related query suggestions were returned by the SERP provider.",
+            confidence: 0.8,
+            sourceUrls: [...new Set(relatedQueries.flatMap(query => sourceUrlsRelevantTo(query, pagesForMatching, 2)))].slice(0, 10),
+            evidence: relatedQueries.map(query => query.slice(0, 250)),
+        });
+    }
+    const videoPages = pages.filter(page => page.pageType === "video");
+    if (videoPages.length > 0) {
+        serpFeatures.push({
+            type: "video_result",
+            classification: "observed",
+            description: "Video-hosted results appeared in the sampled organic ranking set.",
+            confidence: Math.min(0.9, 0.5 + videoPages.length / Math.max(1, pages.length) * 0.4),
+            sourceUrls: videoPages.map(page => page.url).slice(0, 10),
+            evidence: videoPages.map(page => page.title.slice(0, 250)).slice(0, 6),
+        });
+    }
+    const toolPages = pages.filter(page => page.pageType === "interactive_tool");
+    if (toolPages.length > 0) {
+        serpFeatures.push({
+            type: "interactive_tool_result",
+            classification: "observed",
+            description: "Titles or URLs identify tool-like results in the sampled organic ranking set; this is a result-format signal, not proof of a specific Google SERP widget.",
+            confidence: Math.min(0.9, 0.5 + toolPages.length / Math.max(1, pages.length) * 0.4),
+            sourceUrls: toolPages.map(page => page.url).slice(0, 10),
+            evidence: toolPages.map(page => page.title.slice(0, 250)).slice(0, 6),
+        });
+    }
+
     const toolFormatShare = dominantFormats.find(item => item.format === "tool")?.share ?? 0;
     const siteFit = siteActionFor(library, existingSite ?? null, mostCommonFormat, Math.max(toolFormatShare, mostCommonFormat === "tool" ? dominantShare : 0));
 
@@ -598,6 +666,7 @@ export function buildSerpCompetitiveBrief(params: {
         researchedAt,
         intent,
         dominantFormats,
+        serpFeatures: serpFeatures.slice(0, 12),
         pages,
         requiredCoverage,
         readerNeeds: readerNeeds.slice(0, 20),
