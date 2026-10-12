@@ -14,6 +14,8 @@ import {
     type SourceEvidence,
     type SourceType,
     type PageExistenceResult,
+    type SiteContentLibrary,
+    type SerpCompetitiveBrief,
     type InternalLinkSuggestion,
 } from "./contracts";
 
@@ -146,10 +148,15 @@ export async function buildResearchPacket(params: {
     competitorAnalysis?: CompetitorAnalysis | null;
     gscEvidence?: Record<string, unknown> | null;
     existingSite?: PageExistenceResult | null;
+    siteContentLibrary?: SiteContentLibrary | null;
+    serpCompetitiveBrief?: SerpCompetitiveBrief;
     internalLinkOpportunities?: InternalLinkSuggestion[] | null;
 }): Promise<ResearchPacket> {
     const retrievedAt = new Date().toISOString();
-    const { keyword, brain, serpContext, author, sections = [], groundedCtx, competitorAnalysis, gscEvidence, existingSite, internalLinkOpportunities } = params;
+    const {
+        keyword, brain, serpContext, author, sections = [], groundedCtx, competitorAnalysis,
+        gscEvidence, existingSite, siteContentLibrary, serpCompetitiveBrief, internalLinkOpportunities,
+    } = params;
     const serpSources = (serpContext?.results ?? [])
         .map((result, index) => sourceFromSerpResult(result, `serp-${index + 1}`, retrievedAt))
         .filter((source): source is SourceEvidence => source !== null);
@@ -177,14 +184,23 @@ export async function buildResearchPacket(params: {
     const sources = [...dedupedSources.values()].slice(0, 40);
     const competitors = (serpContext?.results ?? [])
         .filter(result => isUrl(result.link) && result.title.trim())
-        .slice(0, 8)
-        .map(result => ({
-            title: truncate(result.title, 500),
-            url: result.link,
-            snippet: truncate(result.snippet, 2_000),
-            headings: compact(result.scrapedHeadings, 50),
-            ...(typeof result.wordCount === "number" ? { wordCount: result.wordCount } : {}),
-        }));
+        .slice(0, 10)
+        .map((result, index) => {
+            const observed = serpCompetitiveBrief?.pages.find(page => page.url === result.link);
+            return {
+                title: truncate(result.title, 500),
+                url: result.link,
+                snippet: truncate(result.snippet, 2_000),
+                headings: compact(result.scrapedHeadings, 50),
+                rank: result.rank ?? index + 1,
+                pageType: observed?.pageType,
+                scrapeStatus: observed?.scrapeStatus ?? (result.scrapedContent && result.scrapedContent.length > 200 ? "ANALYZED" as const : "SNIPPET_ONLY" as const),
+                ...(result.scrapedSchemaTypes?.length ? { schemaTypes: compact(result.scrapedSchemaTypes, 20) } : {}),
+                ...(result.scrapedPublishedDate ? { publishedAt: truncate(result.scrapedPublishedDate, 100) } : {}),
+                ...(result.scrapedContent?.length ? { contentExcerpt: truncate(result.scrapedContent, 900) } : {}),
+                ...(typeof result.wordCount === "number" ? { wordCount: result.wordCount } : {}),
+            };
+        });
 
     const firstPartyEvidence = groundedCtx?.data ? {
         domain: groundedCtx.data.domain,
@@ -250,6 +266,8 @@ export async function buildResearchPacket(params: {
         ...(competitorAnalysis ? { competitorAnalysis } : {}),
         ...(gscEvidence ? { gscEvidence } : {}),
         ...(existingSite ? { existingSite } : {}),
+        ...(siteContentLibrary ? { siteContentLibrary } : {}),
+        ...(serpCompetitiveBrief ? { serpCompetitiveBrief } : {}),
         ...(internalLinkOpportunities ? { internalLinkOpportunities } : {}),
         ...(brain.informationGainDirective ? { informationGain: brain.informationGainDirective } : {}),
         contentGaps: compact(brain.contentGaps),
