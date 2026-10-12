@@ -106,6 +106,9 @@ export async function syndicateToHashnode(options: HashnodePublishOptions): Prom
     if (!publicationId || !token) {
         return { success: false, error: "Missing Hashnode publication ID or token" };
     }
+    if (!/^[a-f0-9]{24}$/i.test(publicationId)) {
+        return { success: false, error: "Hashnode publishing requires a resolved 24-character publication ID." };
+    }
     if (!draft.title.trim() || !draft.content.trim()) {
         return { success: false, error: "A title and Markdown content are required to publish to Hashnode" };
     }
