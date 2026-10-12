@@ -50,6 +50,11 @@ function context(results: ReturnType<typeof result>[], extras?: Partial<SerpCont
         featuredSnippet: null,
         relatedSearches: ["technical SEO audit tool", "crawl analysis software"],
         formattedContext: "SERP context fixture",
+        opportunityAnalysis: {
+            tableStakes: [],
+            opportunities: [],
+            unansweredQuestions: [],
+        },
         ...extras,
     };
 }
