@@ -194,14 +194,14 @@ function pageTypeForResult(result: SerpResult): SerpPageType {
     if (/reddit\.com|quora\.com|stackoverflow\.com/.test(url)) return "forum";
     if (/news|press release|announces|breaking/.test(combined) && /news|press/.test(url)) return "news";
     if (/\/pricing|\/product|\/features|\/platform/.test(url)) return "product_page";
-    if (/\b(vs\.?|versus|compare|comparison|alternative|alternatives)\b/.test(combined)) return "comparison";
-    if (/\b(best|top\s+\d+|\d+\s+best|alternatives|ranked|listicle)\b/.test(title)) return "listicle";
-    if (/\b(how to|step by step|tutorial|guide)\b/.test(combined)) return "tutorial";
     if (/\b(calculator|generator|checker)\b/.test(combined) ||
         /\b(free|online|interactive)\b.{0,35}\b(tool|audit|checker|calculator)\b/.test(combined) ||
         /\/(tools?|calculators?|checkers?|audits?)\/?$/i.test(url)) {
         return "interactive_tool";
     }
+    if (/\b(vs\.?|versus|compare|comparison|alternative|alternatives)\b/.test(combined)) return "comparison";
+    if (/\b(best|top\s+\d+|\d+\s+best|alternatives|ranked|listicle)\b/.test(title)) return "listicle";
+    if (/\b(how to|step by step|tutorial|guide)\b/.test(combined)) return "tutorial";
     return "article";
 }
 
@@ -291,7 +291,7 @@ function siteActionFor(
 ): { recommendedAction: ContentAction; rationale: string; matchingPageUrl?: string; matchingPageTitle?: string; relatedPageUrls: string[]; humanReviewRequired: boolean } {
     const existingUrl = existingSite?.existingPage?.url ? safeUrl(existingSite.existingPage.url) : undefined;
     const related = library.relatedPages.slice(0, 5);
-    const relatedUrls = related.map(page => page.url).filter((url): url is string => !!url);
+    const relatedPageUrls = related.map(page => page.url).filter((url): url is string => !!url);
     const resolverAction = existingSite?.recommendedAction?.toUpperCase() ?? "";
 
     if (dominantFormat === "tool" && dominantShare >= 0.4) {
@@ -320,7 +320,7 @@ function siteActionFor(
         /^(UPDATE|REFRESH|FIX|MERGE|CONSOLIDATE)/.test(resolverAction)) {
         return {
             recommendedAction: "UPDATE_EXISTING",
-            rationale: existingSite.verdict === "EXISTING_CANNIBALIZED"
+            rationale: existingSite?.verdict === "EXISTING_CANNIBALIZED"
                 ? "Existing-page evidence indicates cannibalization; resolve the competing pages before creating another URL."
                 : "An existing page matches the topic and needs improvement. Plan a refresh rather than creating a duplicate URL.",
             ...(existingUrl ? { matchingPageUrl: existingUrl } : {}),

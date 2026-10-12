@@ -5,6 +5,8 @@ import { callGeminiJson } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 
 export const MAX_INFORMATION_GAIN_DIRECTIVE_LENGTH = 2_000;
+const MAX_ITEM_LENGTH = 120;
+const MAX_LIST_ITEMS = 3;
 
 export type InformationGainResearchStatus = "AVAILABLE" | "PARTIAL" | "UNAVAILABLE";
 

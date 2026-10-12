@@ -27,7 +27,7 @@ function result(
         scrapeStatus: options.scrapeStatus ?? "ANALYZED",
         ...(analyzed ? {
             scrapedContent: ("A practical guide to technical SEO audits, crawl analysis, indexation, reporting, and evaluation criteria. ").repeat(8),
-            scrapedHeadings: options.headings ?? ["Technical SEO tools comparison", "Features and use cases", "Pricing and limitations"],
+            scrapedHeadings: options.headings ?? [`Overview ${rank}`, `Features ${rank}`, `Pricing ${rank}`],
             scrapedSchemaTypes: ["Article"],
             scrapedPublishedDate: "2026-09-05",
             wordCount: 1200 + rank,

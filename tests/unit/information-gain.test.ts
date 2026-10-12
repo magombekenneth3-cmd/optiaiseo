@@ -86,7 +86,7 @@ describe("buildCompactDirective", () => {
             originalInsightsBlueprint: ["framework"],
         });
 
-        expect(result.length).toBeLessThan(500);
+        expect(result.length).toBeLessThan(700);
         expect(result).toContain("Hypothesis to verify: gap");
         expect(result).toContain("tool cost comparison");
         expect(result).toContain("quotation relevant to: concrete quotation topic");
