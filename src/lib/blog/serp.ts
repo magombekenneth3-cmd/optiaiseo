@@ -673,59 +673,40 @@ export function classifySerpFormat(results: SerpResult[]): SerpFormatSignal {
  * to inject into the blog generation prompt.
  */
 export function formatToPromptHint(signal: SerpFormatSignal, keyword: string): string {
-  const map: Record<SerpFormat, string> = {
-    tool: `FORMAT STRATEGY: The SERP for "${keyword}" is dominated by INTERACTIVE TOOLS.
-A long-form article will likely underperform. Generate a "Tool Companion Guide":
-- Open with the direct answer a tool would give for the most common input
-- Structure H2s around the input variables a tool would accept
-- Close with a step-by-step that substitutes for the tool's output
-- Include a clear CTA toward an interactive tool or calculator`,
+  const label = signal.format.toUpperCase();
+  const confidence = signal.confidence.toUpperCase();
+  const base = [
+    `OBSERVED SERP FORMAT SIGNAL for "${keyword}": ${label} (${confidence} confidence).`,
+    "Treat this as a planning signal, not an instruction to copy competitors or imitate the SERP blindly.",
+    "Prioritize the searcher's actual task, current primary evidence, useful steps, trade-offs, limitations, and original analysis.",
+    "Choose headings, tables, FAQs, and examples only when they help the reader; do not pad an article to match competitors.",
+  ];
 
-    listicle: `FORMAT STRATEGY: The SERP for "${keyword}" is dominated by LISTICLES.
-Structure as a numbered list:
-- Use a specific number in the H1 (e.g. "11 Best…", "7 Proven…")
-- Each H2 = one item with a bold takeaway + 2–3 sentences + one actionable tip
-- Add a comparison table summarising all items near the end
-- Open with a 60-word executive summary naming the top pick`,
+  switch (signal.format) {
+    case "tool":
+      base.push("Interactive tools appear important in the sampled results. If the user needs an actual calculation, audit, or generated output, flag the format gap and consider a real tool or clearly scoped companion guide; never claim prose is a substitute for a working tool.");
+      break;
+    case "listicle":
+      base.push("A list format may fit the query. Use a numbered list only if the options are independently useful and can be compared fairly; don't invent a fixed number of items or a winner without evidence.");
+      break;
+    case "comparison":
+      base.push("A comparison format may fit the query. Define consistent, relevant criteria, cite current product facts, explain methodology and caveats, and avoid ungrounded winners or pricing.");
+      break;
+    case "guide":
+      base.push("A procedural guide may fit the query. Organize steps in the order the reader must perform them, include prerequisites and troubleshooting when useful, and verify operational details against current sources.");
+      break;
+    case "product":
+      base.push("Commercial/product pages appear in the sample. Clarify decision criteria, audience fit, trade-offs, and current verifiable facts; do not invent pricing, specifications, or first-party product experience.");
+      break;
+    case "video":
+      base.push("Video results appear in the sample. A written companion should offer accessible steps, checklists, references, transcripts, or additional detail. Do not imply an article fully replaces the video format.");
+      break;
+    default:
+      base.push("No dominant format has been established. Select the lightest format that completes the user's task rather than forcing a comparison table, FAQ, or long-form guide.");
+      break;
+  }
 
-    comparison: `FORMAT STRATEGY: The SERP for "${keyword}" is dominated by COMPARISON content.
-Structure as a side-by-side comparison:
-- Open with a direct verdict: "X is better for Y if… Z is better for W if…"
-- Use comparison tables with consistent criteria rows
-- Declare a winner for at least 3 distinct buyer profiles
-- Avoid fence-sitting — state clear winners per use case`,
-
-    guide: `FORMAT STRATEGY: The SERP for "${keyword}" is dominated by HOW-TO GUIDES.
-Structure as a step-by-step guide:
-- H1 must start with "How to…"
-- Numbered H2s for each step (Step 1:, Step 2:, …)
-- Prerequisites section before step 1
-- Troubleshooting FAQ at the end
-- Each step: what + why + how`,
-
-    product: `FORMAT STRATEGY: The SERP for "${keyword}" shows strong COMMERCIAL / PRODUCT intent.
-Structure as a buying guide:
-- Open with "who should buy this" summary
-- Feature a comparison table with real specs / pricing
-- Add a pricing breakdown section
-- End with a clear recommendation segmented by use case and budget`,
-
-    video: `FORMAT STRATEGY: The SERP for "${keyword}" is VIDEO-dominated.
-Generate a written companion that complements video content:
-- Short, scannable sections (under 150 words each)
-- "Key takeaways" summary box at the top
-- Timestamp-style headings if applicable (## 0:00 – Introduction)
-- Optimise for featured-snippet capture — Google often pulls text results
-  alongside video SERPs`,
-
-    general: `FORMAT STRATEGY: No dominant format detected for "${keyword}". Use a comprehensive guide:
-- Direct answer in the first paragraph
-- Skimmable H2 structure
-- Comparison table for any tools or options mentioned
-- FAQ section at the end`,
-  };
-
-  return map[signal.format];
+  return base.join("\\n");
 }
 
 
@@ -786,12 +767,10 @@ export function buildCompetitorProfiles(results: SerpResult[]): CompetitorProfil
 }
 
 /**
- * Synthesises competitor profiles into a concrete beat strategy string for
- * injection into LLM prompts. Tells the model:
- *  - minimum word count to outrank
- *  - table-stakes H2s every competitor covers (must include)
- *  - underserved angles only one competitor covers (differentiate here)
- *  - editorial stance requirements
+ * Synthesises observed competitor coverage into an evidence-qualified strategy.
+ * The result guides task completion, useful subtopics, source-backed differentiation,
+ * freshness checks, and appropriate structured data. It never prescribes length padding
+ * or treats inaccessible page content as evidence of a competitor omission.
  */
 export function buildCompetitorBeatStrategy(
   profiles: CompetitorProfile[],
