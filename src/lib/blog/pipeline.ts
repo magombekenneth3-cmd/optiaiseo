@@ -29,10 +29,14 @@ import {
     type CompetitorAnalysis,
     type SourceEvidence,
     type EvidenceAvailability,
+    type PageExistenceResult,
+    type SerpCompetitiveBrief,
+    type SiteContentLibrary,
     isValidFaqOpener,
     ResearchBrainSchema,
     OutlinePlanSchema,
 } from "./contracts";
+import { buildSerpCompetitiveBrief, loadRelevantSiteContentLibrary } from "./serp-competitive-brief";
 import type { PageExistenceVerdict, ExistingPageEvidence } from "@/lib/opportunity-engine/types";
 import { resolvePageExistence, makeDecision } from "@/lib/opportunity-engine/page-existence-resolver";
 import { extractEvidencePacket } from "./evidence-extractor";
@@ -68,6 +72,12 @@ export interface OutlineSection {
     evidenceType: "case_study" | "data" | "example" | "opinion" | "comparison" | "how_to" | "faq";
     wordTarget: number;
     keyEntities: string[];
+    readerTask?: string;
+    observedCompetitorCoverage?: string[];
+    additionalValue?: string;
+    evidenceRequirements?: string[];
+    contributionStatus?: "verified" | "inferential" | "requires_research";
+    competitiveSourceUrls?: string[];
     isIntro?: boolean;
     isOutro?: boolean;
 }
@@ -115,15 +125,17 @@ function parseJsonSafe<T>(text: string, fallback: T): T {
     }
 }
 
-function wordCountTarget(
+export function wordCountTarget(
     ctx: PromptContext,
     serpContext: SerpContext | null,
     brain: ResearchBrain,
+    brief?: SerpCompetitiveBrief,
 ): number {
+    const briefIntent = brief && brief.intent.confidence >= 0.65 ? brief.intent.label : ctx.intent;
     const base =
-        ctx.intent === "transactional" ? 1400
-        : ctx.intent === "commercial" ? 1900
-        : ctx.intent === "local" ? 1600
+        briefIntent === "transactional" ? 1400
+        : briefIntent === "commercial" ? 1900
+        : briefIntent === "local" ? 1600
         : 1800;
 
     const decomposition = brain.queryDecomposition;
@@ -131,23 +143,25 @@ function wordCountTarget(
     const decisionCount = decomposition?.decisionCriteria?.length ?? 0;
     const comparisonCount = decomposition?.comparisonDimensions?.length ?? 0;
     const riskCount = decomposition?.risksAndExceptions?.length ?? 0;
-    const gapCount = brain.contentGaps.length;
     const evidenceSections = serpContext?.results.length
         ? Math.min(3, serpContext.results.filter(result => (result.scrapedContent?.length ?? 0) > 1_000).length)
         : 0;
+
+    const requiredTopicCount = brief?.requiredCoverage.length ?? 0;
+    const readerNeedCount = brief?.readerNeeds.length ?? 0;
+    const evidenceRequirementCount = brief?.evidenceRequirements.length ?? 0;
 
     const complexity =
         Math.min(questionCount, 8) * 90 +
         Math.min(decisionCount, 5) * 110 +
         Math.min(comparisonCount, 5) * 100 +
         Math.min(riskCount, 4) * 100 +
-        Math.min(gapCount, 4) * 100 +
+        Math.min(requiredTopicCount, 6) * 80 +
+        Math.min(readerNeedCount, 6) * 45 +
+        Math.min(evidenceRequirementCount, 5) * 70 +
         evidenceSections * 120;
 
-    const format = serpContext ? classifySerpFormat(serpContext.results).format : null;
-    const formatAdjustment = format === "comparison" ? 250 : format === "listicle" ? 150 : 0;
-
-    return Math.min(Math.max(base, base + complexity + formatAdjustment), 4800);
+    return Math.min(Math.max(base, base + complexity), 4800);
 }
 
 /** Builds a full competitor depth benchmark string for the Outline Planner. */
@@ -212,6 +226,11 @@ export async function runResearchBrain(
     groundedCtx?: GroundedSiteContext | null,
     competitorAnalysis?: CompetitorAnalysis | null,
     pipelineType?: string,
+    researchContext?: {
+        serpCompetitiveBrief?: SerpCompetitiveBrief;
+        siteContentLibrary?: SiteContentLibrary | null;
+        existingSite?: PageExistenceResult | null;
+    },
 ): Promise<ResearchBrain> {
     const serpSummary = serpContext
         ? `TOP SERP RESULTS:\n${serpContext.results.slice(0, 3).map((r, i) =>
@@ -222,16 +241,16 @@ export async function runResearchBrain(
             ).join("\n")}`
         : "No SERP data available.";
 
-    const competitorSaturation = serpContext?.results
-        .slice(0, 5)
-        .flatMap(r => r.scrapedHeadings ?? [])
-        .filter(h => h.length > 5)
-        .slice(0, 14)
-        .join(" | ") ?? "";
+    const serpCompetitiveBrief = researchContext?.serpCompetitiveBrief;
+    const competitorSaturation = serpCompetitiveBrief
+        ? serpCompetitiveBrief.requiredCoverage.slice(0, 8).map(item => item.topic).join(" | ")
+        : serpContext?.results.slice(0, 5).flatMap(r => r.scrapedHeadings ?? []).filter(h => h.length > 5).slice(0, 14).join(" | ") ?? "";
 
-    const contentGapsInstruction = competitorSaturation
-        ? `topic or angle genuinely absent from current SERP results — MUST NOT overlap with saturated competitor angles: ${competitorSaturation}`
-        : "topic or angle not covered by current top results";
+    const contentGapsInstruction = serpCompetitiveBrief
+        ? "Only name research hypotheses supported by the validated competitive brief and preserve their confidence and source provenance."
+        : competitorSaturation
+            ? "Identify reader needs to investigate beyond the observed headings; do not assert a competitor omission from absent headings alone."
+            : "No verified competitor gaps are available; do not invent them.";
 
     const groundedBlock = groundedCtx?.contextBlock
         ? `\nAUTHORITATIVE SITE GROUNDING:\n${groundedCtx.contextBlock}\n`
@@ -240,21 +259,54 @@ export async function runResearchBrain(
     const competitorBlock = competitorAnalysis
         ? `\n${renderCompetitorAnalysisBlock(competitorAnalysis, "TARGET COMPETITOR ANALYSIS")}\n`
         : "";
+    const library = researchContext?.siteContentLibrary;
+    const libraryBlock = library ? `
+SITE CONTENT LIBRARY (retrieved before planning):
+- Retrieval status: ${library.retrievalStatus}; records considered: ${library.consideredCount}.
+- Relevant existing pages: ${library.relatedPages.slice(0, 5).map(page => `${page.title} (${page.status}, relevance ${page.relevance.toFixed(2)}): ${page.url ?? page.slug}; targets: ${page.targetKeywords.slice(0, 4).join(", ")}; excerpt: ${page.excerpt.slice(0, 350)}`).join("\n") || "No related pages were found in the retrieved library."}
+- Library warnings: ${library.warnings.slice(0, 3).join("; ") || "none"}
+` : "";
+    const actionBlock = serpCompetitiveBrief?.siteFit ? `
+EXISTING-PAGE DECISION (resolve before planning):
+- Recommended action: ${serpCompetitiveBrief.siteFit.recommendedAction}
+- Rationale: ${serpCompetitiveBrief.siteFit.rationale}
+- Matching page: ${serpCompetitiveBrief.siteFit.matchingPageUrl ?? "none supplied"}
+- Human review required: ${serpCompetitiveBrief.siteFit.humanReviewRequired}
+Do not create a competing URL when UPDATE_EXISTING is recommended. If REQUEST_REVIEW is recommended, write a decision-ready draft only for review and do not describe it as publication-ready.
+` : "";
+    const competitiveBriefBlock = serpCompetitiveBrief ? `
+VALIDATED COMPETITIVE BRIEF (status/confidence must remain visible):
+- Keyword: ${serpCompetitiveBrief.keyword}; researched at: ${serpCompetitiveBrief.researchedAt}
+- Intent: ${serpCompetitiveBrief.intent.label} (confidence ${serpCompetitiveBrief.intent.confidence.toFixed(2)}): ${serpCompetitiveBrief.intent.rationale}
+- Retrieval: ${serpCompetitiveBrief.retrieval.status}; ${serpCompetitiveBrief.retrieval.analyzedPages}/${serpCompetitiveBrief.retrieval.uniqueResults} pages analysed; confidence ${serpCompetitiveBrief.retrieval.confidence}
+- Dominant result formats: ${serpCompetitiveBrief.dominantFormats.slice(0, 4).map(item => `${item.format} (${item.count}, share ${item.share.toFixed(2)})`).join("; ") || "not observed"}
+- Observed SERP feature signals: ${serpCompetitiveBrief.serpFeatures.slice(0, 6).map(feature => `${feature.type} [${feature.classification}; confidence ${feature.confidence.toFixed(2)}]`).join("; ") || "no explicit SERP feature returned"}
+- Required coverage candidates: ${serpCompetitiveBrief.requiredCoverage.slice(0, 8).map(item => `${item.topic} [${item.classification}, ${item.supportCount}/${item.totalAnalyzed}; sources: ${item.observedOn.slice(0, 2).join(", ")}]`).join("; ") || "none confirmed"}
+- Reader needs: ${serpCompetitiveBrief.readerNeeds.slice(0, 8).map(item => `${item.question} [${item.source}, confidence ${item.confidence.toFixed(2)}]`).join("; ") || "none returned"}
+- Opportunities: ${serpCompetitiveBrief.opportunities.slice(0, 6).map(item => `${item.description} [${item.verificationStatus}; ${item.confidence.toFixed(2)}; sources: ${item.sourceUrls.slice(0, 2).join(", ")}]`).join("; ") || "none substantiated"}
+- Evidence requirements: ${serpCompetitiveBrief.evidenceRequirements.slice(0, 6).join("; ")}
+- Retrieval caveats: ${serpCompetitiveBrief.retrieval.notes.slice(0, 5).join("; ") || "none"}
+` : "No validated SERP brief available. Do not invent competitor observations or gaps.";
 
     const prompt = `You are an editorial research analyst. Your job is NOT to write content — it is to produce a structured research brief that a writer will use.
 
 KEYWORD: "${keyword}"
-INTENT: ${ctx.intent}
+INTENT PRIOR: ${ctx.intent}
 RISK LEVEL: ${ctx.riskTier}
 ${pipelineType ? `PIPELINE TYPE: ${pipelineType}` : ""}
 
 ${groundedBlock}
+${libraryBlock}
+${actionBlock}
+${competitiveBriefBlock}
 ${competitorBlock}
 ${serpSummary}
 
 DIFFERENTIATION MANDATE:
-- "contentGaps" MUST NOT duplicate these saturated competitor angles: ${competitorSaturation || "Not available"}
-- "contrarianAngles" must challenge or reframe a saturated angle, not repeat it.
+- Content gaps are hypotheses unless the brief marks an observation as directly supported; preserve evidence/source limitations.
+- Never claim a whole competitor page omits a topic merely because the heading or excerpt sample does not show it.
+- Do not invent experiments, first-party experience, metrics, quotes, or competitor weaknesses.
+- "contrarianAngles" must be supportable editorial positions, not fabricated claims about what all competitors get wrong.
 
 Produce a research brief as a JSON object with these exact keys:
 
@@ -298,7 +350,7 @@ Rules:
         contentGaps: [],
         entities: [],
         contrarianAngles: [],
-        examplesNeeded: ["real case study with measurable outcome"],
+        examplesNeeded: ["Use a documented real case study only when a source verifies it; otherwise label an example as hypothetical or omit it."],
         faqTargets: [],
         commonMisconceptions: [],
         industryMyths: [],
@@ -317,9 +369,25 @@ Rules:
 
     const infoGain = await runInformationGainAlgorithm(
         keyword,
-        // Reuse already-scraped SERP results — avoids a duplicate 10-result fetch
-        serpContext?.results ?? undefined,
-    ).catch(() => null);
+        // An explicit empty array means the SERP already failed; do not start a
+        // second search that would give the Research Brain a different snapshot.
+        serpContext?.results ?? [],
+        {
+            peopleAlsoAsk: serpContext?.peopleAlsoAsk ?? [],
+            relatedSearches: serpContext?.relatedSearches ?? [],
+            retrievalStatus: !serpContext
+                ? "UNAVAILABLE"
+                : serpContext.results.some(result => result.scrapeStatus && result.scrapeStatus !== "ANALYZED")
+                    ? "PARTIAL"
+                    : "AVAILABLE",
+        },
+    ).catch((error: unknown) => {
+        logger.warn("[Pipeline] Information-gain research failed", {
+            keyword,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+    });
 
     try {
         const result = await generateWithFallbackJson<ResearchBrain>({
@@ -331,7 +399,10 @@ Rules:
 
         if (infoGain) {
             result.informationGainDirective = infoGain.informationGainPromptDirective;
-            result.contentGaps = [...new Set([...(result.contentGaps || []), ...infoGain.uniqueContentGaps])];
+            result.contentGaps = [...new Set([
+                ...(result.contentGaps || []),
+                ...infoGain.uniqueContentGaps.map(gap => "Unverified research hypothesis: " + gap),
+            ])];
         }
 
         return result;
@@ -360,8 +431,14 @@ export async function runOutlinePlanner(
     groundedCtx?: GroundedSiteContext | null,
     competitorAnalysis?: CompetitorAnalysis | null,
     pipelineType?: string,
+    researchContext?: {
+        serpCompetitiveBrief?: SerpCompetitiveBrief;
+        siteContentLibrary?: SiteContentLibrary | null;
+        existingSite?: PageExistenceResult | null;
+    },
 ): Promise<OutlinePlan> {
-    const targetWords = wordCountTarget(ctx, serpContext, brain);
+    const brief = researchContext?.serpCompetitiveBrief;
+    const targetWords = wordCountTarget(ctx, serpContext, brain, brief);
     const depthBenchmark = buildDepthBenchmark(serpContext);
     const serpHeadings = serpContext?.results.slice(0, 3)
         .flatMap(r => r.scrapedHeadings ?? [])
@@ -370,11 +447,17 @@ export async function runOutlinePlanner(
 
     // Match the SERP format signal so structure aligns with what ranks
     const formatSignal = serpContext ? classifySerpFormat(serpContext.results) : null;
-    const formatInstruction = formatSignal?.format === "listicle"
-        ? "Structure must use a numbered list as the primary content vehicle — this SERP rewards lists."
-        : formatSignal?.format === "comparison"
-        ? "Include a direct comparison table — this SERP rewards comparative structure."
-        : "";
+    const observedFormat = brief?.recommendedFormat ?? formatSignal?.format;
+    const formatShare = brief?.dominantFormats[0]?.share ?? 0;
+    const formatInstruction = observedFormat === "listicle"
+        ? "The observed SERP has a meaningful listicle signal. Consider a list only if it best completes the reader's task."
+        : observedFormat === "comparison"
+            ? "The observed SERP has a comparison signal. Include explicit evaluation criteria and a comparison table only where it improves the answer."
+            : observedFormat === "tool" && formatShare >= 0.4
+                ? "A conventional article may not satisfy the dominant interactive-tool task. Do not pretend an article is equivalent to a working tool; clearly flag this for human review and propose the most useful article/hybrid scope."
+                : observedFormat === "video" && formatShare >= 0.4
+                    ? "Video is a dominant observed SERP format. Explain what a supporting article can add and flag format mismatch for review rather than claiming the article replaces video."
+                    : "";
 
     const dataReportInstruction = pipelineType === "DATA_REPORT"
         ? `DATA REPORT PIPELINE MANDATE:
@@ -387,6 +470,30 @@ export async function runOutlinePlanner(
         ? renderCompetitorAnalysisBlock(competitorAnalysis, "COMPETITOR ATTACK/GAP MANDATE")
         : "";
 
+    const competitiveBriefBlock = brief ? `
+VALIDATED SERP COMPETITIVE BRIEF:
+- Intent: ${brief.intent.label} (confidence ${brief.intent.confidence.toFixed(2)}): ${brief.intent.rationale}
+- Research retrieval: ${brief.retrieval.status}, ${brief.retrieval.analyzedPages}/${brief.retrieval.uniqueResults} pages analysed, confidence ${brief.retrieval.confidence}.
+- Dominant formats: ${brief.dominantFormats.slice(0, 4).map(item => `${item.format} (${item.share.toFixed(2)})`).join("; ")}
+- Observed SERP features: ${brief.serpFeatures.slice(0, 6).map(feature => `${feature.type} [${feature.classification}; ${feature.confidence.toFixed(2)}]`).join("; ") || "none explicitly returned"}
+- Recommended format: ${brief.recommendedFormat}. Do not force conventional article format when the reader's task suggests a tool, video, or other format.
+- Required-coverage candidates: ${brief.requiredCoverage.slice(0, 8).map(item => `${item.topic} [${item.classification}; sources: ${item.observedOn.slice(0, 2).join(", ")}]`).join("; ") || "not established"}
+- Reader needs: ${brief.readerNeeds.slice(0, 8).map(item => item.question).join("; ") || "not available"}
+- Differentiation plan: ${brief.differentiationPlan.slice(0, 5).join("; ")}
+- Evidence requirements: ${brief.evidenceRequirements.slice(0, 6).join("; ")}
+- Retrieval caveats: ${brief.retrieval.notes.slice(0, 5).join("; ") || "none"}
+Treat absence from sampled excerpts as an inference, not a verified omission. Ranking pages are research input, not a source for copied prose.
+` : "No validated SERP brief is available; do not invent competitor gaps.";
+    const siteLibraryBlock = researchContext?.siteContentLibrary ? `
+SITE LIBRARY OVERLAP:
+${researchContext.siteContentLibrary.relatedPages.slice(0, 5).map(page => `- ${page.title} [${page.status}; relevance ${page.relevance.toFixed(2)}]; URL: ${page.url ?? page.slug}; matching terms: ${page.matchedTerms.join(", ")}`).join("\n") || "- No related page found."}
+` : "";
+    const contentActionBlock = brief?.siteFit ? `
+CONTENT ACTION DECISION:
+- ${brief.siteFit.recommendedAction}: ${brief.siteFit.rationale}
+- Human review required: ${brief.siteFit.humanReviewRequired}
+` : "";
+
     const groundedBlock = groundedCtx?.data ? `
 SITE GROUNDING FACTS:
 - Core Services: ${groundedCtx.data.coreServices || "N/A"}
@@ -395,11 +502,11 @@ SITE GROUNDING FACTS:
 - Brand Facts: ${groundedCtx.data.brandFacts.slice(0, 5).map(f => `${f.factType}: ${f.value}`).join("; ") || "N/A"}
 ` : "";
 
-    const gapSignal = serpContext
-        ? `Table-stakes topics (every competitor covers these — you must too): ${
-            serpContext.results.flatMap(r => r.scrapedHeadings ?? []).slice(0, 8).join(", ")}
-Differentiation opportunities (none of them cover these well): ${brain.contentGaps.slice(0, 4).join(", ")}`
-        : `Content gaps: ${brain.contentGaps.slice(0, 4).join(", ")}`;
+    const gapSignal = brief
+        ? `Observed coverage candidates: ${brief.requiredCoverage.slice(0, 8).map(item => `${item.topic} (${item.supportCount}/${item.totalAnalyzed}, ${item.classification})`).join("; ") || "none confirmed"}
+Reader needs returned by the SERP: ${brief.readerNeeds.slice(0, 8).map(item => `${item.question} [${item.source}]`).join("; ") || "none returned"}
+Opportunities requiring judgement or research: ${brief.opportunities.slice(0, 6).map(item => `${item.description} [${item.verificationStatus}, confidence ${item.confidence.toFixed(2)}]`).join("; ") || "none established"}`
+        : `Reader needs or hypotheses to validate: ${brain.contentGaps.slice(0, 4).join("; ") || "no verified gaps available"}`;
 
     const prompt = `You are a content strategist planning an article structure. You do NOT write the article — you plan it.
 
@@ -412,6 +519,9 @@ ${pipelineType ? `PIPELINE TYPE: ${pipelineType}` : ""}
 
 ${groundedBlock}
 ${depthBenchmark}
+${competitiveBriefBlock}
+${siteLibraryBlock}
+${contentActionBlock}
 ${dataReportInstruction}
 ${competitorInstruction}
 
@@ -448,7 +558,7 @@ Produce an outline as JSON with this exact shape:
   "title": "Article title — primary keyword in first 60 chars, no clickbait",
   "slug": "lowercase-hyphenated-slug-primary-keyword-only",
   "quickAnswer": "40-60 word direct answer to the keyword query. First word: Yes/No/a number/a tool name/a time frame.",
-  "thesis": "A single argumentative sentence stating this article's unique editorial position — what it believes that most content on this topic gets wrong or ignores. This is NOT a summary. Example: 'Most teams fail at X because they skip Y, and no ranking article addresses this.'",
+  "thesis": "A concise editorial position based on verified evidence, first-party data, or clearly labelled reasoning. Do not assert that ranking pages all get something wrong unless the brief provides direct evidence.",
   "metaDescription": "140-160 chars. Keyword within first 120 chars. Written as ad copy.",
   "sections": [
     {
@@ -458,6 +568,12 @@ Produce an outline as JSON with this exact shape:
       "evidenceType": "case_study|data|example|opinion|comparison|how_to|faq",
       "wordTarget": 300,
       "keyEntities": ["entity1", "entity2"],
+      "readerTask": "The concrete reader question or task completed by this section",
+      "observedCompetitorCoverage": ["What the sampled SERP pages already cover, with source URLs kept in competitiveSourceUrls"],
+      "additionalValue": "The specific additional useful value this section contributes without copying competitor text",
+      "evidenceRequirements": ["Factual claims or comparisons that need verification and the type of evidence required"],
+      "contributionStatus": "verified|inferential|requires_research",
+      "competitiveSourceUrls": ["https://example.com/observed-ranking-page"],
       "isIntro": true
     }
   ],
@@ -468,10 +584,13 @@ RULES:
 - First section: isIntro=true, tone="direct", wordTarget=120-150. Open with the single most useful fact.
 - Last section if FAQ: isOutro=true, evidenceType="faq", 5-7 questions.
 - At least one section with tone="contrarian" — challenge an industry assumption.
-- At least one section with evidenceType="case_study" — real example (or placeholder).
+- Use a case study only when documented evidence is available. Otherwise use a clearly labelled hypothetical example or omit the case-study framing.
 - Vary tones across sections — no two consecutive sections with the same tone.
 - 5-8 sections total.
-- wordTargets should be driven by task complexity and evidence needs, not competitor word counts.
+- wordTargets should be driven by searcher task complexity and evidence needs, never by competitor word counts.
+- Every section must say what reader task it completes, what the sampled ranking pages already cover, its additional value, which claims need evidence, and whether its contribution is verified, inferential, or still requires research.
+- Do not force every competitor heading or People Also Ask question into a separate section.
+- Preserve the confidence and retrieval limitations of the competitive brief.
 - Every required question that materially affects the task must be assigned to a section or the FAQ.
 - Every decision criterion or comparison dimension must appear in the outline when relevant.
 - Avoid sections that exist only to increase word count.
@@ -753,12 +872,24 @@ Violating these rules produces fabricated content that will be caught by the pub
     const evidenceInstructions: Record<OutlineSection["evidenceType"], string> = {
         case_study: "Anchor in a real example. Pattern: '[Type of company] doing [X] saw [Y]'. Never invent statistics.",
         data:       "Lead with a specific statistic from the REAL FACTS below. If none fits, write the insight without a number.",
-        example:    "Use at least one concrete, named example. Generic advice without a named example is not acceptable.",
+        example:    "Use a documented example only when a source supports it. Otherwise label a hypothetical scenario clearly; never invent a named company, person, or outcome.",
         opinion:    "Take a clear editorial stance. 'In practice\u2026', 'What works better is\u2026'",
         comparison: "Compare two approaches or tools directly. Declare a winner for at least one use case.",
         how_to:     "Number the steps. Be specific \u2014 'do X' not 'consider doing X'.",
-        faq:        "5-7 Q&A pairs. Each answer MUST open with: Yes / No / a number / a tool name / a time frame. Max 3 sentences.",
+        faq:        "Answer only the highest-value reader questions that fit the intent; do not force every PAA query into a separate question. Each answer should lead directly with a clear answer and stay under 3 sentences.",
     };
+
+    const sectionCompetitivePlan = `
+SECTION VALUE CONTRACT:
+- Reader task: ${section.readerTask || section.goal}
+- Observed ranking-page coverage from sampled SERP data: ${section.observedCompetitorCoverage?.slice(0, 5).join("; ") || "no directly relevant pattern established"}
+- Additional value intended for this section: ${section.additionalValue || "Add practical reasoning, caveats, and evidence beyond a surface-level summary."}
+- Contribution status before writing: ${section.contributionStatus || "requires_research"}. Do not claim a contribution is verified until supplied evidence verifies it.
+- Evidence requirements: ${section.evidenceRequirements?.slice(0, 5).join("; ") || "Verify material and freshness-sensitive claims against relevant sources."}
+- Ranking-page URLs reviewed for scope: ${section.competitiveSourceUrls?.slice(0, 5).join(", ") || "none mapped"}.
+- Do not copy or closely paraphrase ranking-page wording. Competitive pages establish what was observed, not whether a factual claim is true.
+- Use only the sources supplied in the authoritative research snapshot for factual claims. If evidence is missing, qualify the point as an inference/research task or omit it.
+`;
 
     const claimPlanBlock = sectionClaimPlan
         ? renderClaimPlanForSection(sectionClaimPlan)
@@ -776,6 +907,7 @@ Tone: ${section.tone} \u2014 ${toneInstructions[section.tone]}
 Evidence type: ${section.evidenceType} \u2014 ${evidenceInstructions[section.evidenceType]}
 Word target: ${section.wordTarget} words (\u00b120%)
 ${section.keyEntities.length > 0 ? `Key entities: ${section.keyEntities.join(", ")}` : ""}
+${sectionCompetitivePlan}
 ${serpNote}
 
 ${claimPlanBlock}
@@ -1137,6 +1269,62 @@ ${content}`;
         return content;
     }
 }
+function findCompetitiveCoverageGaps(
+    content: string,
+    brief: SerpCompetitiveBrief | undefined,
+): string[] {
+    if (!brief || brief.retrieval.confidence !== "high" || brief.retrieval.analyzedPages < 3) return [];
+
+    const normalizedContent = content
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .toLowerCase()
+        .replace(/[^a-z0-9 ]/g, " ")
+        .replace(/\s+/g, " ");
+    const observedRequirements = brief.requiredCoverage
+        .filter(item =>
+            item.classification === "observed_pattern" &&
+            item.supportCount >= 3 &&
+            item.confidence >= 0.65,
+        );
+
+    return observedRequirements.filter(item => {
+        const significantTerms = [...new Set(
+            item.topic.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/)
+                .filter(term => term.length > 3 && !["overview", "introduction", "conclusion", "summary", "guide"].includes(term)),
+        )];
+        if (significantTerms.length < 2) return false;
+        const present = significantTerms.filter(term => normalizedContent.includes(term)).length;
+        return present / significantTerms.length < 0.5;
+    }).slice(0, 4).map(item =>
+        item.topic + " (observed on " + item.supportCount + "/" + item.totalAnalyzed +
+        " analysed pages; sources: " + item.observedOn.slice(0, 3).join(", ") + ")",
+    );
+}
+
+function addCoverageGapsToAnalysis(
+    analysis: ContentAnalysisReport,
+    coverageGaps: string[],
+): ContentAnalysisReport {
+    if (coverageGaps.length === 0) return analysis;
+    const newDefects = coverageGaps.map(gap => "Missing essential observed SERP coverage: " + gap);
+    const directive = [
+        analysis.repairDirective ?? "",
+        "TARGETED COMPETITIVE-COVERAGE REVISION:",
+        "Add or improve only the missing reader-relevant topics listed below. Do not pad length, copy competitor phrasing, or add a heading where the topic would not help the reader. Use the existing source packet; if a topic cannot be supported, qualify it or explain what remains unknown.",
+        ...coverageGaps.map(gap => "- " + gap),
+    ].filter(Boolean).join("\n");
+
+    return {
+        ...analysis,
+        needsRevision: true,
+        defects: [...new Set([...analysis.defects, ...newDefects])],
+        overallDefects: [...new Set([...analysis.overallDefects, ...newDefects])],
+        repairDirective: directive.slice(0, 6_000),
+    };
+}
+
 // ─── Convenience: Full Pipeline ───────────────────────────────────────────────
 
 export interface PipelineResult {
@@ -1173,29 +1361,75 @@ export async function runFullPipeline(params: {
     pipelineType?: string;
     ledger?: ResearchEvidenceLedger | null;
     siteId?: string;
-    existingSite?: import("./contracts").PageExistenceResult | null;
+    existingSite?: PageExistenceResult | null;
+    siteContentLibrary?: SiteContentLibrary | null;
+    serpCompetitiveBrief?: SerpCompetitiveBrief;
     internalLinkOpportunities?: import("./contracts").InternalLinkSuggestion[] | null;
 }): Promise<PipelineResult> {
-    const { keyword, serpContext, ctx, author, tone, groundedCtx, competitorAnalysis, gscEvidence, pipelineType, ledger, siteId } = params;
+    const {
+        keyword, serpContext, ctx, author, tone, groundedCtx, competitorAnalysis,
+        gscEvidence, pipelineType, ledger, siteId,
+    } = params;
 
-    logger.debug("[Pipeline] Stage 1 — Research Brain", { keyword });
-    const brain = await runResearchBrain(keyword, serpContext, ctx, groundedCtx, competitorAnalysis, pipelineType);
-
-    logger.debug("[Pipeline] Stage 2 — Outline Planner", { keyword });
-    const outline = await runOutlinePlanner(keyword, brain, serpContext, ctx, tone, groundedCtx, competitorAnalysis, pipelineType);
-
+    // Resolve existing-page and site-library evidence before research planning.
     let existingSite = params.existingSite ?? null;
     if (!existingSite && siteId) {
         try {
             existingSite = await resolvePageExistence(siteId, keyword);
         } catch (err) {
-            logger.warn("[Pipeline] Page existence resolution failed — proceeding without snapshot", {
+            logger.warn("[Pipeline] Existing-page resolution failed", {
                 siteId,
                 keyword,
-                error: (err as Error)?.message,
+                error: err instanceof Error ? err.message : String(err),
             });
+            existingSite = {
+                verdict: "NEEDS_REVIEW",
+                existingPage: null,
+                allCandidates: [],
+                recommendedAction: "REQUEST_REVIEW",
+                recommendedCategory: "EXISTING_PAGE_RESOLUTION_UNAVAILABLE",
+                reasoning: "Existing-page resolution failed; a duplicate-safe content action could not be selected.",
+            };
         }
     }
+
+    let siteContentLibrary = params.siteContentLibrary ?? null;
+    if (!siteContentLibrary && siteId) {
+        siteContentLibrary = await loadRelevantSiteContentLibrary({
+            siteId,
+            keyword,
+            domain: ctx.siteDomain ?? groundedCtx?.data.domain ?? null,
+        });
+    }
+
+    const serpCompetitiveBrief = params.serpCompetitiveBrief ?? buildSerpCompetitiveBrief({
+        keyword,
+        serpContext,
+        priorIntent: ctx.intent,
+        siteContentLibrary: siteContentLibrary ?? undefined,
+        existingSite,
+    });
+    logger.info("[Pipeline] Competitive research prepared before planning", {
+        keyword,
+        analyzedPages: serpCompetitiveBrief.retrieval.analyzedPages,
+        retrievalConfidence: serpCompetitiveBrief.retrieval.confidence,
+        recommendedAction: serpCompetitiveBrief.siteFit?.recommendedAction ?? "REQUEST_REVIEW",
+        humanReviewRequired: serpCompetitiveBrief.siteFit?.humanReviewRequired ?? true,
+        libraryPages: siteContentLibrary?.relatedPages.length ?? 0,
+    });
+
+    const researchContext = { serpCompetitiveBrief, siteContentLibrary, existingSite };
+
+    logger.debug("[Pipeline] Stage 1 — Research Brain", { keyword });
+    const brain = await runResearchBrain(
+        keyword, serpContext, ctx, groundedCtx, competitorAnalysis, pipelineType, researchContext,
+    );
+
+    logger.debug("[Pipeline] Stage 2 — Outline Planner", { keyword });
+    const plannedOutline = await runOutlinePlanner(
+        keyword, brain, serpContext, ctx, tone, groundedCtx, competitorAnalysis, pipelineType, researchContext,
+    );
+    const outline = enrichOutlineWithCompetitiveBrief(plannedOutline, serpCompetitiveBrief);
 
     let internalLinkOpportunities = params.internalLinkOpportunities ?? null;
     if (!internalLinkOpportunities && siteId) {
@@ -1206,7 +1440,7 @@ export async function runFullPipeline(params: {
                 siteId,
                 domain,
                 {
-                    secondaryKeywords: outline.sections.flatMap(s => s.keyEntities || []),
+                    secondaryKeywords: outline.sections.flatMap(section => section.keyEntities || []),
                     title: outline.title,
                 }
             );
@@ -1214,7 +1448,7 @@ export async function runFullPipeline(params: {
             logger.warn("[Pipeline] Internal link suggestion fetch failed — proceeding without suggestions", {
                 siteId,
                 keyword,
-                error: (err as Error)?.message,
+                error: err instanceof Error ? err.message : String(err),
             });
         }
     }
@@ -1233,6 +1467,8 @@ export async function runFullPipeline(params: {
         competitorAnalysis,
         gscEvidence,
         existingSite,
+        siteContentLibrary,
+        serpCompetitiveBrief,
         internalLinkOpportunities,
     });
     const sectionResearch = await buildSectionResearchMap(outline.sections, researchPacket);
@@ -1248,7 +1484,7 @@ export async function runFullPipeline(params: {
         });
     } catch (e) {
         logger.warn("[Pipeline] Claim plan failed — proceeding without", {
-            error: (e as Error).message,
+            error: e instanceof Error ? e.message : String(e),
         });
     }
 
@@ -1257,36 +1493,48 @@ export async function runFullPipeline(params: {
 
     logger.debug("[Pipeline] Stage 4 — Editorial Rewrite", { keyword, chunks: Math.ceil(rawDraft.length / 18000) });
     const { content: polishedMarkdown, truncated } = await runEditorialRewrite(rawDraft, ctx, groundedCtx ?? undefined);
-    if (truncated) {
-        logger.warn("[Pipeline] Editorial rewrite was truncated", { keyword });
-    }
+    if (truncated) logger.warn("[Pipeline] Editorial rewrite was truncated", { keyword });
 
     const repairedMarkdown = await repairUnsupportedClaims(polishedMarkdown, researchPacket, ctx);
-
-    // ── Stage 5: Analyze → Revise → Re-analyze (Max 1 bounded revision attempt) ──
-    const initialAnalysis = analyzeDraftQuality(repairedMarkdown, brain, researchPacket, ctx);
+    const initialQualityAnalysis = analyzeDraftQuality(repairedMarkdown, brain, researchPacket, ctx);
+    const initialCoverageGaps = findCompetitiveCoverageGaps(repairedMarkdown, serpCompetitiveBrief);
+    const initialAnalysis = addCoverageGapsToAnalysis(initialQualityAnalysis, initialCoverageGaps);
     let finalMarkdown = repairedMarkdown;
+
     if (initialAnalysis.needsRevision && initialAnalysis.repairDirective) {
         logger.info("[Pipeline] Stage 5 — Targeted revision pass triggered", {
             keyword,
             defects: initialAnalysis.defects,
+            competitiveCoverageGaps: initialCoverageGaps,
         });
         const revisedMarkdown = await applyTargetedRevision(repairedMarkdown, initialAnalysis.repairDirective, ctx);
-        const postRevisionAnalysis = analyzeDraftQuality(revisedMarkdown, brain, researchPacket, ctx);
-
-        // Retain revision only if it passed quality checks or reduced overall defect count
-        if (!postRevisionAnalysis.needsRevision || postRevisionAnalysis.defects.length < initialAnalysis.defects.length) {
+        const postQualityAnalysis = analyzeDraftQuality(revisedMarkdown, brain, researchPacket, ctx);
+        const postCoverageGaps = findCompetitiveCoverageGaps(revisedMarkdown, serpCompetitiveBrief);
+        const postRevisionAnalysis = addCoverageGapsToAnalysis(postQualityAnalysis, postCoverageGaps);
+        const defectCountImproved = postRevisionAnalysis.defects.length < initialAnalysis.defects.length;
+        const gapsImproved = postCoverageGaps.length < initialCoverageGaps.length;
+        if (!postRevisionAnalysis.needsRevision || defectCountImproved || gapsImproved) {
             logger.info("[Pipeline] Stage 5 — Targeted revision accepted", {
                 keyword,
                 initialDefects: initialAnalysis.defects.length,
                 postDefects: postRevisionAnalysis.defects.length,
+                initialCoverageGaps: initialCoverageGaps.length,
+                postCoverageGaps: postCoverageGaps.length,
             });
             finalMarkdown = revisedMarkdown;
+            if (postCoverageGaps.length > 0) {
+                logger.warn("[Pipeline] Material SERP coverage gaps remain after the bounded revision; publication gate will route the draft for review.", {
+                    keyword,
+                    gaps: postCoverageGaps,
+                });
+            }
         } else {
-            logger.warn("[Pipeline] Stage 5 — Targeted revision rejected (did not reduce defects)", {
+            logger.warn("[Pipeline] Stage 5 — Targeted revision rejected (did not reduce defects or coverage gaps)", {
                 keyword,
                 initialDefects: initialAnalysis.defects.length,
                 postDefects: postRevisionAnalysis.defects.length,
+                initialCoverageGaps: initialCoverageGaps.length,
+                postCoverageGaps: postCoverageGaps.length,
             });
         }
     }
@@ -1307,6 +1555,90 @@ export async function runFullPipeline(params: {
         claimPlan,
         degraded: outline.degraded === true,
     };
+}
+
+function normalizedCompetitiveTerms(value: string): string[] {
+    return [...new Set(value.toLowerCase().replace(/<[^>]+>/g, " ").replace(/[^a-z0-9 ]/g, " ")
+        .split(/\s+/).filter(word => word.length > 2))];
+}
+
+function competitiveOverlap(a: string, b: string): number {
+    const aTerms = normalizedCompetitiveTerms(a);
+    if (aTerms.length === 0) return 0;
+    const uniqueTerms = new Set(aTerms);
+    const bTerms = new Set(normalizedCompetitiveTerms(b));
+    return [...uniqueTerms].filter(term => bTerms.has(term)).length / uniqueTerms.size;
+}
+
+export function enrichOutlineWithCompetitiveBrief(
+    outline: OutlinePlan,
+    brief: SerpCompetitiveBrief | undefined,
+): OutlinePlan {
+    if (!brief) return outline;
+    const sections = outline.sections.map(section => {
+        const sectionTopic = [section.heading, section.goal, ...(section.keyEntities ?? [])].join(" ");
+        const relevantPages = brief.pages
+            .map(page => ({
+                url: page.url,
+                relevance: competitiveOverlap(sectionTopic, [page.title, page.snippet, ...page.headings].join(" ")),
+            }))
+            .filter(page => page.relevance >= 0.12)
+            .sort((a, b) => b.relevance - a.relevance)
+            .slice(0, 5);
+        const observedTopics = brief.requiredCoverage
+            .map(item => ({ item, relevance: competitiveOverlap(sectionTopic, item.topic) }))
+            .filter(candidate => candidate.relevance >= 0.18)
+            .sort((a, b) => b.relevance - a.relevance)
+            .slice(0, 4)
+            .map(candidate => candidate.item.topic);
+        const relevantNeeds = brief.readerNeeds
+            .map(item => ({ item, relevance: competitiveOverlap(sectionTopic, item.question) }))
+            .filter(candidate => candidate.relevance >= 0.12)
+            .sort((a, b) => b.relevance - a.relevance)
+            .slice(0, 3);
+        const sourceUrls = [...new Set([
+            ...(section.competitiveSourceUrls ?? []),
+            ...relevantPages.map(page => page.url),
+        ])].slice(0, 8);
+        const evidenceRequirements = [...new Set([
+            ...(section.evidenceRequirements ?? []),
+            ...brief.evidenceRequirements.filter(requirement =>
+                competitiveOverlap(sectionTopic, requirement) >= 0.1 ||
+                section.evidenceType === "data" ||
+                section.evidenceType === "comparison",
+            ).slice(0, 4),
+        ])].slice(0, 8);
+        const additionalValue = section.additionalValue?.trim()
+            || (section.evidenceType === "how_to"
+                ? "Give the reader an actionable sequence with prerequisites, validation steps, and failure cases rather than a generic list."
+                : section.evidenceType === "comparison"
+                    ? "Define fair decision criteria, cite current facts, and state limitations of the comparison."
+                    : section.evidenceType === "data"
+                        ? "Explain the method and evidence behind numbers; omit unsupported metrics."
+                        : section.evidenceType === "case_study"
+                            ? "Use documented outcomes only, or clearly label a hypothetical example and avoid invented metrics."
+                            : "Add reasoning, caveats, concrete choices, or practical examples beyond a surface-level summary.");
+        const contributionStatus = sourceUrls.length > 0 && observedTopics.length > 0 && relevantNeeds.length > 0
+            ? "inferential" as const
+            : "requires_research" as const;
+
+        return {
+            ...section,
+            readerTask: section.readerTask || section.goal,
+            observedCompetitorCoverage: [...new Set([
+                ...(section.observedCompetitorCoverage ?? []),
+                ...observedTopics,
+            ])].slice(0, 8),
+            additionalValue,
+            evidenceRequirements: evidenceRequirements.length > 0 ? evidenceRequirements : [
+                "Verify factual and freshness-sensitive claims against cited sources; omit claims that cannot be verified.",
+            ],
+            contributionStatus,
+            competitiveSourceUrls: sourceUrls,
+        };
+    });
+
+    return { ...outline, sections };
 }
 
 export interface ContentAnalysisReport {

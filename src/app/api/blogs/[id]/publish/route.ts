@@ -157,6 +157,38 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             return NextResponse.json({ error: "Blog not found or unauthorized" }, { status: 404 });
         }
 
+        const unresolvedPlaceholderPattern = /\[Section generation failed|\[EDITOR:|\bTODO\b|\bTBD\b|\bFIXME\b|lorem ipsum|Example Company|YourCompany|\{\{[^}]+\}\}|\[INSERT STAT\]|\[IMAGE HERE\]/i;
+        if (unresolvedPlaceholderPattern.test(blog.content)) {
+            return NextResponse.json({
+                error: "Publication blocked: the article contains unresolved generation or editorial placeholders.",
+                hint: "Regenerate the failed section or resolve every editorial instruction before publishing.",
+            }, { status: 409 });
+        }
+
+        const storedPublicationGates = Array.isArray(blog.publicationGates)
+            ? blog.publicationGates as Array<{
+                name?: unknown;
+                status?: unknown;
+                isHard?: unknown;
+                issues?: unknown;
+            }>
+            : [];
+        const failedMandatoryGates = storedPublicationGates.filter(gate =>
+            gate?.isHard === true && gate.status === "FAIL",
+        );
+        if (failedMandatoryGates.length > 0) {
+            return NextResponse.json({
+                error: "Publication blocked: one or more mandatory quality gates failed.",
+                blockers: failedMandatoryGates.map(gate => ({
+                    name: typeof gate.name === "string" ? gate.name : "Mandatory quality gate",
+                    issues: Array.isArray(gate.issues)
+                        ? gate.issues.filter((issue): issue is string => typeof issue === "string").slice(0, 5)
+                        : [],
+                })),
+                hint: "Fix the mandatory issues and rerun review before publishing.",
+            }, { status: 409 });
+        }
+
         // FIX #5: Pre-publish Duplicate Check
         const originality = await checkOriginality(blog.content);
         if (!originality.isOriginal) {

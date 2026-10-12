@@ -560,6 +560,10 @@ model Blog {
   /// Null for non-GSC pipelines or blogs generated before this field existed.
   /// Validated via GscOpportunityEvidenceSchema (Zod) before writing.
   gscEvidence          Json?
+  /// Validated SERP-driven competitive brief captured during article generation.
+  /// Includes research timestamp, analysed ranking pages, source-backed opportunities,
+  /// retrieval coverage, site-library overlap, and content-action recommendation.
+  serpCompetitiveBrief  Json?
   /// Independent gate results from the publication gate architecture.
   /// Each entry contains name, status (PASS/REVIEW/FAIL), isHard, issues, warnings.
   publicationGates     Json?

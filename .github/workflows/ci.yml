@@ -43,6 +43,24 @@ jobs:
       - name: TypeScript type check (full project, blocking)
         run: pnpm exec tsc --noEmit
 
+      - name: SERP competitive intelligence regression tests (blocking)
+        run: >-
+          pnpm exec vitest run
+          tests/unit/serp-competitive-brief.test.ts
+          tests/unit/information-gain.test.ts
+          tests/unit/blog-pipeline-production.test.ts
+          --reporter=verbose
+
+      - name: Production Next.js build (blocking)
+        run: pnpm build
+        env:
+          SKIP_ENV_VALIDATION: "1"
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/optiaiseo_ci
+          NEXTAUTH_SECRET: ci-build-only-secret-not-for-production
+          NEXTAUTH_URL: http://localhost:3000
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+
       # ── Informational checks — failures logged but don't block merge ────
       - name: Unit tests (informational)
         run: pnpm exec vitest run tests/unit/ --reporter=verbose

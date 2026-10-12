@@ -24,7 +24,7 @@ describe("buildCompactDirective", () => {
         });
 
         expect(result.length).toBeLessThanOrEqual(MAX_INFORMATION_GAIN_DIRECTIVE_LENGTH);
-        expect(result).toContain("INFORMATION-GAIN MANDATE");
+        expect(result).toContain("INFORMATION-GAIN RESEARCH DIRECTIVE");
         expect(result).toContain("Gap one is short");
         expect(result).toContain("Framework two");
     });
@@ -81,15 +81,15 @@ describe("buildCompactDirective", () => {
         const result = buildCompactDirective({
             saturatedTopics: ["one"],
             uniqueContentGaps: ["gap"],
-            missingDataMetrics: ["metric"],
-            recommendedQuotes: ["quote"],
+            missingDataMetrics: ["tool cost comparison"],
+            recommendedQuotes: ["concrete quotation topic"],
             originalInsightsBlueprint: ["framework"],
         });
 
         expect(result.length).toBeLessThan(500);
-        expect(result).toContain("- gap");
-        expect(result).toContain("- metric");
-        expect(result).toContain("- quote");
+        expect(result).toContain("Hypothesis to verify: gap");
+        expect(result).toContain("tool cost comparison");
+        expect(result).toContain("quotation relevant to: concrete quotation topic");
         expect(result).toContain("- framework");
     });
 
@@ -103,8 +103,27 @@ describe("buildCompactDirective", () => {
         });
 
         expect(result.length).toBeLessThanOrEqual(MAX_INFORMATION_GAIN_DIRECTIVE_LENGTH);
-        expect(result).toContain("INFORMATION-GAIN MANDATE");
-        expect(result).toContain("generic overviews");
+        expect(result).toContain("INFORMATION-GAIN RESEARCH DIRECTIVE");
+        expect(result).toContain("No repeated heading pattern was established");
+    });
+
+    it("never turns unverified metric values or quote-shaped model output into article suggestions", () => {
+        const result = buildCompactDirective({
+            saturatedTopics: [],
+            uniqueContentGaps: ["Research whether a reader need is unmet"],
+            missingDataMetrics: ["45% of websites improve rankings after adopting this tool"],
+            recommendedQuotes: ['"We improved rankings by 43%" said an unnamed CEO'],
+            originalInsightsBlueprint: [],
+            researchStatus: "PARTIAL",
+            sourceUrls: ["https://example.com/research"],
+        });
+
+        expect(result).not.toContain("45%");
+        expect(result).not.toContain("We improved rankings by 43%");
+        expect(result).toContain("Find a current, authoritative source and verify any metric");
+        expect(result).toContain("Find a real, attributable quotation relevant to");
+        expect(result).toContain("https://example.com/research");
+        expect(result).toContain("Research status: PARTIAL");
     });
 
     it("respects a custom maxChars parameter", () => {
