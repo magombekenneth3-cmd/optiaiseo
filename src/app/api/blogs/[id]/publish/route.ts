@@ -70,11 +70,11 @@ import { submitUrlForIndexing } from "@/lib/indexer";
 import { getIndexNowConfig } from "@/lib/indexnow-config";
 
 
-import { syndicateToHashnode } from "@/lib/blog/hashnode";
+import { resolveHashnodePublicationId, syndicateToHashnode } from "@/lib/blog/hashnode";
 
 async function publishToHashnode(
     token: string,
-    publicationId: string,
+    configuredPublication: string,
     blog: {
         title: string;
         content: string;
@@ -85,16 +85,24 @@ async function publishToHashnode(
     }
 ): Promise<{ url: string } | null> {
     try {
+        const resolution = await resolveHashnodePublicationId(token, configuredPublication);
+        if (!resolution.success) {
+            logger.error("[Hashnode] Publication resolution failed", {
+                configuredPublication,
+                error: resolution.error,
+            });
+            return null;
+        }
+
         // Hashnode expects Markdown, but our content is HTML.
-        // First strip <script> blocks (JSON-LD schemas, inline JS) — Turndown converts
-        // them to ugly code fences which pollute the Markdown on Hashnode.
+        // Strip JSON-LD and inline script blocks before converting HTML to Markdown.
         const cleanedHtml = blog.content.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
         const TurndownService = (await import("turndown")).default;
         const turndownService = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
         const contentMarkdown = turndownService.turndown(cleanedHtml);
 
         const result = await syndicateToHashnode({
-            publicationId,
+            publicationId: resolution.publicationId,
             token,
             canonicalUrl: `https://${blog.site.domain}/blog/${blog.slug}`,
             draft: {
