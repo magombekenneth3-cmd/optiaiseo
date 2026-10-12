@@ -5,6 +5,7 @@ import {
 } from "@/lib/blog/contracts";
 import type { SerpContext } from "@/lib/blog/serp";
 import { buildSerpCompetitiveBrief } from "@/lib/blog/serp-competitive-brief";
+import { enrichOutlineWithCompetitiveBrief, type OutlinePlan } from "@/lib/blog/pipeline";
 
 const keyword = "best technical SEO tools";
 
@@ -86,6 +87,47 @@ describe("SERP competitive brief", () => {
                 observation.sourceUrls.every(url => /^https?:\/\//.test(url)),
             ),
         )).toBe(true);
+    });
+
+    it("turns the SERP brief into section-specific value contracts and traceable source URLs", () => {
+        const pages = [
+            result(1, { headings: ["Technical SEO tools comparison", "Crawl coverage and limitations", "Pricing and plans"] }),
+            result(2, { headings: ["Technical SEO tools comparison", "Crawl coverage and limitations", "Features and use cases"] }),
+            result(3, { headings: ["Technical SEO tools comparison", "Crawl coverage and limitations", "Implementation"] }),
+            result(4),
+            result(5),
+        ];
+        const brief = buildSerpCompetitiveBrief({
+            keyword,
+            serpContext: context(pages),
+            priorIntent: "commercial",
+        });
+        const outline: OutlinePlan = {
+            title: "How to Evaluate Technical SEO Tools",
+            slug: "evaluate-technical-seo-tools",
+            quickAnswer: "Compare coverage, limits, reliability, and the workflow each tool supports.",
+            metaDescription: "A practical guide to comparing technical SEO tools and evaluation criteria.",
+            thesis: "Tool selection should follow the site's crawling and decision needs.",
+            estimatedTotal: 1800,
+            sections: [{
+                heading: "Technical SEO tools comparison",
+                goal: "Help readers choose a tool using concrete evaluation criteria.",
+                tone: "analytical",
+                evidenceType: "comparison",
+                wordTarget: 500,
+                keyEntities: ["crawl coverage", "pricing", "indexing"],
+            }],
+        };
+
+        const enriched = enrichOutlineWithCompetitiveBrief(outline, brief);
+        const section = enriched.sections[0];
+
+        expect(section.readerTask).toBe(outline.sections[0].goal);
+        expect(section.observedCompetitorCoverage).toContain("Technical SEO tools comparison");
+        expect(section.additionalValue).toContain("decision criteria");
+        expect(section.evidenceRequirements?.length).toBeGreaterThan(0);
+        expect(section.competitiveSourceUrls).toContain("https://publisher1.example.com/technical-seo-tools");
+        expect(section.contributionStatus).not.toBe("verified");
     });
 
     it("deduplicates ranking URLs and lowers confidence when pages cannot be analysed", () => {
