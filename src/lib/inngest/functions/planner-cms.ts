@@ -96,6 +96,7 @@ export const publishBlogToCmsJob = inngest.createFunction(
                     select: {
                         wordPressConfig: true,
                         ghostConfig: true,
+                        domain: true,
                         hashnodeToken: true,
                         hashnodePublicationId: true,
                     },
@@ -115,6 +116,7 @@ export const publishBlogToCmsJob = inngest.createFunction(
                 const result = await syndicateToHashnode({
                     publicationId: site.hashnodePublicationId!,
                     token: site.hashnodeToken!,
+                    canonicalUrl: `https://${site.domain}/blog/${blog.slug}`,
                     draft: {
                         title: blog.title,
                         content: blog.content,
