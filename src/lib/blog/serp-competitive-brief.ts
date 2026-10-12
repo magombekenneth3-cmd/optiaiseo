@@ -188,7 +188,7 @@ function pageTypeForResult(result: SerpResult): SerpPageType {
     const url = (result.link ?? "").toLowerCase();
     const title = result.title.toLowerCase();
     const snippet = result.snippet.toLowerCase();
-    const combined = \`\${title} \${snippet}\`;
+    const combined = title + " " + snippet;
 
     if (/youtube\.com|youtu\.be|vimeo\.com/.test(url)) return "video";
     if (/reddit\.com|quora\.com|stackoverflow\.com/.test(url)) return "forum";
