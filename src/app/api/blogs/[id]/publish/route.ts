@@ -70,30 +70,11 @@ import { submitUrlForIndexing } from "@/lib/indexer";
 import { getIndexNowConfig } from "@/lib/indexnow-config";
 
 
-import { syndicateToHashnode } from "@/lib/blog/hashnode";
-
-// Auto-discovers the first publication ID from a Hashnode token
-const _HASHNODE_GQL = "https://gql.hashnode.com/";
-async function resolvePublicationId(token: string): Promise<string | null> {
-    try {
-        const res = await fetch(_HASHNODE_GQL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: token },
-            body: JSON.stringify({
-                query: `query { me { publications(first:1) { edges { node { id } } } } }`,
-            }),
-            signal: AbortSignal.timeout(8000),
-        });
-        const json = await res.json();
-        return json.data?.me?.publications?.edges?.[0]?.node?.id ?? null;
-    } catch {
-        return null;
-    }
-}
+import { resolveHashnodePublicationId, syndicateToHashnode } from "@/lib/blog/hashnode";
 
 async function publishToHashnode(
     token: string,
-    publicationId: string,
+    configuredPublication: string,
     blog: {
         title: string;
         content: string;
@@ -104,17 +85,26 @@ async function publishToHashnode(
     }
 ): Promise<{ url: string } | null> {
     try {
+        const resolution = await resolveHashnodePublicationId(token, configuredPublication);
+        if (!resolution.success) {
+            logger.error("[Hashnode] Publication resolution failed", {
+                configuredPublication,
+                error: resolution.error,
+            });
+            return null;
+        }
+
         // Hashnode expects Markdown, but our content is HTML.
-        // First strip <script> blocks (JSON-LD schemas, inline JS) — Turndown converts
-        // them to ugly code fences which pollute the Markdown on Hashnode.
+        // Strip JSON-LD and inline script blocks before converting HTML to Markdown.
         const cleanedHtml = blog.content.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
         const TurndownService = (await import("turndown")).default;
         const turndownService = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
         const contentMarkdown = turndownService.turndown(cleanedHtml);
 
         const result = await syndicateToHashnode({
-            publicationId,
+            publicationId: resolution.publicationId,
             token,
+            canonicalUrl: `https://${blog.site.domain}/blog/${blog.slug}`,
             draft: {
                 title: blog.title,
                 content: contentMarkdown, // Use turndown output
@@ -235,11 +225,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
                 });
         }
 
-        let mediumUrl: string | undefined;
-        let hashnodeUrl: string | undefined;
+        let mediumUrl: string | undefined = blog.mediumUrl ?? undefined;
+        let hashnodeUrl: string | undefined = blog.hashnodeUrl ?? undefined;
 
-        // 2a. Medium
-        if (blog.site.mediumToken) {
+        // 2a. Medium: only create a new cross-post when one has not already been recorded.
+        if (blog.site.mediumToken && !mediumUrl) {
             try {
                 const meRes = await fetch("https://api.medium.com/v1/me", {
                     headers: {
@@ -291,42 +281,39 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             }
         }
 
-        // 2b. Hashnode — prefer site-level override, fall back to central dev account.
-        //     Publication ID is auto-discovered from the token if not explicitly set.
-        const hashnodeToken = blog.site.hashnodeToken || process.env.HASHNODE_TOKEN;
+        // Hashnode credentials are site-scoped. Never fall back to a shared
+        // environment token or publication ID, which could publish one tenant's
+        // content into another account.
+        const hashnodeConfigured = Boolean(blog.site.hashnodeToken || blog.site.hashnodePublicationId);
 
-        if (hashnodeToken) {
+        if (blog.site.hashnodeToken && blog.site.hashnodePublicationId && !hashnodeUrl) {
             try {
-                // Resolve publication ID: explicit override → env var → auto-discovery from token
-                const hashnodePublicationId =
-                    blog.site.hashnodePublicationId ||
-                    process.env.HASHNODE_PUBLICATION_ID ||
-                    await resolvePublicationId(hashnodeToken);
-
-                if (hashnodePublicationId) {
-                    const result = await publishToHashnode(hashnodeToken, hashnodePublicationId, blog);
-                    if (result) {
-                        hashnodeUrl = result.url;
-                        logger.debug(`[Hashnode] Cross-posted blog ${blog.id} → ${hashnodeUrl}`);
-                    }
-                } else {
-                    logger.warn("[Hashnode] Could not resolve a publication ID — skipping.");
+                const result = await publishToHashnode(
+                    blog.site.hashnodeToken,
+                    blog.site.hashnodePublicationId,
+                    blog
+                );
+                if (result) {
+                    hashnodeUrl = result.url;
+                    logger.info("[Hashnode] Cross-post completed", { blogId: blog.id, postUrl: hashnodeUrl });
                 }
-
             } catch (hashnodeErr: unknown) {
-                logger.error("[Hashnode] Error during syndication:", { error: (hashnodeErr as Error)?.message || String(hashnodeErr) });
+                logger.error("[Hashnode] Error during syndication", {
+                    blogId: blog.id,
+                    error: (hashnodeErr as Error)?.message || String(hashnodeErr),
+                });
             }
-        } else {
-            logger.debug("[Hashnode] No token configured — skipping syndication.");
-
+        } else if (hashnodeConfigured && !hashnodeUrl) {
+            logger.warn("[Hashnode] Site configuration is incomplete; configure both token and publication ID", {
+                siteId: blog.siteId,
+            });
         }
-
 
         await prisma.blog.update({
             where: { id: blog.id },
             data: {
                 status: "PUBLISHED",
-                publishedAt: new Date(),
+                publishedAt: blog.publishedAt ?? new Date(),
                 ...(mediumUrl ? { mediumUrl } : {}),
                 ...(hashnodeUrl ? { hashnodeUrl } : {}),
             },
@@ -369,7 +356,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // Report syndication status so the UI can show accurate per-platform feedback
         const syndicationPartial =
             (blog.site.mediumToken && !mediumUrl) ||
-            ((blog.site.hashnodeToken || process.env.HASHNODE_TOKEN) && !hashnodeUrl);
+            ((blog.site.hashnodeToken || blog.site.hashnodePublicationId) && !hashnodeUrl);
 
         return NextResponse.json({ success: true, mediumUrl, hashnodeUrl, syndicationPartial: !!syndicationPartial });
 

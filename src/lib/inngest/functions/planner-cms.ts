@@ -96,6 +96,7 @@ export const publishBlogToCmsJob = inngest.createFunction(
                     select: {
                         wordPressConfig: true,
                         ghostConfig: true,
+                        domain: true,
                         hashnodeToken: true,
                         hashnodePublicationId: true,
                     },
@@ -110,14 +111,28 @@ export const publishBlogToCmsJob = inngest.createFunction(
 
         if (site.hashnodeToken && site.hashnodePublicationId && !blog.hashnodeUrl) {
             await step.run("publish-to-hashnode", async () => {
-                const { syndicateToHashnode } = await import("@/lib/blog/hashnode");
+                const { resolveHashnodePublicationId, syndicateToHashnode } = await import("@/lib/blog/hashnode");
+
+                const cleanedHtml = blog.content.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+                const TurndownService = (await import("turndown")).default;
+                const turndownService = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+                const contentMarkdown = turndownService.turndown(cleanedHtml);
+
+                const resolution = await resolveHashnodePublicationId(
+                    site.hashnodeToken!,
+                    site.hashnodePublicationId!,
+                );
+                if (!resolution.success) {
+                    throw new NonRetriableError(`Hashnode publication resolution failed: ${resolution.error}`);
+                }
 
                 const result = await syndicateToHashnode({
-                    publicationId: site.hashnodePublicationId!,
+                    publicationId: resolution.publicationId,
                     token: site.hashnodeToken!,
+                    canonicalUrl: `https://${site.domain}/blog/${blog.slug}`,
                     draft: {
                         title: blog.title,
-                        content: blog.content,
+                        content: contentMarkdown,
                         metaDescription: blog.metaDescription ?? "",
                         targetKeywords: blog.targetKeywords ?? [],
                         excerpt: blog.metaDescription ?? "",

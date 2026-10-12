@@ -1080,7 +1080,7 @@ export function BlogList({
                 if (res.ok && data.success) {
                     toast.success(
                         <div className="flex flex-col gap-1">
-                            <span className="font-semibold">Blog published successfully</span>
+                            <span className="font-semibold">{data.syndicationPartial ? "Blog published; a connected platform needs attention" : "Blog published successfully"}</span>
                             {data.mediumUrl && (
                                 <a
                                     href={data.mediumUrl}

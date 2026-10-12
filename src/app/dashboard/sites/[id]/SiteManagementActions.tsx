@@ -484,9 +484,8 @@ export function SiteManagementActions({
                     Hashnode Publishing
                 </h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                    By default, approved blogs are syndicated to our platform&apos;s central Hashnode account — no setup required.
-                    You can optionally override this with your own Hashnode credentials to publish under your personal account.
-                    Get a free token at{" "}
+                    Connect this site to your own Hashnode publication. Approved articles will be syndicated using the credentials saved here, with a canonical URL pointing back to your website.
+                    Hashnode publishing API access requires a publication with an active Pro plan. Create a token at{" "}
                     <a
                         href="https://hashnode.com/settings/developer"
                         target="_blank"
@@ -504,20 +503,20 @@ export function SiteManagementActions({
                                 type="password"
                                 value={hashnodeToken}
                                 onChange={(e) => setHashnodeToken(e.target.value)}
-                                placeholder="Your Hashnode PAT (optional — leave blank to use platform default)"
+                                placeholder="Personal access token for this site's Hashnode account"
                                 className="w-full bg-background/50 border border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/50 rounded-lg px-4 py-2.5 text-sm transition-all text-white placeholder:text-muted-foreground outline-none"
                             />
                         </div>
                         <div>
-                            <label className="block text-xs text-muted-foreground mb-1.5 font-medium">Publication ID <span className="text-muted-foreground">(optional — leave blank to auto-discover from token)</span></label>
+                            <label className="block text-xs text-muted-foreground mb-1.5 font-medium">Publication ID or hostname</label>
                             <input
                                 type="text"
                                 value={hashnodePublicationId}
                                 onChange={(e) => setHashnodePublicationId(e.target.value)}
-                                placeholder="e.g. 6769f1a59c13c4f98d3b7a2e"
+                                placeholder="e.g. 6769f1a59c13c4f98d3b7a2e or you.hashnode.dev"
                                 className="w-full bg-background/50 border border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/50 rounded-lg px-4 py-2.5 text-sm transition-all text-white placeholder:text-muted-foreground outline-none font-mono"
                             />
-                            <p className="text-xs text-muted-foreground mt-1">Find your Publication ID at <a href="https://hashnode.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground hover:underline">Hashnode</a> → Your Blog → Settings → Domain & SEO → Publication ID.</p>
+                            <p className="text-xs text-muted-foreground mt-1">Enter the 24-character publication ID, or the publication hostname. Hostnames are resolved to an ID when you publish.</p>
                         </div>
                         <button
                             type="button"

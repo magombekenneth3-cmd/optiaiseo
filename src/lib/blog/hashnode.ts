@@ -1,12 +1,8 @@
 import { logger } from "@/lib/logger";
 import type { BlogPostDraft } from "./index";
 
-/**
- * Hashnode only needs publishable presentation fields. Keeping this narrower
- * than BlogPostDraft lets us re-syndicate historical posts without fabricating
- * a ResearchPacket for a generation attempt that happened before evidence
- * plumbing existed.
- */
+const HASHNODE_GQL = "https://gql.hashnode.com/";
+
 export type HashnodeDraft = Pick<
     BlogPostDraft,
     "title" | "content" | "excerpt" | "metaDescription" | "targetKeywords" | "heroImage"
@@ -16,6 +12,7 @@ export interface HashnodePublishOptions {
     publicationId: string;
     token: string;
     draft: HashnodeDraft;
+    canonicalUrl?: string;
 }
 
 export interface HashnodeResult {
@@ -24,111 +21,181 @@ export interface HashnodeResult {
     error?: string;
 }
 
-/**
- * Pushes a generated blog post to a Hashnode publication using the Hashnode GraphQL API.
- * Requirements: Valid PAT (Personal Access Token) and an active Publication ID.
- */
+export type HashnodePublicationResolution =
+    | { success: true; publicationId: string }
+    | { success: false; error: string };
+
+export async function resolveHashnodePublicationId(
+    token: string,
+    configuredPublication: string,
+): Promise<HashnodePublicationResolution> {
+    const value = configuredPublication.trim();
+    if (!token.trim() || !value) {
+        return { success: false, error: "A Hashnode token and publication ID or hostname are required." };
+    }
+
+    if (/^[a-f0-9]{24}$/i.test(value)) {
+        return { success: true, publicationId: value };
+    }
+
+    let host: string;
+    try {
+        const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+        const url = new URL(candidate);
+        if (url.protocol !== "https:" && url.protocol !== "http:") {
+            return { success: false, error: "Use a Hashnode publication hostname or a 24-character publication ID." };
+        }
+        host = url.hostname.toLowerCase();
+    } catch {
+        return { success: false, error: "Use a valid Hashnode publication hostname or a 24-character publication ID." };
+    }
+
+    const query = `
+        query PublicationByHost($host: String!) {
+            publication(host: $host) {
+                id
+            }
+        }
+    `;
+
+    try {
+        const response = await fetch(HASHNODE_GQL, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ query, variables: { host } }),
+            signal: AbortSignal.timeout(10000),
+        });
+
+        if (!response.ok) {
+            const message = (await response.text()).slice(0, 500);
+            return { success: false, error: `Hashnode returned HTTP ${response.status}: ${message}` };
+        }
+
+        const data = await response.json() as {
+            errors?: Array<{ message?: string }>;
+            data?: { publication?: { id?: string } | null };
+        };
+
+        if (data.errors?.length) {
+            const message = data.errors.map(error => error.message).filter(Boolean).join("; ");
+            return {
+                success: false,
+                error: message || "Hashnode could not resolve that publication. Check the domain and API access.",
+            };
+        }
+
+        const publicationId = data.data?.publication?.id;
+        if (!publicationId) {
+            return { success: false, error: `No Hashnode publication was found for ${host}.` };
+        }
+
+        return { success: true, publicationId };
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Network error resolving the Hashnode publication";
+        logger.error("[Hashnode] Publication lookup failed", { host, error: message });
+        return { success: false, error: message };
+    }
+}
+
 export async function syndicateToHashnode(options: HashnodePublishOptions): Promise<HashnodeResult> {
-    const { publicationId, token, draft } = options;
+    const { publicationId, token, draft, canonicalUrl } = options;
 
     if (!publicationId || !token) {
         return { success: false, error: "Missing Hashnode publication ID or token" };
     }
+    if (!/^[a-f0-9]{24}$/i.test(publicationId)) {
+        return { success: false, error: "Hashnode publishing requires a resolved 24-character publication ID." };
+    }
+    if (!draft.title.trim() || !draft.content.trim()) {
+        return { success: false, error: "A title and Markdown content are required to publish to Hashnode" };
+    }
 
-    // GraphQL Mutation for Publishing a Post to Hashnode
-    // Ref: https://api.hashnode.com/
     const query = `
         mutation PublishPost($input: PublishPostInput!) {
             publishPost(input: $input) {
                 post {
+                    id
+                    slug
                     url
                 }
             }
         }
     `;
 
-    // Map BlogPostDraft to Hashnode's required structure.
-    // Hashnode API v2: tags accept { slug, name } only — no arbitrary "id" field.
-    // Passing an "id" causes a GraphQL validation error and silently fails the whole mutation.
-    //
-    // subtitle hard limit: 250 chars (Hashnode enforces this strictly).
-    // Strip markdown bold/italic first so **words** don't eat into the character budget.
     const cleanSubtitle = (draft.excerpt ?? "")
-        .replace(/\*\*(.+?)\*\*/g, "$1") // **bold** → bold
-        .replace(/\*(.+?)\*/g, "$1")     // *italic* → italic
+        .replace(/\*\*(.+?)\*\*/g, "$1")
+        .replace(/\*(.+?)\*/g, "$1")
         .slice(0, 250);
+
+    const tagsBySlug = new Map<string, { slug: string; name: string }>();
+    for (const keyword of draft.targetKeywords ?? []) {
+        const name = keyword.trim();
+        if (!name) continue;
+        const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+        if (slug && !tagsBySlug.has(slug)) {
+            tagsBySlug.set(slug, { slug, name: name.slice(0, 100) });
+        }
+    }
+    const tags = [...tagsBySlug.values()].slice(0, 5);
 
     const variables = {
         input: {
             title: draft.title,
-            publicationId: publicationId,
+            publicationId,
             contentMarkdown: draft.content,
-            subtitle: cleanSubtitle,
-            tags: draft.targetKeywords.slice(0, 5).map(kw => ({
-                slug: kw.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 60),
-                name: kw.slice(0, 100),
-            })),
-            coverImageOptions: draft.heroImage ? {
-                coverImageURL: draft.heroImage.url,
-                isCoverAttributionHidden: false,
-                coverImagePhotographer: draft.heroImage.photographer,
-                coverImageAttribution: `Photo by ${draft.heroImage.photographer} on Unsplash`
-            } : null,
-            // originalArticleURL omitted — BlogPostDraft has no articleSchema field
-            metaTags: {
-                title: draft.title,
-                description: draft.metaDescription || draft.excerpt,
-            }
-        }
+            ...(cleanSubtitle ? { subtitle: cleanSubtitle } : {}),
+            tags,
+            ...(canonicalUrl ? { originalArticleURL: canonicalUrl } : {}),
+            ...(draft.heroImage?.url ? {
+                coverImage: draft.heroImage.url,
+                ogImage: draft.heroImage.url,
+            } : {}),
+            metaTitle: draft.title,
+            metaDescription: draft.metaDescription || draft.excerpt || "",
+        },
     };
 
-    let retries = 3;
-    let fallbackError = "Unknown error";
+    try {
+        const response = await fetch(HASHNODE_GQL, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ query, variables }),
+            signal: AbortSignal.timeout(15000),
+        });
 
-    while (retries > 0) {
-        try {
-            const res = await fetch('https://gql.hashnode.com/', {
-                method: 'POST',
-                headers: {
-                    'Authorization': token,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ query, variables }),
-                signal: AbortSignal.timeout(15000)
-            });
-
-            if (!res.ok) {
-                const err = await res.text();
-                logger.error(`[Hashnode API] HTTP Error (Retries left: ${retries - 1}):`, { error: err });
-                fallbackError = `Hashnode HTTP ${res.status}: ${err}`;
-            } else {
-                const data = await res.json();
-
-                if (data.errors) {
-                    logger.error("[Hashnode API] GraphQL Errors:", { error: data.errors?.message || data.errors });
-                    return { success: false, error: data.errors[0]?.message || "GraphQL mutation failed" };
-                }
-
-                const postUrl = data.data?.publishPost?.post?.url;
-                if (!postUrl) {
-                    return { success: false, error: "Post published but no URL returned from Hashnode" };
-                }
-
-                return { success: true, postUrl };
-            }
-         
-         
-        } catch (e: unknown) {
-        logger.error(`[Hashnode Syndication Failed] (Retries left: ${retries - 1}):`, { error: (e as Error)?.message || String(e) });
-            fallbackError = (e as Error).message || "Network error communicating with Hashnode";
+        if (!response.ok) {
+            const errorBody = (await response.text()).slice(0, 1000);
+            const error = `Hashnode HTTP ${response.status}: ${errorBody}`;
+            logger.error("[Hashnode API] HTTP error", { status: response.status, error: errorBody });
+            return { success: false, error };
         }
 
-        retries--;
-        if (retries > 0) {
-            // Wait 2 seconds before retrying
-            await new Promise(resolve => setTimeout(resolve, 2000));
+        const data = await response.json() as {
+            errors?: Array<{ message?: string }>;
+            data?: { publishPost?: { post?: { url?: string } | null } };
+        };
+
+        if (data.errors?.length) {
+            const error = data.errors.map(item => item.message).filter(Boolean).join("; ") || "GraphQL mutation failed";
+            logger.error("[Hashnode API] GraphQL errors", { error });
+            return { success: false, error };
         }
+
+        const postUrl = data.data?.publishPost?.post?.url;
+        if (!postUrl) {
+            return { success: false, error: "Hashnode did not return a published post URL" };
+        }
+
+        return { success: true, postUrl };
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Network error communicating with Hashnode";
+        logger.error("[Hashnode Syndication] Request failed", { error: message });
+        return { success: false, error: message };
     }
-
-    return { success: false, error: fallbackError };
 }
