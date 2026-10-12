@@ -300,7 +300,7 @@ export const SiteContentLibraryEntrySchema = z.object({
     title: ShortString,
     slug: z.string().trim().max(200),
     url: z.string().url().optional(),
-    status: z.enum(["PUBLISHED", "DRAFT", "NEEDS_REVIEW", "EVIDENCE_REVIEW", "REVIEW", "REJECTED", "FAILED", "GENERATING"]),
+    status: z.enum(["PUBLISHED", "DRAFT", "NEEDS_REVIEW", "EVIDENCE_REVIEW", "REVIEW", "REJECTED", "FAILED", "GENERATING", "QUEUED", "PENDING"]),
     targetKeywords: z.array(z.string().trim().min(1).max(200)).max(20),
     metaDescription: z.string().trim().max(200).optional(),
     publishedAt: z.string().datetime().nullable().optional(),
