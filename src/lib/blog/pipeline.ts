@@ -873,6 +873,18 @@ Violating these rules produces fabricated content that will be caught by the pub
         faq:        "5-7 Q&A pairs. Each answer MUST open with: Yes / No / a number / a tool name / a time frame. Max 3 sentences.",
     };
 
+    const sectionCompetitivePlan = `
+SECTION VALUE CONTRACT:
+- Reader task: ${section.readerTask || section.goal}
+- Observed ranking-page coverage from sampled SERP data: ${section.observedCompetitorCoverage?.slice(0, 5).join("; ") || "no directly relevant pattern established"}
+- Additional value intended for this section: ${section.additionalValue || "Add practical reasoning, caveats, and evidence beyond a surface-level summary."}
+- Contribution status before writing: ${section.contributionStatus || "requires_research"}. Do not claim a contribution is verified until supplied evidence verifies it.
+- Evidence requirements: ${section.evidenceRequirements?.slice(0, 5).join("; ") || "Verify material and freshness-sensitive claims against relevant sources."}
+- Ranking-page URLs reviewed for scope: ${section.competitiveSourceUrls?.slice(0, 5).join(", ") || "none mapped"}.
+- Do not copy or closely paraphrase ranking-page wording. Competitive pages establish what was observed, not whether a factual claim is true.
+- Use only the sources supplied in the authoritative research snapshot for factual claims. If evidence is missing, qualify the point as an inference/research task or omit it.
+`;
+
     const claimPlanBlock = sectionClaimPlan
         ? renderClaimPlanForSection(sectionClaimPlan)
         : "";
@@ -889,6 +901,7 @@ Tone: ${section.tone} \u2014 ${toneInstructions[section.tone]}
 Evidence type: ${section.evidenceType} \u2014 ${evidenceInstructions[section.evidenceType]}
 Word target: ${section.wordTarget} words (\u00b120%)
 ${section.keyEntities.length > 0 ? `Key entities: ${section.keyEntities.join(", ")}` : ""}
+${sectionCompetitivePlan}
 ${serpNote}
 
 ${claimPlanBlock}
