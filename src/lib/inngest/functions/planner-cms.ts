@@ -113,13 +113,18 @@ export const publishBlogToCmsJob = inngest.createFunction(
             await step.run("publish-to-hashnode", async () => {
                 const { syndicateToHashnode } = await import("@/lib/blog/hashnode");
 
+                const cleanedHtml = blog.content.replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi, "");
+                const TurndownService = (await import("turndown")).default;
+                const turndownService = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+                const contentMarkdown = turndownService.turndown(cleanedHtml);
+
                 const result = await syndicateToHashnode({
                     publicationId: site.hashnodePublicationId!,
                     token: site.hashnodeToken!,
                     canonicalUrl: `https://${site.domain}/blog/${blog.slug}`,
                     draft: {
                         title: blog.title,
-                        content: blog.content,
+                        content: contentMarkdown,
                         metaDescription: blog.metaDescription ?? "",
                         targetKeywords: blog.targetKeywords ?? [],
                         excerpt: blog.metaDescription ?? "",
