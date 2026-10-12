@@ -21,9 +21,9 @@ function result(
     const analyzed = (options.scrapeStatus ?? "ANALYZED") === "ANALYZED";
     return {
         rank,
-        title: options.title ?? \`Best technical SEO tools: guide \${rank}\`,
-        link: options.url ?? \`https://publisher\${rank}.example.com/technical-seo-tools\`,
-        snippet: \`Compare technical SEO tools for crawling, indexing, audits and reporting. Result \${rank}.\`,
+        title: options.title ?? `Best technical SEO tools: guide ${rank}`,
+        link: options.url ?? `https://publisher${rank}.example.com/technical-seo-tools`,
+        snippet: `Compare technical SEO tools for crawling, indexing, audits and reporting. Result ${rank}.`,
         scrapeStatus: options.scrapeStatus ?? "ANALYZED",
         ...(analyzed ? {
             scrapedContent: ("A practical guide to technical SEO audits, crawl analysis, indexation, reporting, and evaluation criteria. ").repeat(8),
