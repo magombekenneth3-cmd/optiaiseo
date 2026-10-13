@@ -121,6 +121,8 @@ export interface ExplainableScore {
     trafficPotential: number;
     businessValue: number; // 0-100 scale based on commercial intent
     effort: number;
+    serpEvidenceStatus?: SerpEvidenceStatus;
+    serpResultCount?: number;
     components: {
         rankingOpportunity: number;
         trafficOpportunity: number;
