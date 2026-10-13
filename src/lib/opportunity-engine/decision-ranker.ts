@@ -67,6 +67,8 @@ export function rankGrowthDecisions(
             ...(intel?.serpResultCount !== undefined
                 ? { serpResultCount: intel.serpResultCount }
                 : {}),
+            ...(intel?.serpSource ? { serpSource: intel.serpSource } : {}),
+            ...(intel?.serpObservedAt ? { serpObservedAt: intel.serpObservedAt } : {}),
             components: {
                 rankingOpportunity: rankingOpp,
                 trafficOpportunity: trafficOpp,
