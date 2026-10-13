@@ -138,6 +138,10 @@ describe("fetchGscEvidenceResult", () => {
     expect(result.status).toBe("NO_DATA");
     expect(result.data).toEqual([]);
     expect(result.source).toBe("LIVE_GSC");
+    expect(result.dateRange).not.toBeNull();
+    const from = new Date(result.dateRange!.from).getTime();
+    const to = new Date(result.dateRange!.to).getTime();
+    expect((to - from) / (24 * 60 * 60 * 1000)).toBe(89);
     expect(fetchGSCKeywords).toHaveBeenCalledTimes(1);
   });
 
