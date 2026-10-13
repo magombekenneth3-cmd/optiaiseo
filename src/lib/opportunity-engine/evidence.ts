@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { GscPageMetric } from "./types";
 import { classifyGscError, logGscFailure } from "@/lib/gsc/gsc-availability";
+import type { GscDataStatus } from "@/lib/gsc/gsc-availability";
 
 // Require at least seven recent, usable days before preferring persisted history.
 const MIN_DB_DAYS_FOR_PRIMARY = 7;
@@ -197,21 +198,6 @@ export async function fetchGscEvidence(siteId: string): Promise<GscPageMetric[]>
 // ────────────────────────────────────────────────────────────────────────────
 // DB-backed evidence (primary path)
 // ────────────────────────────────────────────────────────────────────────────
-
-async function getPersistedDayCount(siteId: string): Promise<number> {
-    try {
-        const distinctDays = await prisma.gscDailyPerformance.findMany({
-            where: { siteId },
-            select: { date: true },
-            distinct: ["date"],
-            orderBy: { date: "desc" },
-            take: 100,
-        });
-        return distinctDays.length;
-    } catch {
-        return 0;
-    }
-}
 
 function dateDaysAgo(days: number): string {
     const d = new Date();
