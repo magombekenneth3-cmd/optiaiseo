@@ -1,10 +1,11 @@
 import { SerpContext } from "@/lib/blog/serp";
-import { SerpConsensus, OpportunityIntelligence } from "@/lib/opportunity-engine/types";
+import { SerpConsensus, OpportunityIntelligence, SerpEvidenceStatus } from "@/lib/opportunity-engine/types";
 import { classifyIntent } from "@/lib/gsc";
 
 export function analyzeSerpConsensus(
     keyword: string,
-    serpContext?: SerpContext | null
+    serpContext?: SerpContext | null,
+    requestedEvidenceStatus?: SerpEvidenceStatus,
 ): OpportunityIntelligence {
     const rawIntent = classifyIntent(keyword);
     let commercialValueScore = 50;
@@ -17,8 +18,10 @@ export function analyzeSerpConsensus(
     if (!serpContext || !serpContext.results || serpContext.results.length === 0) {
         return {
             keyword,
-            intentAlignment: 80,
+            intentAlignment: 50,
             commercialValueScore,
+            serpEvidenceStatus: requestedEvidenceStatus ?? "UNAVAILABLE",
+            serpResultCount: 0,
         };
     }
 
@@ -85,6 +88,8 @@ export function analyzeSerpConsensus(
         keyword,
         serpConsensus,
         intentAlignment: Math.min(100, Math.max(50, confidence)),
-        commercialValueScore
+        commercialValueScore,
+        serpEvidenceStatus: "AVAILABLE",
+        serpResultCount: total,
     };
 }
