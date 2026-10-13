@@ -69,6 +69,22 @@ describe("fetchGscEvidenceResult", () => {
     expect(result.data).toBeNull();
   });
 
+
+  it("reports insufficient recent history separately from stale stored history", async () => {
+    vi.mocked(prisma.gscDailyPerformance.findMany).mockResolvedValue(
+      recentDates.slice(0, 3) as never,
+    );
+    vi.mocked(prisma.gscDailyPerformance.findFirst).mockResolvedValue({
+      date: "2026-10-10",
+    } as never);
+
+    const result = await fetchGscEvidenceResult("site-1");
+
+    expect(result.status).toBe("INSUFFICIENT_HISTORY");
+    expect(result.fallbackStatus).toBe("NOT_CONNECTED");
+    expect(result.data).toBeNull();
+  });
+
   it("uses recent persisted history and reports the actual source and date", async () => {
     vi.mocked(prisma.gscDailyPerformance.findMany).mockResolvedValue(recentDates as never);
     vi.mocked(prisma.gscDailyPerformance.findFirst).mockResolvedValue({
