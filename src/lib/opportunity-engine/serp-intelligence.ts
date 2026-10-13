@@ -12,7 +12,8 @@ import { analyzeSerpConsensus } from "@/lib/intelligence/intent-profiler";
 const DEFAULT_MAX_LIVE_LOOKUPS = 5;
 const MAX_CACHED_KEYWORDS = 500;
 const SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-const LOOKUP_CONCURRENCY = 2;
+const LOOKUP_CONCURRENCY = 3;
+const LIVE_LOOKUP_TIMEOUT_MS = 12_000;
 
 type SerpEvidenceSource = "CACHED_KEYWORD_SNAPSHOT" | "LIVE_SERP";
 
@@ -189,6 +190,23 @@ async function fetchLiveSerpContext(
   return null;
 }
 
+async function loadContextWithTimeout(
+  loader: SerpContextLoader,
+  keyword: string,
+): Promise<SerpContext | null> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      loader(keyword),
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), LIVE_LOOKUP_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 async function loadInBatches(
   keywords: Array<{ key: string; keyword: string }>,
   loader: SerpContextLoader,
@@ -201,7 +219,7 @@ async function loadInBatches(
     const results = await Promise.allSettled(
       batch.map(async ({ key, keyword }) => ({
         key,
-        context: await loader(keyword),
+        context: await loadContextWithTimeout(loader, keyword),
       })),
     );
 
