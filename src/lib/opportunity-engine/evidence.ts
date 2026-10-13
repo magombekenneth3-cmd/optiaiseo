@@ -6,50 +6,192 @@ import { logger } from "@/lib/logger";
 import { GscPageMetric } from "./types";
 import { classifyGscError, logGscFailure } from "@/lib/gsc/gsc-availability";
 
-// Minimum number of days of persisted data required before we trust the DB
-// over the live API. Below this, a fresh install falls back to live GSC.
+// Require at least seven recent, usable days before preferring persisted history.
 const MIN_DB_DAYS_FOR_PRIMARY = 7;
+const GSC_REPORTING_LAG_DAYS = 3;
+const EVIDENCE_WINDOW_DAYS = 90;
+
+export type OpportunityGscEvidenceStatus =
+    | "AVAILABLE"
+    | "NO_DATA"
+    | "STALE"
+    | "SITE_NOT_FOUND"
+    | "SOURCE_ERROR"
+    | Exclude<GscDataStatus, "AVAILABLE" | "NO_DATA">;
+
+export type OpportunityGscEvidenceResult =
+    | {
+          status: "AVAILABLE" | "NO_DATA";
+          data: GscPageMetric[];
+          source: "PERSISTED_DB" | "LIVE_GSC";
+          observedAt: string | null;
+          dateRange: { from: string; to: string };
+      }
+    | {
+          status: Exclude<OpportunityGscEvidenceStatus, "AVAILABLE" | "NO_DATA">;
+          data: null;
+          source: "NONE";
+          observedAt: null;
+          dateRange: null;
+          fallbackStatus?: Exclude<GscDataStatus, "AVAILABLE" | "NO_DATA">;
+          detail?: string;
+      };
+
+interface PersistedHistory {
+    recentDistinctDays: number;
+    latestRecentDate: string | null;
+    hasAnyRows: boolean;
+}
+
+function evidenceDateRange() {
+    return {
+        from: dateDaysAgo(EVIDENCE_WINDOW_DAYS + GSC_REPORTING_LAG_DAYS),
+        to: dateDaysAgo(GSC_REPORTING_LAG_DAYS),
+    };
+}
+
+function unavailableResult(
+    status: Exclude<OpportunityGscEvidenceStatus, "AVAILABLE" | "NO_DATA">,
+    detail?: string,
+    fallbackStatus?: Exclude<GscDataStatus, "AVAILABLE" | "NO_DATA">,
+): OpportunityGscEvidenceResult {
+    return {
+        status,
+        data: null,
+        source: "NONE",
+        observedAt: null,
+        dateRange: null,
+        ...(fallbackStatus ? { fallbackStatus } : {}),
+        ...(detail ? { detail } : {}),
+    };
+}
+
+function availableResult(
+    data: GscPageMetric[],
+    source: "PERSISTED_DB" | "LIVE_GSC",
+    observedAt: string | null,
+): OpportunityGscEvidenceResult {
+    return {
+        status: data.length > 0 ? "AVAILABLE" : "NO_DATA",
+        data,
+        source,
+        observedAt,
+        dateRange: evidenceDateRange(),
+    };
+}
+
+async function getPersistedHistory(siteId: string): Promise<PersistedHistory> {
+    const { from, to } = evidenceDateRange();
+    const [recentDays, anyRow] = await Promise.all([
+        prisma.gscDailyPerformance.findMany({
+            where: { siteId, date: { gte: from, lte: to } },
+            select: { date: true },
+            distinct: ["date"],
+            orderBy: { date: "desc" },
+            take: 100,
+        }),
+        prisma.gscDailyPerformance.findFirst({
+            where: { siteId },
+            select: { date: true },
+            orderBy: { date: "desc" },
+        }),
+    ]);
+
+    return {
+        recentDistinctDays: recentDays.length,
+        latestRecentDate: recentDays[0]?.date ?? null,
+        hasAnyRows: Boolean(anyRow),
+    };
+}
 
 /**
- * Fetch GSC evidence for the opportunity pipeline.
- *
- * Primary path: reads from the persistent GscDailyPerformance table.
- * This provides previousPosition / previousClicks (90-day comparison)
- * which unlocks the DECLINING detector and improves scoring accuracy.
- *
- * Fallback path: if the DB has < 7 days of data (fresh install, new site),
- * falls back to the live GSC API (original behavior, no historical comparison).
+ * Returns explicit data-availability semantics to decision pipelines.
+ * A disconnected/failed/stale provider is never represented as an authoritative empty array.
  */
-export async function fetchGscEvidence(siteId: string): Promise<GscPageMetric[]> {
+export async function fetchGscEvidenceResult(
+    siteId: string,
+): Promise<OpportunityGscEvidenceResult> {
+    let site: { id: string; domain: string; userId: string } | null;
     try {
-        const site = await prisma.site.findUnique({
+        site = await prisma.site.findUnique({
             where: { id: siteId },
-            select: { id: true, domain: true, userId: true }
+            select: { id: true, domain: true, userId: true },
         });
-
-        if (!site) return [];
-
-        // Check if we have enough persisted data to use the DB path
-        const dbDayCount = await getPersistedDayCount(siteId);
-
-        if (dbDayCount >= MIN_DB_DAYS_FOR_PRIMARY) {
-            return fetchEvidenceFromDb(siteId);
-        }
-
-        // Fallback: live GSC API (original behavior for fresh installs)
-        logger.info("[EvidenceProvider] Insufficient DB history, falling back to live GSC API", {
-            siteId, dbDayCount, threshold: MIN_DB_DAYS_FOR_PRIMARY,
-        });
-        return fetchEvidenceFromLiveApi(site);
     } catch (err: unknown) {
-        const status = classifyGscError(err);
-        logGscFailure("EvidenceProvider", status, {
+        logger.error("[EvidenceProvider] Site lookup failed", {
             siteId,
-            note: "Returning empty evidence — opportunity scoring will lack GSC data",
             error: (err as Error)?.message || String(err),
         });
-        return [];
+        return unavailableResult("SOURCE_ERROR", "Unable to load the site's GSC evidence configuration.");
     }
+
+    if (!site) return unavailableResult("SITE_NOT_FOUND", "The requested site no longer exists.");
+
+    let history: PersistedHistory;
+    try {
+        history = await getPersistedHistory(siteId);
+    } catch (err: unknown) {
+        logger.error("[EvidenceProvider] Persisted GSC history lookup failed", {
+            siteId,
+            error: (err as Error)?.message || String(err),
+        });
+        return unavailableResult("SOURCE_ERROR", "Unable to read persisted GSC history.");
+    }
+
+    if (history.recentDistinctDays >= MIN_DB_DAYS_FOR_PRIMARY) {
+        try {
+            const data = await fetchEvidenceFromDb(siteId);
+            logger.info("[EvidenceProvider] Using recent persisted GSC history", {
+                siteId: "redacted",
+                recentDistinctDays: history.recentDistinctDays,
+                rows: data.length,
+            });
+            return availableResult(data, "PERSISTED_DB", history.latestRecentDate);
+        } catch (err: unknown) {
+            logger.error("[EvidenceProvider] Persisted GSC aggregation failed", {
+                siteId,
+                error: (err as Error)?.message || String(err),
+            });
+            return unavailableResult("SOURCE_ERROR", "Persisted GSC rows could not be aggregated safely.");
+        }
+    }
+
+    logger.info("[EvidenceProvider] Recent GSC history below threshold; trying live API", {
+        siteId,
+        recentDistinctDays: history.recentDistinctDays,
+        threshold: MIN_DB_DAYS_FOR_PRIMARY,
+    });
+
+    try {
+        const data = await fetchEvidenceFromLiveApi(site);
+        return availableResult(data, "LIVE_GSC", new Date().toISOString());
+    } catch (err: unknown) {
+        const failureStatus = classifyGscError(err);
+        logGscFailure("EvidenceProvider.liveApi", failureStatus, {
+            siteId,
+            phase: "fetch",
+            error: (err as Error)?.message || String(err),
+        });
+
+        if (history.hasAnyRows) {
+            return unavailableResult(
+                "STALE",
+                "Stored GSC history is too old to use, and refreshing it failed.",
+                failureStatus,
+            );
+        }
+
+        return unavailableResult(failureStatus, "GSC could not provide current evidence.");
+    }
+}
+
+/**
+ * Backwards-compatible adapter for existing non-decision consumers.
+ * New decision paths should consume fetchGscEvidenceResult() and check status.
+ */
+export async function fetchGscEvidence(siteId: string): Promise<GscPageMetric[]> {
+    const result = await fetchGscEvidenceResult(siteId);
+    return result.data ?? [];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -78,16 +220,17 @@ function dateDaysAgo(days: number): string {
 }
 
 async function fetchEvidenceFromDb(siteId: string): Promise<GscPageMetric[]> {
-    const recentStart = dateDaysAgo(90);
-    const previousStart = dateDaysAgo(180);
-    const previousEnd = dateDaysAgo(91);
+    const recentStart = dateDaysAgo(EVIDENCE_WINDOW_DAYS + GSC_REPORTING_LAG_DAYS);
+    const recentEnd = dateDaysAgo(GSC_REPORTING_LAG_DAYS);
+    const previousStart = dateDaysAgo((EVIDENCE_WINDOW_DAYS * 2) + GSC_REPORTING_LAG_DAYS);
+    const previousEnd = recentStart;
 
     // Recent 90 days: aggregated by URL
     const recentRows = await prisma.gscDailyPerformance.groupBy({
         by: ["url", "keyword"],
         where: {
             siteId,
-            date: { gte: recentStart },
+            date: { gte: recentStart, lte: recentEnd },
             device: "ALL",
         },
         _sum: { clicks: true, impressions: true },
@@ -207,15 +350,7 @@ async function fetchEvidenceFromDb(siteId: string): Promise<GscPageMetric[]> {
 async function fetchEvidenceFromLiveApi(
     site: { id: string; domain: string; userId: string }
 ): Promise<GscPageMetric[]> {
-    let accessToken: string;
-    try {
-        accessToken = await getUserGscToken(site.userId);
-    } catch (err) {
-        const status = classifyGscError(err);
-        logGscFailure("EvidenceProvider.liveApi", status, { siteId: site.id, phase: "token" });
-        return [];
-    }
-
+    const accessToken = await getUserGscToken(site.userId);
     const siteUrl = await getAuthorizedGscProperty(site.userId, accessToken, site.domain);
     const keywordRows = await fetchGSCKeywords(accessToken, siteUrl, 90, 3600);
 
