@@ -11,6 +11,7 @@ import type { GscDataStatus } from "@/lib/gsc/gsc-availability";
 const MIN_DB_DAYS_FOR_PRIMARY = 7;
 const GSC_REPORTING_LAG_DAYS = 3;
 const EVIDENCE_WINDOW_DAYS = 90;
+const MAX_PERSISTED_AGE_DAYS = 14;
 
 export type OpportunityGscEvidenceStatus =
     | "AVAILABLE"
@@ -42,6 +43,7 @@ export type OpportunityGscEvidenceResult =
 interface PersistedHistory {
     recentDistinctDays: number;
     latestRecentDate: string | null;
+    hasFreshRecentData: boolean;
     hasAnyRows: boolean;
 }
 
@@ -99,9 +101,15 @@ async function getPersistedHistory(siteId: string): Promise<PersistedHistory> {
         }),
     ]);
 
+    const latestRecentDate = recentDays[0]?.date ?? null;
+    const freshnessCutoff = dateDaysAgo(GSC_REPORTING_LAG_DAYS + MAX_PERSISTED_AGE_DAYS);
+
     return {
         recentDistinctDays: recentDays.length,
-        latestRecentDate: recentDays[0]?.date ?? null,
+        latestRecentDate,
+        hasFreshRecentData: Boolean(
+            latestRecentDate && latestRecentDate >= freshnessCutoff,
+        ),
         hasAnyRows: Boolean(anyRow),
     };
 }
@@ -140,7 +148,7 @@ export async function fetchGscEvidenceResult(
         return unavailableResult("SOURCE_ERROR", "Unable to read persisted GSC history.");
     }
 
-    if (history.recentDistinctDays >= MIN_DB_DAYS_FOR_PRIMARY) {
+    if (history.recentDistinctDays >= MIN_DB_DAYS_FOR_PRIMARY && history.hasFreshRecentData) {
         try {
             const data = await fetchEvidenceFromDb(siteId);
             logger.info("[EvidenceProvider] Using recent persisted GSC history", {
@@ -161,6 +169,8 @@ export async function fetchGscEvidenceResult(
     logger.info("[EvidenceProvider] Recent GSC history below threshold; trying live API", {
         siteId,
         recentDistinctDays: history.recentDistinctDays,
+        latestRecentDate: history.latestRecentDate,
+        hasFreshRecentData: history.hasFreshRecentData,
         threshold: MIN_DB_DAYS_FOR_PRIMARY,
     });
 
@@ -174,6 +184,14 @@ export async function fetchGscEvidenceResult(
             phase: "fetch",
             error: (err as Error)?.message || String(err),
         });
+
+        if (history.hasAnyRows && !history.hasFreshRecentData) {
+            return unavailableResult(
+                "STALE",
+                "Stored GSC history is too old to use, and refreshing it failed.",
+                failureStatus,
+            );
+        }
 
         if (history.recentDistinctDays > 0) {
             return unavailableResult(
