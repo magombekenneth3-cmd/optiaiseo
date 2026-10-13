@@ -137,6 +137,8 @@ export interface DeterministicWhyNowSignal {
     evidence: string;
 }
 
+export type SerpEvidenceStatus = "AVAILABLE" | "UNAVAILABLE" | "NOT_REQUESTED";
+
 export interface SerpConsensus {
     dominantType: "COMPARISON_PAGE" | "PRODUCT_PAGE" | "INTERACTIVE_TOOL" | "DEEP_EXPLAINER";
     confidence: number; // 0-100 scale
@@ -161,6 +163,8 @@ export interface OpportunityIntelligence {
     serpConsensus?: SerpConsensus;
     intentAlignment: number; // 0-100
     commercialValueScore: number; // 0-100
+    serpEvidenceStatus?: SerpEvidenceStatus;
+    serpResultCount?: number;
     /** Historical outcome evidence for this action type; null/undefined → heuristic baseline only. */
     interventionEvidence?: InterventionEvidence | null;
 }
