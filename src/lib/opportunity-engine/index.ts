@@ -1,4 +1,4 @@
-import { fetchGscEvidence } from "./evidence";
+import { fetchGscEvidenceResult } from "./evidence";
 import { detectRawOpportunities } from "./detector";
 import { consolidateOpportunities } from "./deduplicator";
 import { buildOpportunityIntelligence } from "./serp-intelligence";
@@ -17,8 +17,23 @@ export async function runGrowthDecisionPipeline(siteId: string): Promise<{ succe
     try {
         logger.info("[DecisionPipeline] Starting growth decision pipeline", { siteId });
 
-        // 1. Evidence Stage (Fetch Real GSC Metrics)
-        const gscMetrics = await fetchGscEvidence(siteId);
+        // 1. Evidence Stage (keep unavailable/stale distinct from an authoritative empty query)
+        const gscEvidence = await fetchGscEvidenceResult(siteId);
+        if (gscEvidence.status !== "AVAILABLE" && gscEvidence.status !== "NO_DATA") {
+            logger.warn("[DecisionPipeline] GSC evidence is not safe for a refresh; preserving existing decisions", {
+                siteId,
+                status: gscEvidence.status,
+                fallbackStatus: gscEvidence.fallbackStatus,
+            });
+            return {
+                success: false,
+                count: 0,
+                status: gscEvidence.status === "STALE"
+                    ? "GSC_STALE"
+                    : `GSC_${gscEvidence.status}`,
+            };
+        }
+        const gscMetrics = gscEvidence.data;
 
         // 2. Detection Stage (Extract Raw Opportunities)
         const rawSignals = await detectRawOpportunities(siteId, gscMetrics);
