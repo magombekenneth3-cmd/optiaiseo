@@ -46,7 +46,7 @@ interface PersistedHistory {
 
 function evidenceDateRange() {
     return {
-        from: dateDaysAgo(EVIDENCE_WINDOW_DAYS + GSC_REPORTING_LAG_DAYS),
+        from: dateDaysAgo(EVIDENCE_WINDOW_DAYS + GSC_REPORTING_LAG_DAYS - 1),
         to: dateDaysAgo(GSC_REPORTING_LAG_DAYS),
     };
 }
@@ -206,9 +206,9 @@ function dateDaysAgo(days: number): string {
 }
 
 async function fetchEvidenceFromDb(siteId: string): Promise<GscPageMetric[]> {
-    const recentStart = dateDaysAgo(EVIDENCE_WINDOW_DAYS + GSC_REPORTING_LAG_DAYS);
+    const recentStart = dateDaysAgo(EVIDENCE_WINDOW_DAYS + GSC_REPORTING_LAG_DAYS - 1);
     const recentEnd = dateDaysAgo(GSC_REPORTING_LAG_DAYS);
-    const previousStart = dateDaysAgo((EVIDENCE_WINDOW_DAYS * 2) + GSC_REPORTING_LAG_DAYS);
+    const previousStart = dateDaysAgo((EVIDENCE_WINDOW_DAYS * 2) + GSC_REPORTING_LAG_DAYS - 1);
     const previousEnd = recentStart;
 
     // Recent 90 days: aggregated by URL
