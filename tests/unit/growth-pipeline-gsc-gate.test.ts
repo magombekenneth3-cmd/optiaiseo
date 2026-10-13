@@ -74,6 +74,23 @@ describe("growth pipeline GSC evidence safety gate", () => {
     expect(releaseSyncLock).toHaveBeenCalledWith("site-1");
   });
 
+
+  it("reports FAILED when durable decision persistence throws", async () => {
+    vi.mocked(fetchGscEvidenceResult).mockResolvedValue({
+      status: "NO_DATA",
+      data: [],
+      source: "LIVE_GSC",
+      observedAt: "2026-10-13T18:00:00.000Z",
+      dateRange: { from: "2026-07-12", to: "2026-10-10" },
+    });
+    vi.mocked(savePersistedDecisions).mockRejectedValue(new Error("database write failed"));
+
+    const result = await runGrowthDecisionPipeline("site-1");
+
+    expect(result).toEqual({ success: false, count: 0, status: "FAILED" });
+    expect(savePersistedDecisions).toHaveBeenCalledWith("site-1", []);
+  });
+
   it("continues when GSC authoritatively returns no rows", async () => {
     vi.mocked(fetchGscEvidenceResult).mockResolvedValue({
       status: "NO_DATA",
