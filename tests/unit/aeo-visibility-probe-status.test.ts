@@ -50,7 +50,7 @@ describe("typed AI visibility probes", () => {
 
   it("records a successful negative Grok result as a measured zero", async () => {
     vi.stubEnv("XAI_API_KEY", "test-key");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response("Here are three general SEO tools.")));
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => response("Here are three general SEO tools.")));
 
     const result = await checkGrokVisibilityWithStatus("OptiAISEO", "best SEO tools");
 
@@ -73,7 +73,7 @@ describe("typed AI visibility probes", () => {
     vi.stubEnv("AZURE_OAI_ENDPOINT", "https://example.openai.azure.com");
     vi.stubEnv("AZURE_OAI_KEY", "test-key");
     vi.stubEnv("BING_SEARCH_KEY", "");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response("OptiAISEO is one option to consider.")));
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => response("OptiAISEO is one option to consider.")));
 
     const result = await checkCopilotVisibilityWithStatus("OptiAISEO", "best SEO tools");
 
