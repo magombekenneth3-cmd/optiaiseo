@@ -16,6 +16,7 @@ export type OpportunityGscEvidenceStatus =
     | "AVAILABLE"
     | "NO_DATA"
     | "STALE"
+    | "INSUFFICIENT_HISTORY"
     | "SITE_NOT_FOUND"
     | "SOURCE_ERROR"
     | Exclude<GscDataStatus, "AVAILABLE" | "NO_DATA">;
@@ -46,7 +47,7 @@ interface PersistedHistory {
 
 function evidenceDateRange() {
     return {
-        from: dateDaysAgo(EVIDENCE_WINDOW_DAYS + GSC_REPORTING_LAG_DAYS - 1),
+        from: dateDaysAgo(EVIDENCE_WINDOW_DAYS + GSC_REPORTING_LAG_DAYS),
         to: dateDaysAgo(GSC_REPORTING_LAG_DAYS),
     };
 }
@@ -174,6 +175,14 @@ export async function fetchGscEvidenceResult(
             error: (err as Error)?.message || String(err),
         });
 
+        if (history.recentDistinctDays > 0) {
+            return unavailableResult(
+                "INSUFFICIENT_HISTORY",
+                "There are too few recent GSC days for a reliable decision, and a live refresh failed.",
+                failureStatus,
+            );
+        }
+
         if (history.hasAnyRows) {
             return unavailableResult(
                 "STALE",
@@ -206,9 +215,9 @@ function dateDaysAgo(days: number): string {
 }
 
 async function fetchEvidenceFromDb(siteId: string): Promise<GscPageMetric[]> {
-    const recentStart = dateDaysAgo(EVIDENCE_WINDOW_DAYS + GSC_REPORTING_LAG_DAYS - 1);
+    const recentStart = dateDaysAgo(EVIDENCE_WINDOW_DAYS + GSC_REPORTING_LAG_DAYS);
     const recentEnd = dateDaysAgo(GSC_REPORTING_LAG_DAYS);
-    const previousStart = dateDaysAgo((EVIDENCE_WINDOW_DAYS * 2) + GSC_REPORTING_LAG_DAYS - 1);
+    const previousStart = dateDaysAgo((EVIDENCE_WINDOW_DAYS * 2) + GSC_REPORTING_LAG_DAYS);
     const previousEnd = recentStart;
 
     // Recent 90 days: aggregated by URL
