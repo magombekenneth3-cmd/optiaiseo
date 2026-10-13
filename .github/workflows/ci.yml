@@ -49,6 +49,7 @@ jobs:
           tests/unit/serp-competitive-brief.test.ts
           tests/unit/information-gain.test.ts
           tests/unit/blog-pipeline-production.test.ts
+          tests/unit/aeo-visibility-probe-status.test.ts
           --reporter=verbose
 
       - name: Production Next.js build (blocking)
