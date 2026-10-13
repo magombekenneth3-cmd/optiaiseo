@@ -123,6 +123,8 @@ export interface ExplainableScore {
     effort: number;
     serpEvidenceStatus?: SerpEvidenceStatus;
     serpResultCount?: number;
+    serpSource?: "CACHED_KEYWORD_SNAPSHOT" | "LIVE_SERP";
+    serpObservedAt?: string;
     components: {
         rankingOpportunity: number;
         trafficOpportunity: number;
@@ -167,6 +169,8 @@ export interface OpportunityIntelligence {
     commercialValueScore: number; // 0-100
     serpEvidenceStatus?: SerpEvidenceStatus;
     serpResultCount?: number;
+    serpSource?: "CACHED_KEYWORD_SNAPSHOT" | "LIVE_SERP";
+    serpObservedAt?: string;
     /** Historical outcome evidence for this action type; null/undefined → heuristic baseline only. */
     interventionEvidence?: InterventionEvidence | null;
 }
