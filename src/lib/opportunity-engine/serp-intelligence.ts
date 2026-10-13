@@ -157,33 +157,33 @@ async function fetchLiveSerpContext(
   keyword: string,
   locationCode: number,
 ): Promise<SerpContext | null> {
-  if (process.env.SERPER_API_KEY) {
-    return getSerpContextForKeyword(keyword, false);
-  }
-
   if (process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD) {
     const result = await getSerpData(keyword, locationCode);
     const organic = result.features.organicResults;
-    if (organic.length === 0) return null;
+    if (organic.length > 0) {
+      return {
+        keyword,
+        results: organic.map((item) => ({
+          title: item.title,
+          link: item.url,
+          snippet: "",
+          rank: item.rank,
+        })),
+        peopleAlsoAsk: [],
+        featuredSnippet: null,
+        relatedSearches: [],
+        formattedContext: "",
+        opportunityAnalysis: {
+          tableStakes: [],
+          opportunities: [],
+          unansweredQuestions: [],
+        },
+      };
+    }
+  }
 
-    return {
-      keyword,
-      results: organic.map((item) => ({
-        title: item.title,
-        link: item.url,
-        snippet: "",
-        rank: item.rank,
-      })),
-      peopleAlsoAsk: [],
-      featuredSnippet: null,
-      relatedSearches: [],
-      formattedContext: "",
-      opportunityAnalysis: {
-        tableStakes: [],
-        opportunities: [],
-        unansweredQuestions: [],
-      },
-    };
+  if (process.env.SERPER_API_KEY) {
+    return getSerpContextForKeyword(keyword, false);
   }
 
   return null;
