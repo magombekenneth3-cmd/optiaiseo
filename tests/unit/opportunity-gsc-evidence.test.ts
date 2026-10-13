@@ -34,7 +34,7 @@ vi.mock("@/lib/logger", () => ({
 
 const site = { id: "site-1", domain: "example.com", userId: "user-1" };
 const recentDates = Array.from({ length: 7 }, (_, index) => ({
-  date: `2026-10-${String(12 - index).padStart(2, "0")}`,
+  date: `2026-10-${String(10 - index).padStart(2, "0")}`,
 }));
 
 describe("fetchGscEvidenceResult", () => {
@@ -89,7 +89,7 @@ describe("fetchGscEvidenceResult", () => {
 
     expect(result.status).toBe("AVAILABLE");
     expect(result.source).toBe("PERSISTED_DB");
-    expect(result.observedAt).toBe("2026-10-12");
+    expect(result.observedAt).toBe("2026-10-10");
     expect(result.data).toHaveLength(1);
     expect(result.data?.[0].keyword).toBe("seo tool");
   });
