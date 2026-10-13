@@ -17,8 +17,14 @@ export interface OpportunityIntelligenceOptions {
   maxLookups?: number;
 }
 
+interface KeywordGroup {
+  keyword: string;
+  opportunities: ConsolidatedOpportunity[];
+  maxImpressions: number;
+}
+
 async function loadInBatches(
-  keywords: string[],
+  keywords: Array<{ key: string; keyword: string }>,
   loader: SerpContextLoader,
   concurrency: number,
 ): Promise<Map<string, SerpContext | null>> {
@@ -27,17 +33,17 @@ async function loadInBatches(
   for (let start = 0; start < keywords.length; start += concurrency) {
     const batch = keywords.slice(start, start + concurrency);
     const results = await Promise.allSettled(
-      batch.map(async (keyword) => ({
-        keyword,
+      batch.map(async ({ key, keyword }) => ({
+        key,
         context: await loader(keyword),
       })),
     );
 
     for (let index = 0; index < results.length; index++) {
       const result = results[index];
-      const keyword = batch[index];
+      const key = batch[index].key;
       contexts.set(
-        keyword,
+        key,
         result.status === "fulfilled" ? result.value.context : null,
       );
     }
@@ -50,58 +56,79 @@ export async function buildOpportunityIntelligence(
   opportunities: ConsolidatedOpportunity[],
   options: OpportunityIntelligenceOptions = {},
 ): Promise<Map<string, OpportunityIntelligence>> {
-  const maxLookups = Math.max(
-    0,
-    Math.floor(options.maxLookups ?? DEFAULT_MAX_LOOKUPS),
-  );
+  const configuredLimit = options.maxLookups ?? DEFAULT_MAX_LOOKUPS;
+  const maxLookups = Number.isFinite(configuredLimit)
+    ? Math.min(DEFAULT_MAX_LOOKUPS, Math.max(0, Math.floor(configuredLimit)))
+    : DEFAULT_MAX_LOOKUPS;
   const serpConfigured =
     options.serpConfigured ?? Boolean(process.env.SERPER_API_KEY);
   const loader =
     options.loadSerpContext ??
     ((keyword: string) => getSerpContextForKeyword(keyword, false));
 
-  const bestOpportunityByKeyword = new Map<string, ConsolidatedOpportunity>();
+  const keywordGroups = new Map<string, KeywordGroup>();
   for (const opportunity of opportunities) {
     const keyword = opportunity.keyword.trim();
     if (!keyword) continue;
 
-    const current = bestOpportunityByKeyword.get(keyword);
-    if (!current || opportunity.impressions > current.impressions) {
-      bestOpportunityByKeyword.set(keyword, opportunity);
+    const key = keyword.toLocaleLowerCase();
+    const current = keywordGroups.get(key);
+    if (!current) {
+      keywordGroups.set(key, {
+        keyword,
+        opportunities: [opportunity],
+        maxImpressions: opportunity.impressions,
+      });
+      continue;
     }
+
+    current.opportunities.push(opportunity);
+    current.maxImpressions = Math.max(current.maxImpressions, opportunity.impressions);
   }
 
-  const prioritizedKeywords = [...bestOpportunityByKeyword.entries()]
-    .sort(([, a], [, b]) => b.impressions - a.impressions)
-    .map(([keyword]) => keyword);
+  const prioritizedKeywords = [...keywordGroups.entries()]
+    .sort(([, a], [, b]) => b.maxImpressions - a.maxImpressions)
+    .map(([key, group]) => ({ key, keyword: group.keyword }));
   const requestedKeywords =
     serpConfigured && maxLookups > 0
       ? prioritizedKeywords.slice(0, maxLookups)
       : [];
-  const requestedSet = new Set(requestedKeywords);
+  const requestedSet = new Set(requestedKeywords.map(({ key }) => key));
 
   const contexts = requestedKeywords.length > 0
     ? await loadInBatches(requestedKeywords, loader, LOOKUP_CONCURRENCY)
     : new Map<string, SerpContext | null>();
 
-  const intelligence = new Map<string, OpportunityIntelligence>();
-  for (const keyword of bestOpportunityByKeyword.keys()) {
-    const context = contexts.get(keyword) ?? null;
+  const groupIntelligence = new Map<string, OpportunityIntelligence>();
+  for (const [key, group] of keywordGroups.entries()) {
+    const context = contexts.get(key) ?? null;
     const hasSerpEvidence = Boolean(context?.results?.length);
     let status: SerpEvidenceStatus;
 
     if (hasSerpEvidence) {
       status = "AVAILABLE";
-    } else if (!serpConfigured || requestedSet.has(keyword)) {
+    } else if (!serpConfigured || requestedSet.has(key)) {
       status = "UNAVAILABLE";
     } else {
       status = "NOT_REQUESTED";
     }
 
-    intelligence.set(
-      keyword,
-      analyzeSerpConsensus(keyword, context, status),
+    groupIntelligence.set(
+      key,
+      analyzeSerpConsensus(group.keyword, context, status),
     );
+  }
+
+  const intelligence = new Map<string, OpportunityIntelligence>();
+  for (const opportunity of opportunities) {
+    const keyword = opportunity.keyword.trim();
+    const intel = groupIntelligence.get(keyword.toLocaleLowerCase());
+    if (intel) {
+      intelligence.set(opportunity.keyword, {
+        ...intel,
+        keyword: opportunity.keyword,
+      });
+    }
   }
 
   return intelligence;
