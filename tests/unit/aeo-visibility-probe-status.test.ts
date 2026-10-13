@@ -31,10 +31,12 @@ describe("typed AI visibility probes", () => {
 
   it("marks a missing Grok key as unconfigured, not as observed zero visibility", async () => {
     vi.stubEnv("XAI_API_KEY", "");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
     const result = await checkGrokVisibilityWithStatus("OptiAISEO", "best SEO tools");
 
     expect(result).toEqual({ score: null, status: "NO_API_KEY" });
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("marks a failed Grok request as unavailable", async () => {
