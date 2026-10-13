@@ -1,4 +1,7 @@
 import { getSerpContextForKeyword, type SerpContext } from "@/lib/blog/serp";
+import { logger } from "@/lib/logger";
+import { prisma } from "@/lib/prisma";
+import { resolveLocationCode, getSerpData } from "@/lib/keywords/dataforseo";
 import type {
   ConsolidatedOpportunity,
   OpportunityIntelligence,
@@ -6,8 +9,18 @@ import type {
 } from "./types";
 import { analyzeSerpConsensus } from "@/lib/intelligence/intent-profiler";
 
-const DEFAULT_MAX_LOOKUPS = 5;
+const DEFAULT_MAX_LIVE_LOOKUPS = 5;
+const MAX_CACHED_KEYWORDS = 500;
+const SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const LOOKUP_CONCURRENCY = 2;
+
+type SerpEvidenceSource = "CACHED_KEYWORD_SNAPSHOT" | "LIVE_SERP";
+
+interface LoadedSerpEvidence {
+  context: SerpContext;
+  source: SerpEvidenceSource;
+  observedAt: string;
+}
 
 export type SerpContextLoader = (keyword: string) => Promise<SerpContext | null>;
 
@@ -22,12 +35,166 @@ interface KeywordGroup {
   maxImpressions: number;
 }
 
+interface CachedContextResult {
+  contexts: Map<string, LoadedSerpEvidence>;
+  locationCode: number;
+}
+
+function normalizeKeyword(keyword: string): string {
+  return keyword.trim().toLowerCase().split(/\s+/).filter(Boolean).join(" ");
+}
+
+function contextFromSnapshot(keyword: string, value: unknown): SerpContext | null {
+  if (!Array.isArray(value)) return null;
+
+  const results = value.flatMap((entry, index) => {
+    if (!entry || typeof entry !== "object") return [];
+    const row = entry as Record<string, unknown>;
+    const link =
+      typeof row.url === "string" ? row.url :
+      typeof row.link === "string" ? row.link : "";
+    if (!link) return [];
+
+    return [{
+      title: typeof row.title === "string" ? row.title : "",
+      link,
+      snippet: typeof row.snippet === "string" ? row.snippet : "",
+      rank: typeof row.rank === "number" ? row.rank : index + 1,
+    }];
+  });
+
+  if (results.length === 0) return null;
+
+  return {
+    keyword,
+    results,
+    peopleAlsoAsk: [],
+    featuredSnippet: null,
+    relatedSearches: [],
+    formattedContext: "",
+    opportunityAnalysis: {
+      tableStakes: [],
+      opportunities: [],
+      unansweredQuestions: [],
+    },
+  };
+}
+
+async function loadFreshSnapshotContexts(
+  siteId: string,
+  keywordGroups: Map<string, KeywordGroup>,
+): Promise<CachedContextResult> {
+  const contexts = new Map<string, LoadedSerpEvidence>();
+  let locationCode = 2840;
+
+  try {
+    const site = await prisma.site.findUnique({
+      where: { id: siteId },
+      select: { location: true, localContext: true },
+    });
+    if (!site) return { contexts, locationCode };
+
+    locationCode = resolveLocationCode(site.location?.trim() || site.localContext);
+    const cacheCandidates = [...keywordGroups.entries()]
+      .sort(([, a], [, b]) => b.maxImpressions - a.maxImpressions)
+      .slice(0, MAX_CACHED_KEYWORDS)
+      .map(([key]) => key);
+
+    if (cacheCandidates.length === 0) return { contexts, locationCode };
+
+    const since = new Date(Date.now() - SNAPSHOT_MAX_AGE_MS);
+    const snapshots = await prisma.keywordSerpSnapshot.findMany({
+      where: {
+        keyword: { in: cacheCandidates },
+        observedAt: { gte: since },
+        run: {
+          is: {
+            siteId,
+            locationCode,
+            languageCode: "en",
+            status: { in: ["COMPLETED", "PARTIAL"] },
+          },
+        },
+      },
+      orderBy: { observedAt: "desc" },
+      take: Math.min(3000, Math.max(100, cacheCandidates.length * 5)),
+      select: {
+        keyword: true,
+        results: true,
+        observedAt: true,
+      },
+    });
+
+    for (const snapshot of snapshots) {
+      const key = normalizeKeyword(snapshot.keyword);
+      if (contexts.has(key)) continue;
+      const context = contextFromSnapshot(snapshot.keyword, snapshot.results);
+      if (!context) continue;
+      contexts.set(key, {
+        context,
+        source: "CACHED_KEYWORD_SNAPSHOT",
+        observedAt: snapshot.observedAt.toISOString(),
+      });
+    }
+  } catch (error: unknown) {
+    logger.warn("[DecisionPipeline] Could not reuse fresh SERP snapshots", {
+      siteId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return { contexts, locationCode };
+}
+
+function canFetchLiveSerp(): boolean {
+  return Boolean(
+    process.env.SERPER_API_KEY ||
+    (process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD),
+  );
+}
+
+async function fetchLiveSerpContext(
+  keyword: string,
+  locationCode: number,
+): Promise<SerpContext | null> {
+  if (process.env.SERPER_API_KEY) {
+    return getSerpContextForKeyword(keyword, false);
+  }
+
+  if (process.env.DATAFORSEO_LOGIN && process.env.DATAFORSEO_PASSWORD) {
+    const result = await getSerpData(keyword, locationCode);
+    const organic = result.features.organicResults;
+    if (organic.length === 0) return null;
+
+    return {
+      keyword,
+      results: organic.map((item) => ({
+        title: item.title,
+        link: item.url,
+        snippet: "",
+        rank: item.rank,
+      })),
+      peopleAlsoAsk: [],
+      featuredSnippet: null,
+      relatedSearches: [],
+      formattedContext: "",
+      opportunityAnalysis: {
+        tableStakes: [],
+        opportunities: [],
+        unansweredQuestions: [],
+      },
+    };
+  }
+
+  return null;
+}
+
 async function loadInBatches(
   keywords: Array<{ key: string; keyword: string }>,
   loader: SerpContextLoader,
   concurrency: number,
-): Promise<Map<string, SerpContext | null>> {
-  const contexts = new Map<string, SerpContext | null>();
+): Promise<Map<string, LoadedSerpEvidence>> {
+  const contexts = new Map<string, LoadedSerpEvidence>();
 
   for (let start = 0; start < keywords.length; start += concurrency) {
     const batch = keywords.slice(start, start + concurrency);
@@ -40,11 +207,14 @@ async function loadInBatches(
 
     for (let index = 0; index < results.length; index++) {
       const result = results[index];
-      const key = batch[index].key;
-      contexts.set(
-        key,
-        result.status === "fulfilled" ? result.value.context : null,
-      );
+      if (result.status !== "fulfilled" || !result.value.context?.results?.length) {
+        continue;
+      }
+      contexts.set(result.value.key, {
+        context: result.value.context,
+        source: "LIVE_SERP",
+        observedAt: new Date().toISOString(),
+      });
     }
   }
 
@@ -52,57 +222,55 @@ async function loadInBatches(
 }
 
 export async function buildOpportunityIntelligence(
+  siteId: string,
   opportunities: ConsolidatedOpportunity[],
   options: OpportunityIntelligenceOptions = {},
 ): Promise<Map<string, OpportunityIntelligence>> {
-  const configuredLimit = options.maxLookups ?? DEFAULT_MAX_LOOKUPS;
+  const configuredLimit = options.maxLookups ?? DEFAULT_MAX_LIVE_LOOKUPS;
   const maxLookups = Number.isFinite(configuredLimit)
-    ? Math.min(DEFAULT_MAX_LOOKUPS, Math.max(0, Math.floor(configuredLimit)))
-    : DEFAULT_MAX_LOOKUPS;
-  const serpConfigured =
-    options.serpConfigured ?? Boolean(process.env.SERPER_API_KEY);
-  const loader =
-    options.loadSerpContext ??
-    ((keyword: string) => getSerpContextForKeyword(keyword, false));
+    ? Math.min(DEFAULT_MAX_LIVE_LOOKUPS, Math.max(0, Math.floor(configuredLimit)))
+    : DEFAULT_MAX_LIVE_LOOKUPS;
+  const serpConfigured = options.serpConfigured ?? canFetchLiveSerp();
+  const loader = options.loadSerpContext ??
+    ((keyword: string) => fetchLiveSerpContext(keyword, cacheResult.locationCode));
 
   const keywordGroups = new Map<string, KeywordGroup>();
   for (const opportunity of opportunities) {
     const keyword = opportunity.keyword.trim();
     if (!keyword) continue;
 
-    const key = keyword.toLowerCase();
+    const key = normalizeKeyword(keyword);
     const current = keywordGroups.get(key);
     if (!current) {
-      keywordGroups.set(key, {
-        keyword,
-        maxImpressions: opportunity.impressions,
-      });
+      keywordGroups.set(key, { keyword, maxImpressions: opportunity.impressions });
       continue;
     }
-
     current.maxImpressions = Math.max(current.maxImpressions, opportunity.impressions);
   }
 
+  const cacheResult = await loadFreshSnapshotContexts(siteId, keywordGroups);
+  const contexts = new Map(cacheResult.contexts);
   const prioritizedKeywords = [...keywordGroups.entries()]
     .sort(([, a], [, b]) => b.maxImpressions - a.maxImpressions)
     .map(([key, group]) => ({ key, keyword: group.keyword }));
-  const requestedKeywords =
-    serpConfigured && maxLookups > 0
-      ? prioritizedKeywords.slice(0, maxLookups)
-      : [];
+  const requestedKeywords = serpConfigured
+    ? prioritizedKeywords
+        .filter(({ key }) => !contexts.has(key))
+        .slice(0, maxLookups)
+    : [];
   const requestedSet = new Set(requestedKeywords.map(({ key }) => key));
 
-  const contexts = requestedKeywords.length > 0
-    ? await loadInBatches(requestedKeywords, loader, LOOKUP_CONCURRENCY)
-    : new Map<string, SerpContext | null>();
+  if (requestedKeywords.length > 0) {
+    const liveContexts = await loadInBatches(requestedKeywords, loader, LOOKUP_CONCURRENCY);
+    for (const [key, value] of liveContexts) contexts.set(key, value);
+  }
 
   const groupIntelligence = new Map<string, OpportunityIntelligence>();
   for (const [key, group] of keywordGroups.entries()) {
-    const context = contexts.get(key) ?? null;
-    const hasSerpEvidence = Boolean(context?.results?.length);
+    const loaded = contexts.get(key) ?? null;
     let status: SerpEvidenceStatus;
 
-    if (hasSerpEvidence) {
+    if (loaded) {
       status = "AVAILABLE";
     } else if (!serpConfigured || requestedSet.has(key)) {
       status = "UNAVAILABLE";
@@ -110,16 +278,22 @@ export async function buildOpportunityIntelligence(
       status = "NOT_REQUESTED";
     }
 
-    groupIntelligence.set(
-      key,
-      analyzeSerpConsensus(group.keyword, context, status),
-    );
+    const profile = analyzeSerpConsensus(group.keyword, loaded?.context ?? null, status);
+    groupIntelligence.set(key, {
+      ...profile,
+      ...(loaded
+        ? {
+            serpSource: loaded.source,
+            serpObservedAt: loaded.observedAt,
+          }
+        : {}),
+    });
   }
 
   const intelligence = new Map<string, OpportunityIntelligence>();
   for (const opportunity of opportunities) {
-    const keyword = opportunity.keyword.trim();
-    const intel = groupIntelligence.get(keyword.toLocaleLowerCase());
+    const key = normalizeKeyword(opportunity.keyword);
+    const intel = groupIntelligence.get(key);
     if (intel) {
       intelligence.set(opportunity.keyword, {
         ...intel,
