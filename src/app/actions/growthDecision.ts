@@ -35,6 +35,11 @@ export async function triggerGrowthDecisionSync(siteId: string) {
         success: result.success,
         status: result.status ?? (result.success ? "COMPLETED" : "FAILED"),
         count: result.count,
+        ...(result.status === "NO_GSC_DATA"
+            ? {
+                notice: "Search Console returned no query rows for the current date range. Existing growth decisions were preserved.",
+            }
+            : {}),
         ...(!result.success
             ? {
                 error: result.status?.startsWith("GSC_")
