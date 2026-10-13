@@ -1,11 +1,10 @@
 import { fetchGscEvidence } from "./evidence";
 import { detectRawOpportunities } from "./detector";
 import { consolidateOpportunities } from "./deduplicator";
-import { analyzeSerpConsensus } from "@/lib/intelligence/intent-profiler";
+import { buildOpportunityIntelligence } from "./serp-intelligence";
 import { rankGrowthDecisions } from "./decision-ranker";
 import { savePersistedDecisions } from "@/lib/growth/decision-persistence";
 import { acquireSyncLock, releaseSyncLock } from "@/lib/growth/decision-lock";
-import { GrowthDecision, OpportunityIntelligence } from "./types";
 import { logger } from "@/lib/logger";
 
 export async function runGrowthDecisionPipeline(siteId: string): Promise<{ success: boolean; count: number; status?: string }> {
@@ -27,12 +26,21 @@ export async function runGrowthDecisionPipeline(siteId: string): Promise<{ succe
         // 3. Deduplication Stage (Merge per Canonical URL)
         const consolidated = consolidateOpportunities(rawSignals);
 
-        // 4. Intent Intelligence Stage (Analyze SERP Consensus per Keyword)
-        const intelligenceMap = new Map<string, OpportunityIntelligence>();
-        for (const opp of consolidated) {
-            const intel = analyzeSerpConsensus(opp.keyword, null);
-            intelligenceMap.set(opp.keyword, intel);
-        }
+        // 4. Intent Intelligence Stage (bounded, real SERP evidence when available)
+        const intelligenceMap = await buildOpportunityIntelligence(consolidated);
+        const serpStatuses = [...intelligenceMap.values()].reduce<Record<string, number>>(
+            (counts, intel) => {
+                const status = intel.serpEvidenceStatus ?? "UNAVAILABLE";
+                counts[status] = (counts[status] ?? 0) + 1;
+                return counts;
+            },
+            {},
+        );
+        logger.info("[DecisionPipeline] SERP evidence coverage", {
+            siteId,
+            keywords: intelligenceMap.size,
+            statuses: serpStatuses,
+        });
 
         // 5. Ranking Stage (Weighted Bounded 0-100 Scoring & Action Mapping)
         const decisions = rankGrowthDecisions(siteId, consolidated, intelligenceMap);
