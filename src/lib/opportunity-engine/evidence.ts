@@ -11,6 +11,8 @@ import type { GscDataStatus } from "@/lib/gsc/gsc-availability";
 const MIN_DB_DAYS_FOR_PRIMARY = 7;
 const GSC_REPORTING_LAG_DAYS = 3;
 const EVIDENCE_WINDOW_DAYS = 90;
+const RECENT_START_AGE_DAYS = EVIDENCE_WINDOW_DAYS + GSC_REPORTING_LAG_DAYS - 1;
+const PREVIOUS_START_AGE_DAYS = (EVIDENCE_WINDOW_DAYS * 2) + GSC_REPORTING_LAG_DAYS - 1;
 const MAX_PERSISTED_AGE_DAYS = 14;
 
 export type OpportunityGscEvidenceStatus =
@@ -50,7 +52,7 @@ interface PersistedHistory {
 
 function evidenceDateRange() {
     return {
-        from: dateDaysAgo(EVIDENCE_WINDOW_DAYS + GSC_REPORTING_LAG_DAYS),
+        from: dateDaysAgo(RECENT_START_AGE_DAYS),
         to: dateDaysAgo(GSC_REPORTING_LAG_DAYS),
     };
 }
@@ -234,9 +236,9 @@ function dateDaysAgo(days: number): string {
 }
 
 async function fetchEvidenceFromDb(siteId: string): Promise<GscPageMetric[]> {
-    const recentStart = dateDaysAgo(EVIDENCE_WINDOW_DAYS + GSC_REPORTING_LAG_DAYS);
+    const recentStart = dateDaysAgo(RECENT_START_AGE_DAYS);
     const recentEnd = dateDaysAgo(GSC_REPORTING_LAG_DAYS);
-    const previousStart = dateDaysAgo((EVIDENCE_WINDOW_DAYS * 2) + GSC_REPORTING_LAG_DAYS);
+    const previousStart = dateDaysAgo(PREVIOUS_START_AGE_DAYS);
     const previousEnd = recentStart;
 
     // Recent 90 days: aggregated by URL
