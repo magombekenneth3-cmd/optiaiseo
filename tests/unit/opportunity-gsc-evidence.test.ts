@@ -70,6 +70,25 @@ describe("fetchGscEvidenceResult", () => {
   });
 
 
+
+  it("does not reuse seven historical days when the newest persisted observation is stale", async () => {
+    vi.mocked(prisma.gscDailyPerformance.findMany).mockResolvedValue(
+      Array.from({ length: 7 }, (_, index) => ({
+        date: `2026-09-${String(20 - index).padStart(2, "0")}`,
+      })) as never,
+    );
+    vi.mocked(prisma.gscDailyPerformance.findFirst).mockResolvedValue({
+      date: "2026-09-20",
+    } as never);
+
+    const result = await fetchGscEvidenceResult("site-1");
+
+    expect(result.status).toBe("STALE");
+    expect(result.fallbackStatus).toBe("NOT_CONNECTED");
+    expect(result.data).toBeNull();
+    expect(prisma.gscDailyPerformance.groupBy).not.toHaveBeenCalled();
+  });
+
   it("reports insufficient recent history separately from stale stored history", async () => {
     vi.mocked(prisma.gscDailyPerformance.findMany).mockResolvedValue(
       recentDates.slice(0, 3) as never,
