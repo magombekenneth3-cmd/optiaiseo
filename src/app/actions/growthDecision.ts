@@ -32,8 +32,16 @@ export async function triggerGrowthDecisionSync(siteId: string) {
     const result = await runGrowthDecisionPipeline(siteId);
 
     return {
-        success: true,
-        status: result.status ?? "COMPLETED",
+        success: result.success,
+        status: result.status ?? (result.success ? "COMPLETED" : "FAILED"),
         count: result.count,
+        ...(!result.success
+            ? {
+                error: result.status?.startsWith("GSC_")
+                    ? "Google Search Console evidence is unavailable or stale. Reconnect GSC or refresh its data before retrying."
+                    : "Growth decision sync failed. Existing recommendations were preserved.",
+                code: result.status ?? "FAILED",
+            }
+            : {}),
     };
 }
