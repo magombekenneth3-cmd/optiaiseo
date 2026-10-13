@@ -38,7 +38,7 @@ export async function triggerGrowthDecisionSync(siteId: string) {
         ...(!result.success
             ? {
                 error: result.status?.startsWith("GSC_")
-                    ? "Google Search Console evidence is unavailable or stale. Reconnect GSC or refresh its data before retrying."
+                    ? "Google Search Console evidence is unavailable, stale, or too sparse for a reliable refresh. Reconnect GSC or refresh its data before retrying."
                     : "Growth decision sync failed. Existing recommendations were preserved.",
                 code: result.status ?? "FAILED",
             }
