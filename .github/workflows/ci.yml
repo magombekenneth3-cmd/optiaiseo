@@ -43,7 +43,7 @@ jobs:
       - name: TypeScript type check (full project, blocking)
         run: pnpm exec tsc --noEmit
 
-      - name: SERP competitive intelligence regression tests (blocking)
+      - name: SERP and AI visibility regression tests (blocking)
         run: >-
           pnpm exec vitest run
           tests/unit/serp-competitive-brief.test.ts
