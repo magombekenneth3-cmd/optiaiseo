@@ -29,6 +29,7 @@ export type OpportunityGscEvidenceResult =
           source: "PERSISTED_DB" | "LIVE_GSC";
           observedAt: string | null;
           dateRange: { from: string; to: string };
+          fallbackStatus?: Exclude<GscDataStatus, "AVAILABLE" | "NO_DATA">;
       }
     | {
           status: Exclude<OpportunityGscEvidenceStatus, "AVAILABLE" | "NO_DATA">;
