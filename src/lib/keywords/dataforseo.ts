@@ -66,11 +66,8 @@ export const DATAFORSEO_LOCATION_CODES: Record<string, number> = {
 export function resolveLocationCode(text: string | null | undefined): number {
     if (!text?.trim()) return DATAFORSEO_LOCATION_CODES.us;
 
-    const normalized = text
-        .trim()
-        .toLowerCase()
-        .replace(/[_-]+/g, " ")
-        .replace(/\\s+/g, " ");
+    const normalized = text.trim().toLowerCase().replace(/[_-]+/g, " ");
+    const tokens = normalized.split(/[^a-z]+/).filter(Boolean);
 
     const nameToCode: Record<string, number> = {
         "uganda": 1011984, "kenya": 1010046, "nigeria": 2566,
@@ -86,17 +83,22 @@ export function resolveLocationCode(text: string | null | undefined): number {
         ([a], [b]) => b.length - a.length,
     );
     for (const [name, code] of normalizedNames) {
-        const boundaryMatch = new RegExp("(?:^|[^a-z])" + name + "(?:$|[^a-z])");
-        if (boundaryMatch.test(normalized)) return code;
+        const nameTokens = name.split(" ");
+        const found = tokens.some((_, startIndex) =>
+            nameTokens.every((token, offset) => tokens[startIndex + offset] === token),
+        );
+        if (found) return code;
     }
 
-    // Accept a bare country code or a clearly delimited trailing code.
-    // Avoid matching short codes inside words such as "business".
-    const bareCode = normalized.match(/^[a-z]{2}$/)?.[0];
-    const delimitedCode = normalized.match(/(?:^|[,()\\s])([a-z]{2})[)\\s]*$/)?.[1];
-    const code = bareCode ?? delimitedCode;
-    if (code && DATAFORSEO_LOCATION_CODES[code]) {
-        return DATAFORSEO_LOCATION_CODES[code];
+    if (/^[a-z]{2}$/.test(normalized) && DATAFORSEO_LOCATION_CODES[normalized]) {
+        return DATAFORSEO_LOCATION_CODES[normalized];
+    }
+
+    // A code in a location string is accepted only when explicitly delimited.
+    const lastToken = tokens[tokens.length - 1];
+    const hasExplicitDelimiter = /[,()]|[-_]/.test(text);
+    if (hasExplicitDelimiter && lastToken && DATAFORSEO_LOCATION_CODES[lastToken]) {
+        return DATAFORSEO_LOCATION_CODES[lastToken];
     }
 
     return DATAFORSEO_LOCATION_CODES.us;
