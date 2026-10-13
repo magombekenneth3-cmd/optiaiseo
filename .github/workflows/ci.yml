@@ -51,6 +51,8 @@ jobs:
           tests/unit/blog-pipeline-production.test.ts
           tests/unit/opportunity-serp-evidence.test.ts
           tests/unit/dataforseo-location.test.ts
+          tests/unit/opportunity-gsc-evidence.test.ts
+          tests/unit/growth-pipeline-gsc-gate.test.ts
           --reporter=verbose
 
       - name: Production Next.js build (blocking)
