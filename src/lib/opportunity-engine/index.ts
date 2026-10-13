@@ -33,6 +33,14 @@ export async function runGrowthDecisionPipeline(siteId: string): Promise<{ succe
                     : `GSC_${gscEvidence.status}`,
             };
         }
+        if (gscEvidence.status === "NO_DATA") {
+            logger.info("[DecisionPipeline] GSC returned no query rows; preserving existing growth decisions", {
+                siteId,
+                source: gscEvidence.source,
+                dateRange: gscEvidence.dateRange,
+            });
+            return { success: true, count: 0, status: "NO_GSC_DATA" };
+        }
         const gscMetrics = gscEvidence.data;
 
         // 2. Detection Stage (Extract Raw Opportunities)
