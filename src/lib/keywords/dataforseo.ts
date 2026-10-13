@@ -64,6 +64,29 @@ export const DATAFORSEO_LOCATION_CODES: Record<string, number> = {
 };
 
 export function resolveLocationCode(text: string | null | undefined): number {
+    if (!text?.trim()) return DATAFORSEO_LOCATION_CODES.us;
+
+    const normalized = text
+        .trim()
+        .toLowerCase()
+        .replace(/[_-]+/g, " ")
+        .replace(/\\s+/g, " ");
+
+    const nameToCode: Record<string, number> = {
+        "uganda": 1011984, "kenya": 1010046, "nigeria": 2566,
+        "ghana": 2288, "south africa": 2710, "tanzania": 1010467,
+        "rwanda": 1006886, "ethiopia": 2231, "senegal": 2686,
+        "united states": 2840, "usa": 2840, "united kingdom": 2826,
+        "uk": 2826, "australia": 2036, "canada": 2124, "india": 2356,
+        "singapore": 2702, "germany": 2276, "france": 2250,
+        "netherlands": 2528, "philippines": 2608,
+    };
+
+    const normalizedName = Object.entries(nameToCode).sort(
+        ([a], [b]) => b.length - a.length,
+    );
+    for (const [name, code] of normalizedName) {
+        const escaped = name.replace(/[.*+?^{}()|[\\]\\\\]/g, "\\\\export function resolveLocationCode(text: string | null | undefined): number {
     if (!text) return DATAFORSEO_LOCATION_CODES.us;
     const lower = text.toLowerCase();
     const nameToCode: Record<string, number> = {
@@ -82,6 +105,22 @@ export function resolveLocationCode(text: string | null | undefined): number {
     for (const [code, loc] of Object.entries(DATAFORSEO_LOCATION_CODES)) {
         if (lower.includes(code)) return loc;
     }
+    return DATAFORSEO_LOCATION_CODES.us;
+}");
+        if (new RegExp(`(?:^|[^a-z])${escaped}(?:$|[^a-z])`).test(normalized)) {
+            return code;
+        }
+    }
+
+    // Accept a bare country code or an explicitly delimited trailing code.
+    // Do not substring-match short codes inside ordinary words such as "business".
+    const bareCode = normalized.match(/^[a-z]{2}$/)?.[0];
+    const delimitedCode = normalized.match(/(?:^|[,()\\s])([a-z]{2})[)\\s]*$/)?.[1];
+    const code = bareCode ?? delimitedCode;
+    if (code && DATAFORSEO_LOCATION_CODES[code]) {
+        return DATAFORSEO_LOCATION_CODES[code];
+    }
+
     return DATAFORSEO_LOCATION_CODES.us;
 }
 
