@@ -21,7 +21,7 @@ export type ProviderStatus =
   | "NO_API_KEY"
   | "CIRCUIT_OPEN";
 
-/** A probe result keeps an observed zero separate from an unknown value. */
+/** A provider probe keeps a genuine zero separate from an unknown result. */
 export interface VisibilityProbeResult {
   score: number | null;
   status: ProviderStatus;
