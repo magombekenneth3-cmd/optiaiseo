@@ -27,7 +27,7 @@ export async function runGrowthDecisionPipeline(siteId: string): Promise<{ succe
         const consolidated = consolidateOpportunities(rawSignals);
 
         // 4. Intent Intelligence Stage (bounded, real SERP evidence when available)
-        const intelligenceMap = await buildOpportunityIntelligence(consolidated);
+        const intelligenceMap = await buildOpportunityIntelligence(siteId, consolidated);
         const serpStatuses = [...intelligenceMap.values()].reduce<Record<string, number>>(
             (counts, intel) => {
                 const status = intel.serpEvidenceStatus ?? "UNAVAILABLE";
