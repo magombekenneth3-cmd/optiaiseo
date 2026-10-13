@@ -77,11 +77,17 @@ describe("growth pipeline GSC evidence safety gate", () => {
 
   it("reports FAILED when durable decision persistence throws", async () => {
     vi.mocked(fetchGscEvidenceResult).mockResolvedValue({
-      status: "NO_DATA",
-      data: [],
+      status: "AVAILABLE",
+      data: [{
+        url: "https://example.com/page",
+        keyword: "seo tool",
+        clicks: 7,
+        impressions: 100,
+        position: 8,
+      }],
       source: "LIVE_GSC",
       observedAt: "2026-10-13T18:00:00.000Z",
-      dateRange: { from: "2026-07-12", to: "2026-10-10" },
+      dateRange: { from: "2026-07-13", to: "2026-10-10" },
     });
     vi.mocked(savePersistedDecisions).mockRejectedValue(new Error("database write failed"));
 
@@ -91,7 +97,7 @@ describe("growth pipeline GSC evidence safety gate", () => {
     expect(savePersistedDecisions).toHaveBeenCalledWith("site-1", []);
   });
 
-  it("continues when GSC authoritatively returns no rows", async () => {
+  it("preserves existing active decisions when GSC authoritatively returns no rows", async () => {
     vi.mocked(fetchGscEvidenceResult).mockResolvedValue({
       status: "NO_DATA",
       data: [],
@@ -102,8 +108,8 @@ describe("growth pipeline GSC evidence safety gate", () => {
 
     const result = await runGrowthDecisionPipeline("site-1");
 
-    expect(result).toEqual({ success: true, count: 0, status: "COMPLETED" });
-    expect(detectRawOpportunities).toHaveBeenCalledWith("site-1", []);
-    expect(savePersistedDecisions).toHaveBeenCalledWith("site-1", []);
+    expect(result).toEqual({ success: true, count: 0, status: "NO_GSC_DATA" });
+    expect(detectRawOpportunities).not.toHaveBeenCalled();
+    expect(savePersistedDecisions).not.toHaveBeenCalled();
   });
 });
