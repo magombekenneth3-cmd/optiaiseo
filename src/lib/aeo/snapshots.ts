@@ -1,8 +1,8 @@
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { AeoResult } from "./index";
-import { checkGrokVisibility } from "./check-grok";
-import { checkCopilotVisibility } from "./check-copilot";
+import { checkGrokVisibilityWithStatus } from "./check-grok";
+import { checkCopilotVisibilityWithStatus } from "./check-copilot";
 
 export async function saveAeoSnapshot(siteId: string, result: AeoResult) {
     const platformBreakdown = result.multiModelResults.reduce((acc, r) => {
@@ -22,9 +22,19 @@ export async function saveAeoSnapshot(siteId: string, result: AeoResult) {
     const brand = (result as unknown as Record<string, string>).domain ?? siteId;
     const query = `What are the best tools for ${brand}?`;
 
-    const [grokScore, copilotScore] = await Promise.allSettled([
-        checkGrokVisibility(brand, query),
-        checkCopilotVisibility(brand, query),
+    const [grokProbe, copilotProbe] = await Promise.all([
+        checkGrokVisibilityWithStatus(brand, query).catch((error: unknown) => {
+            logger.warn("[AEO/Grok] Visibility probe rejected unexpectedly", {
+                error: (error as Error)?.message || String(error),
+            });
+            return { score: null, status: "PROVIDER_ERROR" as const };
+        }),
+        checkCopilotVisibilityWithStatus(brand, query).catch((error: unknown) => {
+            logger.warn("[AEO/Copilot] Visibility probe rejected unexpectedly", {
+                error: (error as Error)?.message || String(error),
+            });
+            return { score: null, status: "PROVIDER_ERROR" as const };
+        }),
     ]);
 
     // Gap 4.4: Use upsert with the @@unique([siteId, createdAt]) constraint.
@@ -45,8 +55,8 @@ export async function saveAeoSnapshot(siteId: string, result: AeoResult) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         claudeScore: (result.multiEngineScore as any)?.claude ?? 0,
         googleAioScore: result.multiEngineScore?.googleAio ?? 0,
-        grokScore: grokScore.status === "fulfilled" ? grokScore.value : 0,
-        copilotScore: copilotScore.status === "fulfilled" ? copilotScore.value : 0,
+        grokScore: grokProbe.score ?? 0,
+        copilotScore: copilotProbe.score ?? 0,
         // Phase 2: 4-dimensional scoring
         technicalReadiness: result.dimensions?.technicalReadiness ?? 0,
         contentReadiness: result.dimensions?.contentReadiness ?? 0,
@@ -62,13 +72,13 @@ export async function saveAeoSnapshot(siteId: string, result: AeoResult) {
             // P0.9: Record visibility check provenance so UI knows 0 ≠ error
             Grok: {
                 ...(platformBreakdown["Grok"] ?? {}),
-                visibilityScore: grokScore.status === "fulfilled" ? grokScore.value : 0,
-                visibilityStatus: grokScore.status === "fulfilled" ? "SUCCESS" : "PROVIDER_ERROR",
+                visibilityScore: grokProbe.score,
+                visibilityStatus: grokProbe.status,
             },
             Copilot: {
                 ...(platformBreakdown["Copilot"] ?? {}),
-                visibilityScore: copilotScore.status === "fulfilled" ? copilotScore.value : 0,
-                visibilityStatus: copilotScore.status === "fulfilled" ? "SUCCESS" : "PROVIDER_ERROR",
+                visibilityScore: copilotProbe.score,
+                visibilityStatus: copilotProbe.status,
             },
         },
         failedChecks,
