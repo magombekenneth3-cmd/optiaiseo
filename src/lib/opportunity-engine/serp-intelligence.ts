@@ -231,8 +231,6 @@ export async function buildOpportunityIntelligence(
     ? Math.min(DEFAULT_MAX_LIVE_LOOKUPS, Math.max(0, Math.floor(configuredLimit)))
     : DEFAULT_MAX_LIVE_LOOKUPS;
   const serpConfigured = options.serpConfigured ?? canFetchLiveSerp();
-  const loader = options.loadSerpContext ??
-    ((keyword: string) => fetchLiveSerpContext(keyword, cacheResult.locationCode));
 
   const keywordGroups = new Map<string, KeywordGroup>();
   for (const opportunity of opportunities) {
@@ -250,6 +248,8 @@ export async function buildOpportunityIntelligence(
 
   const cacheResult = await loadFreshSnapshotContexts(siteId, keywordGroups);
   const contexts = new Map(cacheResult.contexts);
+  const loader = options.loadSerpContext ??
+    ((keyword: string) => fetchLiveSerpContext(keyword, cacheResult.locationCode));
   const prioritizedKeywords = [...keywordGroups.entries()]
     .sort(([, a], [, b]) => b.maxImpressions - a.maxImpressions)
     .map(([key, group]) => ({ key, keyword: group.keyword }));
