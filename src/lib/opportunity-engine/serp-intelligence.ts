@@ -19,7 +19,6 @@ export interface OpportunityIntelligenceOptions {
 
 interface KeywordGroup {
   keyword: string;
-  opportunities: ConsolidatedOpportunity[];
   maxImpressions: number;
 }
 
@@ -71,18 +70,16 @@ export async function buildOpportunityIntelligence(
     const keyword = opportunity.keyword.trim();
     if (!keyword) continue;
 
-    const key = keyword.toLocaleLowerCase();
+    const key = keyword.toLowerCase();
     const current = keywordGroups.get(key);
     if (!current) {
       keywordGroups.set(key, {
         keyword,
-        opportunities: [opportunity],
         maxImpressions: opportunity.impressions,
       });
       continue;
     }
 
-    current.opportunities.push(opportunity);
     current.maxImpressions = Math.max(current.maxImpressions, opportunity.impressions);
   }
 
