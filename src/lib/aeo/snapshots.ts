@@ -9,7 +9,7 @@ export async function saveAeoSnapshot(siteId: string, result: AeoResult) {
         acc[r.model] = {
             mentioned: r.mentioned,
             confidence: r.confidence,
-            status: r.providerStatus ?? "SUCCESS",
+            status: r.providerStatus ?? "NOT_RECORDED",
         };
         return acc;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
