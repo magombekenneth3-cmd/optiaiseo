@@ -162,7 +162,7 @@ function platformStatusLabel(status: PlatformStatus): string {
     case "SUCCESS":
       return "Measured";
     case "NO_RESULT":
-      return "No response";
+      return "No usable result";
     case "NO_API_KEY":
       return "Not configured";
     case "TIMEOUT":
