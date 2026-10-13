@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getAeoPlatformStatus } from "@/lib/aeo/platform-status";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +100,7 @@ export async function GET(req: NextRequest) {
         successfulProviders: true,
         totalProviders: true,
         failedChecks: true,
+        platformBreakdown: true,
         createdAt: true,
       },
     }),
@@ -178,6 +180,14 @@ export async function GET(req: NextRequest) {
       googleAio: latestSnapshot.googleAioScore,
       grok: latestSnapshot.grokScore,
       copilot: latestSnapshot.copilotScore,
+    },
+    platformStatuses: {
+      perplexity: getAeoPlatformStatus(latestSnapshot.platformBreakdown, "Perplexity"),
+      chatgpt: getAeoPlatformStatus(latestSnapshot.platformBreakdown, "ChatGPT"),
+      claude: getAeoPlatformStatus(latestSnapshot.platformBreakdown, "Claude"),
+      googleAio: "NOT_RECORDED",
+      grok: getAeoPlatformStatus(latestSnapshot.platformBreakdown, "Grok", true),
+      copilot: getAeoPlatformStatus(latestSnapshot.platformBreakdown, "Copilot", true),
     },
     dimensions: {
       technicalReadiness: latestSnapshot.technicalReadiness,
