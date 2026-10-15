@@ -50,11 +50,18 @@ async function getCachedToken(userId: string): Promise<string | null> {
     }
 }
 
-async function setCachedToken(userId: string, token: string): Promise<void> {
+async function setCachedToken(userId: string, token: string, ttlSeconds?: number): Promise<void> {
     const redis = await getRedis();
     if (!redis) return;
     try {
-        await redis.set(`${TOKEN_CACHE_PREFIX}${userId}`, token, { ex: TOKEN_CACHE_TTL_SECONDS });
+        // FIX #4: Use the shorter of the fixed max TTL and the token's
+        // actual remaining lifetime (minus 60s safety margin).
+        // Previously a token with 10 minutes left was cached for ~58 minutes.
+        const effectiveTtl = ttlSeconds
+            ? Math.min(ttlSeconds, TOKEN_CACHE_TTL_SECONDS)
+            : TOKEN_CACHE_TTL_SECONDS;
+        if (effectiveTtl <= 0) return; // Don't cache already-expired tokens
+        await redis.set(`${TOKEN_CACHE_PREFIX}${userId}`, token, { ex: effectiveTtl });
     } catch (err) {
         logger.warn("[gsc-token] Cache write failed", { userId, error: formatError(err) });
     }
@@ -140,7 +147,11 @@ export async function getUserGscToken(userId: string): Promise<string> {
     const isExpired = acc.expires_at && acc.expires_at < now + 60;
 
     if (!isExpired) {
-        await setCachedToken(userId, acc.access_token);
+        // FIX #4: Cache with actual remaining lifetime, not a fixed TTL
+        const remainingSeconds = acc.expires_at
+            ? Math.max(0, acc.expires_at - now - 60)  // 60s safety margin
+            : TOKEN_CACHE_TTL_SECONDS;
+        await setCachedToken(userId, acc.access_token, remainingSeconds);
         prisma.user.updateMany({
             where: { id: userId, gscConnected: false },
             data: { gscConnected: true },
@@ -233,7 +244,9 @@ export async function getUserGscToken(userId: string): Promise<string> {
         },
     });
 
-    await setCachedToken(userId, credentials.access_token);
+    // FIX #4: Cache with actual remaining lifetime from the refreshed token
+    const refreshedRemainingSeconds = Math.max(0, newExpiresAt - now - 60);
+    await setCachedToken(userId, credentials.access_token, refreshedRemainingSeconds);
 
     logger.info("[gsc-token] Token refreshed and persisted", {
         userId,

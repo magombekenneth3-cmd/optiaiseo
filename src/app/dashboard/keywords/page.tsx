@@ -187,58 +187,28 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
         }
     }
 
-    if (!rankingsRes.success || !rankingsRes.data) {
-        const isGscNotConnected =
+    // ── FIX #5: GSC data is optional — Research/Discovery work without it ────
+    // Instead of returning early with a full-page wall, we render the page with
+    // GSC-dependent panels showing an inline connect banner, while Research,
+    // Discovery, and Clusters tabs remain fully accessible.
+    const gscAvailable = rankingsRes.success && !!rankingsRes.data;
+    const isGscNotConnected =
+        !gscAvailable && (
             rankingsRes.error?.includes("Connect Google") ||
-            rankingsRes.error?.includes("reconnect GSC");
-
-        return (
-            <div className="flex flex-col gap-5 w-full max-w-6xl mx-auto">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-foreground mb-1">Keyword Performance</h1>
-                    <p className="text-sm text-muted-foreground">Track rankings, find opportunities and grow organic traffic.</p>
-                </div>
-                {isGscNotConnected ? (
-                    <div className="relative rounded-xl overflow-hidden border border-border">
-                        <div className="blur-sm pointer-events-none opacity-50 p-6">
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                                {[
-                                    { label: "Tracked Keywords", val: "247" },
-                                    { label: "Page 1 Rankings", val: "38" },
-                                    { label: "Need Attention", val: "61" },
-                                    { label: "Clicks", val: "1.2k" },
-                                ].map(s => (
-                                    <div key={s.label} className="p-4 rounded-xl border border-border bg-muted">
-                                        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{s.label}</p>
-                                        <p className="text-3xl font-semibold tracking-tight text-foreground">{s.val}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-4 bg-background/80 backdrop-blur-[2px]">
-                            <Search className="w-10 h-10 text-muted-foreground" />
-                            <div className="text-center">
-                                <p className="font-bold text-lg text-foreground mb-1">Connect Google Search Console</p>
-                                <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                                    Connect your Google account to see real keyword rankings, positions, and click data.
-                                </p>
-                            </div>
-                            <ConnectGSCButton callbackUrl="/dashboard/keywords" />
-                        </div>
-                    </div>
-                ) : (
-                    <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-8 text-center">
-                        <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-3" />
-                        <p className="text-destructive font-medium mb-1">Failed to load keywords</p>
-                        <p className="text-sm text-muted-foreground">{rankingsRes.error}</p>
-                    </div>
-                )}
-            </div>
+            rankingsRes.error?.includes("reconnect GSC")
         );
-    }
 
-    const { keywords, categorised, summary, opportunities, siteId: resolvedSiteId } = rankingsRes.data!;
-    const activeSiteId = siteId || resolvedSiteId;
+    // Build safe defaults when GSC data is unavailable
+    const gscData = gscAvailable ? rankingsRes.data! : null;
+    const keywords = gscData?.keywords ?? [];
+    const categorised = gscData?.categorised ?? {};
+    const summary = gscData?.summary ?? {
+        total: 0, page1Count: 0, top3Count: 0,
+        totalClicks: 0, totalImpressions: 0, page1Pct: 0,
+        criticalCount: 0, weakCount: 0, improvingCount: 0, strongCount: 0,
+    };
+    const opportunities = gscData?.opportunities ?? [];
+    const activeSiteId = siteId || (gscData as { siteId?: string } | null)?.siteId || "";
     const activeSite = userSites.find(s => s.id === activeSiteId);
     const needAttention = summary.criticalCount + summary.weakCount;
     const needPct = summary.total > 0 ? Math.round((needAttention / summary.total) * 100) : 0;
@@ -247,51 +217,96 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
         <div className="flex flex-col gap-5 w-full max-w-6xl mx-auto">
 
             <PageHeader
-                title="Keyword Rankings"
-                description={`Track rankings, find opportunities and grow organic traffic · ${("dateLabel" in (rankingsRes.data ?? {}) ? (rankingsRes.data as { dateLabel?: string }).dateLabel : null) ?? dateLabel} · GSC + GA4`}
-                category="Monitor"
-                metrics={[
+                title="Keyword Research & Rankings"
+                description={
+                    gscAvailable
+                        ? `Track rankings, find opportunities and grow organic traffic · ${(("dateLabel" in (rankingsRes.data ?? {}) ? (rankingsRes.data as { dateLabel?: string }).dateLabel : null) ?? dateLabel)} · GSC + GA4`
+                        : "Discover keyword opportunities, run competitive research, and plan content — no GSC required"
+                }
+                category="Research"
+                metrics={gscAvailable ? [
                     { label: "Tracked", value: fmt(summary.total), color: "text-foreground", sub: `${summary.page1Count} on page 1` },
                     { label: "Page 1", value: String(summary.page1Count), color: "text-brand", sub: `${summary.top3Count} in top 3` },
                     { label: "Need Attention", value: String(needAttention), color: needAttention > 0 ? "text-destructive" : "text-muted-foreground", sub: `${needPct}% of keywords` },
                     { label: "Clicks", value: fmt(summary.totalClicks), color: "text-foreground", sub: dateLabel },
-                ]}
+                ] : []}
             />
 
-            <div className="flex items-center justify-between gap-3 flex-wrap -mt-2">
-                <GscDateRangePicker activeLabel={dateLabel} siteId={activeSiteId} />
-                {userSites.length > 0 && (
+            {gscAvailable && (
+                <div className="flex items-center justify-between gap-3 flex-wrap -mt-2">
+                    <GscDateRangePicker activeLabel={dateLabel} siteId={activeSiteId} />
+                    {userSites.length > 0 && (
+                        <KeywordSiteSwitcher
+                            sites={userSites.map(s => ({ id: s.id, domain: s.domain }))}
+                            activeSiteId={activeSiteId}
+                        />
+                    )}
+                </div>
+            )}
+
+            {/* GSC connection banner — inline, not blocking */}
+            {isGscNotConnected && (
+                <div className="rounded-xl border border-border/60 bg-card p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <div className="flex items-center gap-3 flex-1">
+                        <div className="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center shrink-0">
+                            <Search className="w-5 h-5 text-info" />
+                        </div>
+                        <div>
+                            <p className="font-semibold text-sm text-foreground">Connect Google Search Console for ranking data</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                                Keyword Research, AI Discovery, and Sitemap Import work without GSC.
+                                Connect GSC to unlock ranking tracking, position history, and click data.
+                            </p>
+                        </div>
+                    </div>
+                    <ConnectGSCButton callbackUrl="/dashboard/keywords" />
+                </div>
+            )}
+
+            {!gscAvailable && !isGscNotConnected && rankingsRes.error && (
+                <div className="rounded-xl border border-warning/20 bg-warning/5 p-4 flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                    <div>
+                        <p className="text-sm font-medium text-warning">GSC data temporarily unavailable</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{rankingsRes.error}. Keyword research tools below still work.</p>
+                    </div>
+                </div>
+            )}
+
+            {!gscAvailable && userSites.length > 0 && (
+                <div className="flex items-center justify-end gap-3 flex-wrap -mt-2">
                     <KeywordSiteSwitcher
                         sites={userSites.map(s => ({ id: s.id, domain: s.domain }))}
                         activeSiteId={activeSiteId}
                     />
-                )}
-            </div>
-
-            {summary.total === 0 && <GscConnectCard siteDomain={activeSite?.domain} />}
-
-            {/* Step 1: Duplicate KpiCard grid removed — data is now in PageHeader metrics */}
-
-            <HealthBar summary={summary} />
-
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-                <div className="lg:col-span-3">
-                    <PanelErrorBoundary fallbackTitle="Priority Actions">
-                        <PriorityActions keywords={keywords} siteId={activeSiteId} />
-                    </PanelErrorBoundary>
                 </div>
-                <div className="lg:col-span-2">
-                    <TrafficMini summary={summary} visibilityScore={visibilityScore} />
-                </div>
-            </div>
+            )}
 
-            {activeSiteId && (
+            {summary.total === 0 && gscAvailable && <GscConnectCard siteDomain={activeSite?.domain} />}
+
+            {gscAvailable && <HealthBar summary={summary} />}
+
+            {gscAvailable && (
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+                    <div className="lg:col-span-3">
+                        <PanelErrorBoundary fallbackTitle="Priority Actions">
+                            <PriorityActions keywords={keywords} siteId={activeSiteId} />
+                        </PanelErrorBoundary>
+                    </div>
+                    <div className="lg:col-span-2">
+                        <TrafficMini summary={summary} visibilityScore={visibilityScore} />
+                    </div>
+                </div>
+            )}
+
+            {/* Keyword Workspace — ALWAYS rendered, GSC-dependent tabs show inline prompts */}
+            {(activeSiteId || userSites.length > 0) && (
                 <KeywordTabPanels
-                    siteId={activeSiteId}
+                    siteId={activeSiteId || userSites[0]?.id || ""}
                     categorised={categorised}
                     opportunities={opportunities}
                     summary={summary}
-                    domain={activeSite?.domain ?? ""}
+                    domain={activeSite?.domain ?? userSites[0]?.domain ?? ""}
                     userTier={userTier}
                     maxTracked={maxTracked}
                     trackedKeywordsData={trackedKeywordsData}
@@ -301,10 +316,11 @@ export default async function KeywordsPage({ searchParams }: { searchParams: Pro
                     competitorCount={(competitors as unknown[]).length}
                     trackedCount={trackedKeywordsData.length}
                     keywords={keywords}
+                    gscAvailable={gscAvailable}
                 />
             )}
 
-            {activeSiteId && (
+            {gscAvailable && activeSiteId && (
                 <div id="analytics">
                     <PanelErrorBoundary fallbackTitle="Traffic & Search Performance">
                         <CollapsibleAnalytics siteId={activeSiteId} />

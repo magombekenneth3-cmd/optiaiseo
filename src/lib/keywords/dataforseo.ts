@@ -80,7 +80,11 @@ export function resolveLocationCode(text: string | null | undefined): number {
         if (lower.includes(name)) return code;
     }
     for (const [code, loc] of Object.entries(DATAFORSEO_LOCATION_CODES)) {
-        if (lower.includes(code)) return loc;
+        // FIX #6c: Use word-boundary match for 2-letter codes.
+        // Previously `lower.includes(code)` caused 'us' to match inside
+        // 'business', 'australia', etc.
+        const codeRe = new RegExp(`\\b${code}\\b`, "i");
+        if (codeRe.test(lower)) return loc;
     }
     return DATAFORSEO_LOCATION_CODES.us;
 }
@@ -231,7 +235,9 @@ export async function getKeywordMetricsBatch(
                 if (!kw) continue;
                 results.set(kw, {
                     keyword: kw,
-                    searchVolume: item.search_volume ?? 0,
+                    // FIX #6a: Preserve null for missing data — don't conflate
+                    // 'API returned no data' with 'volume is actually zero'.
+                    searchVolume: item.search_volume ?? null,
                     // keywordDifficulty is intentionally null here — it comes from the Labs endpoint.
                     // competition_index is PAID-SEARCH competition, NOT organic SEO difficulty.
                     keywordDifficulty: null,

@@ -192,16 +192,24 @@ export async function discoverKeywordsWithAI(siteId: string): Promise<{
         const base = `https://${site.domain}`;
         let pagesToCrawl: string[] = [];
 
+        const { safeFetchPublicUrl, validateSitemapUrls } = await import("@/lib/security/safe-fetch");
+
         try {
             for (const path of ["/sitemap.xml", "/sitemap_index.xml"]) {
-                const res = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-                if (!res.ok) continue;
-                const xml = await res.text();
-                const found = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)]
+                const sitemapResult = await safeFetchPublicUrl(`${base}${path}`, {
+                    timeoutMs: FETCH_TIMEOUT_MS,
+                    allowedDomain: site.domain,
+                    maxResponseBytes: 10 * 1024 * 1024,
+                });
+                if (!sitemapResult.ok) continue;
+                if (!sitemapResult.response.ok) continue;
+                const xml = sitemapResult.body;
+                const rawUrls = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)]
                     .map((m) => m[1].trim())
-                    .filter((u) => u.startsWith("http") && !u.endsWith(".xml"))
-                    .slice(0, 6);
-                if (found.length > 0) { pagesToCrawl = found; break; }
+                    .filter((u) => u.startsWith("http") && !u.endsWith(".xml"));
+                // Validate sitemap entries against the allowed domain scope
+                const { valid } = await validateSitemapUrls(rawUrls.slice(0, 20), site.domain);
+                if (valid.length > 0) { pagesToCrawl = valid.slice(0, 6); break; }
             }
         } catch { }
 
@@ -213,12 +221,13 @@ export async function discoverKeywordsWithAI(siteId: string): Promise<{
         await Promise.allSettled(
             pagesToCrawl.slice(0, 5).map(async (url) => {
                 try {
-                    const res = await fetch(url, {
-                        headers: { "User-Agent": "Mozilla/5.0 (compatible; SEOBot/1.0)" },
-                        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+                    const result = await safeFetchPublicUrl(url, {
+                        timeoutMs: FETCH_TIMEOUT_MS,
+                        allowedDomain: site.domain,
+                        fetchInit: { headers: { "User-Agent": "Mozilla/5.0 (compatible; SEOBot/1.0)" } },
                     });
-                    if (!res.ok) return;
-                    const html = await res.text();
+                    if (!result.ok || !result.response.ok) return;
+                    const html = result.body;
                     const title = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? "";
                     const desc = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)?.[1]?.trim() ?? "";
                     const headings = [...html.matchAll(/<h[1-3][^>]*>(.*?)<\/h[1-3]>/gi)]
@@ -304,19 +313,31 @@ export async function importKeywordsFromSitemap(siteId: string): Promise<{
         const MAX_URLS = 50000;
         let urls: string[] = [];
 
+        const { safeFetchPublicUrl, validateSitemapUrls } = await import("@/lib/security/safe-fetch");
+
         for (const path of ["/sitemap.xml", "/sitemap_index.xml", "/sitemap/"]) {
             try {
-                const res = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(10000) });
-                if (!res.ok) continue;
-                const contentLength = res.headers.get("content-length");
-                if (contentLength && parseInt(contentLength, 10) > MAX_SITEMAP_SIZE) continue;
-                const xml = await res.text();
+                const sitemapResult = await safeFetchPublicUrl(`${base}${path}`, {
+                    timeoutMs: 10000,
+                    allowedDomain: site.domain,
+                    maxResponseBytes: MAX_SITEMAP_SIZE,
+                });
+                if (!sitemapResult.ok || !sitemapResult.response.ok) continue;
+                const xml = sitemapResult.body;
                 if (xml.length > MAX_SITEMAP_SIZE) continue;
-                const found = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)]
+                const rawUrls = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)]
                     .map((m) => m[1].trim())
                     .filter((u) => u.startsWith("http"))
                     .slice(0, MAX_URLS);
-                if (found.length > 0) { urls = found; break; }
+                // Validate all sitemap entries against the allowed domain
+                const { valid, rejected } = await validateSitemapUrls(rawUrls, site.domain);
+                if (rejected.length > 0) {
+                    logger.warn(`[KeywordDiscovery] Rejected ${rejected.length} sitemap URLs outside domain scope`, {
+                        domain: site.domain,
+                        examples: rejected.slice(0, 3),
+                    });
+                }
+                if (valid.length > 0) { urls = valid; break; }
             } catch (err: unknown) {
                 logger.warn(`[KeywordDiscovery] Failed to process ${path}:`, { error: err });
             }

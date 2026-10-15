@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Search } from "lucide-react";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { KeywordPlaybookPanel } from "@/components/dashboard/KeywordPlaybookPanel";
 import { CannibalizationPanel } from "./CannibalizationPanel";
@@ -19,12 +20,12 @@ import { PositionDistributionChart } from "./components/PositionDistributionChar
 import { BiggestMovers } from "./components/BiggestMovers";
 
 const TABS = [
-    { id: "keywords", label: "Keywords", desc: "Full keyword rankings from Search Console" },
-    { id: "opportunities", label: "Opportunities", desc: "AI-ranked actions to improve rankings" },
-    { id: "research", label: "Research", desc: "Discover new keyword opportunities" },
-    { id: "competitors", label: "Competitors", desc: "Benchmark against rivals" },
-    { id: "tracked", label: "Tracked", desc: "Position history & rank tracking" },
-    { id: "authority", label: "Authority Map", desc: "Topical clusters, pillar/spoke coverage, internal link detection" },
+    { id: "keywords",      label: "Keywords",      desc: "Full keyword rankings from Search Console", needsGsc: true },
+    { id: "opportunities", label: "Opportunities", desc: "AI-ranked actions to improve rankings",      needsGsc: true },
+    { id: "research",      label: "Research",      desc: "Discover new keyword opportunities",         needsGsc: false },
+    { id: "competitors",   label: "Competitors",   desc: "Benchmark against rivals",                   needsGsc: true },
+    { id: "tracked",       label: "Tracked",       desc: "Position history & rank tracking",           needsGsc: true },
+    { id: "authority",     label: "Authority Map",  desc: "Topical clusters, pillar/spoke coverage",    needsGsc: true },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];
@@ -50,6 +51,28 @@ interface Props {
     competitorCount?: number;
     trackedCount?: number;
     keywords?: { keyword: string; position: number; clicks: number; impressions: number; ctr: number; url: string; intent?: string | null; difficulty?: number | null; positionHistory?: { date: string; position: number }[] }[];
+    /** FIX #5: When false, GSC-dependent tabs show inline connect prompts */
+    gscAvailable?: boolean;
+}
+
+/** Inline banner shown inside GSC-dependent tabs when GSC is not connected */
+function GscRequiredBanner({ tabLabel }: { tabLabel: string }) {
+    return (
+        <div className="py-16 px-6 flex flex-col items-center text-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-info/10 flex items-center justify-center">
+                <Search className="w-6 h-6 text-info" />
+            </div>
+            <div>
+                <p className="font-semibold text-foreground mb-1">
+                    {tabLabel} requires Google Search Console
+                </p>
+                <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                    Connect your Google Search Console to view {tabLabel.toLowerCase()} data.
+                    Use the <strong>Research</strong> tab for keyword discovery without GSC.
+                </p>
+            </div>
+        </div>
+    );
 }
 
 export function KeywordTabPanels({
@@ -57,8 +80,10 @@ export function KeywordTabPanels({
     userTier, maxTracked, trackedKeywordsData, competitors,
     hasRankTracking, hasShareOfVoice,
     competitorCount = 0, trackedCount = 0, keywords = [],
+    gscAvailable = true,
 }: Props) {
-    const [activeTab, setActiveTab] = useState<TabId>("keywords");
+    // FIX #5: Default to Research tab when GSC is unavailable
+    const [activeTab, setActiveTab] = useState<TabId>(gscAvailable ? "keywords" : "research");
 
     const needAttention = keywords.filter(k => k.position > 10).length;
     const badges: Partial<Record<TabId, number>> = {};
@@ -76,6 +101,7 @@ export function KeywordTabPanels({
                 {TABS.map(tab => {
                     const isActive = activeTab === tab.id;
                     const badge = badges[tab.id];
+                    const isDisabledByGsc = tab.needsGsc && !gscAvailable;
                     return (
                         <button
                             key={tab.id}
@@ -84,10 +110,16 @@ export function KeywordTabPanels({
                                 "shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap border-b-2 -mb-px",
                                 isActive
                                     ? "border-info text-foreground"
-                                    : "border-transparent text-muted-foreground hover:text-foreground",
+                                    : isDisabledByGsc
+                                        ? "border-transparent text-muted-foreground/50 hover:text-muted-foreground/70"
+                                        : "border-transparent text-muted-foreground hover:text-foreground",
                             ].join(" ")}
+                            title={isDisabledByGsc ? `${tab.label} requires GSC connection` : tab.desc}
                         >
                             {tab.label}
+                            {isDisabledByGsc && !isActive && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 shrink-0" title="Needs GSC" />
+                            )}
                             {badge !== undefined && (
                                 <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
                                     isActive ? "bg-info/20 text-info" : "bg-muted text-muted-foreground"
@@ -103,23 +135,32 @@ export function KeywordTabPanels({
             <div>
                 {activeTab === "keywords" && (
                     <PanelErrorBoundary fallbackTitle="Keywords table failed to load">
-                        <AllKeywordsTable keywords={keywords} siteId={siteId} />
-                        {/* Step 7: Position distribution + biggest movers below the table */}
-                        {keywords.length > 0 && (
-                            <div className="flex flex-col gap-4 p-5 border-t border-border/60">
-                                <PositionDistributionChart keywords={keywords} />
-                                <BiggestMovers keywords={keywords} />
-                            </div>
+                        {gscAvailable ? (
+                            <>
+                                <AllKeywordsTable keywords={keywords} siteId={siteId} />
+                                {keywords.length > 0 && (
+                                    <div className="flex flex-col gap-4 p-5 border-t border-border/60">
+                                        <PositionDistributionChart keywords={keywords} />
+                                        <BiggestMovers keywords={keywords} />
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <GscRequiredBanner tabLabel="Keywords" />
                         )}
                     </PanelErrorBoundary>
                 )}
                 {activeTab === "opportunities" && (
                     <PanelErrorBoundary fallbackTitle="Opportunities panel failed to load">
-                        <div className="flex flex-col gap-4 p-5">
-                            <KeywordPlaybookPanel categorised={categorised as never} opportunities={opportunities as never} summary={summary as never} domain={domain} siteId={siteId} />
-                            <CannibalizationPanel siteId={siteId} />
-                            <DeviceCtrGapPanel siteId={siteId} />
-                        </div>
+                        {gscAvailable ? (
+                            <div className="flex flex-col gap-4 p-5">
+                                <KeywordPlaybookPanel categorised={categorised as never} opportunities={opportunities as never} summary={summary as never} domain={domain} siteId={siteId} />
+                                <CannibalizationPanel siteId={siteId} />
+                                <DeviceCtrGapPanel siteId={siteId} />
+                            </div>
+                        ) : (
+                            <GscRequiredBanner tabLabel="Opportunities" />
+                        )}
                     </PanelErrorBoundary>
                 )}
                 {activeTab === "research" && (
@@ -133,29 +174,41 @@ export function KeywordTabPanels({
                 )}
                 {activeTab === "competitors" && (
                     <PanelErrorBoundary fallbackTitle="Competitors panel failed to load">
-                        <div className="p-5">
-                            <CompetitorManager siteId={siteId} initialCompetitors={competitors as never} />
-                        </div>
+                        {gscAvailable ? (
+                            <div className="p-5">
+                                <CompetitorManager siteId={siteId} initialCompetitors={competitors as never} />
+                            </div>
+                        ) : (
+                            <GscRequiredBanner tabLabel="Competitors" />
+                        )}
                     </PanelErrorBoundary>
                 )}
                 {activeTab === "tracked" && (
                     <PanelErrorBoundary fallbackTitle="Tracked Keywords panel failed to load">
-                        <div className="flex flex-col gap-4 p-5">
-                            {hasRankTracking ? (
-                                <TrackedKeywordsPanel siteId={siteId} initialData={trackedKeywordsData} tier={userTier} maxTracked={maxTracked} />
-                            ) : (
-                                <div className="py-12 text-center text-muted-foreground text-sm">Rank tracking is available on the Pro plan and above.</div>
-                            )}
-                            {hasShareOfVoice && <ShareOfVoiceChart siteId={siteId} />}
-                            <SerpFeatureHistoryPanel siteId={siteId} />
-                        </div>
+                        {gscAvailable ? (
+                            <div className="flex flex-col gap-4 p-5">
+                                {hasRankTracking ? (
+                                    <TrackedKeywordsPanel siteId={siteId} initialData={trackedKeywordsData} tier={userTier} maxTracked={maxTracked} />
+                                ) : (
+                                    <div className="py-12 text-center text-muted-foreground text-sm">Rank tracking is available on the Pro plan and above.</div>
+                                )}
+                                {hasShareOfVoice && <ShareOfVoiceChart siteId={siteId} />}
+                                <SerpFeatureHistoryPanel siteId={siteId} />
+                            </div>
+                        ) : (
+                            <GscRequiredBanner tabLabel="Tracked Keywords" />
+                        )}
                     </PanelErrorBoundary>
                 )}
                 {activeTab === "authority" && (
                     <PanelErrorBoundary fallbackTitle="Authority Map failed to load">
-                        <div className="p-5">
-                            <TopicalAuthorityPanel siteId={siteId} />
-                        </div>
+                        {gscAvailable ? (
+                            <div className="p-5">
+                                <TopicalAuthorityPanel siteId={siteId} />
+                            </div>
+                        ) : (
+                            <GscRequiredBanner tabLabel="Authority Map" />
+                        )}
                     </PanelErrorBoundary>
                 )}
             </div>
