@@ -54,7 +54,7 @@ export default async function AutopilotPage({
 
   return (
     <div className="p-2 sm:p-4 lg:p-6 flex flex-col gap-6">
-      <AutopilotDashboard canManage={site.userId === session.user.id} />
+      <AutopilotDashboard />
     </div>
   );
 }
