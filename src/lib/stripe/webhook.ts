@@ -4,6 +4,9 @@ import type Stripe from "stripe"
 import { redis } from "@/lib/redis"
 import { ALERT_EMAIL } from "@/lib/constants/auth"
 import { bumpSessionVersion } from "@/lib/session-version"
+import { grantCreditPackOnce } from "@/lib/stripe/credit-pack"
+// The client is a lazy Proxy: nothing is constructed (and no key is read) until first use.
+import { stripe } from "./client"
 
 function extractPriceIdFromInvoice(invoice: Stripe.Invoice, fallbackPriceId: string): string {
     const lineItem = invoice.lines?.data?.[0]
@@ -108,16 +111,26 @@ function toPeriodEnd(timestamp: number | null | undefined): Date | null {
 
 
 export async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promise<void> {
+    // One-time payments (credit packs) have no subscription. Handle them before
+    // the subscription requirement below, otherwise the paid session is
+    // acknowledged without delivering credits.
+    if (session.mode === "payment") {
+        await handleCreditPackCheckout(session)
+        return
+    }
+
     const userId = await resolveUserId(session.metadata?.userId, session.customer as string | null)
     if (!userId) {
         logger.error("[Webhook] checkout.session.completed: could not resolve userId")
         return
     }
 
-    const subscriptionId = session.subscription as string
-    if (!subscriptionId) return
+    // For a subscription-mode session, a missing subscription is not success.
+    if (typeof session.subscription !== "string" || !session.subscription) {
+        throw new Error(`Checkout Session ${session.id} has no subscription`)
+    }
+    const subscriptionId = session.subscription
 
-    const { stripe } = await import("./client")
     const stripeSub = await stripe.subscriptions.retrieve(subscriptionId)
     const item = stripeSub.items.data[0]
     const priceId = item?.price.id ?? null
@@ -148,6 +161,66 @@ export async function handleCheckoutCompleted(session: Stripe.Checkout.Session):
     await bumpSessionVersion(userId)
 
     logger.debug("[Webhook] User upgraded", { userId, tier })
+}
+
+async function handleCreditPackCheckout(session: Stripe.Checkout.Session): Promise<void> {
+    // A delayed payment is not eligible for a grant yet. Asynchronous payment
+    // methods are fulfilled by checkout.session.async_payment_succeeded, which
+    // is routed back through handleCheckoutCompleted with payment_status "paid".
+    if (session.payment_status !== "paid") {
+        logger.info("[Stripe] Credit-pack session is not paid yet", {
+            sessionId: session.id,
+            paymentStatus: session.payment_status,
+        })
+        return
+    }
+
+    // Metadata is set server-side at session creation; fall back to the
+    // customer → subscription lookup for customers that already exist.
+    const userId = await resolveUserId(session.metadata?.userId, session.customer as string | null)
+    const configuredPriceId = process.env.STRIPE_CREDIT_PACK_PRICE_ID
+    if (!userId || !configuredPriceId) {
+        // Throw (not return) so the event is marked RETRY_PENDING and stays visible.
+        throw new Error(
+            `Credit-pack session ${session.id} is missing user metadata or configured price`,
+        )
+    }
+
+    if (session.metadata?.purchaseType && session.metadata.purchaseType !== "credit_pack") {
+        throw new Error(
+            `Unexpected purchaseType "${session.metadata.purchaseType}" on payment session ${session.id}`,
+        )
+    }
+
+    // Verify the actual purchased line item rather than trusting browser input or
+    // the new metadata label (sessions created before this deploy lack it).
+    const lineItems = await stripe.checkout.sessions.listLineItems(session.id, { limit: 2 })
+    const onlyItem = lineItems.data.length === 1 ? lineItems.data[0] : undefined
+    // Preserve the union handling: price may be an ID string or an expanded object.
+    const rawPrice = onlyItem?.price as Stripe.Price | string | null | undefined
+    const actualPriceId = typeof rawPrice === "string" ? rawPrice : rawPrice?.id
+
+    if (actualPriceId !== configuredPriceId || onlyItem?.quantity !== 1) {
+        throw new Error(`Unexpected line item on credit-pack session ${session.id}`)
+    }
+
+    // Optional but recommended: retrieve the configured fixed price and compare
+    // amount/currency if the product does not use taxes, discounts, or adjustable quantities.
+    const { CREDIT_PACK } = await import("@/lib/stripe/plans")
+    const result = await grantCreditPackOnce(userId, session.id, CREDIT_PACK.credits)
+
+    if (result.granted) {
+        // Same as the legacy invoice path: refresh sessions so the new balance /
+        // unlocked state is picked up immediately.
+        await bumpSessionVersion(userId)
+    }
+
+    logger.info("[Stripe] Credit-pack checkout handled", {
+        sessionId: session.id,
+        userId,
+        granted: result.granted,
+        balance: result.balance,
+    })
 }
 
 export async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
@@ -281,16 +354,17 @@ export async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> 
     const priceId = extractPriceIdFromInvoice(invoice, subscription.stripePriceId ?? "")
 
     if (priceId === process.env.STRIPE_CREDIT_PACK_PRICE_ID) {
-        const { addCreditPackCredits } = await import("@/lib/credits")
-        const { CREDIT_PACK } = await import("@/lib/stripe/plans")
-        await addCreditPackCredits(subscription.userId, CREDIT_PACK.credits)
-        // Unlock credits so old balance + new pack = total usable
-        await prisma.user.update({
-            where: { id: subscription.userId },
-            data: { creditsLockedAt: null },
-        }).catch(() => {})
-        await bumpSessionVersion(subscription.userId)
-        logger.debug("[Webhook] Credit pack purchased — credits unlocked", { userId: subscription.userId })
+        // Credit packs are fulfilled exclusively by their paid Checkout Session
+        // (handleCheckoutCompleted → grantCreditPackOnce, idempotent by session ID).
+        // Granting here as well would credit the same purchase twice, so this
+        // branch only acknowledges the invoice and stops it falling through to
+        // the subscription-tier logic below.
+        // Before deleting this branch entirely, confirm no legacy production flow
+        // relied on invoice.paid for credit-pack fulfillment.
+        logger.info("[Webhook] invoice.paid for credit-pack price — fulfilled via Checkout Session, skipping grant", {
+            invoiceId: invoice.id,
+            userId: subscription.userId,
+        })
         return
     }
 

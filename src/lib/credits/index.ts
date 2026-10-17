@@ -147,6 +147,11 @@ export async function resetMonthlyCredits(): Promise<void> {
  * One-time credit pack purchase: add credits on top of the user's current balance.
  * Called by the Stripe webhook when a CREDIT_PACK invoice is paid.
  * Uses an atomic increment so concurrent purchases never race.
+ *
+ * @deprecated Not idempotent: a redelivered Stripe webhook would grant twice.
+ * Stripe credit-pack fulfillment now goes through `grantCreditPackOnce()` in
+ * `@/lib/stripe/credit-pack`, keyed by Checkout Session ID. Kept only for
+ * manual/admin tooling; do not wire this back into a webhook path.
  */
 export async function addCreditPackCredits(
     userId: string,

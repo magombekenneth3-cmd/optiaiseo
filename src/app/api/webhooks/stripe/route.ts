@@ -107,6 +107,20 @@ async function processWebhookEvent(event: Stripe.Event): Promise<boolean> {
             case "checkout.session.completed":
                 await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session)
                 break
+            case "checkout.session.async_payment_succeeded":
+                // Delayed payment methods: same idempotent fulfillment path, now with payment_status "paid".
+                await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session)
+                break
+            case "checkout.session.async_payment_failed": {
+                // Never route a failed payment through the grant path.
+                const failed = event.data.object as Stripe.Checkout.Session
+                logger.warn("[Webhook] Checkout async payment failed — no credits granted", {
+                    sessionId: failed.id,
+                    userId: failed.metadata?.userId,
+                    mode: failed.mode,
+                })
+                break
+            }
             case "customer.subscription.updated":
                 await handleSubscriptionUpdated(event.data.object as Stripe.Subscription)
                 break
