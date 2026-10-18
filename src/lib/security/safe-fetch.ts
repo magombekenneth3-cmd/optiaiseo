@@ -55,15 +55,75 @@ function isPrivateIPv4(ip: string): boolean {
     return false;
 }
 
-/** Rejects IPv6 loopback, link-local, unique local, and mapped IPv4 addresses. */
+/**
+ * Parses an IPv6 address (optionally bracketed, optionally with a zone id or an
+ * embedded dotted IPv4 tail) into its eight 16-bit groups. Returns null if the
+ * input is not a valid IPv6 address.
+ */
+function parseIPv6(ip: string): number[] | null {
+    let s = ip.replace(/^\[|\]$/g, "").toLowerCase();
+    const zone = s.indexOf("%");
+    if (zone >= 0) s = s.slice(0, zone);
+    if (isIP(s) !== 6) return null;
+
+    // Replace an embedded dotted IPv4 tail (e.g. ::ffff:1.2.3.4) with two hex groups.
+    const lastColon = s.lastIndexOf(":");
+    const tail = s.slice(lastColon + 1);
+    if (tail.includes(".")) {
+        const p = tail.split(".").map(Number);
+        s = `${s.slice(0, lastColon + 1)}${((p[0] << 8) | p[1]).toString(16)}:${((p[2] << 8) | p[3]).toString(16)}`;
+    }
+
+    let groups: string[];
+    if (s.includes("::")) {
+        const [head, rest] = s.split("::");
+        const headParts = head ? head.split(":") : [];
+        const restParts = rest ? rest.split(":") : [];
+        const fill = 8 - headParts.length - restParts.length;
+        groups = [...headParts, ...Array<string>(fill).fill("0"), ...restParts];
+    } else {
+        groups = s.split(":");
+    }
+    if (groups.length !== 8) return null;
+    return groups.map((g) => parseInt(g, 16));
+}
+
+/** Formats two 16-bit groups as a dotted IPv4 address. */
+function groupsToIPv4(hi: number, lo: number): string {
+    return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
+}
+
+/**
+ * Rejects IPv6 loopback, unspecified, link-local, site-local, unique local,
+ * multicast, and any IPv6 form that embeds a private IPv4 address.
+ *
+ * Works on parsed groups rather than string prefixes: the WHATWG URL parser
+ * normalizes `[::ffff:127.0.0.1]` to `[::ffff:7f00:1]`, which a dotted-quad
+ * regex does not recognise.
+ */
 function isPrivateIPv6(ip: string): boolean {
-    const clean = ip.replace(/^\[|\]$/g, "").toLowerCase();
-    if (clean === "::1" || clean === "::") return true;
-    if (clean.startsWith("fe80:")) return true;   // Link-local
-    if (clean.startsWith("fc") || clean.startsWith("fd")) return true;  // Unique local
-    // IPv4-mapped IPv6 (::ffff:x.x.x.x) — extract the embedded IPv4
-    const v4Mapped = clean.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (v4Mapped) return isPrivateIPv4(v4Mapped[1]);
+    const h = parseIPv6(ip);
+    if (!h) return false;
+    const zeroUpTo = (n: number) => h.slice(0, n).every((g) => g === 0);
+
+    if (zeroUpTo(8)) return true;                         // :: (unspecified)
+    if (zeroUpTo(7) && h[7] === 1) return true;           // ::1 (loopback)
+    // IPv4-mapped (::ffff:a.b.c.d, dotted or hex form) — check the embedded IPv4
+    if (zeroUpTo(5) && h[5] === 0xffff) return isPrivateIPv4(groupsToIPv4(h[6], h[7]));
+    // IPv4-translated (::ffff:0:a.b.c.d) and deprecated IPv4-compatible (::a.b.c.d)
+    if (zeroUpTo(4) && h[4] === 0xffff && h[5] === 0) return true;
+    if (zeroUpTo(6)) return true;
+    // NAT64 well-known prefix 64:ff9b::/96 — check the embedded IPv4
+    if (h[0] === 0x64 && h[1] === 0xff9b && h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0) {
+        return isPrivateIPv4(groupsToIPv4(h[6], h[7]));
+    }
+    if (h[0] === 0x64 && h[1] === 0xff9b && h[2] === 1) return true; // NAT64 local-use 64:ff9b:1::/48
+    if (h[0] === 0x2002) return isPrivateIPv4(groupsToIPv4(h[1], h[2])); // 6to4 2002::/16
+    if (h[0] === 0x2001 && h[1] === 0) return true;       // Teredo 2001::/32
+    if ((h[0] & 0xfe00) === 0xfc00) return true;          // Unique local fc00::/7
+    if ((h[0] & 0xffc0) === 0xfe80) return true;          // Link-local fe80::/10
+    if ((h[0] & 0xffc0) === 0xfec0) return true;          // Site-local (deprecated) fec0::/10
+    if ((h[0] & 0xff00) === 0xff00) return true;          // Multicast ff00::/8
     return false;
 }
 
@@ -78,7 +138,8 @@ function isPrivateIP(ip: string): boolean {
 const BLOCKED_TLDS = [".local", ".internal", ".localhost", ".test", ".invalid", ".example"];
 
 function isPublicHostname(hostname: string): boolean {
-    const lower = hostname.toLowerCase();
+    // A trailing dot ("localhost.") is a valid fully-qualified form of the same name.
+    const lower = hostname.toLowerCase().replace(/\.$/, "");
     if (lower === "localhost") return false;
     // Strip IPv6 brackets for isIP check — URL.hostname uses [::1] format
     const unbracketed = lower.replace(/^\[|\]$/g, "");
@@ -120,7 +181,10 @@ function isWithinDomainScope(url: URL, allowedDomain: string): boolean {
 
 // ── DNS resolution with SSRF check ────────────────────────────────────────────
 
-async function resolveAndValidate(hostname: string): Promise<{ ok: true } | { ok: false; error: string }> {
+async function resolveAndValidate(rawHostname: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    // URL.hostname brackets IPv6 literals ([::1]); DNS/isIP need the bare address.
+    const hostname = rawHostname.replace(/^\[|\]$/g, "");
+
     // If hostname is already an IP, check it directly
     if (isIP(hostname)) {
         return isPrivateIP(hostname)
@@ -129,24 +193,19 @@ async function resolveAndValidate(hostname: string): Promise<{ ok: true } | { ok
     }
 
     try {
-        // Resolve all addresses (A + AAAA) to catch dual-stack attacks
-        const addresses = await dns.resolve(hostname);
-        for (const addr of addresses) {
-            if (isPrivateIP(addr)) {
-                return { ok: false, error: `Blocked: ${hostname} resolves to private IP ${addr}` };
-            }
+        // Use the same resolver fetch uses (getaddrinfo: honours /etc/hosts and
+        // search domains), and check every A + AAAA address to catch dual-stack attacks.
+        // NOTE: this is check-then-connect; fetch resolves again, so a DNS-rebinding
+        // server with a ~0s TTL can still race this check. Closing that needs a
+        // connect-time lookup (undici Agent `connect.lookup`).
+        const addresses = await dns.lookup(hostname, { all: true, verbatim: true });
+        if (addresses.length === 0) {
+            return { ok: false, error: `DNS resolution failed for ${hostname}` };
         }
-
-        // Also check IPv6 addresses
-        try {
-            const v6Addresses = await dns.resolve6(hostname);
-            for (const addr of v6Addresses) {
-                if (isPrivateIPv6(addr)) {
-                    return { ok: false, error: `Blocked: ${hostname} resolves to private IPv6 ${addr}` };
-                }
+        for (const { address } of addresses) {
+            if (isPrivateIP(address)) {
+                return { ok: false, error: `Blocked: ${hostname} resolves to private IP ${address}` };
             }
-        } catch {
-            // No AAAA records — that's fine, IPv4 was checked above
         }
 
         return { ok: true };
@@ -245,6 +304,8 @@ export async function safeFetchPublicUrl(
 
             // Handle redirects
             if ([301, 302, 303, 307, 308].includes(response.status)) {
+                // Release the redirect response's socket; its body is never used.
+                await response.body?.cancel().catch(() => undefined);
                 if (redirectCount >= maxRedirects) {
                     return { ok: false, error: `Blocked: exceeded maximum ${maxRedirects} redirects` };
                 }
@@ -280,8 +341,8 @@ export async function safeFetchPublicUrl(
                     return { ok: false, error: `Blocked redirect: ${redirectDnsCheck.error}` };
                 }
 
-                currentUrl = redirectUrl.href;
                 logger.debug("[safeFetch] Following redirect", { from: currentUrl, to: redirectUrl.href, hop: redirectCount });
+                currentUrl = redirectUrl.href;
                 continue;
             }
 

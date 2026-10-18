@@ -1,5 +1,6 @@
 import { logger } from "@/lib/logger";
 import * as cheerio from "cheerio";
+import { safeFetchPublicUrl, type SafeFetchResult, type SafeFetchError } from "@/lib/security/safe-fetch";
 
 
 import { computeContentGapsFromOpportunities, type SeoOpportunityAnalysis } from "./seo-opportunity";
@@ -64,8 +65,18 @@ const UNSCRAPPABLE_DOMAINS = [
   "linkedin.com",
 ];
 
+/**
+ * Matches the URL's hostname (or any subdomain of it) against the exclusion list.
+ * A substring match would wrongly exclude e.g. netflix.com (contains "x.com").
+ */
 function isUnscrappable(url: string): boolean {
-  return UNSCRAPPABLE_DOMAINS.some((d) => url.includes(d));
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase().replace(/\.$/, "");
+  } catch {
+    return false; // invalid URLs are rejected by the safe fetcher with a clear reason
+  }
+  return UNSCRAPPABLE_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`));
 }
 
 
@@ -82,6 +93,39 @@ async function fetchWithRetry(
     await new Promise((r) => setTimeout(r, delayMs));
     return fetchWithRetry(url, options, retries - 1, delayMs * 2);
   }
+}
+
+/** Upper bound on a scraped page body; larger responses are abandoned mid-stream. */
+const SCRAPE_MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
+
+const SCRAPE_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
+/**
+ * SSRF-safe page fetch for third-party SERP result URLs. Each redirect hop is
+ * re-validated (scheme, hostname, resolved IPs) and the body is size-limited.
+ * Retries only transient network failures/timeouts, as fetchWithRetry did;
+ * policy blocks ("Blocked: …") and DNS failures are returned immediately.
+ */
+async function safeScrapeFetch(
+  url: string,
+  retries = 2,
+  delayMs = 1000
+): Promise<SafeFetchResult | SafeFetchError> {
+  const result = await safeFetchPublicUrl(url, {
+    maxRedirects: 3,
+    maxResponseBytes: SCRAPE_MAX_RESPONSE_BYTES,
+    timeoutMs: 8_000,
+    fetchInit: { headers: SCRAPE_HEADERS },
+  });
+  const transient = !result.ok && (result.error.startsWith("Fetch failed") || result.error.startsWith("Timeout"));
+  if (result.ok || !transient || retries === 0) return result;
+  await new Promise((r) => setTimeout(r, delayMs));
+  return safeScrapeFetch(url, retries - 1, delayMs * 2);
 }
 
 /**
@@ -303,23 +347,21 @@ export async function scrapePageData(
   if (isUnscrappable(url)) return { ...empty, status: "UNSCRAPPABLE", failureReason: "This domain is excluded from page scraping." };
 
   try {
-    const res = await fetchWithRetry(
-      url,
-      {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-        signal: AbortSignal.timeout(8_000),
-      }
-    );
+    const fetched = await safeScrapeFetch(url);
+    if (!fetched.ok) {
+      // SSRF/size policy blocks will not succeed on retry: report them as unscrappable.
+      return {
+        ...empty,
+        ...(fetched.error.startsWith("Blocked") ? { status: "UNSCRAPPABLE" as const } : {}),
+        failureReason: fetched.error.slice(0, 250),
+      };
+    }
 
+    const res = fetched.response;
     if (!res.ok) return { ...empty, failureReason: `HTTP ${res.status} ${res.statusText}`.slice(0, 250) };
 
     const lastModifiedHeader = res.headers.get("last-modified");
-    const html = await res.text();
+    const html = fetched.body;
     const $ = cheerio.load(html);
 
     const headings: string[] = [];

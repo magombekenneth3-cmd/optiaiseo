@@ -14,6 +14,10 @@
 
 import * as cheerio from "cheerio";
 import { logger } from "@/lib/logger";
+import { safeFetchPublicUrl } from "@/lib/security/safe-fetch";
+
+/** Upper bound on a scraped page body; larger responses are abandoned mid-stream. */
+const SCRAPE_MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -151,15 +155,26 @@ async function scrapePage(url: string, position: number): Promise<PageSignals> {
     };
 
     try {
-        const res = await fetch(url, {
-            headers: { "User-Agent": "Mozilla/5.0 (compatible; OptiAISEO-GapBot/1.0; +https://optiaiseo.online)" },
-            signal: AbortSignal.timeout(12_000),
+        // SERP result URLs are third-party controlled: validate every redirect hop
+        // against private/metadata addresses and cap the body size.
+        const fetched = await safeFetchPublicUrl(url, {
+            maxRedirects: 3,
+            maxResponseBytes: SCRAPE_MAX_RESPONSE_BYTES,
+            timeoutMs: 12_000,
+            fetchInit: {
+                headers: { "User-Agent": "Mozilla/5.0 (compatible; OptiAISEO-GapBot/1.0; +https://optiaiseo.online)" },
+            },
         });
+        if (!fetched.ok) {
+            base.fetchError = fetched.error.slice(0, 250);
+            return base;
+        }
+        const res = fetched.response;
         if (!res.ok) {
             base.fetchError = `HTTP ${res.status}`;
             return base;
         }
-        const html = await res.text();
+        const html = fetched.body;
         const $ = cheerio.load(html);
 
         // Remove noise
