@@ -787,6 +787,12 @@ export const cronStuckAuditSweep = inngest.createFunction(
         );
 
         const reconciled: string[] = [];
+        // Derived from the memoized step output, not from updateMany counts: this
+        // loop runs outside step.run, so on Inngest re-entry the counts are 0.
+        // refundAuditIfFailed re-checks the persisted status before refunding.
+        const reconciledFailed = stuckInProgress
+            .filter((a) => a.totalPages > 0 && a.completedPages + a.failedPages >= a.totalPages && a.completedPages === 0)
+            .map((a) => a.id);
         for (const audit of stuckInProgress) {
             const processed = audit.completedPages + audit.failedPages;
             if (audit.totalPages > 0 && processed >= audit.totalPages) {
@@ -849,6 +855,21 @@ export const cronStuckAuditSweep = inngest.createFunction(
                         await releaseAuditLease(lockKey, audit.id).catch(() => null);
                     }
                 }
+            });
+        }
+
+        const failedIds = [...reconciledFailed, ...allStuck.map((a) => a.id)];
+        if (failedIds.length > 0) {
+            // Idempotent per audit: only charged audits that are FAILED are refunded,
+            // so step retries and repeat sweeps never refund twice.
+            await step.run("refund-failed-audit-credits", async () => {
+                const { refundAuditIfFailed } = await import("@/lib/credits/audit-billing");
+                let refunded = 0;
+                for (const auditId of failedIds) {
+                    const result = await refundAuditIfFailed(auditId, "Audit timed out (stuck-audit sweep)");
+                    if (result.refunded) refunded++;
+                }
+                return { refunded };
             });
         }
 

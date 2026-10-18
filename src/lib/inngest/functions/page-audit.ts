@@ -6,6 +6,7 @@ import { getAuditEngine } from "@/lib/seo-audit";
 import { discoverPages } from "@/lib/seo-audit/crawler";
 import { logger } from "@/lib/logger";
 import { releaseAuditLease, renewAuditLease } from "@/lib/audit-lock";
+import { refundAuditIfFailed } from "@/lib/credits/audit-billing";
 
 /** Terminal states — once reached, the audit must not be overwritten. */
 const TERMINAL_STATES = ["COMPLETED", "FAILED", "PARTIAL"] as const;
@@ -65,6 +66,11 @@ export const runPageAuditJob = inngest.createFunction(
                 if (siteId) await releaseParentLease(auditId, siteId).catch(() => null);
                 logger.info("[PageAudit] Parent audit finalized as FAILED after coordinator failure", { auditId });
             }
+            // Outside the count check: if a previous onFailure attempt marked FAILED
+            // but crashed before refunding, this retry still refunds (idempotent).
+            await refundAuditIfFailed(auditId, "Page audit coordinator failed after retries").catch((e: unknown) =>
+                logger.error("[PageAudit] Credit refund failed", { auditId, error: (e as Error)?.message }),
+            );
         }
 
         logger.error("[PageAudit] Coordinator failed after all retries", {
@@ -254,7 +260,7 @@ export const processPageAuditJob = inngest.createFunction(
       });
     }
 
-    await step.run("update-progress", async () => {
+    const finalized = await step.run("update-progress", async () => {
       const updated = await prisma.audit.update({
         where: { id: auditId },
         data: auditSucceeded
@@ -299,8 +305,16 @@ export const processPageAuditJob = inngest.createFunction(
             failed: updated.failedPages,
           });
         }
+        return { finalStatus };
       }
+      return { finalStatus: null };
     });
+
+    // Every page failed: the paid crawl produced nothing. A separate step so a
+    // refund retry never re-runs the counter increment above. Idempotent per audit.
+    if (finalized.finalStatus === "FAILED") {
+      await step.run("refund-failed-audit", () => refundAuditIfFailed(auditId, "All audited pages failed"));
+    }
 
     return { pageUrl, score, success: auditSucceeded };
   }

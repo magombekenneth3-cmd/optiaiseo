@@ -7,7 +7,8 @@ import { runSiteAudit } from "@/lib/audit";
 import { clearSessionCaches } from "@/lib/seo/ai";
 // Monthly audit count limit removed — credits are the single gate.
 import { getEffectiveTier, guardErrorToResult } from "@/lib/stripe/guards";
-import { consumeCredits } from "@/lib/credits";
+import { CREDIT_COSTS } from "@/lib/credits";
+import { chargeAuditCreditsOnce, refundAuditCreditsOnce } from "@/lib/credits/audit-billing";
 import { redis } from "@/lib/redis";
 import { inngest } from "@/lib/inngest/client";
 import { requireUser } from "@/lib/auth/require-user";
@@ -37,7 +38,13 @@ type GetUserAuditsResult =
 
 type RunAuditResult =
   | { success: true; audit: { id: string } }
-  | { success: false; error: string };
+  | { success: false; error: string; code?: "insufficient_credits" | "credits_locked" };
+
+function creditErrorMessage(reason: "insufficient_credits" | "credits_locked", remaining: number): string {
+  return reason === "credits_locked"
+    ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
+    : `Not enough credits (${remaining} remaining, need ${CREDIT_COSTS.full_site_audit}). Buy a credit pack or upgrade your plan.`;
+}
 
 type GetPageAuditsResult =
   | { success: true; pages: unknown[] }
@@ -167,6 +174,20 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
       };
     }
 
+    // Charge at job creation (not when results are viewed). Keyed by auditId, so
+    // it can never be applied twice. Homepage-only scans are free (no CreditGate in UI).
+    if (auditMode === "full") {
+      const charge = await chargeAuditCreditsOnce(user.id, auditId);
+      if (!charge.charged) {
+        await prisma.audit.delete({ where: { id: auditId } }).catch(() => null);
+        const { releaseAuditLease } = await import("@/lib/audit-lock");
+        await releaseAuditLease(lockKey, auditId).catch(() => null);
+        lockKey = undefined;
+        auditId = undefined;
+        return { success: false, error: creditErrorMessage(charge.reason, charge.remaining), code: charge.reason };
+      }
+    }
+
     try {
       await inngest.send({
         name: "audit.run.manual" as const,
@@ -204,6 +225,11 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
             inp: liveAuditResult.inp ?? null,
           },
         });
+        if (auditMode === "full") {
+          // The paid fan-out never ran; the user only received the free homepage scan.
+          await refundAuditCreditsOnce(user.id, auditId, "Queue unavailable: homepage-only fallback")
+            .catch((e: unknown) => logger.error("[runAudit] Fallback refund failed", { auditId, error: (e as Error)?.message }));
+        }
       } catch (syncErr: unknown) {
         // Synchronous fallback also failed — mark audit FAILED
         logger.error("[runAudit] Synchronous fallback failed", {
@@ -214,6 +240,8 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
           where: { id: auditId },
           data: { fixStatus: "FAILED" },
         }).catch(() => null);
+        await refundAuditCreditsOnce(user.id, auditId, "Audit failed: synchronous fallback error")
+          .catch((e: unknown) => logger.error("[runAudit] Refund after fallback failure failed", { auditId, error: (e as Error)?.message }));
       } finally {
         // Release lock on synchronous path (success or failure)
         const { releaseAuditLease } = await import("@/lib/audit-lock");
@@ -232,6 +260,10 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
         where: { id: auditId, fixStatus: { notIn: ["COMPLETED", "FAILED", "PARTIAL"] } },
         data: { fixStatus: "FAILED" },
       }).catch(() => null);
+      // Idempotent and a no-op if the charge never happened.
+      const { refundAuditIfFailed } = await import("@/lib/credits/audit-billing");
+      await refundAuditIfFailed(auditId, "Audit failed to start")
+        .catch((e: unknown) => logger.error("[runAudit] Refund after failure failed", { auditId, error: (e as Error)?.message }));
     }
     // Release lock if still held
     if (lockKey && auditId) {
@@ -267,15 +299,18 @@ export async function getPageAudits(auditId: string): Promise<GetPageAuditsResul
     });
     if (!audit) return { success: false, error: "Audit not found", pages: [] };
 
-    const creditResult = await consumeCredits(user.id, "full_site_audit");
-    if (!creditResult.allowed) {
+    // Audits are charged once when queued. Previously this charged on every view.
+    // Legacy audits with page results that were never charged are charged once
+    // here (idempotent on auditId); already-charged and homepage-only audits are free.
+    if (audit.pageAudits.length > 0) {
+      const charge = await chargeAuditCreditsOnce(user.id, audit.id);
+      if (!charge.charged) {
         return {
-            success: false,
-            error: creditResult.reason === "credits_locked"
-                ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
-                : `Not enough credits (${creditResult.remaining} remaining, need 10). Buy a credit pack or upgrade your plan.`,
-            pages: [], upsell: true,
+          success: false,
+          error: creditErrorMessage(charge.reason, charge.remaining),
+          pages: [], upsell: true,
         };
+      }
     }
 
     return { success: true, pages: audit.pageAudits };

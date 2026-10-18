@@ -13,6 +13,7 @@ import { executeHealingWithConfidenceGate } from "@/lib/self-healing/confidence"
 import { detectGscAnomalies, generateGscHealingPlan } from "@/lib/self-healing/gsc";
 import { writeMetricSnapshot } from "@/lib/metrics/metric-snapshot";
 import { releaseAuditLease } from "@/lib/audit-lock";
+import { refundAuditIfFailed } from "@/lib/credits/audit-billing";
 import { fireWhiteLabelWebhook } from "@/lib/webhooks/white-label";
 import { persistFindingWithEvidence } from "@/lib/seo-audit/diagnostic-persistence";
 import type { DiagnosticFinding } from "@/lib/seo-audit/root-cause-engine";
@@ -56,6 +57,10 @@ export const processManualAuditJob = inngest.createFunction(
                     where: { id: auditId, fixStatus: { notIn: ["COMPLETED", "FAILED", "PARTIAL"] } },
                     data: { fixStatus: "FAILED" },
                 }).catch(() => null);
+                // Idempotent: refunds the creation-time charge at most once.
+                await refundAuditIfFailed(auditId, "Manual audit failed after retries").catch((e: unknown) =>
+                    logger.error("[ManualAudit] Credit refund failed", { auditId, error: (e as Error)?.message }),
+                );
             }
             if (lockKey && auditId) {
                 // Never blindly DEL a lease: this worker may be stale and a newer
