@@ -73,9 +73,12 @@ describe("runAudit charges at job creation", () => {
         expect(h.refundOnce).not.toHaveBeenCalled();
     });
 
-    it("does not charge homepage-only scans", async () => {
-        await runAudit(SITE_ID, "homepage");
+    it("homepage-only scans never charge or refund credits (enforced server-side)", async () => {
+        const res = await runAudit(SITE_ID, "homepage");
+        expect(res.success).toBe(true);
         expect(h.charge).not.toHaveBeenCalled();
+        expect(h.refundOnce).not.toHaveBeenCalled();
+        expect(h.refundIfFailed).not.toHaveBeenCalled();
         expect(h.send).toHaveBeenCalledTimes(1);
     });
 
@@ -101,24 +104,53 @@ describe("runAudit charges at job creation", () => {
         },
     );
 
-    it("refunds when the queue is down and the synchronous fallback fails", async () => {
-        h.send.mockRejectedValue(new Error("inngest down"));
-        h.runSiteAudit.mockRejectedValue(new Error("crawl failed"));
+    describe("queue unavailable", () => {
+        beforeEach(() => {
+            h.send.mockRejectedValue(new Error("inngest down"));
+            h.runSiteAudit.mockResolvedValue({ categoryScores: {}, issues: [], lcp: null, cls: null, inp: null });
+        });
 
-        await runAudit(SITE_ID, "full");
+        it("full audit: fails it, refunds the charge once, and does NOT downgrade to a homepage scan", async () => {
+            const res = await runAudit(SITE_ID, "full");
 
-        expect(h.prisma.audit.update).toHaveBeenCalledWith({ where: { id: AUDIT_ID }, data: { fixStatus: "FAILED" } });
-        expect(h.refundOnce).toHaveBeenCalledWith("user_1", AUDIT_ID, expect.stringMatching(/fallback/));
-    });
+            expect(res).toMatchObject({ success: false, code: "queue_unavailable" });
+            expect((res as { error: string }).error).toMatch(/not been charged/);
+            expect(h.charge).toHaveBeenCalledTimes(1);
+            expect(h.runSiteAudit).not.toHaveBeenCalled();
+            expect(h.prisma.audit.update).toHaveBeenCalledWith({ where: { id: AUDIT_ID }, data: { fixStatus: "FAILED" } });
+            expect(h.prisma.audit.update).not.toHaveBeenCalledWith(
+                expect.objectContaining({ data: expect.objectContaining({ fixStatus: "COMPLETED" }) }),
+            );
+            expect(h.refundOnce).toHaveBeenCalledTimes(1);
+            expect(h.refundOnce).toHaveBeenCalledWith("user_1", AUDIT_ID, expect.stringMatching(/queue unavailable/i));
+            expect(h.release).toHaveBeenCalledTimes(1);
+        });
 
-    it("refunds a full audit that degraded to the free homepage-only fallback", async () => {
-        h.send.mockRejectedValue(new Error("inngest down"));
-        h.runSiteAudit.mockResolvedValue({ categoryScores: {}, issues: [], lcp: null, cls: null, inp: null });
+        it("full audit: still reports queue_unavailable if the refund itself errors (reconciled later)", async () => {
+            h.refundOnce.mockRejectedValue(new Error("db blip"));
+            const res = await runAudit(SITE_ID, "full");
+            expect(res).toMatchObject({ success: false, code: "queue_unavailable" });
+            expect(h.runSiteAudit).not.toHaveBeenCalled();
+        });
 
-        const res = await runAudit(SITE_ID, "full");
+        it("homepage-only: runs synchronously for free and succeeds", async () => {
+            const res = await runAudit(SITE_ID, "homepage");
 
-        expect(res.success).toBe(true);
-        expect(h.refundOnce).toHaveBeenCalledWith("user_1", AUDIT_ID, expect.stringMatching(/homepage-only fallback/));
+            expect(res).toEqual({ success: true, audit: { id: AUDIT_ID } });
+            expect(h.runSiteAudit).toHaveBeenCalledTimes(1);
+            expect(h.charge).not.toHaveBeenCalled();
+            expect(h.refundOnce).not.toHaveBeenCalled();
+        });
+
+        it("homepage-only: reports failure (not success) if the synchronous scan fails, without any refund", async () => {
+            h.runSiteAudit.mockRejectedValue(new Error("crawl failed"));
+            const res = await runAudit(SITE_ID, "homepage");
+
+            expect(res.success).toBe(false);
+            expect(h.prisma.audit.update).toHaveBeenCalledWith({ where: { id: AUDIT_ID }, data: { fixStatus: "FAILED" } });
+            expect(h.charge).not.toHaveBeenCalled();
+            expect(h.refundOnce).not.toHaveBeenCalled();
+        });
     });
 
     it("refunds (idempotently) when an unexpected error marks the audit FAILED", async () => {
@@ -132,32 +164,32 @@ describe("runAudit charges at job creation", () => {
     });
 });
 
-describe("getPageAudits no longer charges on every view", () => {
+describe("getPageAudits is read-only", () => {
     beforeEach(() => {
         h.prisma.audit.findFirst.mockResolvedValue({ id: AUDIT_ID, pageAudits: [{ id: "p1" }] });
     });
 
-    it("uses the idempotent per-audit charge (no-op for audits charged at creation)", async () => {
-        h.charge.mockResolvedValue({ charged: true, alreadyCharged: true, cost: 10, remaining: null });
-
-        await getPageAudits(AUDIT_ID);
-        await getPageAudits(AUDIT_ID);
-
-        expect(h.charge).toHaveBeenNthCalledWith(1, "user_1", AUDIT_ID);
-        expect(h.charge).toHaveBeenNthCalledWith(2, "user_1", AUDIT_ID);
+    it.each([0, 1, 10])("never charges or refunds when reloaded %i times", async (times) => {
+        for (let i = 0; i < times; i++) {
+            const res = await getPageAudits(AUDIT_ID);
+            expect(res).toEqual({ success: true, pages: [{ id: "p1" }] });
+        }
+        expect(h.charge).not.toHaveBeenCalled();
+        expect(h.refundOnce).not.toHaveBeenCalled();
+        expect(h.refundIfFailed).not.toHaveBeenCalled();
     });
 
-    it("does not charge for audits without page results (homepage-only / weekly)", async () => {
-        h.prisma.audit.findFirst.mockResolvedValue({ id: AUDIT_ID, pageAudits: [] });
+    it("returns results even when the user has no credits left", async () => {
+        h.charge.mockResolvedValue({ charged: false, reason: "insufficient_credits", cost: 10, remaining: 0 });
         const res = await getPageAudits(AUDIT_ID);
-        expect(res).toEqual({ success: true, pages: [] });
+        expect(res).toEqual({ success: true, pages: [{ id: "p1" }] });
         expect(h.charge).not.toHaveBeenCalled();
     });
 
-    it("upsells when an uncharged legacy audit cannot be paid for", async () => {
-        h.charge.mockResolvedValue({ charged: false, reason: "insufficient_credits", cost: 10, remaining: 2 });
+    it("does not return another user's audit", async () => {
+        h.prisma.audit.findFirst.mockResolvedValue(null);
         const res = await getPageAudits(AUDIT_ID);
-        expect(res).toMatchObject({ success: false, upsell: true, pages: [] });
-        expect((res as { error: string }).error).toMatch(/2 remaining, need 10/);
+        expect(res).toMatchObject({ success: false, pages: [] });
+        expect(h.charge).not.toHaveBeenCalled();
     });
 });

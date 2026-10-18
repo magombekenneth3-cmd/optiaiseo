@@ -245,6 +245,42 @@ describe("refundAuditCreditsOnce", () => {
     });
 });
 
+describe("ledger references", () => {
+    it("uses distinct references for the charge and the refund of one audit", () => {
+        expect(auditChargeReferenceId(AUDIT)).toBe(`audit:${AUDIT}:charge`);
+        expect(auditRefundReferenceId(AUDIT)).toBe(`audit:${AUDIT}:refund`);
+        expect(auditChargeReferenceId(AUDIT)).not.toBe(auditRefundReferenceId(AUDIT));
+    });
+
+    it("stores the charge and the refund as two coexisting ledger rows", async () => {
+        await chargeAuditCreditsOnce(USER, AUDIT);
+        await refundAuditCreditsOnce(USER, AUDIT, "failed");
+
+        expect(h.state.ledger.map((l) => l.referenceId)).toEqual([
+            `audit:${AUDIT}:charge`,
+            `audit:${AUDIT}:refund`,
+        ]);
+        expect(h.state.ledger.map((l) => l.amount)).toEqual([-COST, COST]);
+    });
+
+    it("a refund can never be created before its charge (collision-free, charge required)", async () => {
+        const res = await refundAuditCreditsOnce(USER, AUDIT, "failed");
+        expect(res).toEqual({ refunded: false, reason: "not_charged" });
+        expect(h.state.ledger).toHaveLength(0);
+    });
+});
+
+describe("legacy audits (created before billing, no charge record)", () => {
+    it("a FAILED legacy audit gets no retroactive refund", async () => {
+        h.state.audits.set(AUDIT, { id: AUDIT, fixStatus: "FAILED", userId: USER });
+
+        expect(await refundAuditIfFailed(AUDIT, "stuck sweep")).toEqual({ refunded: false, reason: "not_charged" });
+        expect(credits()).toBe(START);
+        expect(h.state.ledger).toHaveLength(0);
+        expect(h.state.history).toHaveLength(0);
+    });
+});
+
 describe("refundAuditIfFailed", () => {
     beforeEach(async () => {
         await chargeAuditCreditsOnce(USER, AUDIT);

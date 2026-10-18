@@ -38,7 +38,7 @@ type GetUserAuditsResult =
 
 type RunAuditResult =
   | { success: true; audit: { id: string } }
-  | { success: false; error: string; code?: "insufficient_credits" | "credits_locked" };
+  | { success: false; error: string; code?: "insufficient_credits" | "credits_locked" | "queue_unavailable" };
 
 function creditErrorMessage(reason: "insufficient_credits" | "credits_locked", remaining: number): string {
   return reason === "credits_locked"
@@ -117,6 +117,8 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
   // Declare these outside try so the finally/catch blocks can access them.
   let lockKey: string | undefined;
   let auditId: string | undefined;
+  // Set when the queue is down AND the synchronous fallback also failed.
+  let fallbackFailed = false;
 
   try {
     const auth = await requireUser();
@@ -204,9 +206,38 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
       });
       logger.info("[runAudit] Queued manual audit job", { domain: site.domain, auditId, auditMode });
     } catch (queueErr: unknown) {
-      // If Inngest is unavailable, fall back to synchronous execution.
-      // Lock cleanup is handled by the outer finally.
-      logger.warn("[runAudit] Inngest unavailable — falling back to synchronous homepage-only audit", {
+      // Lock cleanup is handled by the outer finally / the finally blocks below.
+      if (auditMode === "full") {
+        // Never substitute a homepage-only scan for the paid full-site audit the
+        // user asked for. Fail the audit, refund the charge exactly once, and let
+        // the user choose a free homepage-only scan explicitly.
+        logger.error("[runAudit] Inngest unavailable — failing full-site audit and refunding", {
+          auditId,
+          error: (queueErr as Error)?.message,
+        });
+        await prisma.audit.update({
+          where: { id: auditId },
+          data: { fixStatus: "FAILED" },
+        }).catch(() => null);
+        await refundAuditCreditsOnce(user.id, auditId, "Queue unavailable: full-site audit not started")
+          .catch((e: unknown) => logger.error("[runAudit] Refund after queue failure failed", { auditId, error: (e as Error)?.message }));
+        const { releaseAuditLease } = await import("@/lib/audit-lock");
+        await releaseAuditLease(lockKey, auditId).catch(() => null);
+        lockKey = undefined; // Prevent double-release in outer catch
+        revalidatePath("/dashboard/audits");
+        revalidateTag(`dashboard-metrics-${user.id}`);
+        return {
+          success: false,
+          code: "queue_unavailable",
+          error:
+            "The full-site audit could not be started right now, and you have not been charged. " +
+            "Please try again shortly, or run a free homepage-only scan instead.",
+        };
+      }
+
+      // Homepage-only scans are free and are exactly what was requested, so the
+      // synchronous path is an equivalent substitute for the queue here.
+      logger.warn("[runAudit] Inngest unavailable — running homepage-only audit synchronously", {
         error: (queueErr as Error)?.message,
       });
       try {
@@ -225,14 +256,10 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
             inp: liveAuditResult.inp ?? null,
           },
         });
-        if (auditMode === "full") {
-          // The paid fan-out never ran; the user only received the free homepage scan.
-          await refundAuditCreditsOnce(user.id, auditId, "Queue unavailable: homepage-only fallback")
-            .catch((e: unknown) => logger.error("[runAudit] Fallback refund failed", { auditId, error: (e as Error)?.message }));
-        }
       } catch (syncErr: unknown) {
-        // Synchronous fallback also failed — mark audit FAILED
-        logger.error("[runAudit] Synchronous fallback failed", {
+        fallbackFailed = true;
+        // Synchronous run also failed — mark audit FAILED (nothing was charged).
+        logger.error("[runAudit] Synchronous homepage audit failed", {
           error: (syncErr as Error)?.message,
           auditId,
         });
@@ -240,8 +267,6 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
           where: { id: auditId },
           data: { fixStatus: "FAILED" },
         }).catch(() => null);
-        await refundAuditCreditsOnce(user.id, auditId, "Audit failed: synchronous fallback error")
-          .catch((e: unknown) => logger.error("[runAudit] Refund after fallback failure failed", { auditId, error: (e as Error)?.message }));
       } finally {
         // Release lock on synchronous path (success or failure)
         const { releaseAuditLease } = await import("@/lib/audit-lock");
@@ -252,6 +277,13 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
 
     revalidatePath("/dashboard/audits");
     revalidateTag(`dashboard-metrics-${user.id}`);
+    if (fallbackFailed) {
+      // The audit row exists but never ran; don't report success.
+      return {
+        success: false,
+        error: "The homepage scan could not be completed. Please try again.",
+      };
+    }
     return { success: true, audit: newAudit };
   } catch (error: unknown) {
     // If we created an audit but something unexpected threw, mark it FAILED
@@ -299,19 +331,8 @@ export async function getPageAudits(auditId: string): Promise<GetPageAuditsResul
     });
     if (!audit) return { success: false, error: "Audit not found", pages: [] };
 
-    // Audits are charged once when queued. Previously this charged on every view.
-    // Legacy audits with page results that were never charged are charged once
-    // here (idempotent on auditId); already-charged and homepage-only audits are free.
-    if (audit.pageAudits.length > 0) {
-      const charge = await chargeAuditCreditsOnce(user.id, audit.id);
-      if (!charge.charged) {
-        return {
-          success: false,
-          error: creditErrorMessage(charge.reason, charge.remaining),
-          pages: [], upsell: true,
-        };
-      }
-    }
+    // Read-only: audits are charged exactly once, when runAudit accepts them
+    // (keyed by auditId). Viewing results must never create a debit.
 
     return { success: true, pages: audit.pageAudits };
   } catch (error: unknown) {
