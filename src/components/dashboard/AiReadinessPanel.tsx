@@ -26,6 +26,24 @@ interface PlatformScores {
   copilot: number;
 }
 
+type PlatformStatus =
+  | "SUCCESS"
+  | "NO_RESULT"
+  | "PROVIDER_ERROR"
+  | "TIMEOUT"
+  | "NO_API_KEY"
+  | "CIRCUIT_OPEN"
+  | "NOT_RECORDED";
+
+interface PlatformStatuses {
+  perplexity: PlatformStatus;
+  chatgpt: PlatformStatus;
+  claude: PlatformStatus;
+  googleAio: PlatformStatus;
+  grok: PlatformStatus;
+  copilot: PlatformStatus;
+}
+
 interface Dimensions {
   technicalReadiness: number | null;
   contentReadiness: number | null;
@@ -71,6 +89,7 @@ interface AiReadinessData {
     generativeShareOfVoice: number;
     citationLikelihood: number;
     platforms: PlatformScores;
+    platformStatuses?: PlatformStatuses;
     dimensions: Dimensions;
     confidence: Confidence;
     failedChecks: unknown;
@@ -138,11 +157,45 @@ function DimensionRow({ label, value }: { label: string; value: number | null })
   );
 }
 
-function PlatformBadge({ name, score }: { name: string; score: number }) {
+function platformStatusLabel(status: PlatformStatus): string {
+  switch (status) {
+    case "SUCCESS":
+      return "Measured";
+    case "NO_RESULT":
+      return "No usable result";
+    case "NO_API_KEY":
+      return "Not configured";
+    case "TIMEOUT":
+      return "Timed out";
+    case "PROVIDER_ERROR":
+      return "Unavailable";
+    case "CIRCUIT_OPEN":
+      return "Temporarily paused";
+    default:
+      return "Status unknown";
+  }
+}
+
+function PlatformBadge({
+  name,
+  score,
+  status = "NOT_RECORDED",
+}: {
+  name: string;
+  score: number;
+  status?: PlatformStatus;
+}) {
+  const hasObservedScore = status === "SUCCESS";
   return (
-    <div className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/10 px-2.5 py-1.5">
+    <div className="flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-muted/10 px-2.5 py-1.5">
       <span className="text-[11px] font-medium text-muted-foreground capitalize">{name}</span>
-      <span className={`text-xs font-bold tabular-nums ${scoreColor(score)}`}>{score}%</span>
+      <span
+        className={`text-xs font-bold tabular-nums ${hasObservedScore ? scoreColor(score) : "text-muted-foreground"}`}
+        aria-label={`${name}: ${hasObservedScore ? `${score}% observed visibility` : platformStatusLabel(status)}`}
+        title={hasObservedScore ? "Provider responded; 0% is a measured result" : platformStatusLabel(status)}
+      >
+        {hasObservedScore ? `${score}%` : platformStatusLabel(status)}
+      </span>
     </div>
   );
 }
@@ -459,12 +512,12 @@ export function AiReadinessPanel({ siteId }: { siteId: string | null }) {
               <span className="text-xs font-semibold text-foreground">Per-Platform Visibility</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-              <PlatformBadge name="Perplexity" score={platforms.perplexity} />
-              <PlatformBadge name="ChatGPT" score={platforms.chatgpt} />
-              <PlatformBadge name="Claude" score={platforms.claude} />
-              <PlatformBadge name="Google AIO" score={platforms.googleAio} />
-              <PlatformBadge name="Grok" score={platforms.grok} />
-              <PlatformBadge name="Copilot" score={platforms.copilot} />
+              <PlatformBadge name="Perplexity" score={platforms.perplexity} status={snap?.platformStatuses?.perplexity} />
+              <PlatformBadge name="ChatGPT" score={platforms.chatgpt} status={snap?.platformStatuses?.chatgpt} />
+              <PlatformBadge name="Claude" score={platforms.claude} status={snap?.platformStatuses?.claude} />
+              <PlatformBadge name="Google AIO" score={platforms.googleAio} status={snap?.platformStatuses?.googleAio} />
+              <PlatformBadge name="Grok" score={platforms.grok} status={snap?.platformStatuses?.grok} />
+              <PlatformBadge name="Copilot" score={platforms.copilot} status={snap?.platformStatuses?.copilot} />
             </div>
           </div>
         )}

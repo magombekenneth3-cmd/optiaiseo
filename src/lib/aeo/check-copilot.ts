@@ -2,7 +2,7 @@ import { logger } from "@/lib/logger";
 import type { MentionResult } from "./multi-model";
 import { analyzeCitationQuality } from "./multi-model";
 import { TIMEOUTS } from "@/lib/constants/timeouts";
-import { type ProviderStatus, type ProviderTelemetry, classifyError } from "./provider-result";
+import { type ProviderStatus, type ProviderTelemetry, type VisibilityProbeResult, classifyError } from "./provider-result";
 import { buildAeoQuestion } from "./aeo-prompt";
 
 export async function checkCopilotMention(
@@ -80,8 +80,14 @@ export async function checkCopilotMention(
   }
 }
 
-export async function checkCopilotVisibility(brand: string, query: string): Promise<number> {
-  if (!process.env.AZURE_OAI_ENDPOINT || !process.env.AZURE_OAI_KEY) return 0;
+export async function checkCopilotVisibilityWithStatus(
+  brand: string,
+  query: string,
+): Promise<VisibilityProbeResult> {
+  if (!process.env.AZURE_OAI_ENDPOINT || !process.env.AZURE_OAI_KEY) {
+    return { score: null, status: "NO_API_KEY" };
+  }
+
   try {
     const url = `${process.env.AZURE_OAI_ENDPOINT}/openai/deployments/gpt-4o/chat/completions?api-version=2024-02-15-preview`;
     const body: Record<string, unknown> = { messages: [{ role: "user", content: query }] };
@@ -94,12 +100,29 @@ export async function checkCopilotVisibility(brand: string, query: string): Prom
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUTS.AI_COPILOT_MS),
     });
-    if (!res.ok) throw new Error(`Azure OAI error: ${res.status}`);
+
+    if (!res.ok) return { score: null, status: "PROVIDER_ERROR" };
+
     const data = await res.json();
     const text: string = data.choices?.[0]?.message?.content ?? "";
-    return text.toLowerCase().includes(brand.toLowerCase()) ? 100 : 0;
+    if (!text.trim()) return { score: null, status: "NO_RESULT" };
+
+    return {
+      score: text.toLowerCase().includes(brand.toLowerCase()) ? 100 : 0,
+      status: "SUCCESS",
+    };
   } catch (error: unknown) {
-    logger.warn("[AEO/Copilot] Check failed:", { error: (error as Error)?.message || String(error) });
-    return 0;
+    const status = classifyError(error);
+    logger.warn("[AEO/Copilot] Check failed:", {
+      status,
+      error: (error as Error)?.message || String(error),
+    });
+    return { score: null, status };
   }
+}
+
+/** Backwards-compatible numeric adapter for legacy callers. */
+export async function checkCopilotVisibility(brand: string, query: string): Promise<number> {
+  const result = await checkCopilotVisibilityWithStatus(brand, query);
+  return result.score ?? 0;
 }
