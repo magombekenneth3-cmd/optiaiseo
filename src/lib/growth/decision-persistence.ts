@@ -82,6 +82,7 @@ export async function savePersistedDecisions(siteId: string, decisions: GrowthDe
         logger.info("[DecisionPersistence] Successfully batch persisted growth decisions", { siteId, count: decisions.length });
     } catch (err: unknown) {
         logger.error("[DecisionPersistence] Failed to persist growth decisions", { siteId, error: (err as Error)?.message || String(err) });
+        throw err;
     }
 }
 

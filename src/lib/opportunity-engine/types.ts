@@ -121,6 +121,10 @@ export interface ExplainableScore {
     trafficPotential: number;
     businessValue: number; // 0-100 scale based on commercial intent
     effort: number;
+    serpEvidenceStatus?: SerpEvidenceStatus;
+    serpResultCount?: number;
+    serpSource?: "CACHED_KEYWORD_SNAPSHOT" | "LIVE_SERP";
+    serpObservedAt?: string;
     components: {
         rankingOpportunity: number;
         trafficOpportunity: number;
@@ -136,6 +140,8 @@ export interface DeterministicWhyNowSignal {
     severity: "HIGH" | "MEDIUM" | "LOW";
     evidence: string;
 }
+
+export type SerpEvidenceStatus = "AVAILABLE" | "UNAVAILABLE" | "NOT_REQUESTED";
 
 export interface SerpConsensus {
     dominantType: "COMPARISON_PAGE" | "PRODUCT_PAGE" | "INTERACTIVE_TOOL" | "DEEP_EXPLAINER";
@@ -161,6 +167,10 @@ export interface OpportunityIntelligence {
     serpConsensus?: SerpConsensus;
     intentAlignment: number; // 0-100
     commercialValueScore: number; // 0-100
+    serpEvidenceStatus?: SerpEvidenceStatus;
+    serpResultCount?: number;
+    serpSource?: "CACHED_KEYWORD_SNAPSHOT" | "LIVE_SERP";
+    serpObservedAt?: string;
     /** Historical outcome evidence for this action type; null/undefined → heuristic baseline only. */
     interventionEvidence?: InterventionEvidence | null;
 }

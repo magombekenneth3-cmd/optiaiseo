@@ -61,6 +61,14 @@ export function rankGrowthDecisions(
             trafficPotential: trafficOpp,
             businessValue,
             effort,
+            ...(intel?.serpEvidenceStatus
+                ? { serpEvidenceStatus: intel.serpEvidenceStatus }
+                : {}),
+            ...(intel?.serpResultCount !== undefined
+                ? { serpResultCount: intel.serpResultCount }
+                : {}),
+            ...(intel?.serpSource ? { serpSource: intel.serpSource } : {}),
+            ...(intel?.serpObservedAt ? { serpObservedAt: intel.serpObservedAt } : {}),
             components: {
                 rankingOpportunity: rankingOpp,
                 trafficOpportunity: trafficOpp,

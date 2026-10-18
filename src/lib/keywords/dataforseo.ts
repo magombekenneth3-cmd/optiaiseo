@@ -64,31 +64,45 @@ export const DATAFORSEO_LOCATION_CODES: Record<string, number> = {
 };
 
 export function resolveLocationCode(text: string | null | undefined): number {
-    if (!text) return DATAFORSEO_LOCATION_CODES.us;
-    const lower = text.toLowerCase();
+    if (!text?.trim()) return DATAFORSEO_LOCATION_CODES.us;
+
+    const normalized = text.trim().toLowerCase().replace(/[_-]+/g, " ");
+    const tokens = normalized.split(/[^a-z]+/).filter(Boolean);
+
     const nameToCode: Record<string, number> = {
         "uganda": 1011984, "kenya": 1010046, "nigeria": 2566,
         "ghana": 2288, "south africa": 2710, "tanzania": 1010467,
         "rwanda": 1006886, "ethiopia": 2231, "senegal": 2686,
-        "united states": 2840, "usa": 2840,
-        "united kingdom": 2826, "uk": 2826,
-        "australia": 2036, "canada": 2124, "india": 2356,
+        "united states": 2840, "usa": 2840, "united kingdom": 2826,
+        "uk": 2826, "australia": 2036, "canada": 2124, "india": 2356,
         "singapore": 2702, "germany": 2276, "france": 2250,
         "netherlands": 2528, "philippines": 2608,
     };
-    for (const [name, code] of Object.entries(nameToCode)) {
-        if (lower.includes(name)) return code;
+
+    const normalizedNames = Object.entries(nameToCode).sort(
+        ([a], [b]) => b.length - a.length,
+    );
+    for (const [name, code] of normalizedNames) {
+        const nameTokens = name.split(" ");
+        const found = tokens.some((_, startIndex) =>
+            nameTokens.every((token, offset) => tokens[startIndex + offset] === token),
+        );
+        if (found) return code;
     }
-    for (const [code, loc] of Object.entries(DATAFORSEO_LOCATION_CODES)) {
-        // FIX #6c: Use word-boundary match for 2-letter codes.
-        // Previously `lower.includes(code)` caused 'us' to match inside
-        // 'business', 'australia', etc.
-        const codeRe = new RegExp(`\\b${code}\\b`, "i");
-        if (codeRe.test(lower)) return loc;
+
+    if (/^[a-z]{2}$/.test(normalized) && DATAFORSEO_LOCATION_CODES[normalized]) {
+        return DATAFORSEO_LOCATION_CODES[normalized];
     }
+
+    // A code in a location string is accepted only when explicitly delimited.
+    const lastToken = tokens[tokens.length - 1];
+    const hasExplicitDelimiter = /[,()]|[-_]/.test(text);
+    if (hasExplicitDelimiter && lastToken && DATAFORSEO_LOCATION_CODES[lastToken]) {
+        return DATAFORSEO_LOCATION_CODES[lastToken];
+    }
+
     return DATAFORSEO_LOCATION_CODES.us;
 }
-
 function getAuthHeader(): string | null {
     const login = process.env.DATAFORSEO_LOGIN;
     const password = process.env.DATAFORSEO_PASSWORD;
