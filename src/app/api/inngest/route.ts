@@ -28,6 +28,7 @@ import { measureHealingOutcomesJob } from "@/lib/inngest/functions/healing-outco
 import { runFullStrategyJob } from "@/lib/inngest/functions/full-strategy";
 import { uptimeMonitorJob, uptimeSiteCheckerJob } from "@/lib/inngest/functions/uptime-monitor";
 import { creditsResetJob } from "@/lib/inngest/functions/credits-reset";
+import { stripeWebhookReconcileJob } from "@/lib/inngest/functions/stripe-webhook-reconcile";
 import { runFreeAuditJob } from "@/lib/inngest/functions/free-audit";
 import { sendFreeReportEmailJob } from "@/lib/inngest/functions/free-report-email";
 import { fireLeadWebhookJob } from "@/lib/inngest/functions/lead-webhook";
@@ -193,6 +194,10 @@ export const { GET, POST, PUT } = serve({
         // IMPORTANT: Scheduled via Inngest cron ONLY. Do NOT add a matching
         // entry in vercel.json — double-scheduling resets credits twice per month.
         creditsResetJob,
+
+        // Stripe webhook crash recovery: replays stale RECEIVED / RETRY_PENDING events.
+        // Scheduled via Inngest cron ONLY (single scheduler for this work stream).
+        stripeWebhookReconcileJob,   // cron: */10
 
         cronMonthlyRateLimitCleanup,
 

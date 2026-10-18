@@ -121,8 +121,9 @@ export async function handleCheckoutCompleted(session: Stripe.Checkout.Session):
 
     const userId = await resolveUserId(session.metadata?.userId, session.customer as string | null)
     if (!userId) {
-        logger.error("[Webhook] checkout.session.completed: could not resolve userId")
-        return
+        logger.error("[Webhook] checkout.session.completed: could not resolve userId", { sessionId: session.id })
+        // Required invariant: throw so the event is RETRY_PENDING, not PROCESSED.
+        throw new Error(`checkout.session.completed ${session.id}: could not resolve userId`)
     }
 
     // For a subscription-mode session, a missing subscription is not success.
@@ -232,7 +233,9 @@ export async function handleSubscriptionUpdated(subscription: Stripe.Subscriptio
         logger.error("[Webhook] subscription.updated: could not resolve userId", {
             subscriptionId: subscription.id,
         })
-        return
+        // Required invariant (may also be an ordering race with checkout.session.completed):
+        // throw so Stripe retries instead of the event being marked PROCESSED.
+        throw new Error(`customer.subscription.updated ${subscription.id}: could not resolve userId`)
     }
 
     const item = subscription.items.data[0]
@@ -277,7 +280,13 @@ export async function handleSubscriptionDeleted(subscription: Stripe.Subscriptio
         subscription.metadata?.userId,
         subscription.customer as string | null
     )
-    if (!userId) return
+    if (!userId) {
+        logger.error("[Webhook] subscription.deleted: could not resolve userId", {
+            subscriptionId: subscription.id,
+        })
+        // Required invariant: a cancellation we cannot attribute must stay visible/retryable.
+        throw new Error(`customer.subscription.deleted ${subscription.id}: could not resolve userId`)
+    }
 
     const now = new Date()
 
@@ -343,13 +352,26 @@ export async function handlePaymentFailed(invoice: Stripe.Invoice): Promise<void
 
 export async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
     const customerId = invoice.customer as string
-    if (!customerId) return
+    // Intentional ignores (not retryable invariants): invoices without a customer, or
+    // for customers with no local Subscription row (e.g. one-off invoices), carry no
+    // subscription lifecycle to apply. Subscription upgrades are applied by
+    // checkout.session.completed, so an early invoice.paid is safe to skip.
+    if (!customerId) {
+        logger.info("[Webhook] invoice.paid without customer — ignored", { invoiceId: invoice.id })
+        return
+    }
 
     const subscription = await prisma.subscription.findFirst({
         where: { stripeCustomerId: customerId },
         select: { userId: true, stripePriceId: true },
     })
-    if (!subscription?.userId) return
+    if (!subscription?.userId) {
+        logger.info("[Webhook] invoice.paid for customer with no local subscription — ignored", {
+            invoiceId: invoice.id,
+            customerId,
+        })
+        return
+    }
 
     const priceId = extractPriceIdFromInvoice(invoice, subscription.stripePriceId ?? "")
 

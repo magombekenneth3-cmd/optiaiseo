@@ -123,7 +123,12 @@ vi.mock("@/lib/session-version", () => ({ bumpSessionVersion: h.bumpSessionVersi
 vi.mock("@/lib/redis", () => ({ redis: { set: vi.fn(async () => null) } }));
 vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 
-import { handleCheckoutCompleted, handleInvoicePaid } from "@/lib/stripe/webhook";
+import {
+    handleCheckoutCompleted,
+    handleInvoicePaid,
+    handleSubscriptionUpdated,
+    handleSubscriptionDeleted,
+} from "@/lib/stripe/webhook";
 import { grantCreditPackOnce, creditPackReferenceId } from "@/lib/stripe/credit-pack";
 import { CREDIT_PACK } from "@/lib/stripe/plans";
 
@@ -358,5 +363,54 @@ describe("subscription Checkout and invoice.paid", () => {
         // The credit-pack invoice must not fall through to tier/commission logic.
         expect(h.prisma.user.update).not.toHaveBeenCalled();
         expect(h.prisma.subscription.updateMany).not.toHaveBeenCalled();
+    });
+});
+
+// PR 2 §2.3: a known event type that fails a required invariant must throw (so the
+// event becomes RETRY_PENDING), not return early and get marked PROCESSED.
+describe("required invariants are retryable, intentional ignores are not", () => {
+    beforeEach(() => {
+        h.prisma.subscription.findUnique.mockResolvedValue(null);
+        h.prisma.subscription.findFirst.mockResolvedValue(null);
+    });
+
+    it("subscription Checkout with an unresolvable user throws", async () => {
+        await expect(
+            handleCheckoutCompleted({
+                id: "cs_sub_nouser",
+                mode: "subscription",
+                subscription: "sub_1",
+                customer: "cus_unknown",
+                metadata: {},
+            } as unknown as Stripe.Checkout.Session),
+        ).rejects.toThrow(/could not resolve userId/);
+    });
+
+    it("customer.subscription.updated with an unresolvable user throws", async () => {
+        await expect(
+            handleSubscriptionUpdated({
+                id: "sub_x",
+                customer: "cus_unknown",
+                metadata: {},
+                items: { data: [] },
+            } as unknown as Stripe.Subscription),
+        ).rejects.toThrow(/could not resolve userId/);
+    });
+
+    it("customer.subscription.deleted with an unresolvable user throws", async () => {
+        await expect(
+            handleSubscriptionDeleted({
+                id: "sub_x",
+                customer: "cus_unknown",
+                metadata: {},
+            } as unknown as Stripe.Subscription),
+        ).rejects.toThrow(/could not resolve userId/);
+    });
+
+    it("invoice.paid for a customer with no local subscription is an intentional ignore", async () => {
+        await expect(
+            handleInvoicePaid({ id: "in_orphan", customer: "cus_unknown", lines: { data: [] } } as unknown as Stripe.Invoice),
+        ).resolves.toBeUndefined();
+        expect(h.prisma.user.update).not.toHaveBeenCalled();
     });
 });
