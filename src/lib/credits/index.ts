@@ -1,7 +1,7 @@
 /**
  * 6.1: Credits-based usage layer
  * Atomic credit check + deduction for expensive API actions.
- * Protects: full audit (10), AEO check (5), blog generation (15),
+ * Protects: full audit (10), AEO check (5), blog generation (10),
  * competitor analysis (8), GitHub PR fix (3), voice session (2).
  */
 import { prisma } from "@/lib/prisma";

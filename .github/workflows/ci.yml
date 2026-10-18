@@ -37,13 +37,13 @@ jobs:
         run: pnpm exec prisma generate
 
       # ── Blocking checks — these MUST pass to merge ──────────────────────
-      - name: Security regression tests
+      - name: Security regression tests (includes SSRF)
         run: pnpm exec vitest run tests/security/ --reporter=verbose
 
       - name: TypeScript type check (full project, blocking)
         run: pnpm exec tsc --noEmit
 
-      - name: SERP competitive intelligence regression tests (blocking)
+      - name: SERP and AI visibility regression tests (blocking)
         run: >-
           pnpm exec vitest run
           tests/unit/serp-competitive-brief.test.ts
@@ -54,6 +54,9 @@ jobs:
           tests/unit/opportunity-gsc-evidence.test.ts
           tests/unit/growth-pipeline-gsc-gate.test.ts
           --reporter=verbose
+
+      - name: SSRF safe-fetch regression tests (blocking)
+        run: pnpm exec vitest run tests/security/ssrf-safe-fetch.test.ts tests/safe-url.test.ts --reporter=verbose
 
       - name: Production Next.js build (blocking)
         run: pnpm build
@@ -69,3 +72,6 @@ jobs:
       - name: Unit tests (informational)
         run: pnpm exec vitest run tests/unit/ --reporter=verbose
         continue-on-error: true  # Some unit tests need DB fixtures not in CI
+
+      - name: AI visibility provider-status regression tests (blocking)
+        run: pnpm exec vitest run tests/unit/aeo-visibility-probe-status.test.ts --reporter=verbose

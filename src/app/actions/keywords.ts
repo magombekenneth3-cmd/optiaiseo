@@ -359,7 +359,15 @@ export async function generateBlogForKeyword(
             return { success: false, error: "Invalid keyword." };
         }
 
-        const safeKeyword = keyword.replace(/[^\w\s-]/g, "").trim();
+        // FIX #10: Unicode-aware sanitization. The previous regex /[^\w\s-]/g
+        // stripped all non-ASCII characters, breaking i18n keywords (Japanese,
+        // Arabic, Cyrillic, etc.). Now we only remove control characters and
+        // HTML/script injection vectors while preserving legitimate text.
+        const safeKeyword = keyword
+            .replace(/[\x00-\x1f\x7f]/g, "")     // Control characters
+            .replace(/<[^>]*>/g, "")               // HTML tags
+            .replace(/['"`;\\]/g, "")              // Injection-risky chars
+            .trim();
         if (!safeKeyword) return { success: false, error: "Invalid keyword." };
 
         const userId = await getSessionUserId();
@@ -410,17 +418,9 @@ export async function generateBlogForKeyword(
             }
         }
 
-        // ── Credits: deduct AFTER gate passes ───────────────────────────────
-        const creditResult = await consumeCredits(user.id, "blog_generation");
-        if (!creditResult.allowed) {
-            return {
-                success: false,
-                error: creditResult.reason === "credits_locked"
-                    ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
-                    : `Not enough credits (${creditResult.remaining} remaining, need 10). Buy a credit pack or upgrade your plan.`,
-            };
-        }
-
+        // ── FIX #7a: Validate site BEFORE consuming credits ──────────────────
+        // Previously, credits were deducted at L414 but site was validated at
+        // L424-433, so a missing site would silently eat 10 credits.
         const site = siteId
             ? await prisma.site.findFirst({ where: { id: siteId, userId }, select: SITE_SELECT })
             : await prisma.site.findFirst({ where: { userId }, select: SITE_SELECT, orderBy: { createdAt: "desc" } });
@@ -432,35 +432,66 @@ export async function generateBlogForKeyword(
             };
         }
 
-        // Credits are the sole gate — no monthly blog count limit.
-        logger.debug(`[Keywords] Generating blog for keyword: "${safeKeyword}" (intent: ${intent ?? "unknown"})`);
-        const post = await generateBlogFromKeywordGap(safeKeyword, position, impressions, { name: site.domain }, undefined, site.domain, intent, site.id);
-        const { publicationGate } = await evaluateDraftForPublication(post);
+        // ── Credits: deduct AFTER gate AND site validation pass ──────────────
+        const creditResult = await consumeCredits(user.id, "blog_generation");
+        if (!creditResult.allowed) {
+            return {
+                success: false,
+                error: creditResult.reason === "credits_locked"
+                    ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
+                    : `Not enough credits (${creditResult.remaining} remaining, need 10). Buy a credit pack or upgrade your plan.`,
+            };
+        }
 
-        const blog = await prisma.blog.create({
-            data: {
-                siteId: site.id,
-                pipelineType: "GSC_GAP",
-                title: post.title,
-                slug: post.slug,
-                targetKeywords: post.targetKeywords,
-                content: post.content,
-                metaDescription: post.metaDescription,
+        // ── FIX #7b: Refund credits if blog generation/persistence fails ─────
+        // Unique reference prevents double-refund on Inngest retries.
+        const refundRef = `blog-gen-${user.id}-${safeKeyword}-${Date.now()}`;
+        try {
+            // Credits are the sole gate — no monthly blog count limit.
+            logger.debug(`[Keywords] Generating blog for keyword: "${safeKeyword}" (intent: ${intent ?? "unknown"})`);
+            const post = await generateBlogFromKeywordGap(safeKeyword, position, impressions, { name: site.domain }, undefined, site.domain, intent, site.id);
+            const { publicationGate } = await evaluateDraftForPublication(post);
+
+            const blog = await prisma.blog.create({
+                data: {
+                    siteId: site.id,
+                    pipelineType: "GSC_GAP",
+                    title: post.title,
+                    slug: post.slug,
+                    targetKeywords: post.targetKeywords,
+                    content: post.content,
+                    metaDescription: post.metaDescription,
+                    status: publicationGate.status,
+                    validationScore: post.validationScore,
+                    validationErrors: [...post.validationErrors, ...publicationGate.blockingIssues],
+                    validationWarnings: [...post.validationWarnings, ...publicationGate.warnings],
+                },
+            });
+
+            revalidatePath("/dashboard/blogs");
+            return {
+                success: true,
+                generationSucceeded: true,
+                publicationReady: publicationGate.status === "DRAFT",
                 status: publicationGate.status,
-                validationScore: post.validationScore,
-                validationErrors: [...post.validationErrors, ...publicationGate.blockingIssues],
-                validationWarnings: [...post.validationWarnings, ...publicationGate.warnings],
-            },
-        });
-
-        revalidatePath("/dashboard/blogs");
-        return {
-            success: true,
-            generationSucceeded: true,
-            publicationReady: publicationGate.status === "DRAFT",
-            status: publicationGate.status,
-            blog: blog as Record<string, unknown>,
-        };
+                blog: blog as Record<string, unknown>,
+            };
+        } catch (genError: unknown) {
+            // Blog generation or persistence failed — refund the consumed credits
+            const { refundCreditsIdempotent } = await import("@/lib/credits");
+            await refundCreditsIdempotent(
+                user.id,
+                creditResult.cost,
+                refundRef,
+                `Blog generation failed for keyword "${safeKeyword}": ${(genError as Error)?.message || String(genError)}`
+            );
+            logger.error("[Keywords] generateBlogForKeyword failed — credits refunded:", {
+                error: (genError as Error)?.message || String(genError),
+                refundRef,
+                creditCost: creditResult.cost,
+            });
+            return { success: false, error: "Blog generation failed. Your credits have been refunded." };
+        }
     } catch (error: unknown) {
         logger.error("[Keywords] generateBlogForKeyword failed:", { error: (error as Error)?.message || String(error) });
         return { success: false, error: "Failed to generate blog. Check server logs." };

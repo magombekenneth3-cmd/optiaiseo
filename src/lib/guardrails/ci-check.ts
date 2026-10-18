@@ -35,6 +35,46 @@ export async function runSeoGuardrailCheck(target: GuardrailTarget): Promise<Gua
     const warnings: string[] = [];
     const startTime = Date.now();
 
+    // FIX #3: Validate target URL against allowlist to prevent auditing
+    // non-application URLs (e.g. Railway dashboard, Vercel admin panel)
+    const ALLOWED_ORIGINS = [
+        "optiaiseo.online",
+        "www.optiaiseo.online",
+        "localhost",
+        "127.0.0.1",
+    ];
+    try {
+        const parsed = new URL(target.url);
+        const hostname = parsed.hostname.toLowerCase();
+        if (!ALLOWED_ORIGINS.some(origin => hostname === origin || hostname.endsWith(`.${origin}`))) {
+            errors.push(`GUARDRAIL CONFIG ERROR: Target URL hostname "${hostname}" is not in the allowed origins list. This may be a CI misconfiguration (e.g. Railway dashboard URL leaking into environment_url).`);
+            return {
+                url: target.url,
+                passed: false,
+                errors,
+                warnings,
+                metrics: {
+                    title: null, metaDescription: null, canonical: null,
+                    hasOgTitle: false, hasOgImage: false, isNoIndex: true,
+                    estimatedLcpMs: 0, estimatedCls: 0,
+                },
+            };
+        }
+    } catch {
+        errors.push(`GUARDRAIL CONFIG ERROR: Target URL "${target.url}" is not a valid URL.`);
+        return {
+            url: target.url,
+            passed: false,
+            errors,
+            warnings,
+            metrics: {
+                title: null, metaDescription: null, canonical: null,
+                hasOgTitle: false, hasOgImage: false, isNoIndex: true,
+                estimatedLcpMs: 0, estimatedCls: 0,
+            },
+        };
+    }
+
     let html = "";
     try {
         const res = await fetch(target.url, { signal: AbortSignal.timeout(10000) });
@@ -99,14 +139,17 @@ export async function runSeoGuardrailCheck(target: GuardrailTarget): Promise<Gua
     const maxLcp = target.maxLcpMs ?? 2500;
 
     if (estimatedLcpMs > maxLcp) {
-        errors.push(`CORE WEB VITALS REGRESSION: Estimated LCP (${estimatedLcpMs}ms) exceeds threshold (${maxLcp}ms)`);
+        // FIX #3: Label as server-side estimate, not actual CWV measurement.
+        // Real LCP requires a browser environment (Chrome DevTools, CrUX, etc.).
+        errors.push(`SEO ESTIMATE: Server-side estimated LCP (TTFB + 450ms = ${estimatedLcpMs}ms) exceeds threshold (${maxLcp}ms). Note: this is a heuristic, not a real Core Web Vitals measurement.`);
     }
 
     const estimatedCls = html.includes("width=") && html.includes("height=") ? 0.02 : 0.15;
     const maxCls = target.maxCls ?? 0.10;
 
     if (estimatedCls > maxCls) {
-        warnings.push(`CORE WEB VITALS WARN: Estimated CLS (${estimatedCls}) exceeds target (${maxCls})`);
+        // FIX #3: Label as heuristic, not actual CLS measurement.
+        warnings.push(`SEO ESTIMATE: Heuristic CLS (${estimatedCls}) exceeds target (${maxCls}). Based on presence of width/height attributes, not real layout shift measurement.`);
     }
 
     const passed = errors.length === 0;

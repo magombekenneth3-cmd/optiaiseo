@@ -154,7 +154,10 @@ export function rankGrowthDecisions(
                     low: Math.round(opp.impressions * 0.04),
                     expected: Math.round(opp.impressions * 0.12),
                     high: Math.round(opp.impressions * 0.22),
-                    confidence: 85
+                    // FIX #8: Use calibrated confidence instead of hard-coded 85.
+                    // When no empirical evidence exists, this will be lower than 85,
+                    // honestly reflecting the uncertainty of a heuristic-only forecast.
+                    confidence
                 }
             },
             executionPlan,

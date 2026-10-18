@@ -249,7 +249,9 @@ export async function getKeywordMetricsBatch(
                 if (!kw) continue;
                 results.set(kw, {
                     keyword: kw,
-                    searchVolume: item.search_volume ?? 0,
+                    // FIX #6a: Preserve null for missing data — don't conflate
+                    // 'API returned no data' with 'volume is actually zero'.
+                    searchVolume: item.search_volume ?? null,
                     // keywordDifficulty is intentionally null here — it comes from the Labs endpoint.
                     // competition_index is PAID-SEARCH competition, NOT organic SEO difficulty.
                     keywordDifficulty: null,
