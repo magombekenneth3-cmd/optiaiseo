@@ -124,7 +124,7 @@ Respond ONLY with JSON array:
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: { maxOutputTokens: 2048, temperature: 0.2 },
+                        generationConfig: { maxOutputTokens: 2048 },
                     }),
                     signal: AbortSignal.timeout(15000),
                 }
@@ -179,7 +179,7 @@ Respond ONLY with a valid JSON object (no markdown, no explanation) with these e
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: { maxOutputTokens: 1024, temperature: 0.2 },
+                        generationConfig: { maxOutputTokens: 1024 },
                     }),
                     signal: AbortSignal.timeout(20000),
                 }
@@ -666,7 +666,7 @@ Rules:
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: { maxOutputTokens: 900, temperature: 0.2 },
+                        generationConfig: { maxOutputTokens: 900 },
                     }),
                     signal: AbortSignal.timeout(25_000),
                 },

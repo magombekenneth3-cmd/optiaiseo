@@ -2,7 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { logger, formatError } from "@/lib/logger";
 import { pingGoogleIndexingApi } from "@/lib/gsc/indexing";
 import { getIndexNowConfig } from "@/lib/indexnow-config";
-import { getRedis } from "@/lib/redis";
+import { getRedis, redisErrorCode } from "@/lib/redis";
+import { reserveGoogleQuotaAtomic } from "@/lib/indexing/indexnow-lua";
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -14,7 +15,8 @@ export type SubmissionStatus =
     | "NETWORK_ERROR"
     | "TIMEOUT"
     | "NOT_CONFIGURED"
-    | "QUOTA_EXHAUSTED";
+    | "QUOTA_EXHAUSTED"
+    | "QUOTA_CHECK_UNAVAILABLE";
 
 export interface ProviderResult {
     provider: "GOOGLE" | "INDEXNOW";
@@ -97,11 +99,10 @@ export async function submitIndexNow(
             return { provider: "INDEXNOW", status: "SUCCESS" };
         }
 
-        const text = await res.text().catch(() => "");
+        await res.body?.cancel().catch(() => undefined);
         logger.error("[InstantIndexing] IndexNow rejected", {
             host: cleanHost,
             status: res.status,
-            body: text,
         });
         return {
             provider: "INDEXNOW",
@@ -147,6 +148,7 @@ export async function submitGoogleIndexingApi(
     urls: string[],
     userId: string,
 ): Promise<ProviderResult> {
+    if (urls.length === 0) return { provider: "GOOGLE", status: "SUCCESS" };
     if (!userId) {
         return {
             provider: "GOOGLE",
@@ -155,44 +157,38 @@ export async function submitGoogleIndexingApi(
         };
     }
 
-    // Atomic quota enforcement via Upstash HTTP Redis
+    // Atomic quota reservation via Upstash HTTP Redis. Google quota enforcement
+    // is not safe to bypass during a Redis outage, so do not submit without it.
     const redis = getRedis();
-    if (redis) {
-        const today = new Date().toISOString().slice(0, 10);
-        const quotaKey = `${GOOGLE_QUOTA_KEY_PREFIX}${today}`;
+    if (!redis) {
+        logger.error("[InstantIndexing] Redis unavailable — Google quota was not reserved", { siteId });
+        return {
+            provider: "GOOGLE",
+            status: "QUOTA_CHECK_UNAVAILABLE",
+            message: "Google indexing was not submitted because quota could not be checked.",
+        };
+    }
 
-        try {
-            const current = await redis.get<number>(quotaKey) ?? 0;
-            const remaining = GOOGLE_DAILY_LIMIT - current;
-
-            if (remaining <= 0) {
-                logger.warn("[InstantIndexing] Daily Google quota exhausted", {
-                    siteId,
-                    total: urls.length,
-                });
-                return {
-                    provider: "GOOGLE",
-                    status: "QUOTA_EXHAUSTED",
-                    message: "Daily Google Indexing API quota (200 URLs) reached.",
-                };
-            }
-
-            // Reserve quota — cap to remaining
-            const allowed = Math.min(urls.length, remaining);
-            await redis.incrby(quotaKey, allowed);
-            // Set TTL to 48h if not already set (belt-and-suspenders)
-            await redis.expire(quotaKey, 172800);
-            urls = urls.slice(0, allowed);
-        } catch (err: unknown) {
-            // Quota enforcement failed — do NOT silently skip.
-            // Log the failure and continue with conservative behavior.
-            logger.error("[InstantIndexing] Redis quota check failed — proceeding without quota enforcement", {
-                siteId,
-                error: formatError(err),
-            });
+    const today = new Date().toISOString().slice(0, 10);
+    const quotaKey = `${GOOGLE_QUOTA_KEY_PREFIX}${today}`;
+    try {
+        const allowed = await reserveGoogleQuotaAtomic(redis, quotaKey, GOOGLE_DAILY_LIMIT, urls.length);
+        if (allowed === 0) {
+            logger.warn("[InstantIndexing] Daily Google quota exhausted", { siteId, total: urls.length });
+            return {
+                provider: "GOOGLE",
+                status: "QUOTA_EXHAUSTED",
+                message: "Daily Google Indexing API quota (200 URLs) reached.",
+            };
         }
-    } else {
-        logger.warn("[InstantIndexing] Redis not configured — Google quota enforcement disabled", { siteId });
+        urls = urls.slice(0, allowed);
+    } catch (err: unknown) {
+        logger.error("[InstantIndexing] Redis quota reservation failed", { siteId, errorCode: redisErrorCode(err) });
+        return {
+            provider: "GOOGLE",
+            status: "QUOTA_CHECK_UNAVAILABLE",
+            message: "Google indexing was not submitted because quota could not be checked.",
+        };
     }
 
     // Submit each URL via the existing authenticated Google Indexing API

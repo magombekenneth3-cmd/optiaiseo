@@ -110,6 +110,92 @@ export async function consumeCredits(
 }
 
 /**
+ * Atomically charge a background job once. `referenceId` is unique per logical
+ * attempt, so a repeated server action or job recovery cannot debit twice.
+ */
+export async function consumeCreditsIdempotent(
+    userId: string,
+    action: CreditAction,
+    referenceId: string,
+    multiplier = 1,
+): Promise<ConsumeResult> {
+    const cost = CREDIT_COSTS[action] * multiplier;
+    if (!Number.isFinite(cost) || cost < 0) {
+        throw new Error("Invalid credit cost");
+    }
+    if (cost === 0) {
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { credits: true } });
+        return { allowed: true, remaining: user?.credits ?? 0, cost: 0 };
+    }
+
+    try {
+        return await prisma.$transaction(async (tx) => {
+            const existing = await tx.creditLedger.findUnique({
+                where: { userId_referenceId: { userId, referenceId } },
+            });
+            if (existing) {
+                const user = await tx.user.findUnique({ where: { id: userId }, select: { credits: true } });
+                return {
+                    allowed: existing.type === "DEBIT",
+                    remaining: user?.credits ?? 0,
+                    cost,
+                    ...(existing.type === "DEBIT" ? {} : { reason: "already_refunded" }),
+                };
+            }
+
+            const user = await tx.user.findUnique({
+                where: { id: userId },
+                select: { credits: true, creditsLockedAt: true },
+            });
+            if (!user) return { allowed: false, remaining: 0, cost, reason: "user_not_found" };
+            if (user.creditsLockedAt) {
+                return { allowed: false, remaining: user.credits, cost, reason: "credits_locked" };
+            }
+
+            const rows: { credits: number }[] = await tx.$queryRaw`
+                UPDATE "User"
+                SET credits = credits - ${cost}
+                WHERE id = ${userId}
+                  AND credits >= ${cost}
+                  AND "creditsLockedAt" IS NULL
+                RETURNING credits
+            `;
+            if (rows.length === 0) {
+                const current = await tx.user.findUnique({ where: { id: userId }, select: { credits: true } });
+                return { allowed: false, remaining: current?.credits ?? 0, cost, reason: "insufficient_credits" };
+            }
+
+            const remaining = rows[0].credits;
+            await tx.creditLedger.create({
+                data: { userId, amount: cost, type: "DEBIT", referenceId, reason: ACTION_LABELS[action] },
+            });
+            await tx.creditHistory.create({
+                data: { userId, action, label: ACTION_LABELS[action], cost, balanceAfter: remaining },
+            });
+            return { allowed: true, remaining, cost };
+        });
+    } catch (error) {
+        // A concurrent request may win the unique ledger insert. The losing
+        // transaction rolls its debit back, then reads the winner's outcome.
+        if ((error as { code?: string })?.code === "P2002") {
+            const existing = await prisma.creditLedger.findUnique({
+                where: { userId_referenceId: { userId, referenceId } },
+            });
+            if (existing) {
+                const user = await prisma.user.findUnique({ where: { id: userId }, select: { credits: true } });
+                return {
+                    allowed: existing.type === "DEBIT",
+                    remaining: user?.credits ?? 0,
+                    cost,
+                    ...(existing.type === "DEBIT" ? {} : { reason: "already_refunded" }),
+                };
+            }
+        }
+        throw error;
+    }
+}
+
+/**
  * Monthly cron: reset credits for all users based on their plan.
  * Called by: a monthly Inngest cron job.
  */

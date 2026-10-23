@@ -4,21 +4,9 @@ import { z } from "zod";
 import * as crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { extractRoot } from "@/lib/competitors/filters";
+import { getRedis } from "@/lib/redis";
 
 const CATEGORY_CACHE_TTL_S = 7 * 24 * 3600;
-
-let _redis: import("ioredis").Redis | null = null;
-async function getCategoryRedis(): Promise<import("ioredis").Redis | null> {
-    if (_redis) return _redis;
-    if (!process.env.REDIS_URL) return null;
-    try {
-        const { default: Redis } = await import("ioredis");
-        _redis = new Redis(process.env.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1 });
-        return _redis;
-    } catch {
-        return null;
-    }
-}
 
 export const CategoryProfileSchema = z.object({
   category: z.string().describe("The high-level industry category (e.g., 'Telecommunications', 'SaaS', 'Healthcare')"),
@@ -41,11 +29,11 @@ export async function detectCategory(
   const hash = crypto.createHash("sha256").update(contentToHash).digest("hex");
   const cacheKey = `category-ai:${hash}`;
 
-  const r = await getCategoryRedis();
+  const r = getRedis();
   if (r) {
       try {
           const cached = await r.get(cacheKey);
-          if (cached) return JSON.parse(cached) as CategoryProfile;
+          if (cached) return JSON.parse(cached as string) as CategoryProfile;
       } catch { /* non-fatal */ }
   }
 
@@ -66,7 +54,7 @@ export async function detectCategory(
   });
 
   if (r) {
-      try { await r.setex(cacheKey, CATEGORY_CACHE_TTL_S, JSON.stringify(object)); } catch { /* non-fatal */ }
+      try { await r.set(cacheKey, JSON.stringify(object), { ex: CATEGORY_CACHE_TTL_S }); } catch { /* non-fatal */ }
   }
 
   return object;

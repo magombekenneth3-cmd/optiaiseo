@@ -10,8 +10,8 @@
  * Run once per month from the cleanup cron route.
  * NOTE: SCAN may take a few seconds on large datasets — never use on a hot request path.
  */
-import { Redis } from "@upstash/redis";
 import { logger } from "@/lib/logger";
+import { getRedis } from "@/lib/redis";
 
 /** All currently active rl: prefixes — update this if you add/rename a limiter */
 const ACTIVE_PREFIXES = [
@@ -46,7 +46,8 @@ export interface CleanupResult {
  * Safe to call without arguments — builds its own Redis instance.
  */
 export async function cleanupOrphanedRateLimitKeys(): Promise<CleanupResult> {
-    const redis = Redis.fromEnv();
+    const redis = getRedis();
+    if (!redis) throw new Error("Upstash Redis is not configured.");
 
     let cursor = 0;
     let scanned = 0;

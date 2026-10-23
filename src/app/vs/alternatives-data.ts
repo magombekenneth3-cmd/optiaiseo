@@ -20,7 +20,7 @@ const OPT: AltItem = {
   rank: "01",
   name: "OptiAISEO",
   badge: "Best for AI-era SEO · Free tier",
-  price: "Free · Pro from $39/mo",
+  price: "Free · Pro from $49/mo",
   verdict:
     "The only tool that tracks your brand in ChatGPT, Claude, and Perplexity — plus automated GitHub code-fix PRs and AI content generation. Genuine free tier, no credit card needed.",
   pros: [
@@ -194,7 +194,7 @@ export const ALTERNATIVES: Record<string, AltSection> = {
       {
         ...OPT,
         verdict:
-          "The only Clearscope alternative that generates content automatically instead of grading it. Adds technical SEO auditing, AI visibility tracking in ChatGPT and Perplexity, and automated GitHub fixes — at $39/month with a free tier.",
+          "The only Clearscope alternative that generates content automatically instead of grading it. Adds technical SEO auditing, AI visibility tracking in ChatGPT and Perplexity, and automated GitHub fixes — at $49/month with a free tier.",
         cons: ["No per-keyword NLP term-frequency grader like Clearscope's grade system"],
         best: "Teams who want content generated automatically alongside full SEO — not just scored after writing.",
       },

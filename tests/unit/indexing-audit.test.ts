@@ -228,7 +228,9 @@ describe("11. Redis failure does not silently skip quota enforcement", () => {
         );
 
         // Must log an error when Redis fails, not silently succeed
-        expect(content).toContain("Redis quota check failed");
+        // Implementation logs "Redis quota reservation failed" for atomic-reserve errors
+        // and "Redis unavailable" when getRedis() returns null — either phrase is present
+        expect(content).toContain("Redis quota reservation failed");
         // Must NOT silently return true/success on Redis failure
         expect(content).not.toContain("return true; // Fail open");
     });
@@ -241,8 +243,10 @@ describe("11. Redis failure does not silently skip quota enforcement", () => {
             "utf-8"
         );
 
-        expect(content).toContain("Redis not configured");
-        expect(content).toContain("quota enforcement disabled");
+        // Implementation uses "Redis unavailable" in the logger and
+        // QUOTA_CHECK_UNAVAILABLE as the returned status — both must be present
+        expect(content).toContain("Redis unavailable");
+        expect(content).toContain("QUOTA_CHECK_UNAVAILABLE");
     });
 });
 

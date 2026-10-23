@@ -148,7 +148,6 @@ export async function checkGeminiMention(
             model: AI_MODELS.GEMINI_PRO,
             contents: prompt,
             config: {
-                temperature: 0.1,
                 tools: [{ googleSearch: {} }],
             },
         });

@@ -369,7 +369,6 @@ Generate the fully modernised, refreshed version of this post now.`;
             config: {
                 responseMimeType: "application/json",
                 responseSchema: buildBlogResponseSchema(ctx),
-                temperature: 0.7,
             },
         });
 

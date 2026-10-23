@@ -567,6 +567,12 @@ model Blog {
   /// Independent gate results from the publication gate architecture.
   /// Each entry contains name, status (PASS/REVIEW/FAIL), isHard, issues, warnings.
   publicationGates     Json?
+  /// Client supplied idempotency key for generation requests.
+  generationRequestId  String?
+  /// Attempt-specific billing and Inngest event identity.
+  generationAttemptId  String?
+  /// Persisted event payload used to recover a dispatch whose response was lost.
+  generationInput      Json?
   aeoEvents            AeoEvent[]
   repurposedResult     RepurposedResult?
   sourceLinks          InternalLink[]     @relation("SourceLinks")
@@ -577,6 +583,7 @@ model Blog {
   version              Int                @default(1) // optimistic concurrency token
 
   @@unique([siteId, slug])
+  @@unique([siteId, generationRequestId])
   @@index([siteId])
   @@index([siteId, status, createdAt])
   @@index([siteId, pipelineType, createdAt])

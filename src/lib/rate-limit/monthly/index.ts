@@ -15,7 +15,7 @@
  *     cache, etc. No separate Redis client created here.
  */
 import { logger } from "@/lib/logger";
-import { redis as _sharedRedis } from "@/lib/redis";
+import { redis as _sharedRedis, redisErrorCode } from "@/lib/redis";
 
 export type RateLimitResult = {
     allowed:   boolean;
@@ -106,7 +106,7 @@ export const checkRateLimit = async (
         return await checkRedis(key, limit, resetAt);
     } catch (err: unknown) {
         logger.error("[RateLimit/Monthly] Redis error — failing open to prevent user lockout:", {
-            error: err instanceof Error ? (err.stack ?? err.message) : String(err),
+            errorCode: redisErrorCode(err),
         });
         return { allowed: true, remaining: 0, resetAt };
     }

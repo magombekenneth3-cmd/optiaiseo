@@ -293,9 +293,12 @@ export async function validateSerpPreflight(
         // Note: a double-failure (Redis down + Serper down) will produce SKIP
         // (fail-open). This is the explicit policy: infrastructure failures
         // should never permanently block generation.
-        logger.error("[SerpGate] Redis error during preflight validation:", {
-            error: (err as Error)?.message,
-        });
+        const errorCode = typeof err === "object" && err !== null && "code" in err
+            && typeof (err as { code?: unknown }).code === "string"
+            && /^[A-Za-z0-9_-]{1,40}$/.test((err as { code: string }).code)
+            ? (err as { code: string }).code
+            : err instanceof Error ? err.name : "redis_error";
+        logger.error("[SerpGate] Redis error during preflight validation", { errorCode });
         return { valid: false, reason: "REDIS_ERROR" };
     }
 

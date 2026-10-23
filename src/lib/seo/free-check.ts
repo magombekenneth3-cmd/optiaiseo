@@ -129,7 +129,7 @@ export async function runFreeSeoCheck(rawDomain: string): Promise<FreeSeoCheckRe
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 8, temperature: 0.1 },
+          generationConfig: { maxOutputTokens: 8 },
         }),
         signal: AbortSignal.timeout(6_000),
       }

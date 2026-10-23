@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 
-import { redis } from "@/lib/redis";
+import { redis, redisErrorCode } from "@/lib/redis";
 
 export interface KeywordIdea {
     keyword: string
@@ -66,7 +66,7 @@ export const getKeywordIdeas = async (
         if (cached) return JSON.parse(cached as string)
      
      
-    } catch (e: unknown) { logger.warn("Redis Get Error:", { error: (e as Error)?.message || String(e) }) }
+    } catch (e: unknown) { logger.warn("Redis Get Error", { errorCode: redisErrorCode(e) }) }
 
     try {
         // Google Autocomplete — generates keyword suggestions for free
@@ -109,7 +109,7 @@ export const getKeywordIdeas = async (
              
             await redis.set(cacheKey, JSON.stringify(suggestions), { ex: 60 * 60 * 24 });
          
-        } catch (e: unknown) { logger.warn("Redis Set Error:", { error: (e as Error)?.message || String(e) }) }
+        } catch (e: unknown) { logger.warn("Redis Set Error", { errorCode: redisErrorCode(e) }) }
 
          
         return suggestions.slice(0, limit)
@@ -144,7 +144,7 @@ export const getContentIdeas = async (
         const cached = await redis.get(cacheKey)
         if (cached) return JSON.parse(cached as string)
      
-    } catch (e: unknown) { logger.warn("Redis Get Error:", { error: (e as Error)?.message || String(e) }) }
+    } catch (e: unknown) { logger.warn("Redis Get Error", { errorCode: redisErrorCode(e) }) }
 
     // Use Serper.dev for content ideas if key is available
     if (process.env.SERPER_API_KEY) {
@@ -175,7 +175,7 @@ export const getContentIdeas = async (
                      
                     await redis.set(cacheKey, JSON.stringify(mapped), { ex: 60 * 60 * 24 });
                  
-                } catch (e: unknown) { logger.warn("Redis Set Error:", { error: (e as Error)?.message || String(e) }) }
+                } catch (e: unknown) { logger.warn("Redis Set Error", { errorCode: redisErrorCode(e) }) }
 
                 return mapped
             }
@@ -206,7 +206,7 @@ export const getUbersuggestDomainOverview = async (
         const cached = await redis.get(cacheKey)
         if (cached) return JSON.parse(cached as string)
      
-    } catch (e: unknown) { logger.warn("Redis Get Error:", { error: (e as Error)?.message || String(e) }) }
+    } catch (e: unknown) { logger.warn("Redis Get Error", { errorCode: redisErrorCode(e) }) }
 
     // Use Google PageSpeed Insights for some domain signals (free with API key)
     if (process.env.PAGESPEED_API_KEY) {
@@ -228,7 +228,7 @@ export const getUbersuggestDomainOverview = async (
                 try {
                     await redis.set(cacheKey, JSON.stringify(overview), { ex: 60 * 60 * 48 });
                  
-                } catch (e: unknown) { logger.warn("Redis Set Error:", { error: (e as Error)?.message || String(e) }) }
+                } catch (e: unknown) { logger.warn("Redis Set Error", { errorCode: redisErrorCode(e) }) }
                 return overview
             }
          

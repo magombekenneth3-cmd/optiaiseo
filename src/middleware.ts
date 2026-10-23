@@ -71,6 +71,10 @@ function getRedis(): Redis | null {
     redis = new Redis({
         url: process.env.UPSTASH_REDIS_REST_URL,
         token: process.env.UPSTASH_REDIS_REST_TOKEN,
+        retry: {
+            retries: 1,
+            backoff: (retryCount) => Math.min(250 * 2 ** retryCount, 1_000),
+        },
     });
     return redis;
 }
@@ -213,7 +217,13 @@ export async function middleware(request: NextRequest) {
         } catch (err) {
             // Redis unreachable (DNS, network, timeout) — fail open.
             // Rate limiting is best-effort; a Redis outage must not take down all API routes.
-            console.error("[middleware] Rate-limit Redis error, failing open:", (err as Error).message);
+            const rawErrorCode = typeof err === "object" && err !== null && "code" in err
+                ? (err as { code?: unknown }).code
+                : err instanceof Error ? err.name : undefined;
+            const errorCode = typeof rawErrorCode === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(rawErrorCode)
+                ? rawErrorCode
+                : "redis_error";
+            console.error("[middleware] Rate-limit Redis error, failing open:", { errorCode });
             return applySecurityHeaders(baseResponse, nonce);
         }
 

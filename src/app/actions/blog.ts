@@ -13,15 +13,17 @@ import { extractSiteContext } from "@/lib/blog/context";
 import { scoreContent } from "@/lib/content-scoring";
 import { getEffectiveTier } from "@/lib/stripe/guards";
 import { getUserGscToken } from "@/lib/gsc/token";
-import { consumeCredits } from "@/lib/credits";
+import { consumeCreditsIdempotent } from "@/lib/credits";
 import { requireUser } from "@/lib/auth/require-user";
 import { Prisma } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import { fetchGoogleSerp, classifySerpFormat, type SerpFormatSignal } from "@/lib/blog/serp";
 import {
     evaluateSerpIntentGate,
     validateSerpPreflight,
     type SerpGateDecision,
 } from "@/lib/blog/serp-gate";
+import { blogGenerationEventId } from "@/lib/blog/generation-recovery";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +43,15 @@ type SerpGateInput = {
     preflightId?: string;
     /** User explicitly acknowledged the SERP mismatch warning. */
     forceSerpMismatch?: boolean;
+    /** Stable idempotency key retained by the client across ambiguous responses. */
+    requestId?: string;
+};
+
+type BlogGenerationEventData = Record<string, unknown> & {
+    siteId: string;
+    blogId: string;
+    userId: string;
+    pipelineType: string;
 };
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -57,6 +68,71 @@ const SITE_AUTHOR_SELECT = {
 } as const;
 
 type SiteAuthorFields = Prisma.SiteGetPayload<{ select: typeof SITE_AUTHOR_SELECT }>;
+
+function normalizeRequestId(value: string | undefined): string {
+    return value && /^[a-f0-9-]{36}$/i.test(value) ? value : randomUUID();
+}
+
+function isRecord(value: Prisma.JsonValue | null): value is Prisma.JsonObject {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function toEventData(value: Record<string, unknown>): BlogGenerationEventData {
+    return JSON.parse(JSON.stringify(value)) as BlogGenerationEventData;
+}
+
+async function dispatchBlogGeneration(
+    blogId: string,
+    attemptId: string,
+    data: BlogGenerationEventData,
+): Promise<void> {
+    const { inngest } = await import("@/lib/inngest/client");
+    await inngest.send({
+        id: blogGenerationEventId(blogId, attemptId),
+        name: "blog.generate",
+        data: { ...data, attemptId },
+    });
+}
+
+async function resumeStoredGeneration(blog: {
+    id: string;
+    status: string;
+    generationAttemptId: string | null;
+    generationInput: Prisma.JsonValue | null;
+    title?: string;
+    slug?: string;
+    content?: string;
+    metaDescription?: string | null;
+    targetKeywords?: string[];
+}) {
+    if (blog.status !== "GENERATING") {
+        const validSavedOutput = blog.status !== "FAILED"
+            && !!blog.title?.trim()
+            && !!blog.slug?.trim()
+            && !!blog.content?.replace(/<[^>]*>/g, " ").trim()
+            && !!blog.metaDescription?.trim()
+            && !!blog.targetKeywords?.length;
+        return validSavedOutput
+            ? { success: true, status: blog.status, blog }
+            : { success: false, error: blog.status === "FAILED" ? "This generation failed. Use Retry to start another attempt." : "Saved generation output is incomplete; please retry." };
+    }
+    if (!blog.generationAttemptId || !isRecord(blog.generationInput)) {
+        return { success: true, error: "Generation is pending recovery. Please refresh shortly.", pending: true, blog };
+    }
+    try {
+        await dispatchBlogGeneration(
+            blog.id,
+            blog.generationAttemptId,
+            blog.generationInput as unknown as BlogGenerationEventData,
+        );
+    } catch (error) {
+        logger.warn("[Blog Action] Re-dispatch remains pending", {
+            blogId: blog.id,
+            errorName: error instanceof Error ? error.name : "unknown",
+        });
+    }
+    return { success: true, status: "Generating", pending: true, blog };
+}
 
 function buildAuthorProfile(
     authorInput: AuthorInput | undefined,
@@ -223,40 +299,65 @@ export async function retryFailedBlog(blogId: string) {
         const auth = await requireUser();
         if (!auth.ok) return { success: false, error: "Unauthorized" };
         const { user } = auth;
-
-        // Confirm the blog belongs to this user and is actually FAILED
         const blog = await prisma.blog.findFirst({
             where: { id: blogId, site: { userId: user.id } },
             select: {
-                id: true,
-                siteId: true,
-                status: true,
-                targetKeywords: true,
-                pipelineType: true,
+                id: true, siteId: true, status: true, targetKeywords: true, pipelineType: true,
+                generationAttemptId: true, generationInput: true,
                 site: {
                     select: {
-                        id: true,
-                        domain: true,
-                        authorName: true,
-                        authorRole: true,
-                        authorBio: true,
-                        realExperience: true,
-                        realNumbers: true,
-                        localContext: true,
+                        id: true, domain: true, authorName: true, authorRole: true, authorBio: true,
+                        realExperience: true, realNumbers: true, localContext: true,
                         user: { select: { name: true } },
                     },
                 },
             },
         });
-
         if (!blog) return { success: false, error: "Blog not found." };
         if (blog.status !== "FAILED") {
-            return { success: false, error: `Blog is not in FAILED state (current: ${blog.status}).` };
+            return blog.status === "GENERATING"
+                ? { success: true, status: "Retrying" }
+                : { success: false, error: `Blog is not in FAILED state (current: ${blog.status}).` };
         }
 
-        // Deduct credits for the retry (the onFailure handler refunded them on failure)
-        const creditResult = await consumeCredits(user.id, "blog_generation");
+        const attemptId = randomUUID();
+        const baseData = isRecord(blog.generationInput)
+            ? blog.generationInput as unknown as BlogGenerationEventData
+            : {
+                siteId: blog.siteId,
+                blogId: blog.id,
+                userId: user.id,
+                pipelineType: blog.pipelineType ?? "USER_KEYWORD",
+                keyword: blog.targetKeywords[0],
+                authorName: blog.site.authorName ?? blog.site.user?.name ?? undefined,
+                authorRole: blog.site.authorRole ?? undefined,
+                authorBio: blog.site.authorBio ?? undefined,
+                realExperience: blog.site.realExperience ?? undefined,
+                realNumbers: blog.site.realNumbers ?? undefined,
+                localContext: blog.site.localContext ?? undefined,
+            };
+        const eventData = toEventData({ ...baseData, siteId: blog.siteId, blogId: blog.id, userId: user.id });
+
+        // Claim the failed row before charging. Concurrent retry clicks race on
+        // this conditional transition; only one attempt can become GENERATING.
+        const claimed = await prisma.blog.updateMany({
+            where: { id: blog.id, status: "FAILED", generationAttemptId: blog.generationAttemptId },
+            data: {
+                status: "GENERATING",
+                generationAttemptId: attemptId,
+                generationInput: eventData as Prisma.InputJsonValue,
+                validationErrors: [], validationWarnings: [], factCheckIssues: [], factCheckSuggestions: [],
+            },
+        });
+        if (claimed.count !== 1) return { success: true, status: "Retrying" };
+
+        const creditReference = `blog-generation:${blog.id}:${attemptId}`;
+        const creditResult = await consumeCreditsIdempotent(user.id, "blog_generation", creditReference);
         if (!creditResult.allowed) {
+            await prisma.blog.updateMany({
+                where: { id: blog.id, status: "GENERATING", generationAttemptId: attemptId },
+                data: { status: "FAILED", generationAttemptId: blog.generationAttemptId, generationInput: blog.generationInput ?? Prisma.DbNull },
+            });
             return {
                 success: false,
                 error: creditResult.reason === "credits_locked"
@@ -266,64 +367,26 @@ export async function retryFailedBlog(blogId: string) {
             };
         }
 
-        // Reset the blog stub to GENERATING
-        await prisma.blog.update({
-            where: { id: blog.id },
-            data: {
-                status: "GENERATING",
-                validationErrors: [],
-                validationWarnings: [],
-                factCheckIssues: [],
-                factCheckSuggestions: [],
-            },
-        });
-
-        // Re-fire the Inngest job
         try {
-            const { inngest } = await import("@/lib/inngest/client");
-            const keyword = Array.isArray(blog.targetKeywords) ? (blog.targetKeywords as string[])[0] : undefined;
-            await inngest.send({
-                name: "blog.generate",
-                data: {
-                    siteId: blog.siteId,
-                    blogId: blog.id,
-                    userId: user.id,
-                    pipelineType: blog.pipelineType ?? "USER_KEYWORD",
-                    keyword,
-                    authorName: blog.site.authorName ?? blog.site.user?.name ?? undefined,
-                    authorRole: blog.site.authorRole ?? undefined,
-                    authorBio: blog.site.authorBio ?? undefined,
-                    realExperience: blog.site.realExperience ?? undefined,
-                    realNumbers: blog.site.realNumbers ?? undefined,
-                    localContext: blog.site.localContext ?? undefined,
-                },
-            });
-        } catch (e) {
-            // Inngest send failed — revert to FAILED and refund credits
-            logger.warn("[Blog Action] retryFailedBlog: inngest.send failed — reverting", {
+            await dispatchBlogGeneration(blog.id, attemptId, eventData);
+        } catch (error) {
+            // Dispatch acknowledgement can be lost after Inngest accepted the
+            // event. Keep the persisted attempt and debit; the recovery cron will
+            // resend the same event id safely.
+            logger.warn("[Blog Action] Retry dispatch pending recovery", {
                 blogId: blog.id,
-                error: e instanceof Error ? e.message : String(e),
+                errorName: error instanceof Error ? error.name : "unknown",
             });
-            await prisma.blog.update({
-                where: { id: blog.id },
-                data: { status: "FAILED" },
-            }).catch(() => null);
-            // Refund the credits we just charged for the retry
-            try {
-                const { refundCreditsIdempotent } = await import("@/lib/credits");
-                await refundCreditsIdempotent(user.id, 10, `refund:retry:${blog.id}:${Date.now()}`, "Refund: Failed Blog Retry");
-            } catch { /* non-fatal */ }
-            return { success: false, error: "Failed to queue retry. Please try again in a moment." };
         }
 
         revalidatePath("/dashboard/blogs");
         revalidatePath("/dashboard");
         return { success: true, status: "Retrying" };
-
     } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : String(error);
-        logger.error("[Blog Action] retryFailedBlog failed:", { error: msg });
-        return { success: false, error: `Retry failed: ${msg}` };
+        logger.error("[Blog Action] retryFailedBlog failed:", {
+            errorName: error instanceof Error ? error.name : "unknown",
+        });
+        return { success: false, error: "Retry failed. Please try again." };
     }
 }
 
@@ -419,6 +482,16 @@ export async function generateBlog(
             };
         }
 
+        const requestId = normalizeRequestId(gateInput?.requestId);
+        const priorRequest = await prisma.blog.findFirst({
+            where: { siteId: site.id, generationRequestId: requestId },
+            select: {
+                id: true, status: true, generationAttemptId: true, generationInput: true,
+                title: true, slug: true, content: true, metaDescription: true, targetKeywords: true,
+            },
+        });
+        if (priorRequest) return resumeStoredGeneration(priorRequest);
+
         const effectiveTier = await getEffectiveTier(user.id);
         const rateLimitError = await runRateLimitChecks(user.id, effectiveTier);
         if (rateLimitError) return { success: false, error: rateLimitError };
@@ -431,18 +504,6 @@ export async function generateBlog(
         const gateResult = await runSerpGate(user.id, site.id, chosenKeywordForGate, gateInput);
         if (gateResult.blocked) return gateResult.result;
         const serpSignalForInngest = gateResult.signal;
-
-        // ── Credits: deduct AFTER gate passes ─────────────────────────────────
-        const creditResult = await consumeCredits(user.id, "blog_generation");
-        if (!creditResult.allowed) {
-            return {
-                success: false,
-                error: creditResult.reason === "credits_locked"
-                    ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
-                    : `Insufficient credits. Blog generation costs 10 credits. You have ${creditResult.remaining}. Credits reset monthly.`,
-                code: creditResult.reason ?? "insufficient_credits",
-            };
-        }
 
         const author = buildAuthorProfile(authorInput, site, user.name);
 
@@ -544,10 +605,13 @@ export async function generateBlog(
         const placeholderTitle = chosenKeyword
             ? `Generating: ${chosenKeyword}`
             : `Generating post for ${site.domain}`;
-        const placeholderSlug = `generating-${Date.now()}`;
+        const attemptId = randomUUID();
+        const placeholderSlug = `generating-${attemptId}`;
 
-        const savedBlog = await prisma.blog.create({
-            data: {
+        let savedBlog: Awaited<ReturnType<typeof prisma.blog.create>>;
+        try {
+            savedBlog = await prisma.blog.create({
+                data: {
                 siteId: site.id,
                 pipelineType,
                 title: placeholderTitle,
@@ -556,8 +620,23 @@ export async function generateBlog(
                 content: "",
                 metaDescription: "",
                 status: "GENERATING",
-            },
-        });
+                generationRequestId: requestId,
+                generationAttemptId: attemptId,
+                },
+            });
+        } catch (error) {
+            if ((error as { code?: string })?.code === "P2002") {
+                const racedRequest = await prisma.blog.findFirst({
+                    where: { siteId: site.id, generationRequestId: requestId },
+                    select: {
+                        id: true, status: true, generationAttemptId: true, generationInput: true,
+                        title: true, slug: true, content: true, metaDescription: true, targetKeywords: true,
+                    },
+                });
+                if (racedRequest) return resumeStoredGeneration(racedRequest);
+            }
+            throw error;
+        }
 
         // Build GSC opportunity evidence for GSC_GAP blogs (provenance snapshot)
         let gscEvidence: GscOpportunityEvidence | undefined;
@@ -596,11 +675,7 @@ export async function generateBlog(
             gscEvidence = validateGscEvidence(rawEvidence, `blog:${savedBlog.id}`) ?? undefined;
         }
 
-        try {
-            const { inngest } = await import("@/lib/inngest/client");
-            await inngest.send({
-                name: "blog.generate",
-                data: {
+        const eventData = JSON.parse(JSON.stringify({
                     siteId: site.id,
                     blogId: savedBlog.id,
                     userId: user.id,
@@ -629,42 +704,50 @@ export async function generateBlog(
                     // GSC opportunity evidence — full provenance for GSC_GAP blogs.
                     // Undefined for non-GSC pipelines (USER_KEYWORD, COMPETITOR_GAP, etc.)
                     gscEvidence: gscEvidence ?? undefined,
-                },
-            });
-        } catch (e) {
-            logger.warn("[Blog Action] inngest.send failed — marking blog FAILED", {
-                blogId: savedBlog.id,
-                error: e instanceof Error ? e.message : String(e),
-            });
+        })) as BlogGenerationEventData;
+
+        try {
             await prisma.blog.update({
                 where: { id: savedBlog.id },
-                data: { status: "FAILED" },
-            }).catch(() => null);
-            try {
-                const { refundCreditsIdempotent } = await import("@/lib/credits");
-                await refundCreditsIdempotent(
-                    user.id,
-                    10,
-                    `refund:blog_gen:${savedBlog.id}`,
-                    "Refund: Failed Blog Dispatch"
-                );
-            } catch (refundErr) {
-                logger.error("[Blog Action] Failed to refund credits after dispatch failure", {
-                    blogId: savedBlog.id,
-                    userId: user.id,
-                    error: refundErr instanceof Error ? refundErr.message : String(refundErr),
-                });
-            }
+                data: { generationInput: eventData as Prisma.InputJsonValue },
+            });
+        } catch (error) {
+            await prisma.blog.delete({ where: { id: savedBlog.id } }).catch(() => null);
+            throw error;
+        }
+
+        const creditResult = await consumeCreditsIdempotent(
+            user.id,
+            "blog_generation",
+            `blog-generation:${savedBlog.id}:${attemptId}`,
+        );
+        if (!creditResult.allowed) {
+            await prisma.blog.delete({ where: { id: savedBlog.id } });
+            return {
+                success: false,
+                error: creditResult.reason === "credits_locked"
+                    ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
+                    : `Insufficient credits. Blog generation costs 10 credits. You have ${creditResult.remaining}. Credits reset monthly.`,
+                code: creditResult.reason ?? "insufficient_credits",
+            };
+        }
+
+        try {
+            await dispatchBlogGeneration(savedBlog.id, attemptId, eventData);
+        } catch (e) {
+            logger.warn("[Blog Action] Inngest dispatch acknowledgement pending recovery", {
+                blogId: savedBlog.id,
+                errorName: e instanceof Error ? e.name : "unknown",
+            });
         }
 
         revalidatePath("/dashboard/blogs");
         revalidatePath("/dashboard");
-        return { success: true, blog: savedBlog, status: "Generating" };
+        return { success: true, blog: savedBlog, status: "Generating", pending: true };
 
     } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : String(error);
-        logger.error("[Blog Action] generateBlog failed:", { error: msg });
-        return { success: false, error: `Generation failed: ${msg}` };
+        logger.error("[Blog Action] generateBlog failed:", { errorName: error instanceof Error ? error.name : "unknown" });
+        return { success: false, error: "Generation could not be started. Please try again." };
     }
 }
 
@@ -682,6 +765,18 @@ export async function generateAttackBlog(
         if (!auth.ok) return auth.error;
         const { user } = auth;
 
+        const site = await prisma.site.findUnique({ where: { id: siteId, userId: user.id } });
+        if (!site) return { success: false, error: "Site not found" };
+        const requestId = normalizeRequestId(gateInput?.requestId);
+        const priorRequest = await prisma.blog.findFirst({
+            where: { siteId, generationRequestId: requestId },
+            select: {
+                id: true, status: true, generationAttemptId: true, generationInput: true,
+                title: true, slug: true, content: true, metaDescription: true, targetKeywords: true,
+            },
+        });
+        if (priorRequest) return resumeStoredGeneration(priorRequest);
+
         const effectiveTier = await getEffectiveTier(user.id);
         const rateLimitError = await runRateLimitChecks(user.id, effectiveTier);
         if (rateLimitError) return { success: false, error: rateLimitError };
@@ -690,22 +785,6 @@ export async function generateAttackBlog(
         const gateResult = await runSerpGate(user.id, siteId, keyword, gateInput);
         if (gateResult.blocked) return gateResult.result;
         const serpSignalForInngest = gateResult.signal;
-
-        // ── Credits: deduct AFTER gate passes ─────────────────────────────────
-        // CREDITS: same 10-credit cost as generateBlog
-        const creditResult = await consumeCredits(user.id, "blog_generation");
-        if (!creditResult.allowed) {
-            return {
-                success: false,
-                error: creditResult.reason === "credits_locked"
-                    ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
-                    : `Insufficient credits. Competitor blog generation costs 10 credits. You have ${creditResult.remaining}. Credits reset monthly.`,
-                code: creditResult.reason ?? "insufficient_credits",
-            };
-        }
-
-        const site = await prisma.site.findUnique({ where: { id: siteId, userId: user.id } });
-        if (!site) return { success: false, error: "Site not found" };
 
         const author = buildAuthorProfile(authorInput, site, user.name);
 
@@ -717,76 +796,94 @@ export async function generateAttackBlog(
             }).catch(() => null); // non-fatal
         }
 
-        const blog = await prisma.blog.create({
-            data: {
+        const attemptId = randomUUID();
+        let blog: Awaited<ReturnType<typeof prisma.blog.create>>;
+        try {
+            blog = await prisma.blog.create({
+                data: {
                 siteId: site.id,
                 pipelineType: "COMPETITOR_ATTACK",
                 title: `Generating: ${keyword}`,
-                slug: `generating-attack-${Date.now()}`,
+                slug: `generating-attack-${attemptId}`,
                 targetKeywords: [keyword],
                 content: "",
                 metaDescription: "",
                 status: "GENERATING",
-            },
-        });
-
-        try {
-            const { inngest } = await import("@/lib/inngest/client");
-            await inngest.send({
-                name: "blog.generate",
-                data: {
-                    siteId: site.id,
-                    blogId: blog.id,
-                    userId: user.id,
-                    pipelineType: "COMPETITOR_ATTACK",
-                    keyword,
-                    competitorDomain,
-                    searchVolume,
-                    difficulty,
-                    serpSignal: serpSignalForInngest ?? undefined,
-                    authorName: author.name,
-                    authorRole: author.role,
-                    authorBio: author.bio,
-                    realExperience: author.realExperience,
-                    realNumbers: author.realNumbers,
-                    localContext: author.localContext,
+                generationRequestId: requestId,
+                generationAttemptId: attemptId,
                 },
             });
-        } catch (e) {
-            logger.warn("[Blog Action] inngest.send failed for attack blog — marking FAILED", {
-                blogId: blog.id,
-                error: e instanceof Error ? e.message : String(e),
-            });
-            await prisma.blog.update({
-                where: { id: blog.id },
-                data: { status: "FAILED" },
-            }).catch(() => null);
-            try {
-                const { refundCreditsIdempotent } = await import("@/lib/credits");
-                await refundCreditsIdempotent(
-                    user.id,
-                    10,
-                    `refund:blog_gen:${blog.id}`,
-                    "Refund: Failed Blog Dispatch"
-                );
-            } catch (refundErr) {
-                logger.error("[Blog Action] Failed to refund attack-blog credits after dispatch failure", {
-                    blogId: blog.id,
-                    userId: user.id,
-                    error: refundErr instanceof Error ? refundErr.message : String(refundErr),
+        } catch (error) {
+            if ((error as { code?: string })?.code === "P2002") {
+                const racedRequest = await prisma.blog.findFirst({
+                    where: { siteId, generationRequestId: requestId },
+                    select: {
+                        id: true, status: true, generationAttemptId: true, generationInput: true,
+                        title: true, slug: true, content: true, metaDescription: true, targetKeywords: true,
+                    },
                 });
+                if (racedRequest) return resumeStoredGeneration(racedRequest);
             }
+            throw error;
+        }
+
+        const eventData = toEventData({
+            siteId: site.id,
+            blogId: blog.id,
+            userId: user.id,
+            pipelineType: "COMPETITOR_ATTACK",
+            keyword,
+            competitorDomain,
+            searchVolume,
+            difficulty,
+            serpSignal: serpSignalForInngest ?? undefined,
+            authorName: author.name,
+            authorRole: author.role,
+            authorBio: author.bio,
+            realExperience: author.realExperience,
+            realNumbers: author.realNumbers,
+            localContext: author.localContext,
+        });
+        try {
+            await prisma.blog.update({ where: { id: blog.id }, data: { generationInput: eventData as Prisma.InputJsonValue } });
+        } catch (error) {
+            await prisma.blog.delete({ where: { id: blog.id } }).catch(() => null);
+            throw error;
+        }
+
+        const creditResult = await consumeCreditsIdempotent(
+            user.id,
+            "blog_generation",
+            `blog-generation:${blog.id}:${attemptId}`,
+        );
+        if (!creditResult.allowed) {
+            await prisma.blog.delete({ where: { id: blog.id } });
+            return {
+                success: false,
+                error: creditResult.reason === "credits_locked"
+                    ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
+                    : `Insufficient credits. Competitor blog generation costs 10 credits. You have ${creditResult.remaining}. Credits reset monthly.`,
+                code: creditResult.reason ?? "insufficient_credits",
+            };
+        }
+
+        try {
+            await dispatchBlogGeneration(blog.id, attemptId, eventData);
+        } catch (e) {
+            logger.warn("[Blog Action] Attack blog dispatch acknowledgement pending recovery", {
+                blogId: blog.id,
+                errorName: e instanceof Error ? e.name : "unknown",
+            });
         }
 
         revalidatePath("/dashboard/blogs");
         revalidatePath(`/dashboard/sites/${site.id}`);
         revalidatePath("/dashboard");
 
-        return { success: true, blog, status: "Generating" };
+        return { success: true, blog, status: "Generating", pending: true };
 
     } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : String(error);
-        logger.error("[Blog Action] generateAttackBlog failed:", { error: msg });
-        return { success: false, error: `Generation failed: ${msg}` };
+        logger.error("[Blog Action] generateAttackBlog failed:", { errorName: error instanceof Error ? error.name : "unknown" });
+        return { success: false, error: "Generation could not be started. Please try again." };
     }
 }

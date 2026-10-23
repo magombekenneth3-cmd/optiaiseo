@@ -21,7 +21,7 @@ const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online"
 
 export const metadata: Metadata = {
   title: "Best Ahrefs Alternative 2026 — OptiAISEO vs Ahrefs, Semrush & More",
-  description: "Looking for a cheaper Ahrefs alternative? Compare OptiAISEO vs Ahrefs, Semrush, Surfer SEO & Screaming Frog. AI visibility tracking + automated fixes from $39/month.",
+  description: "Looking for a cheaper Ahrefs alternative? Compare OptiAISEO vs Ahrefs, Semrush, Surfer SEO & Screaming Frog. AI visibility tracking + automated fixes from $49/month.",
   alternates: { canonical: `${SITE_URL}/vs` },
   openGraph: {
     title: "OptiAISEO Comparisons — vs Ahrefs, Semrush, Surfer SEO & More",
@@ -35,10 +35,10 @@ export const metadata: Metadata = {
 
 const COMPARISONS = [
   { slug: "ahrefs", name: "Ahrefs", tagline: "The backlink-first SEO platform", category: "Enterprise", price: "From $129/month", verdict: "Ahrefs wins on backlink data depth. OptiAISEO wins on AI visibility, automated fixes, and cost." },
-  { slug: "semrush", name: "Semrush", tagline: "The enterprise keyword & audit suite", category: "Enterprise", price: "From $139.95/month", verdict: "Semrush has the largest keyword database. OptiAISEO is the right choice for AI-first SEO at 72% lower cost." },
+  { slug: "semrush", name: "Semrush", tagline: "The enterprise keyword & audit suite", category: "Enterprise", price: "From $139.95/month", verdict: "Semrush has the largest keyword database. OptiAISEO is the right choice for AI-first SEO at 65% lower cost." },
   { slug: "surfer-seo", name: "Surfer SEO", tagline: "The on-page content optimisation tool", category: "Content", price: "From $99/month", verdict: "Surfer SEO grades content you write. OptiAISEO generates and publishes the content automatically." },
   { slug: "moz", name: "Moz", tagline: "The Domain Authority pioneer", category: "Traditional", price: "From $99/month", verdict: "Moz invented DA. OptiAISEO is built for AI-era search — tracking ChatGPT citations and fixing code automatically." },
-  { slug: "clearscope", name: "Clearscope", tagline: "The premium NLP content grader", category: "Content", price: "From $170/month", verdict: "Clearscope grades content at an enterprise price. OptiAISEO generates it at $39/month." },
+  { slug: "clearscope", name: "Clearscope", tagline: "The premium NLP content grader", category: "Content", price: "From $170/month", verdict: "Clearscope grades content at an enterprise price. OptiAISEO generates it at $49/month." },
   { slug: "mangools", name: "Mangools", tagline: "The budget-friendly keyword suite", category: "Budget", price: "From $49/month", verdict: "Mangools for keyword research. OptiAISEO when you need AI visibility tracking and automated fixes on top." },
   { slug: "screaming-frog", name: "Screaming Frog", tagline: "The technical SEO crawler", category: "Technical", price: "£199/year (~$249)", verdict: "Screaming Frog for deep one-off crawls. OptiAISEO for continuous monitoring with automated fixes." },
   { slug: "yoast", name: "Yoast SEO", tagline: "The WordPress SEO plugin", category: "WordPress", price: "Free / $99/year per site", verdict: "Yoast for WordPress on-page basics. OptiAISEO for any stack with AI visibility and content generation." },
@@ -122,7 +122,7 @@ const SUMMARY_TABLE = [
   },
   {
     feature: "Starting price",
-    optiai: "$39/month",
+    optiai: "$49/month",
     ahrefs: "$129/month",
     semrush: "$139.95/month",
     surfer: "$99/month",
@@ -152,7 +152,7 @@ const USPS = [
 const FAQS = [
   {
     q: "What is the best Ahrefs alternative?",
-    a: "The best Ahrefs alternative depends on what you're replacing it for. If you need AI visibility tracking, automated code fixes, and content generation — OptiAISEO is the strongest alternative and starts at $39/month versus Ahrefs' $129/month. If you only need a comparable backlink database, SE Ranking or Semrush are closer alternatives. See our full OptiAISEO vs Ahrefs comparison for a feature-by-feature breakdown.",
+    a: "The best Ahrefs alternative depends on what you're replacing it for. If you need AI visibility tracking, automated code fixes, and content generation — OptiAISEO is the strongest alternative and starts at $49/month versus Ahrefs' $129/month. If you only need a comparable backlink database, SE Ranking or Semrush are closer alternatives. See our full OptiAISEO vs Ahrefs comparison for a feature-by-feature breakdown.",
   },
   {
     q: "Is OptiAISEO a Screaming Frog alternative?",
@@ -160,7 +160,7 @@ const FAQS = [
   },
   {
     q: "How does OptiAISEO pricing compare to Semrush?",
-    a: "OptiAISEO Pro starts at $39/month. Semrush starts at $139.95/month — a 72% price difference. OptiAISEO doesn't match Semrush's keyword database size or PPC research capabilities, but it includes AI visibility tracking, GitHub auto-fix PRs, and content generation that Semrush doesn't offer at any price. Most growing teams use both: Semrush for deep keyword research, OptiAISEO for execution and AI-era visibility.",
+    a: "OptiAISEO Pro starts at $49/month. Semrush starts at $139.95/month — a 65% price difference. OptiAISEO doesn't match Semrush's keyword database size or PPC research capabilities, but it includes AI visibility tracking, GitHub auto-fix PRs, and content generation that Semrush doesn't offer at any price. Most growing teams use both: Semrush for deep keyword research, OptiAISEO for execution and AI-era visibility.",
   },
   {
     q: "Does OptiAISEO replace Surfer SEO?",

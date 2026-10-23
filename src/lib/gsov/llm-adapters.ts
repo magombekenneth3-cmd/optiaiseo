@@ -67,7 +67,7 @@ export class GeminiProbeAdapter implements ProbeProviderAdapter {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { maxOutputTokens: 768, temperature: 0.1 },
+                    generationConfig: { maxOutputTokens: 768 },
                     tools: [{ googleSearch: {} }]
                 }),
             }

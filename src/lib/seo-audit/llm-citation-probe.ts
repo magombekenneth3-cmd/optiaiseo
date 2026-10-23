@@ -2,24 +2,12 @@ import { logger } from "@/lib/logger";
 import { createHash } from "crypto";
 import { GeminiProbeAdapter } from "@/lib/gsov/llm-adapters";
 import { sanitizeBodyForLlm } from "@/lib/gsov/sanitizer";
+import { getRedis as getSharedRedis } from "@/lib/redis";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const GROUNDED_MODEL = "gemini-3.8-flash";
-const FALLBACK_MODEL = "gemini-3.7-flash";
+const FALLBACK_MODEL = "gemini-3.6-flash";
 const PROBE_TTL_S = 48 * 3600;
-
-let redis: import("ioredis").Redis | null = null;
-async function getRedis() {
-    if (redis) return redis;
-    if (!process.env.REDIS_URL) return null;
-    try {
-        const { default: Redis } = await import("ioredis");
-        redis = new Redis(process.env.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1 });
-        return redis;
-    } catch {
-        return null;
-    }
-}
 
 export interface CitationProbeResult {
     score: number;
@@ -154,13 +142,13 @@ export async function probeLlmCitation(
     if (!apiKey) return fallback(url);
 
     const cacheKey = `llm-probe:v2:${createHash("sha256").update(url).digest("hex").slice(0, 16)}`;
-    const r = await getRedis();
+    const r = getSharedRedis();
     if (r) {
         try {
             const cached = await r.get(cacheKey);
             if (cached) {
                 logger.debug(`[LLM Probe] cache hit for ${url}`);
-                return JSON.parse(cached) as CitationProbeResult;
+                return JSON.parse(cached as string) as CitationProbeResult;
             }
         } catch { }
     }
@@ -212,7 +200,7 @@ export async function probeLlmCitation(
     };
 
     if (r) {
-        try { await r.setex(cacheKey, PROBE_TTL_S, JSON.stringify(result)); } catch { }
+        try { await r.set(cacheKey, JSON.stringify(result), { ex: PROBE_TTL_S }); } catch { }
     }
 
     logger.debug(`[LLM Probe] ${url} score=${result.score} wouldCite=${result.wouldCite} grounded=${groundingUsed}`);

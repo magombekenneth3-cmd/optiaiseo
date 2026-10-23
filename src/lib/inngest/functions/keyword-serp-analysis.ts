@@ -232,7 +232,7 @@ ANCHORS: ${JSON.stringify(topAnchors.slice(0, 5))}`;
             const response = await ai.models.generateContent({
                 model: AI_MODELS.GEMINI_PRO,
                 contents: prompt,
-                config: { responseMimeType: "application/json", temperature: 0.3, maxOutputTokens: 3000 },
+                config: { responseMimeType: "application/json", maxOutputTokens: 3000 },
             });
 
             // FIX 3: Log the raw response before parsing so failures are diagnosable,

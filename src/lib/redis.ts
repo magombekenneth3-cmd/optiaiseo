@@ -22,6 +22,12 @@ if (process.env.NODE_ENV === "production" && !isBuildPhase && (!url || !token)) 
 export const redis = new Redis({
     url:   url   ?? "http://localhost",
     token: token ?? "placeholder",
+    // Keep transient network failures bounded. Upstash uses HTTP requests, so
+    // failures reject the command promise instead of emitting socket events.
+    retry: {
+        retries: 1,
+        backoff: (retryCount) => Math.min(250 * 2 ** retryCount, 1_000),
+    },
 });
 
 export const isRedisConfigured = !!(url && token);
@@ -29,5 +35,17 @@ export const isRedisConfigured = !!(url && token);
 export function getRedis(): Redis | null {
     if (!url || !token) return null;
     return redis;
+}
+
+/** Return only a stable machine identifier; never log an endpoint or error body. */
+export function redisErrorCode(error: unknown): string {
+    if (!error || typeof error !== "object") return "redis_error";
+    const value = error as { code?: unknown; name?: unknown };
+    for (const candidate of [value.code, value.name]) {
+        if (typeof candidate === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(candidate)) {
+            return candidate;
+        }
+    }
+    return "redis_error";
 }
 

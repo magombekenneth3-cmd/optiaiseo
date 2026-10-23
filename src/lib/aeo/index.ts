@@ -368,7 +368,7 @@ ${cleanText}
             const response = await ai.models.generateContent({
                 model: AI_MODELS.GEMINI_PRO,
                 contents: prompt,
-                config: { responseMimeType: "application/json", temperature: 0.2 }
+                config: { responseMimeType: "application/json" }
             });
 
             const text = response.text?.trim() ?? '';
@@ -832,7 +832,6 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
                 contents: `What are the best ${coreServices}? Is ${domain} commonly cited or recommended for ${coreServices}?`,
                 // @ts-expect-error — googleSearch is a valid tool in the Gemini API
                 tools: [{ googleSearch: {} }],
-                config: { temperature: 0.1 },
             });
 
             // Check whether the domain appears in the retrieved search sources
@@ -868,7 +867,6 @@ ${cleanText}
 `,
                 config: {
                     responseMimeType: "application/json",
-                    temperature: 0.1,
                 }
             });
 

@@ -58,7 +58,6 @@ Keep the response under 150 words.`;
                 prompt,
                 { inlineData: { data: base64Image, mimeType: "image/jpeg" } },
             ],
-            config: { temperature: 0.4 },
         });
 
         return response.text || "I was unable to analyze the image.";

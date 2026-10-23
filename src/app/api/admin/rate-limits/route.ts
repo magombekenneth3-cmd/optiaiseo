@@ -1,8 +1,9 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { Redis } from "@upstash/redis";
 import { requireAdminApi } from "@/lib/admin-guard";
+import { getRedis } from "@/lib/redis";
+import { logger } from "@/lib/logger";
 
 
 const LIMITER_PREFIXES = [
@@ -28,32 +29,43 @@ export async function GET(req: NextRequest) {
     if (guard instanceof NextResponse) return guard;
 
 
-    const redis = Redis.fromEnv();
+    const redis = getRedis();
+    if (!redis) {
+        return NextResponse.json({ error: "Rate-limit statistics are unavailable." }, { status: 503 });
+    }
 
-    const stats = await Promise.all(
-        LIMITER_PREFIXES.map(async (prefix) => {
-            const [allowed, blocked] = await Promise.all([
-                redis.get<number>(`${prefix}:analytics:allowed`).then((v) => v ?? 0),
-                redis.get<number>(`${prefix}:analytics:blocked`).then((v) => v ?? 0),
-            ]);
+    try {
+        const stats = await Promise.all(
+            LIMITER_PREFIXES.map(async (prefix) => {
+                const [allowed, blocked] = await Promise.all([
+                    redis.get<number>(`${prefix}:analytics:allowed`).then((v) => v ?? 0),
+                    redis.get<number>(`${prefix}:analytics:blocked`).then((v) => v ?? 0),
+                ]);
 
-            const total = allowed + blocked;
-            const blockRate = total > 0
-                ? Math.round((blocked / total) * 100)
-                : 0;
+                const total = allowed + blocked;
+                const blockRate = total > 0
+                    ? Math.round((blocked / total) * 100)
+                    : 0;
 
-            return {
-                limiter: prefix.replace("rl:", ""),
-                allowed,
-                blocked,
-                total,
-                blockRate,
-            };
-        })
-    );
+                return {
+                    limiter: prefix.replace("rl:", ""),
+                    allowed,
+                    blocked,
+                    total,
+                    blockRate,
+                };
+            })
+        );
 
-    return NextResponse.json({
-        stats,
-        generatedAt: new Date().toISOString(),
-    });
+        return NextResponse.json({
+            stats,
+            generatedAt: new Date().toISOString(),
+        });
+    } catch (error: unknown) {
+        const errorCode = typeof error === "object" && error !== null && "code" in error
+            ? String((error as { code?: unknown }).code ?? "redis_error")
+            : "redis_error";
+        logger.warn("[Admin/RateLimits] Redis read failed", { errorCode });
+        return NextResponse.json({ error: "Rate-limit statistics are temporarily unavailable." }, { status: 503 });
+    }
 }

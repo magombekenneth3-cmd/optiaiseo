@@ -58,6 +58,7 @@ export function GenerateBlogButton({
     const router = useRouter();
     const menuRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
+    const generationRequestId = useRef<string | null>(null);
 
     const [isPending, setIsPending] = useState(false);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -102,6 +103,7 @@ export function GenerateBlogButton({
     const [pendingAuthor, setPendingAuthor] = useState<AuthorInput | null>(null);
 
     const handleGenerate = async (author: AuthorInput): Promise<{ success: boolean; error?: string }> => {
+        generationRequestId.current ??= crypto.randomUUID();
         setPendingAuthor(author);
         setIsPending(true);
 
@@ -118,12 +120,14 @@ export function GenerateBlogButton({
             const res = await generateBlog(
                 pendingPipelineType,
                 siteId,
-                author
+                author,
+                { requestId: generationRequestId.current ?? undefined },
             );
 
             toast.dismiss(loadingId);
 
             if (res && "success" in res && res.success) {
+                generationRequestId.current = null;
                 router.refresh();
 
                 toast.success(
