@@ -3,6 +3,7 @@ import { AI_MODELS } from "@/lib/constants/ai-models";
 import { getKeywordMetricsBatch, resolveLocationCode } from "./dataforseo";
 import { getKeywordIdeas } from "@/lib/ubersuggest";
 import { getAhrefsTopKeywords } from "@/lib/ahrefs";
+import { getRedis, redisErrorCode } from "@/lib/redis";
 
 export interface EnrichedKeyword {
     keyword: string;
@@ -289,15 +290,11 @@ export const clusterKeywords = async (
         );
     }
 
-    let redisClient: import("@upstash/redis").Redis | null = null;
+    const redisClient = getRedis();
     let cacheKey: string | null = null;
-    const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
-    const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-    if (upstashUrl?.startsWith("https://") && upstashToken) {
+    if (redisClient) {
         try {
-            const { Redis } = await import("@upstash/redis");
-            redisClient = new Redis({ url: upstashUrl, token: upstashToken });
             const keywordHash = keywords.map((k) => k.keyword).sort().join(",");
             const { createHash } = await import("crypto");
             const hash8 = createHash("sha256").update(keywordHash).digest("hex").slice(0, 8);
@@ -309,7 +306,7 @@ export const clusterKeywords = async (
             }
         } catch (err: unknown) {
             logger.warn("[keywords] Redis cache check failed, continuing without cache", {
-                error: formatError(err),
+                errorCode: redisErrorCode(err),
             });
         }
     }

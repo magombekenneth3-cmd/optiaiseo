@@ -2,6 +2,8 @@ import { logger } from "@/lib/logger";
 import { inngest } from "../client";
 import { NonRetriableError } from "inngest";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
+import { hasConfiguredAiProvider } from "@/lib/blog/ai-client";
 import {
     generateEvergreenPost,
     generateBlogFromCompetitorGap,
@@ -16,6 +18,7 @@ import { detectIntent, cleanDomainToDisplayName } from "@/lib/blog/prompt-contex
 import { gateCitationScore } from "@/lib/blog/ai-citation-template";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { getSerpContextForKeyword, type SerpContext, type SerpFormatSignal } from "@/lib/blog/serp";
+import { replayGenerationOutbox } from "@/lib/blog/generation-recovery";
 
 // getEffectiveTier / getPlan removed — monthly blog count limit no longer enforced.
 
@@ -271,10 +274,9 @@ export const generateBlogJob = inngest.createFunction(
         // Cap at 2 retries: 3 attempts × up to 90s (Claude) = ~270s max, well inside
         // Railway's 5-min function timeout. More retries cause compounding hangs.
         retries: 2,
-        // Idempotency: Inngest deduplicates events with the same blogId within its
-        // dedup window. Prevents double credit burns when users double-click or
-        // the server action fires the event more than once (e.g. after a 504 retry).
-        idempotency: "event.data.blogId",
+        // A recovered dispatch reuses its attempt ID. A deliberate retry gets a
+        // new attempt ID and therefore can run against the same blog row.
+        idempotency: "event.data.attemptId",
         concurrency: { limit: 5 },
         rateLimit: {
             limit: 10,
@@ -296,6 +298,7 @@ export const generateBlogJob = inngest.createFunction(
             const blogId = originalData.blogId as string | undefined;
             const siteId = originalData.siteId as string | undefined;
             const userId = originalData.userId as string | undefined;
+            const attemptId = originalData.attemptId as string | undefined;
 
             // Classify the error so downstream consumers can make informed decisions.
             // This prevents infrastructure failures from being treated as content failures.
@@ -307,11 +310,11 @@ export const generateBlogJob = inngest.createFunction(
                 : isProviderFailure ? "PROVIDER_FAILURE"
                 : "SYSTEM_FAILURE";
 
-            logger.error(`[Inngest/Blog] Job failed for site ${siteId ?? "unknown"}:`, {
-                error: errorMessage,
+            logger.error("[Inngest/Blog] Generation attempt failed", {
                 blogId,
                 siteId,
                 errorCode,
+                errorName: error instanceof Error ? error.name : "unknown",
                 runId,
             });
 
@@ -321,16 +324,20 @@ export const generateBlogJob = inngest.createFunction(
             if (blogId) {
                 // Human-readable failure message: prefix with error code so the card
                 // can show a specific reason rather than just a red "Failed" badge.
-                const humanReason =
-                    errorCode === "RATE_LIMIT"
-                        ? `Generation paused: AI quota exceeded. Retry in a few minutes.`
-                        : errorCode === "PROVIDER_FAILURE"
-                          ? `Generation failed: AI provider unavailable (${errorMessage.slice(0, 120)}).`
-                          : `Generation failed: ${errorMessage.slice(0, 200)}`;
+                const humanReason = errorCode === "RATE_LIMIT"
+                    ? "Generation paused because the AI provider is rate limited. Retry in a few minutes."
+                    : errorCode === "PROVIDER_FAILURE"
+                        ? "Generation failed because the AI provider is unavailable."
+                        : "Generation failed due to an internal processing error.";
 
-                await prisma.blog
-                    .updateMany({
-                        where: { id: blogId },
+                let failed: { count: number };
+                try {
+                    failed = await prisma.blog.updateMany({
+                        where: {
+                            id: blogId,
+                            status: "GENERATING",
+                            ...(attemptId ? { generationAttemptId: attemptId } : {}),
+                        },
                         data: {
                             status: "FAILED",
                             // Persist failure reason so the list card can display it
@@ -338,23 +345,32 @@ export const generateBlogJob = inngest.createFunction(
                             // the DB entry is permanent and survives Redis eviction.
                             validationErrors: [humanReason],
                         },
-                    })
-                    .catch((e: unknown) =>
-                        logger.error("[Inngest/Blog] onFailure DB write failed", {
-                            blogId,
-                            error: e instanceof Error ? e.message : String(e),
-                        })
-                    );
+                    });
+                } catch (dbError) {
+                    logger.error("[Inngest/Blog] onFailure DB write failed", {
+                        blogId,
+                        errorName: dbError instanceof Error ? dbError.name : "unknown",
+                    });
+                    return;
+                }
+
+                // A failed downstream enrichment after save-blog must not turn
+                // a persisted article into a failed job or refund its charge.
+                if (failed.count === 0) {
+                    logger.warn("[Inngest/Blog] Failure arrived after the generation row left GENERATING", { blogId, attemptId });
+                }
+                if (failed.count === 0) return;
             } else {
                 logger.error("[Inngest/Blog] onFailure: missing blogId — refusing to infer a target blog", { siteId });
+                return;
             }
 
-            // Persist the failure reason to Redis so the status API can surface it
-            // to the generating page — users see the actual cause, not a generic error.
+            // Persist only the sanitized category to Redis; provider response
+            // bodies and arbitrary exception messages never enter cache logs.
             if (effectiveBlogId) {
                 const { redis: failRedis } = await import("@/lib/redis").catch(() => ({ redis: null }));
                 if (failRedis) {
-                    const reason = errorMessage.slice(0, 300);
+                    const reason = errorCode;
                     await Promise.all([
                         failRedis.set(`blog:fail:${effectiveBlogId}`, reason, { ex: 3600 }),
                         failRedis.del(`blog:step:${effectiveBlogId}`),
@@ -362,9 +378,6 @@ export const generateBlogJob = inngest.createFunction(
                 }
             }
 
-            // Emit a structured application failure event.
-            // Downstream functions can subscribe to `blog/generation.failed` to handle
-            // alerting, retries, and escalation without coupling to Inngest internals.
             try {
                 await inngest.send({
                     name: "blog/generation.failed",
@@ -375,32 +388,31 @@ export const generateBlogJob = inngest.createFunction(
                         userId: userId ?? null,
                         stage: "inngest-job",
                         errorCode,
-                        errorMessage: errorMessage.slice(0, 500),
+                        errorMessage: errorCode,
                         retryable: isProviderFailure,
                         failedAt: new Date().toISOString(),
                     },
                 });
             } catch (sendErr) {
-                // Non-fatal — the event emit failing must not prevent credit refund
                 logger.warn("[Inngest/Blog] Failed to emit blog/generation.failed event", {
-                    error: (sendErr as Error)?.message,
+                    errorName: sendErr instanceof Error ? sendErr.name : "unknown",
                     blogId,
                     siteId,
                 });
             }
 
-            // Refund 10 credits idempotently — unique referenceId prevents double-refunds on retries.
+            // Refund only the attempt that transitioned GENERATING → FAILED.
             if (userId && blogId) {
                 try {
                     const { refundCreditsIdempotent } = await import("@/lib/credits");
-                    const refId = `refund:blog_gen:${blogId}`;
+                    const refId = `refund:blog-generation:${blogId}:${attemptId ?? "legacy"}`;
                     await refundCreditsIdempotent(userId, 10, refId, "Refund: Failed Blog Generation");
-                    logger.info("[Inngest/Blog] Idempotently refunded 10 credits after job failure", { userId, blogId, refId });
+                    logger.info("[Inngest/Blog] Idempotently refunded failed generation attempt", { userId, blogId, attemptId });
                 } catch (refundErr) {
                     logger.error("[Inngest/Blog] Failed to refund credits — manual action required", {
                         blogId,
                         userId,
-                        error: (refundErr as Error)?.message,
+                        errorName: refundErr instanceof Error ? refundErr.name : "unknown",
                     });
                 }
             }
@@ -418,6 +430,7 @@ export const generateBlogJob = inngest.createFunction(
             difficulty?: number;
             blogId?: string;
             userId?: string;
+            attemptId?: string;
             authorName?: string;
             authorRole?: string;
             authorBio?: string;
@@ -430,8 +443,8 @@ export const generateBlogJob = inngest.createFunction(
             gscEvidence?: Record<string, unknown>;
         };
 
-        if (!process.env.GEMINI_API_KEY) {
-            throw new NonRetriableError("Missing GEMINI_API_KEY — dropping job");
+        if (!hasConfiguredAiProvider()) {
+            throw new NonRetriableError("No AI provider is configured; dropping job.");
         }
 
         const site = await step.run("fetch-site", async () => {
@@ -1251,6 +1264,18 @@ ${liveBlogPost.content.substring(0, 80000)}`,
 
         await step.run("save-blog", async () => {
             const { sanitizeHtml, sanitizeSchemaMarkup } = await import("@/lib/sanitize-html");
+            const plainText = liveBlogPost.content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+            if (
+                !liveBlogPost.title?.trim() ||
+                !liveBlogPost.slug?.trim() ||
+                liveBlogPost.slug.startsWith("generating-") ||
+                plainText.length < 200 ||
+                !liveBlogPost.metaDescription?.trim() ||
+                !Array.isArray(liveBlogPost.targetKeywords) ||
+                liveBlogPost.targetKeywords.length === 0
+            ) {
+                throw new NonRetriableError("Generated article failed required output validation; it was not persisted.");
+            }
             const blogData = {
                 pipelineType: finalPipelineType,
                 title: liveBlogPost.title,
@@ -1280,6 +1305,8 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                 // Null for non-GSC pipelines (USER_KEYWORD, COMPETITOR_GAP, etc.)
                 gscEvidence: gscEvidence ? (gscEvidence as Record<string, string | number | boolean | null>) : undefined,
                 publicationGates: publicationGateStep.gates as any,
+                generationInput: Prisma.DbNull,
+                generationAttemptId: null,
             };
             if (event.data.blogId) {
                 await prisma.blog.update({ where: { id: event.data.blogId }, data: blogData });
@@ -1497,4 +1524,63 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             },
         };
     }
+);
+
+/**
+ * Database-backed outbox recovery for generation requests whose dispatch
+ * response was lost or whose web process stopped before sending to Inngest.
+ * Each row retains its event payload and stable event ID until save-blog commits.
+ */
+export const recoverStaleBlogGenerations = inngest.createFunction(
+    {
+        id: "recover-stale-blog-generations",
+        name: "Recover Pending Blog Generation Dispatches",
+        retries: 1,
+        concurrency: { limit: 1 },
+        triggers: [{ cron: "*/2 * * * *" }],
+    },
+    async ({ step }) => step.run("redispatch-pending-blog-generations", async () => {
+        const cutoff = new Date(Date.now() - 2 * 60 * 1000);
+        const rows = await prisma.blog.findMany({
+            where: {
+                status: "GENERATING",
+                generationAttemptId: { not: null },
+                updatedAt: { lt: cutoff },
+            },
+            select: { id: true, generationAttemptId: true, generationInput: true },
+            orderBy: { updatedAt: "asc" },
+            take: 50,
+        });
+
+        let dispatched = 0;
+        let skipped = 0;
+        for (const row of rows) {
+            try {
+                const result = await replayGenerationOutbox(row, {
+                    ensureCharge: async (userId, referenceId) => {
+                        const { consumeCreditsIdempotent } = await import("@/lib/credits");
+                        const credit = await consumeCreditsIdempotent(userId, "blog_generation", referenceId);
+                        return credit.allowed;
+                    },
+                    dispatch: async (id, data) => {
+                        await inngest.send({ id, name: "blog.generate", data });
+                    },
+                    markFailed: async (blogId, attemptId, message) => {
+                        await prisma.blog.updateMany({
+                            where: { id: blogId, status: "GENERATING", generationAttemptId: attemptId },
+                            data: { status: "FAILED", validationErrors: [message] },
+                        });
+                    },
+                });
+                if (result === "dispatched") dispatched++;
+                else skipped++;
+            } catch (error) {
+                logger.warn("[Inngest/Blog] Pending generation dispatch will be retried", {
+                    blogId: row.id,
+                    errorName: error instanceof Error ? error.name : "unknown",
+                });
+            }
+        }
+        return { examined: rows.length, dispatched, skipped };
+    }),
 );

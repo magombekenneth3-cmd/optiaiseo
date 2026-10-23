@@ -2,6 +2,7 @@ import { serve } from "inngest/next";
 import { inngest } from "@/lib/inngest/client";
 import {
     generateBlogJob,
+    recoverStaleBlogGenerations,
     runAeoAuditJob,
     runAeoRankJob,
     runWeeklyAuditJob,
@@ -115,6 +116,7 @@ export const { GET, POST, PUT } = serve({
     client: inngest,
     functions: [
         generateBlogJob,
+        recoverStaleBlogGenerations,
         publishBlogToCmsJob,
         // Daily blog auto-generation cron (06:00 UTC)
         cronDailyBlog,

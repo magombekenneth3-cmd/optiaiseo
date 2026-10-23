@@ -1,4 +1,4 @@
-import { redis } from "@/lib/redis";
+import { redis, redisErrorCode } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 import crypto from "crypto";
 import type { MentionResult } from "./multi-model";
@@ -28,6 +28,33 @@ function embeddingKey(text: string): string {
     return `aeo:embedding:${hash(text)}`;
 }
 
+const inFlight = new Map<string, Promise<unknown>>();
+
+function singleFlight<T>(
+    key: string,
+    fn: () => Promise<T>,
+): Promise<T> {
+    const existing = inFlight.get(key) as Promise<T> | undefined;
+
+    if (existing) {
+        return existing;
+    }
+
+    const pending = fn() as Promise<unknown>;
+    inFlight.set(key, pending);
+
+    pending.finally(() => {
+        if (inFlight.get(key) === pending) {
+            inFlight.delete(key);
+        }
+    }).catch(() => {
+        // Prevent the cleanup chain from creating an unhandled rejection.
+    });
+
+    return pending as Promise<T>;
+}
+
+
 async function redisGet<T>(key: string): Promise<T | null> {
     try {
         const raw = await redis.get(key);
@@ -42,7 +69,7 @@ async function redisSet(key: string, value: unknown, ttl: number): Promise<void>
     try {
         await redis.set(key, JSON.stringify(value), { ex: ttl });
     } catch (err: unknown) {
-        logger.warn("[Cache] Redis set failed", { key, error: (err as Error)?.message });
+        logger.warn("[Cache] Redis set failed", { key, errorCode: redisErrorCode(err) });
     }
 }
 
@@ -62,15 +89,19 @@ export async function cachedMentionCheck(
     fn: (domain: string, coreServices?: string | null) => Promise<MentionResult>
 ): Promise<MentionResult & { fromCache?: boolean }> {
     const key = mentionKey(model, domain, coreServices);
+
     const cached = await redisGet<MentionResult>(key);
     if (cached) {
         logger.debug("[Cache] mention hit", { model, domain });
         return { ...cached, fromCache: true };
     }
-    const result = await fn(domain, coreServices);
-    await redisSet(key, result, TTL.MENTION_S);
-    maybeEvictAsync("aeo:mention:");
-    return { ...result, fromCache: false };
+
+    return singleFlight(key, async () => {
+        const result = await fn(domain, coreServices);
+        await redisSet(key, result, TTL.MENTION_S);
+        maybeEvictAsync("aeo:mention:");
+        return { ...result, fromCache: false };
+    });
 }
 
 export async function cachedPerplexityCheck(
@@ -84,10 +115,12 @@ export async function cachedPerplexityCheck(
         logger.debug("[Cache] perplexity hit", { query: query.slice(0, 50), domain });
         return cached;
     }
-    const result = await fn(query, domain);
-    await redisSet(key, result, TTL.PERPLEXITY_S);
-    maybeEvictAsync("aeo:perplexity:");
-    return result;
+    return singleFlight(key, async () => {
+        const result = await fn(query, domain);
+        await redisSet(key, result, TTL.PERPLEXITY_S);
+        maybeEvictAsync("aeo:perplexity:");
+        return result;
+    });
 }
 
 export async function cachedQuestions(
@@ -101,9 +134,11 @@ export async function cachedQuestions(
         logger.debug("[Cache] questions hit", { domain });
         return cached;
     }
-    const result = await fn();
-    await redisSet(key, result, TTL.QUESTIONS_S);
-    return result;
+    return singleFlight(key, async () => {
+        const result = await fn();
+        await redisSet(key, result, TTL.QUESTIONS_S);
+        return result;
+    });
 }
 
 export async function cachedEmbedding(
@@ -116,10 +151,12 @@ export async function cachedEmbedding(
         logger.debug("[Cache] embedding hit", { textLen: text.length });
         return cached;
     }
-    const result = await fn(text);
-    if (result.length > 0) await redisSet(key, result, TTL.EMBEDDING_S);
-    maybeEvictAsync("aeo:embedding:");
-    return result;
+    return singleFlight(key, async () => {
+        const result = await fn(text);
+        if (result.length > 0) await redisSet(key, result, TTL.EMBEDDING_S);
+        maybeEvictAsync("aeo:embedding:");
+        return result;
+    });
 }
 
 export async function bustDomainCache(domain: string, coreServices?: string | null): Promise<void> {

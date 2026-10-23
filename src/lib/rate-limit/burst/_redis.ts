@@ -10,17 +10,11 @@
  * The singleton is null when Upstash credentials are absent (local dev / CI).
  * Every consumer must handle the null case — see ALLOW_ALL in client.ts.
  */
-import { Redis } from "@upstash/redis";
 import { Ratelimit } from "@upstash/ratelimit";
+import { getRedis } from "@/lib/redis";
 
-function buildRedis(): Redis | null {
-    const url   = process.env.UPSTASH_REDIS_REST_URL;
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-    if (!url || !token) return null;
-    return new Redis({ url, token });
-}
-
-export const redis = buildRedis();
+// Reuse the same bounded-retry Upstash client as the rest of the app.
+export const redis = getRedis();
 
 // Returned by makeLimiter() when Redis is unavailable.
 // Always allows requests so local dev and CI are never blocked.

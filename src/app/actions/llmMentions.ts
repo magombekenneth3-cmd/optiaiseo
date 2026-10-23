@@ -121,7 +121,6 @@ Answer ALL of the following about this brand in a single JSON object. Do not inc
             model: AI_MODELS.GEMINI_PRO,
             contents: prompt,
             config: {
-                temperature: 0.1,
                 tools: [{ googleSearch: {} }],
                 // Note: responseMimeType cannot be combined with googleSearch grounding
             },

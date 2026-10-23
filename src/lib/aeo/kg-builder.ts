@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { redis } from "@/lib/redis";
+import { redis, redisErrorCode } from "@/lib/redis";
 import { BRAND } from "@/lib/constants/brand";
 import { lookupKnowledgeGraph, isEntityMatch, type KnowledgeGraphEntity } from "./kg-api";
 
@@ -11,7 +11,7 @@ export async function buildKnowledgeGraph(domain: string) {
         const cached = await redis.get<string>(cacheKey);
         if (cached) return typeof cached === "string" ? JSON.parse(cached) : cached;
     } catch (e: unknown) {
-        logger.warn("[KG-Builder] Redis cache hit failed:", { error: (e as Error).message || e });
+        logger.warn("[KG-Builder] Redis cache hit failed", { errorCode: redisErrorCode(e) });
     }
 
     const site = await prisma.site.findFirst({
@@ -235,7 +235,7 @@ export async function buildKnowledgeGraph(domain: string) {
     try {
         await redis.setex(cacheKey, 3600, JSON.stringify(kg));
     } catch (e: unknown) {
-        logger.warn("[KG-Builder] Redis cache set failed:", { error: (e as Error).message || e });
+        logger.warn("[KG-Builder] Redis cache set failed", { errorCode: redisErrorCode(e) });
     }
 
     return kg;

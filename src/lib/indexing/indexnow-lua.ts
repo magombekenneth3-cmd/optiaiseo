@@ -1,4 +1,4 @@
-import Redis from "ioredis";
+import type { Redis } from "@upstash/redis";
 
 export const RESERVE_QUOTA_LUA = `
 local current = tonumber(redis.call("GET", KEYS[1]) or "0")
@@ -27,10 +27,8 @@ export async function reserveGoogleQuotaAtomic(
 ): Promise<number> {
     const result = await redis.eval(
         RESERVE_QUOTA_LUA,
-        1,
-        quotaKey,
-        dailyLimit.toString(),
-        requestedCount.toString()
+        [quotaKey],
+        [dailyLimit, requestedCount]
     );
     return Number(result) || 0;
 }

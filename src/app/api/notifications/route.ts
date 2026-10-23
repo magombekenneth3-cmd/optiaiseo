@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { redis, isRedisConfigured } from "@/lib/redis";
+import { redis, isRedisConfigured, redisErrorCode } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 import "@/lib/server-only";
 
@@ -34,7 +34,7 @@ export async function GET() {
             }
         } catch (err: unknown) {
             logger.warn("[Notifications] Redis read failed — falling through to DB", {
-                error: err instanceof Error ? err.message : String(err),
+                errorCode: redisErrorCode(err),
             });
         }
     }
@@ -154,7 +154,7 @@ export async function GET() {
             await redis.set(cacheKey, JSON.stringify(payload), { ex: CACHE_TTL_S });
         } catch (err: unknown) {
             logger.warn("[Notifications] Redis write failed — response served without caching", {
-                error: err instanceof Error ? err.message : String(err),
+                errorCode: redisErrorCode(err),
             });
         }
     }

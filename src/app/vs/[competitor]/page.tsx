@@ -264,7 +264,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       body: "A growing share of searches in 2026 start in AI tools — ChatGPT, Claude, Perplexity, or Google AI Overviews. Semrush has 25 billion keywords indexed across Google and nothing for any of those platforms. Teams tracking only Google rankings are already missing a meaningful and growing slice of how people discover things. AI search visibility, generative engine optimisation (GEO), and answer engine optimisation (AEO) are the metrics forward-looking teams are starting to measure. Semrush has no answer for this shift. OptiAISEO was built specifically for AI citation tracking and generative search occupancy (GSoV) measurement.",
     },
     quickList: [
-      { name: "OptiAISEO", badge: "Best for AI visibility and auto-fixes", price: "Free / $39/mo" },
+      { name: "OptiAISEO", badge: "Best for AI visibility and auto-fixes", price: "Free / $49/mo" },
       { name: "Ahrefs", badge: "Best for backlinks", price: "$129/mo" },
       { name: "Moz", badge: "Best for Domain Authority", price: "$99/mo" },
       { name: "SE Ranking", badge: "Best value", price: "$52/mo" },
@@ -302,7 +302,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "Is there a cheaper Semrush alternative that still covers the basics?",
-        a: "Yes. SE Ranking covers all the core SEO features at $52/month — 63% cheaper than Semrush. Mangools is $49/month for keyword research and rank tracking. Ubersuggest is $29/month with a free tier. OptiAISEO is $39/month and adds AI search visibility and automated GitHub fixes.",
+        a: "Yes. SE Ranking covers all the core SEO features at $52/month — 63% cheaper than Semrush. Mangools is $49/month for keyword research and rank tracking. Ubersuggest is $29/month with a free tier. OptiAISEO is $49/month and adds AI search visibility and automated GitHub fixes.",
       },
       {
         q: "Which Semrush alternative is best for agencies?",
@@ -318,7 +318,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "How much does OptiAISEO cost compared to Semrush?",
-        a: "Semrush starts at $139.95/month with no meaningful free plan. OptiAISEO has a free tier and Pro at $39/month — about 72% less than Semrush's entry price.",
+        a: "Semrush starts at $139.95/month with no meaningful free plan. OptiAISEO has a free tier and Pro at $49/month — about 65% less than Semrush's entry price.",
       },
       {
         q: "Why are people leaving Semrush?",
@@ -326,7 +326,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "What is a good Semrush substitute for small businesses?",
-        a: "For small businesses, Ubersuggest ($29/month or free) and Mangools ($49/month) are the most accessible Semrush substitutes. OptiAISEO ($39/month, free tier available) adds AI search visibility tracking if that's part of your strategy.",
+        a: "For small businesses, Ubersuggest ($29/month or free) and Mangools ($49/month) are the most accessible Semrush substitutes. OptiAISEO ($49/month, free tier available) adds AI search visibility tracking if that's part of your strategy.",
       },
       {
         q: "What SEO tools track ChatGPT and AI search visibility?",
@@ -365,7 +365,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       "Recent pricing changes have moved previously included features to higher tiers",
     ],
     verdict:
-      "Ahrefs wins on backlink data — nothing else in this price range comes close. OptiAISEO wins on AI search visibility, automated code fixes, and AI content generation at $39/month. The right choice depends entirely on what drives your SEO work.",
+      "Ahrefs wins on backlink data — nothing else in this price range comes close. OptiAISEO wins on AI search visibility, automated code fixes, and AI content generation at $49/month. The right choice depends entirely on what drives your SEO work.",
     honestWinCallout:
       "Where Ahrefs is genuinely better than everything else: if link building is more than 40% of your SEO activity, the gap between Ahrefs' backlink index and every alternative is real and significant. In our index comparison tests, Ahrefs registered new links an average of 7 days after acquisition — Moz took 19 days on the same set. Domain Rating is also the most trusted authority metric in the industry. For teams whose primary work is link prospecting and competitive backlink analysis, $129/month is justified.",
     hookIntro:
@@ -421,7 +421,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       body: "Backlinks still matter in 2026. But they're not the only signal that drives discovery anymore. A brand cited in ChatGPT's answer to 'best SEO tools' gets traffic that no backlink audit will ever measure. Ahrefs has no answer for this — it tracks links, not AI mentions. AI search visibility, generative engine optimisation (GEO), answer engine optimisation (AEO), and generative search occupancy (GSoV) are the metrics teams are starting to add to their dashboards. OptiAISEO tracks AI citation frequency alongside traditional on-page signals. If your team is only measuring what Ahrefs can see, you're missing a growing slice of qualified traffic.",
     },
     quickList: [
-      { name: "OptiAISEO", badge: "Best for AI visibility and auto-fixes", price: "Free / $39/mo" },
+      { name: "OptiAISEO", badge: "Best for AI visibility and auto-fixes", price: "Free / $49/mo" },
       { name: "Semrush", badge: "Best all-in-one suite", price: "$139/mo" },
       { name: "Moz", badge: "Best for Domain Authority", price: "$99/mo" },
       { name: "Majestic", badge: "Best backlink-only alternative", price: "$49/mo" },
@@ -459,7 +459,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "Is there a cheaper Ahrefs alternative?",
-        a: "Several tools cost less than Ahrefs' $129/month: SE Ranking ($52/mo), Mangools ($49/mo), Ubersuggest ($29/mo), and OptiAISEO ($39/mo with a free tier). OptiAISEO is the only cheaper option that adds AI search visibility tracking and automated GitHub fixes.",
+        a: "Several tools cost less than Ahrefs' $129/month: SE Ranking ($52/mo), Mangools ($49/mo), Ubersuggest ($29/mo), and OptiAISEO ($49/mo with a free tier). OptiAISEO is the only cheaper option that adds AI search visibility tracking and automated GitHub fixes.",
       },
       {
         q: "Which Ahrefs alternative is best for backlink research?",
@@ -479,7 +479,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "How much does OptiAISEO cost compared to Ahrefs?",
-        a: "Ahrefs starts at $129/month with very limited free access. OptiAISEO's Pro plan is $39/month with a free tier — 70% less — and includes AI search visibility tracking, technical auditing, GitHub integration, and AI content generation.",
+        a: "Ahrefs starts at $129/month with very limited free access. OptiAISEO's Pro plan is $49/month with a free tier — 63% less — and includes AI search visibility tracking, technical auditing, GitHub integration, and AI content generation.",
       },
       {
         q: "What is Generative Search Occupancy (GSoV)?",
@@ -514,7 +514,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       "No competitor backlink analysis",
     ],
     verdict:
-      "Surfer SEO genuinely improves individual article quality. OptiAISEO goes further — generating content automatically, auditing technical issues, and tracking your AI search visibility. At $39/month, it costs less than Surfer while covering more ground.",
+      "Surfer SEO genuinely improves individual article quality. OptiAISEO goes further — generating content automatically, auditing technical issues, and tracking your AI search visibility. At $49/month, it costs less than Surfer while covering more ground.",
     honestWinCallout:
       "Where Surfer SEO excels: if your team has dedicated writers who publish regularly and need real-time NLP guidance inside a live editor, Surfer's Content Score is genuinely best-in-class. In our four-month test across 24 articles, Surfer-optimised pieces ranked measurably better than unoptimised controls on comparable keywords. The tool works — the question is whether content grading alone covers your full SEO surface area in 2026.",
     hookIntro:
@@ -570,7 +570,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       body: "NLP-based content scoring works. Articles optimised with Surfer tend to outrank unoptimised versions. But after a few months, teams discover the real constraint isn't quality — it's volume. You can't score your way to topical authority. You need enough content to cover a topic cluster comprehensively. Surfer helps you write one well-optimised article. OptiAISEO generates a semantically linked cluster of them, schema-tagged and internally linked, automatically. AI search visibility, generative engine optimisation (GEO), and answer engine optimisation (AEO) all require content breadth that a grader alone can't produce.",
     },
     quickList: [
-      { name: "OptiAISEO", badge: "Best for AI visibility and content generation", price: "Free / $39/mo" },
+      { name: "OptiAISEO", badge: "Best for AI visibility and content generation", price: "Free / $49/mo" },
       { name: "Clearscope", badge: "Best NLP grading accuracy", price: "$170/mo" },
       { name: "Frase", badge: "Best for content briefs", price: "$14.99/mo" },
       { name: "NeuronWriter", badge: "Best budget option", price: "$19/mo" },
@@ -607,7 +607,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "Is there a cheaper Surfer SEO alternative?",
-        a: "Yes. Frase is $14.99/month (85% cheaper), NeuronWriter is $19/month (81% cheaper), and OptiAISEO is $39/month (61% cheaper) with AI search visibility and technical auditing included.",
+        a: "Yes. Frase is $14.99/month (85% cheaper), NeuronWriter is $19/month (81% cheaper), and OptiAISEO is $49/month (51% cheaper) with AI search visibility and technical auditing included.",
       },
       {
         q: "Is there a free Surfer SEO alternative?",
@@ -714,7 +714,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       body: "Domain Authority, Page Authority, Spam Score — Moz invented the metrics that became the common language of SEO. That contribution is real. But vocabulary isn't product leadership. Ahrefs and Semrush have surpassed Moz on data freshness and feature depth. Independent comparisons consistently show Semrush maintains a considerably larger keyword database, and Ahrefs registers new backlinks significantly faster. Now a new metric is forming that nobody has standardised yet: AI search visibility — tracking how often your brand is cited in ChatGPT, Perplexity, and Claude answers. Generative engine optimisation (GEO), answer engine optimisation (AEO), and generative search occupancy (GSoV) are what forward-looking teams are adding to their dashboards. Moz has announced nothing for this space.",
     },
     quickList: [
-      { name: "OptiAISEO", badge: "Best for AI visibility and auto-fixes", price: "Free / $39/mo" },
+      { name: "OptiAISEO", badge: "Best for AI visibility and auto-fixes", price: "Free / $49/mo" },
       { name: "Semrush", badge: "Best all-in-one suite", price: "$139/mo" },
       { name: "Ahrefs", badge: "Best for backlinks", price: "$129/mo" },
       { name: "SE Ranking", badge: "Best value", price: "$52/mo" },
@@ -748,7 +748,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "What SEO tools are similar to Moz?",
-        a: "The closest Moz competitors are Semrush (larger keyword database, fresher data, more expensive), Ahrefs (stronger backlinks, similar price), and SE Ranking (similar features, lower price). None track AI search visibility. OptiAISEO does, at $39/month.",
+        a: "The closest Moz competitors are Semrush (larger keyword database, fresher data, more expensive), Ahrefs (stronger backlinks, similar price), and SE Ranking (similar features, lower price). None track AI search visibility. OptiAISEO does, at $49/month.",
       },
       {
         q: "Is Semrush better than Moz?",
@@ -772,7 +772,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "What is cheaper than Moz?",
-        a: "Tools cheaper than Moz Pro ($99/month): Mangools ($49/mo), SE Ranking ($52/mo), Ubersuggest ($29/mo), and OptiAISEO ($39/mo with a free tier).",
+        a: "Tools cheaper than Moz Pro ($99/month): Mangools ($49/mo), SE Ranking ($52/mo), Ubersuggest ($29/mo), and OptiAISEO ($49/mo with a free tier).",
       },
       {
         q: "Is there a free Moz alternative?",
@@ -867,7 +867,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       body: "Clearscope's NLP precision is real. But in 2026, topical authority belongs to whoever covers a topic comprehensively — not whoever writes the most polished individual article. A site with 200 solid, well-structured posts covers more ground than a site with 50 perfectly-scored ones. Clearscope optimises the ceiling on individual articles. OptiAISEO raises the floor on total content output — generating entity-dense, schema-tagged posts automatically at scale. AI search visibility, generative engine optimisation (GEO), and answer engine optimisation (AEO) all require content breadth that a content grader alone can't deliver.",
     },
     quickList: [
-      { name: "OptiAISEO", badge: "Best for AI visibility and content generation", price: "Free / $39/mo" },
+      { name: "OptiAISEO", badge: "Best for AI visibility and content generation", price: "Free / $49/mo" },
       { name: "Surfer SEO", badge: "Best direct Clearscope alternative", price: "$99/mo" },
       { name: "Frase", badge: "Best for content briefs", price: "$14.99/mo" },
       { name: "Content Harmony", badge: "Best for SEO agencies", price: "$99/mo" },
@@ -881,7 +881,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       {
         n: "01",
         title: "$170/month with no free trial",
-        body: "Clearscope requires a major financial commitment before you can verify it works for your team. Surfer SEO ($99/mo), Dashword ($39/mo), NeuronWriter ($19/mo), and OptiAISEO ($39/mo with a free tier) all let you test before you pay.",
+        body: "Clearscope requires a major financial commitment before you can verify it works for your team. Surfer SEO ($99/mo), Dashword ($39/mo), NeuronWriter ($19/mo), and OptiAISEO ($49/mo with a free tier) all let you test before you pay.",
       },
       {
         n: "02",
@@ -924,7 +924,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "Why is Clearscope so expensive?",
-        a: "Clearscope charges $170/month because it targets large enterprise teams with unlimited users and best-in-class NLP precision. For small and mid-size teams, Surfer ($99), Dashword ($39), or OptiAISEO ($39) deliver comparable practical value at a fraction of the cost.",
+        a: "Clearscope charges $170/month because it targets large enterprise teams with unlimited users and best-in-class NLP precision. For small and mid-size teams, Surfer ($99), Dashword ($39), or OptiAISEO ($49) deliver comparable practical value at a fraction of the cost.",
       },
       {
         q: "Does any Clearscope alternative track AI search visibility?",
@@ -1019,7 +1019,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       body: "When Semrush raised prices, Mangools filled a real gap: clean, affordable keyword research for freelancers and small teams. KWFinder is still one of the best UX experiences in SEO tooling. But keyword research is where SEO work starts — not where it ends. Technical auditing, content generation, AI search visibility tracking — these aren't premium extras anymore, they're baseline requirements for competitive SEO in 2026. Generative engine optimisation (GEO) and answer engine optimisation (AEO) are dimensions Mangools can't touch at any price point.",
     },
     quickList: [
-      { name: "OptiAISEO", badge: "Best for AI visibility and full-stack SEO", price: "Free / $39/mo" },
+      { name: "OptiAISEO", badge: "Best for AI visibility and full-stack SEO", price: "Free / $49/mo" },
       { name: "SE Ranking", badge: "Best direct step-up", price: "$52/mo" },
       { name: "Ubersuggest", badge: "Best free option", price: "$29/mo" },
       { name: "Semrush", badge: "Best enterprise upgrade", price: "$139/mo" },
@@ -1052,7 +1052,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "What tools are similar to Mangools?",
-        a: "The closest Mangools competitors are SE Ranking (full suite at $52/mo), Ubersuggest (free tier, $29/mo paid), and Serpstat ($59/mo, better for bulk analysis). OptiAISEO is $39/month with AI search visibility and technical auditing that none of the above include.",
+        a: "The closest Mangools competitors are SE Ranking (full suite at $52/mo), Ubersuggest (free tier, $29/mo paid), and Serpstat ($59/mo, better for bulk analysis). OptiAISEO is $49/month with AI search visibility and technical auditing that none of the above include.",
       },
       {
         q: "Is there a free Mangools / KWFinder alternative?",
@@ -1060,7 +1060,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "What is cheaper than Mangools?",
-        a: "Ubersuggest ($29/mo) and OptiAISEO's free tier are cheaper. OptiAISEO Pro at $39/month is also slightly cheaper and adds AI search visibility, technical auditing, and content generation.",
+        a: "Ubersuggest ($29/mo) and OptiAISEO's free tier are cheaper. OptiAISEO Pro at $49/month adds AI search visibility, technical auditing, and content generation.",
       },
       {
         q: "Does Mangools track AI search visibility?",
@@ -1159,7 +1159,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       body: "There's nothing better than Screaming Frog for finding technical SEO issues on large sites. But finding issues and fixing them are different problems. Screaming Frog solves the first one and stops. Your developers still need to receive the export, understand it, prioritise the issues, and deploy fixes. In our tracking, that handoff averaged 23 days per issue cycle. OptiAISEO closes the loop: monitors continuously, surfaces issues, and opens GitHub pull requests with the code fix already written. And as AI search visibility, generative engine optimisation (GEO), and answer engine optimisation (AEO) become factors in how traffic reaches your site, a desktop crawler built in 2010 has no architecture for any of it.",
     },
     quickList: [
-      { name: "OptiAISEO", badge: "Best cloud monitoring with auto-fixes", price: "Free / $39/mo" },
+      { name: "OptiAISEO", badge: "Best cloud monitoring with auto-fixes", price: "Free / $49/mo" },
       { name: "Sitebulb", badge: "Best desktop alternative", price: "$13.50/mo" },
       { name: "DeepCrawl (Lumar)", badge: "Best enterprise cloud crawler", price: "From $89/mo" },
       { name: "Ahrefs Site Audit", badge: "Best bundled audit tool", price: "Included w/ Ahrefs" },
@@ -1205,7 +1205,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       },
       {
         q: "How much does Screaming Frog cost?",
-        a: "The free version crawls up to 500 URLs. The paid license is £199/year (~$249/year) for unlimited crawls. OptiAISEO is free to start and Pro is $39/month — with AI search visibility tracking, automated GitHub fixes, and AI content generation included year-round.",
+        a: "The free version crawls up to 500 URLs. The paid license is £199/year (~$249/year) for unlimited crawls. OptiAISEO is free to start and Pro is $49/month — with AI search visibility tracking, automated GitHub fixes, and AI content generation included year-round.",
       },
       {
         q: "Why are people looking for Screaming Frog alternatives?",
@@ -1300,7 +1300,7 @@ const COMPETITORS: Record<string, CompetitorData> = {
       body: "Yoast's contribution to democratising SEO is real. But the web in 2026 is increasingly headless. Yoast works on exactly one platform: WordPress. Every team that moves to Next.js, Webflow, or any headless CMS loses Yoast entirely and has to rebuild their SEO toolchain. OptiAISEO works on any stack, connects to GitHub directly, and doesn't care whether your site runs on WordPress or a custom deployment. And as AI search visibility, generative engine optimisation (GEO), and answer engine optimisation (AEO) become metrics teams track, a WordPress plugin has no architecture to address any of it.",
     },
     quickList: [
-      { name: "OptiAISEO", badge: "Best for non-WordPress and AI visibility", price: "Free / $39/mo" },
+      { name: "OptiAISEO", badge: "Best for non-WordPress and AI visibility", price: "Free / $49/mo" },
       { name: "Rank Math", badge: "Best free WordPress alternative", price: "Free / $6.99/mo" },
       { name: "All in One SEO", badge: "Best for WooCommerce", price: "$49.60/yr" },
       { name: "SEOPress", badge: "Best lightweight WordPress option", price: "$49/yr" },
@@ -1488,7 +1488,7 @@ function getTestDataRows(
     },
     {
       metric: "Monthly cost for one site",
-      us: "$39/mo",
+      us: "$49/mo",
       them: priceThem,
     },
   ];
@@ -1539,7 +1539,7 @@ const USE_CASES: Record<string, { beginners: string; agencies: string; free: str
     beginners:
       "For beginners, both tools are accessible. Mangools' KWFinder is genuinely one of the easiest keyword research interfaces available. OptiAISEO covers keywords, technical auditing, and AI search visibility in one interface — useful when you're ready to go beyond keyword data.",
     agencies:
-      "For freelancers and small agencies who've outgrown keyword research, OptiAISEO's Pro plan at $39/month adds AI search visibility, technical auditing, and content generation for slightly less than Mangools' entry price.",
+      "For freelancers and small agencies who've outgrown keyword research, OptiAISEO's Pro plan at $49/month adds AI search visibility, technical auditing, and content generation.",
     free:
       "The best free Mangools alternative is OptiAISEO's free tier for broader SEO coverage. Mangools has no free plan — only a 10-day trial. Google Keyword Planner is free for keyword data only.",
   },
@@ -1657,7 +1657,7 @@ const META: Record<
     tableVerdict:
       "Mangools wins for freelancers who need clean keyword research and rank tracking and nothing else. OptiAISEO wins for teams that have outgrown keyword research and need AI search visibility, automated fixes, and content generation.",
     whyBest:
-      "For teams ready to move beyond keyword research, OptiAISEO is the best Mangools alternative in 2026. It matches Mangools on keyword basics on the free tier, then adds AI search visibility, automated GitHub PRs, and AI content generation at $39/month.",
+      "For teams ready to move beyond keyword research, OptiAISEO is the best Mangools alternative in 2026. It matches Mangools on keyword basics on the free tier, then adds AI search visibility, automated GitHub PRs, and AI content generation at $49/month.",
     uniquePositioning:
       "The only Mangools alternative with AI search visibility tracking and automated GitHub fixes built in.",
   },
@@ -1758,7 +1758,7 @@ export default async function VsPage({ params }: Props) {
       "@type": "Offer",
       price: "0",
       priceCurrency: "USD",
-      description: "Free tier available. Pro from $39/month.",
+      description: "Free tier available. Pro from $49/month ($39/month billed annually).",
     },
     description:
       "AI-powered SEO platform that tracks brand visibility in ChatGPT, Claude, and Perplexity, automatically fixes technical issues via GitHub pull requests, and generates entity-dense SEO content.",

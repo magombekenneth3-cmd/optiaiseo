@@ -91,6 +91,14 @@ export async function createAutoFixPR(
         return { success: false, error: "No fix files provided." };
     }
 
+    // ── SHA-pinned proposals must target exactly one file ─────────────────
+    if (expectedBaseSha && files.length !== 1) {
+        return {
+            success: false,
+            error: "SHA-pinned proposals must change exactly one file",
+        };
+    }
+
     // ── Kill switch check ────────────────────────────────────────────────
     if (siteId) {
         try {

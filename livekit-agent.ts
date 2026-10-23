@@ -130,7 +130,14 @@ function buildSessionRedis(): InstanceType<typeof Redis> | null {
     const url   = process.env.UPSTASH_REDIS_REST_URL;
     const token = process.env.UPSTASH_REDIS_REST_TOKEN;
     if (!url || !token) return null;
-    return new Redis({ url, token });
+    return new Redis({
+        url,
+        token,
+        retry: {
+            retries: 1,
+            backoff: (retryCount) => Math.min(250 * 2 ** retryCount, 1_000),
+        },
+    });
 }
 
 const _sessionRedis = buildSessionRedis();

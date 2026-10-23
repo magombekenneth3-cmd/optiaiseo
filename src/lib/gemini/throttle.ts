@@ -62,7 +62,9 @@ export async function throttledGeminiCall<T>(fn: () => Promise<T>): Promise<T> {
             logger.error("[Gemini Throttle] Redis error — applying fallback delay", {
                 key,
                 attempt,
-                error: (redisErr as Error)?.message || String(redisErr),
+                errorCode: redisErr instanceof Error && /^[A-Za-z0-9_-]{1,40}$/.test(redisErr.name)
+                    ? redisErr.name
+                    : "redis_error",
             });
             await delay(1000 + Math.random() * 500);
             break;

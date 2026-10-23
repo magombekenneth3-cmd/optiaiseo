@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 import { Type, Schema } from "@google/genai";
-import { getAiClient } from "./ai-client";
+import { getAiClient, hasConfiguredAiProvider } from "./ai-client";
 import { SiteContext } from "./context";
 import { injectSpecificInternalLink, resolveCanonicalInternalLinks } from "./internalLinks";
 import { getFunnelForIntent, SearchIntent as FunnelIntent } from "../aeo/funnels";
@@ -400,7 +400,7 @@ export async function humanizePost(content: string, ctx: PromptContext): Promise
             // Use Pro for final editorial quality — Flash produces noticeable AI stiffness
             model: AI_MODELS.GEMINI_PRO,
             contents: getHumanizePrompt(content, ctx),
-            config: { temperature: 0.85, maxOutputTokens: 8000 },
+            config: { maxOutputTokens: 8000 },
         });
         const humanized = response.text?.trim();
         if (!humanized || humanized.length < content.length * 0.5) return content;
@@ -582,7 +582,7 @@ export async function generateTrendingPost(
     siteDomain?: string,
     siteId?: string
 ): Promise<BlogPostDraft> {
-    if (!getAiClient()) throw new Error("GEMINI_API_KEY is missing.");
+    if (!hasConfiguredAiProvider()) throw new Error("No AI provider is configured.");
 
     const ctx = buildPromptContext({
         keyword: industry,
@@ -646,8 +646,7 @@ export async function generateEvergreenPost(
     gscEvidence?: Record<string, unknown> | null,
     pipelineType?: string,
 ): Promise<BlogPostDraft> {
-    const ai = getAiClient();
-    if (!ai) throw new Error("GEMINI_API_KEY is missing.");
+    if (!hasConfiguredAiProvider()) throw new Error("No AI provider is configured.");
 
     const primaryKeyword = keywords[0];
     const displayName = siteContext?.title.split(" — ")[0] ?? cleanDomainToDisplayName(siteContext?.domain ?? groundedCtx?.data.domain ?? "");
@@ -719,7 +718,7 @@ export async function generateBlogFromKeywordGap(
     groundedCtx?: GroundedSiteContext | null,
     gscEvidence?: Record<string, unknown> | null,
 ): Promise<BlogPostDraft> {
-    if (!getAiClient()) throw new Error("GEMINI_API_KEY is missing.");
+    if (!hasConfiguredAiProvider()) throw new Error("No AI provider is configured.");
 
     const intent = (intentOverride as SearchIntent) ?? detectIntent(keyword);
     const ctx = buildPromptContext({
@@ -778,7 +777,7 @@ export async function generateBlogFromCompetitorGap(
     gscEvidence?: Record<string, unknown> | null,
     pipelineType?: string,
 ): Promise<BlogPostDraft> {
-    if (!getAiClient()) throw new Error("GEMINI_API_KEY is missing.");
+    if (!hasConfiguredAiProvider()) throw new Error("No AI provider is configured.");
 
     const intent = (intentOverride as SearchIntent) ?? detectIntent(keyword);
     const ctx = buildPromptContext({

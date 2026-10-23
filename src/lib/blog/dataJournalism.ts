@@ -55,7 +55,6 @@ Tone: Objective, data-first, engaging.`,
         config: {
             responseMimeType: "application/json",
             responseSchema: buildBlogResponseSchema(ctx),
-            temperature: 0.8,
         },
     });
 

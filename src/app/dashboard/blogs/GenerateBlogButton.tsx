@@ -71,6 +71,7 @@ export function GenerateBlogButton({
     const [preflightId, setPreflightId] = useState<string | null>(null);
     const [pendingAuthor, setPendingAuthor] = useState<AuthorInput | null>(null);
     const [pendingKeyword, setPendingKeyword] = useState<string>("");
+    const generationRequestId = useRef<string | null>(null);
 
     const dropdownRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
@@ -125,6 +126,7 @@ export function GenerateBlogButton({
     /** Runs the actual generateBlog call after gate has passed. */
     const executeGenerate = useCallback(
         async (author: AuthorInput, options?: { preflightId?: string; forceSerpMismatch?: boolean }): Promise<{ success: boolean; error?: string }> => {
+            generationRequestId.current ??= crypto.randomUUID();
             setIsPending(true);
             const loadingId = toast.loading(
                 <div className="flex flex-col gap-0.5">
@@ -136,10 +138,14 @@ export function GenerateBlogButton({
             );
 
             try {
-                const res = await generateBlog(pendingPipelineType, siteId, author, options);
+                const res = await generateBlog(pendingPipelineType, siteId, author, {
+                    ...options,
+                    requestId: generationRequestId.current,
+                });
                 toast.dismiss(loadingId);
 
                 if (res && "success" in res && res.success) {
+                    generationRequestId.current = null;
                     router.refresh();
                     toast.success(
                         <div className="flex flex-col gap-0.5">

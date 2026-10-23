@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { addCompetitor, removeCompetitor, getKeywordGaps } from "@/app/actions/competitor";
 import { generateAttackBlog } from "@/app/actions/blog";
@@ -32,6 +32,7 @@ export function CompetitorsPanel({ siteId, initialCompetitors, userRole = "AGENC
     const [removingId, setRemovingId] = useState<string | null>(null);
     // Track which keyword attack is in-flight to prevent duplicate submissions
     const [attackingKeyword, setAttackingKeyword] = useState<string | null>(null);
+    const attackRequestIds = useRef(new Map<string, string>());
 
     const [gaps, setGaps] = useState<KeywordGap[]>([]);
     const [isLoadingGaps, setIsLoadingGaps] = useState(false);
@@ -101,16 +102,21 @@ export function CompetitorsPanel({ siteId, initialCompetitors, userRole = "AGENC
         if (attackingKeyword === gap.keyword) return;
 
         setAttackingKeyword(gap.keyword);
+        const requestId = attackRequestIds.current.get(gap.keyword) ?? crypto.randomUUID();
+        attackRequestIds.current.set(gap.keyword, requestId);
         toast.loading(`Drafting attack content for "${gap.keyword}"...`, { id: gap.keyword });
         const attackResult = await generateAttackBlog(
             siteId,
             gap.keyword,
             gap.competitorDomain,
             gap.searchVolume,
-            gap.difficulty
+            gap.difficulty,
+            undefined,
+            { requestId },
         ) as { success: boolean; error?: string; blog?: { id: string } };
 
         if (attackResult.success) {
+            attackRequestIds.current.delete(gap.keyword);
             toast.success("Attack Content Generated! Check the Blogs tab for your draft.", { id: gap.keyword });
         } else {
             toast.error(attackResult.error ?? "Failed to generate content.", { id: gap.keyword });

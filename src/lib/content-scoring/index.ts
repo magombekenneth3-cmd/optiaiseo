@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 import { parse } from 'node-html-parser';
-import { redis } from "@/lib/redis";
+import { redis, redisErrorCode } from "@/lib/redis";
 
 import { AI_MODELS } from "@/lib/constants/ai-models";
 
@@ -118,7 +118,7 @@ async function getSerpBenchmark(keyword: string) {
         if (cached) return typeof cached === 'string' ? JSON.parse(cached) : cached;
      
     } catch (e: unknown) {
-        logger.error("Redis fetch failed", { error: (e as Error)?.message || String(e) });
+        logger.error("Redis fetch failed", { errorCode: redisErrorCode(e) });
     }
 
     const serperKey = process.env.SERPER_API_KEY || process.env.SERPAPI_KEY || "";
@@ -218,7 +218,7 @@ async function getSerpBenchmark(keyword: string) {
         await redis.set(cacheKey, JSON.stringify(benchmark), { ex: 86400 }); // 24 hours TTL
      
     } catch (e: unknown) {
-        logger.error("Redis set failed", { error: (e as Error)?.message || String(e) });
+        logger.error("Redis set failed", { errorCode: redisErrorCode(e) });
     }
 
     return benchmark;

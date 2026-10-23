@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 import { logger } from "@/lib/logger";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { redis } from "@/lib/redis";
+import { redis, redisErrorCode } from "@/lib/redis";
 
 /**
  * Extended health endpoint — checks real dependencies, not just process uptime.
@@ -39,7 +39,7 @@ export async function GET() {
         checks.redis = "ok";
     } catch (error: unknown) {
         logger.error("[HealthCheck] Redis unreachable:", {
-            error: (error as Error).message || String(error),
+            errorCode: redisErrorCode(error),
         });
         checks.redis = "error";
         // Redis failure degrades rate limiting and caching but is not fatal
