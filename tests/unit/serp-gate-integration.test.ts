@@ -2,15 +2,14 @@
  * tests/unit/serp-gate-integration.test.ts
  *
  * Integration-level tests for the SERP gate credit invariants.
- * Proves that consumeCredits() is gated behind the server-side gate
+ * Proves that generation credit deductions are gated behind the server-side gate
  * in generateBlog, generateAttackBlog, and generateBlogForKeyword.
  *
  * Key assertion matrix:
- *   BLOCK                  → consumeCredits called 0 times
- *   WARN + no override     → consumeCredits called 0 times
- *   WARN + forceSerpMismatch → consumeCredits called 1 time
- *   ALLOW                  → consumeCredits called 1 time
- *   SKIP                   → consumeCredits called 1 time (fail-open)
+ *   BLOCK                  → no generation debit
+ *   WARN + no override     → no generation debit
+ *   WARN + forceSerpMismatch → one idempotent generation debit
+ *   ALLOW / SKIP           → one idempotent generation debit
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -31,7 +30,20 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/credits", () => ({
     consumeCredits: vi.fn(),
+    consumeCreditsIdempotent: vi.fn(),
 }));
+
+vi.mock("@/lib/rate-limit/check", () => ({ rateLimit: vi.fn().mockResolvedValue(null) }));
+vi.mock("@/lib/stripe/guards", () => ({ getEffectiveTier: vi.fn().mockResolvedValue("PRO") }));
+vi.mock("@/lib/blog/context", () => ({ extractSiteContext: vi.fn().mockResolvedValue("Example site context") }));
+vi.mock("@/lib/gsc", () => ({ fetchGSCKeywords: vi.fn().mockResolvedValue([]), findOpportunities: vi.fn().mockReturnValue([]) }));
+vi.mock("@/lib/gsc/token", () => ({ getUserGscToken: vi.fn().mockRejectedValue(new Error("not connected")) }));
+vi.mock("@/lib/gsc/property-resolver", () => ({ getAuthorizedGscProperty: vi.fn().mockRejectedValue(new Error("not connected")) }));
+vi.mock("@/lib/gsc/gsc-availability", () => ({
+    classifyGscError: vi.fn().mockReturnValue("NOT_CONNECTED"),
+    logGscFailure: vi.fn(),
+}));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 vi.mock("@/lib/stripe/plans", () => ({
     getEffectiveTier: vi.fn().mockResolvedValue("PRO"),
@@ -64,6 +76,16 @@ vi.mock("@/lib/prisma", () => ({
         },
         blog: {
             create: vi.fn().mockResolvedValue({ id: "blog-1" }),
+            findFirst: vi.fn().mockResolvedValue(null),
+            findMany: vi.fn().mockResolvedValue([]),
+            update: vi.fn().mockResolvedValue({}),
+            delete: vi.fn().mockResolvedValue({}),
+        },
+        competitorKeyword: { findFirst: vi.fn().mockResolvedValue(null) },
+        rankSnapshot: {
+            findFirst: vi.fn().mockResolvedValue(null),
+            findMany: vi.fn().mockResolvedValue([]),
+            create: vi.fn().mockResolvedValue({}),
         },
     },
 }));
@@ -109,10 +131,11 @@ vi.mock("@/lib/blog", () => ({
 import { generateBlog, generateAttackBlog } from "@/app/actions/blog";
 import { generateBlogForKeyword } from "@/app/actions/keywords";
 import { requireUser } from "@/lib/auth/require-user";
-import { consumeCredits } from "@/lib/credits";
+import { consumeCredits, consumeCreditsIdempotent } from "@/lib/credits";
 import { fetchGoogleSerp, classifySerpFormat } from "@/lib/blog/serp";
 import { validateSerpPreflight } from "@/lib/blog/serp-gate";
 import { prisma } from "@/lib/prisma";
+import { inngest } from "@/lib/inngest/client";
 import type { SerpFormatSignal } from "@/lib/blog/serp";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -190,6 +213,7 @@ beforeEach(() => {
 
     vi.mocked(requireUser).mockResolvedValue({ ok: true, user: MOCK_USER } as never);
     vi.mocked(consumeCredits).mockResolvedValue({ allowed: true, remaining: 90, reason: null } as never);
+    vi.mocked(consumeCreditsIdempotent).mockResolvedValue({ allowed: true, remaining: 90, cost: 10 } as never);
     vi.mocked(prisma.site.findUnique).mockResolvedValue(MOCK_SITE as never);
     vi.mocked(prisma.site.findFirst).mockResolvedValue(MOCK_SITE as never);
     vi.mocked(prisma.site.update).mockResolvedValue(MOCK_SITE as never);
@@ -207,57 +231,82 @@ beforeEach(() => {
 
 describe("generateBlog — SERP gate credit invariants", () => {
 
-    it("BLOCK: consumeCredits is never called", async () => {
+    it("replays the same request with one article, one debit, and one stable event ID", async () => {
+        const requestId = "b0b00000-0000-4000-8000-000000000001";
+        await generateBlog("STANDARD", "site-1", MOCK_AUTHOR_INPUT, { requestId });
+        const firstEvent = vi.mocked(inngest.send).mock.calls[0][0] as Record<string, unknown>;
+        const attemptId = (firstEvent.data as Record<string, unknown>).attemptId as string;
+        vi.mocked(prisma.blog.findFirst).mockResolvedValueOnce({
+                id: "blog-1",
+                status: "GENERATING",
+                generationAttemptId: attemptId,
+                generationInput: { siteId: "site-1", blogId: "blog-1", userId: "user-1", pipelineType: "USER_KEYWORD" },
+                title: "Generating post",
+                slug: `generating-${attemptId}`,
+                content: "",
+                metaDescription: "",
+                targetKeywords: ["best crm software"],
+            } as never);
+        await generateBlog("STANDARD", "site-1", MOCK_AUTHOR_INPUT, { requestId });
+
+        expect(prisma.blog.create).toHaveBeenCalledTimes(1);
+        expect(consumeCreditsIdempotent).toHaveBeenCalledTimes(1);
+        expect(inngest.send).toHaveBeenCalledTimes(2);
+        expect((vi.mocked(inngest.send).mock.calls[0][0] as Record<string, unknown>).id)
+            .toBe((vi.mocked(inngest.send).mock.calls[1][0] as Record<string, unknown>).id);
+    });
+
+    it("BLOCK: generation credits are never charged", async () => {
         vi.mocked(classifySerpFormat).mockReturnValue(TOOL_SIGNAL); // tool+high = BLOCK
 
         const result = await generateBlog("STANDARD", "site-1", MOCK_AUTHOR_INPUT);
 
-        expect(consumeCredits).not.toHaveBeenCalled();
+        expect(consumeCreditsIdempotent).not.toHaveBeenCalled();
         expect(result).toMatchObject({ success: false, code: "SERP_GATE_BLOCK" });
     });
 
-    it("WARN + no override: consumeCredits is never called", async () => {
+    it("WARN + no override: generation credits are never charged", async () => {
         vi.mocked(classifySerpFormat).mockReturnValue(LISTICLE_SIGNAL); // WARN
 
         const result = await generateBlog("STANDARD", "site-1", MOCK_AUTHOR_INPUT);
 
-        expect(consumeCredits).not.toHaveBeenCalled();
+        expect(consumeCreditsIdempotent).not.toHaveBeenCalled();
         expect(result).toMatchObject({ success: false, code: "SERP_GATE_WARN", requiresConfirmation: true });
     });
 
-    it("WARN + forceSerpMismatch + valid preflight: consumeCredits called once", async () => {
+    it("WARN + forceSerpMismatch + valid preflight: one idempotent charge", async () => {
         vi.mocked(validateSerpPreflight).mockResolvedValue({ valid: true, record: WARN_RECORD });
 
         await generateBlog("STANDARD", "site-1", MOCK_AUTHOR_INPUT,
             { preflightId: "pre-warn", forceSerpMismatch: true });
 
-        expect(consumeCredits).toHaveBeenCalledTimes(1);
-        expect(consumeCredits).toHaveBeenCalledWith("user-1", "blog_generation");
+        expect(consumeCreditsIdempotent).toHaveBeenCalledTimes(1);
+        expect(consumeCreditsIdempotent).toHaveBeenCalledWith("user-1", "blog_generation", expect.stringMatching(/^blog-generation:blog-1:/));
     });
 
-    it("ALLOW (fresh gate): consumeCredits called once", async () => {
+    it("ALLOW (fresh gate): one idempotent charge", async () => {
         vi.mocked(classifySerpFormat).mockReturnValue(GUIDE_SIGNAL);
 
         await generateBlog("STANDARD", "site-1", MOCK_AUTHOR_INPUT);
 
-        expect(consumeCredits).toHaveBeenCalledTimes(1);
+        expect(consumeCreditsIdempotent).toHaveBeenCalledTimes(1);
     });
 
-    it("ALLOW (valid preflight): consumeCredits called once", async () => {
+    it("ALLOW (valid preflight): one idempotent charge", async () => {
         vi.mocked(validateSerpPreflight).mockResolvedValue({ valid: true, record: ALLOW_RECORD });
 
         await generateBlog("STANDARD", "site-1", MOCK_AUTHOR_INPUT,
             { preflightId: "pre-allow" });
 
-        expect(consumeCredits).toHaveBeenCalledTimes(1);
+        expect(consumeCreditsIdempotent).toHaveBeenCalledTimes(1);
     });
 
-    it("SKIP (no SERPER_API_KEY): consumeCredits called once — fail-open", async () => {
+    it("SKIP (no SERPER_API_KEY): generation is charged once — fail-open", async () => {
         delete process.env.SERPER_API_KEY;
 
         await generateBlog("STANDARD", "site-1", MOCK_AUTHOR_INPUT);
 
-        expect(consumeCredits).toHaveBeenCalledTimes(1);
+        expect(consumeCreditsIdempotent).toHaveBeenCalledTimes(1);
 
         process.env.SERPER_API_KEY = "test-key"; // restore
     });
@@ -268,7 +317,7 @@ describe("generateBlog — SERP gate credit invariants", () => {
         const result = await generateBlog("STANDARD", "site-1", MOCK_AUTHOR_INPUT,
             { forceSerpMismatch: true }); // no preflightId, fresh gate
 
-        expect(consumeCredits).not.toHaveBeenCalled();
+        expect(consumeCreditsIdempotent).not.toHaveBeenCalled();
         expect(result).toMatchObject({ success: false, code: "SERP_GATE_BLOCK" });
     });
 });
@@ -277,43 +326,43 @@ describe("generateBlog — SERP gate credit invariants", () => {
 
 describe("generateAttackBlog — SERP gate credit invariants", () => {
 
-    it("BLOCK: consumeCredits is never called", async () => {
+    it("BLOCK: generation credits are never charged", async () => {
         vi.mocked(classifySerpFormat).mockReturnValue(TOOL_SIGNAL);
 
         const result = await generateAttackBlog(
             "site-1", "best crm software", "competitor.com", 1000, 40);
 
-        expect(consumeCredits).not.toHaveBeenCalled();
+        expect(consumeCreditsIdempotent).not.toHaveBeenCalled();
         expect(result).toMatchObject({ success: false, code: "SERP_GATE_BLOCK" });
     });
 
-    it("WARN + no override: consumeCredits is never called", async () => {
+    it("WARN + no override: generation credits are never charged", async () => {
         vi.mocked(classifySerpFormat).mockReturnValue(LISTICLE_SIGNAL);
 
         const result = await generateAttackBlog(
             "site-1", "best crm software", "competitor.com", 1000, 40);
 
-        expect(consumeCredits).not.toHaveBeenCalled();
+        expect(consumeCreditsIdempotent).not.toHaveBeenCalled();
         expect(result).toMatchObject({ success: false, code: "SERP_GATE_WARN" });
     });
 
-    it("WARN + forceSerpMismatch + valid preflight: consumeCredits called once", async () => {
+    it("WARN + forceSerpMismatch + valid preflight: one idempotent charge", async () => {
         vi.mocked(validateSerpPreflight).mockResolvedValue({ valid: true, record: WARN_RECORD });
 
         await generateAttackBlog(
             "site-1", "best crm software", "competitor.com", 1000, 40,
             undefined, { preflightId: "pre-warn", forceSerpMismatch: true });
 
-        expect(consumeCredits).toHaveBeenCalledTimes(1);
+        expect(consumeCreditsIdempotent).toHaveBeenCalledTimes(1);
     });
 
-    it("ALLOW: consumeCredits called once", async () => {
+    it("ALLOW: generation is charged once", async () => {
         vi.mocked(classifySerpFormat).mockReturnValue(GUIDE_SIGNAL);
 
         await generateAttackBlog(
             "site-1", "best crm software", "competitor.com", 1000, 40);
 
-        expect(consumeCredits).toHaveBeenCalledTimes(1);
+        expect(consumeCreditsIdempotent).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -374,8 +423,8 @@ describe("Preflight replay — same token reusable within TTL", () => {
         await generateBlog("STANDARD", "site-1", MOCK_AUTHOR_INPUT, { preflightId: "replay-id" });
         await generateBlog("STANDARD", "site-1", MOCK_AUTHOR_INPUT, { preflightId: "replay-id" });
 
-        // Two separate credit deductions — token not consumed/deleted
-        expect(consumeCredits).toHaveBeenCalledTimes(2);
+        // Each invocation has a distinct request ID and therefore a distinct debit.
+        expect(consumeCreditsIdempotent).toHaveBeenCalledTimes(2);
         // Token validated twice — never deleted between calls
         expect(validateSerpPreflight).toHaveBeenCalledTimes(2);
     });
@@ -398,7 +447,7 @@ describe("siteId ownership — preflight from site-A cannot be used for site-B",
             { preflightId: "pre-from-site-1" });
 
         // Gate ran fresh (ALLOW) → credits consumed
-        expect(consumeCredits).toHaveBeenCalledTimes(1);
+        expect(consumeCreditsIdempotent).toHaveBeenCalledTimes(1);
         // Preflight was validated with the correct siteId
         expect(validateSerpPreflight).toHaveBeenCalledWith(
             "pre-from-site-1", "user-1", "site-2", expect.any(String)
@@ -417,7 +466,7 @@ describe("siteId ownership — preflight from site-A cannot be used for site-B",
             "STANDARD", "site-2", MOCK_AUTHOR_INPUT,
             { preflightId: "pre-from-site-1" });
 
-        expect(consumeCredits).not.toHaveBeenCalled();
+        expect(consumeCreditsIdempotent).not.toHaveBeenCalled();
         expect(result).toMatchObject({ success: false, code: "SERP_GATE_BLOCK" });
     });
 });
@@ -435,7 +484,7 @@ describe("normalizeKeyword — used in integration path", () => {
 
         await generateBlog("STANDARD", "site-1", modifiedInput, { preflightId: "pre-allow" });
 
-        expect(consumeCredits).toHaveBeenCalledTimes(1);
+        expect(consumeCreditsIdempotent).toHaveBeenCalledTimes(1);
         expect(validateSerpPreflight).toHaveBeenCalledWith(
             "pre-allow", "user-1", "site-1",
             expect.stringMatching(/^best crm software$/)

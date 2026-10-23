@@ -1,38 +1,10 @@
 import type { PromptContext } from "./prompt-context";
-import IORedis from "ioredis";
 
 import { callGeminiJson } from "@/lib/gemini";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import type { Blog, Site } from "@prisma/client";
-
-// Redis — lazy, safe, never blocks import (triggered re-parse)
-
-let _redis: IORedis | null = null;
-
-function getRedis(): IORedis | null {
-    if (_redis) return _redis;
-    if (!process.env.REDIS_URL) return null;
-
-    try {
-        _redis = new IORedis(process.env.REDIS_URL, {
-            maxRetriesPerRequest: 1,
-            enableOfflineQueue: false,
-            lazyConnect: true,
-        });
-
-        _redis.on("error", (err: Error) => {
-            logger.warn("[Repurpose] Redis error", { message: err.message });
-        });
-
-        return _redis;
-    } catch (e) {
-        logger.warn("[Repurpose] Redis init failed — caching disabled", {
-            error: e instanceof Error ? e.message : String(e),
-        });
-        return null;
-    }
-}
+import { getRedis } from "@/lib/redis";
 
 // Cache
 
@@ -46,7 +18,7 @@ async function getCache<T>(key: string): Promise<T | null> {
     if (!redis) return null;
     try {
         const v = await redis.get(key);
-        return v ? (JSON.parse(v) as T) : null;
+        return v ? (JSON.parse(v as string) as T) : null;
     } catch {
         return null;
     }
@@ -56,7 +28,7 @@ async function setCache(key: string, value: unknown): Promise<void> {
     const redis = getRedis();
     if (!redis) return;
     try {
-        await redis.set(key, JSON.stringify(value), "EX", CACHE_TTL);
+        await redis.set(key, JSON.stringify(value), { ex: CACHE_TTL });
     } catch {
         // Non-fatal
     }
