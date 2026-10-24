@@ -9,6 +9,13 @@ RUN apt-get update -qq && \
 
 RUN npm install -g pnpm@8.15.1 --prefer-online
 
+# Never download Puppeteer's bundled Chrome (~600 MB) in the image. Production
+# renders via BROWSERLESS_URL (puppeteer-core connect), and node:20-slim lacks
+# the shared libs the bundled Chrome needs anyway. Keeping it out shrinks the
+# image enough that the final export no longer hits the build-daemon deadline.
+ENV PUPPETEER_SKIP_DOWNLOAD=1
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1
+
 FROM base AS fetch
 WORKDIR /app
 ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
@@ -73,7 +80,6 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 ENV HOME=/app
-ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser  --system --uid 1001 nextjs
@@ -90,8 +96,6 @@ COPY --from=agent-bundle --chown=nextjs:nodejs /app/livekit-agent.js ./livekit-a
 
 RUN mkdir -p ./node_modules/@prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
-
-COPY --from=deps --chown=nextjs:nodejs /root/.cache/puppeteer /app/.cache/puppeteer
 
 RUN npm install -g prisma@5.22.0 --prefer-online
 
