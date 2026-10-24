@@ -95,6 +95,32 @@ function getRelated(current: Keyword, count = 6): Keyword[] {
     .slice(0, count);
 }
 
+function parseOffer(priceStr: string) {
+  const isFree = /free/i.test(priceStr);
+  const numericMatch = priceStr.match(/[\d.]+/);
+  if (isFree) {
+    return {
+      "@type": "Offer" as const,
+      price: "0",
+      priceCurrency: "USD",
+      description: priceStr,
+    };
+  }
+  if (numericMatch) {
+    const currency = priceStr.includes("€") ? "EUR" : priceStr.includes("£") ? "GBP" : "USD";
+    return {
+      "@type": "Offer" as const,
+      price: numericMatch[0],
+      priceCurrency: currency,
+      description: priceStr,
+    };
+  }
+  return {
+    "@type": "Offer" as const,
+    description: priceStr,
+  };
+}
+
 function buildSchema(page: Keyword, siteUrl: string) {
   return {
     "@context": "https://schema.org",
@@ -105,7 +131,7 @@ function buildSchema(page: Keyword, siteUrl: string) {
         description: `Discover the best ${page.keyword} in 2026.`,
         url: `${siteUrl}/tools/${page.slug}`,
         datePublished: "2026-01-01",
-        dateModified: new Date().toISOString().split("T")[0],
+        dateModified: "2026-09-15",
         publisher: {
           "@type": "Organization",
           name: "OptiAISEO",
@@ -123,7 +149,7 @@ function buildSchema(page: Keyword, siteUrl: string) {
             "@type": "SoftwareApplication",
             name: tool.name,
             description: tool.why,
-            offers: { "@type": "Offer", price: tool.price },
+            offers: parseOffer(tool.price),
             url: tool.href,
           },
         })),
@@ -211,12 +237,23 @@ export default async function ToolsPage({
         </header>
 
         {/* Market Context */}
-        <section className="mb-10 p-5 rounded-2xl border border-border bg-card">
+        <section className="mb-6 p-5 rounded-2xl border border-border bg-card">
           <h2 className="text-sm font-bold text-foreground mb-2 flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
             Market Context
           </h2>
           <p className="text-sm text-muted-foreground leading-relaxed">{page.marketContext}</p>
+        </section>
+
+        {/* Editorial Review & Testing Methodology */}
+        <section className="mb-10 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5">
+          <h2 className="text-sm font-bold text-foreground mb-1.5 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            Editorial Review &amp; Testing Methodology
+          </h2>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Every tool in this comparison was evaluated by the OptiAISEO research team based on data accuracy, feature depth, regional availability, and actual usability. We verify pricing, API access, and crawl limits quarterly to ensure recommendations reflect current market realities.
+          </p>
         </section>
 
         {/* Tool list */}

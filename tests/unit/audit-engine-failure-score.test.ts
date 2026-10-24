@@ -19,7 +19,7 @@ describe("AuditEngine failure scoring", () => {
   });
 
   it("caps health when an indexability blocker is found", async () => {
-    const module: AuditModule = {
+    const auditModule: AuditModule = {
       id: "technical-seo",
       label: "Technical SEO",
       requiresHtml: false,
@@ -29,7 +29,7 @@ describe("AuditEngine failure scoring", () => {
         items: [{ id: "indexability", label: "Indexability", status: "Fail", finding: "noindex" }],
       }),
     };
-    const report = await new AuditEngine([module]).runAudit("https://example.com");
+    const report = await new AuditEngine([auditModule]).runAudit("https://example.com");
     expect(report.indexingBlocked).toBe(true);
     expect(report.overallScore).toBe(20);
     expect(report.coverage).toEqual({ completed: 1, expected: 1, percent: 100 });

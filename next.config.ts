@@ -181,7 +181,9 @@ const nextConfig: NextConfig = {
       { source: '/aeo-guide/aeo-tools-comparison', destination: '/aeo-guide/answer-engine-optimization-tools', statusCode: 301 },
       { source: '/aeo-guide/ai-share-of-voice', destination: '/aeo-guide/ai-citation-tracking', statusCode: 301 },
       // Removed page — no appropriate canonical; redirect to hub.
-      { source: '/aeo-guide/aeo-india', destination: '/aeo-guide', statusCode: 302 },
+      { source: '/aeo-guide/aeo-india', destination: '/aeo-guide', statusCode: 301 },
+      { source: '/guide/what-is-generative-share-of-voice', destination: '/geo', statusCode: 301 },
+      { source: '/tools/free-backlink-checker-usa', destination: '/tools/free-backlink-checker', statusCode: 301 },
 
       // ── Deleted blog posts — 301 to hub ─────────────────────────────────
       // These were published, indexed by Google, then unpublished/deleted.

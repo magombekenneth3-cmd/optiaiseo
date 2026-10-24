@@ -54,6 +54,12 @@ export interface LeaderboardIndex {
 }
 
 const CACHE_TTL = 60 * 60;
+const EMPTY_CACHE_TTL = 5 * 60; // 5 minutes for confirmed empty datasets so new sites index quickly
+
+export type NicheLeaderboardResult =
+    | { status: "success"; data: NicheLeaderboard }
+    | { status: "empty"; data: null }
+    | { status: "error"; error: string; data: null };
 
 async function cacheGet<T>(key: string): Promise<T | null> {
     try {
@@ -63,16 +69,49 @@ async function cacheGet<T>(key: string): Promise<T | null> {
     } catch { return null; }
 }
 
-async function cacheSet<T>(key: string, value: T): Promise<void> {
+async function cacheSet<T>(key: string, value: T, ttl: number = CACHE_TTL): Promise<void> {
     try {
-        await redis.setex(key, CACHE_TTL, JSON.stringify(value));
+        await redis.setex(key, ttl, JSON.stringify(value));
     } catch { /* non-fatal */ }
 }
 
-export async function getNicheLeaderboard(niche: Niche): Promise<NicheLeaderboard | null> {
+export async function getNicheLeaderboardResult(niche: Niche): Promise<NicheLeaderboardResult> {
     const cacheKey = `leaderboard:${niche}`;
-    const cached = await cacheGet<NicheLeaderboard>(cacheKey);
-    if (cached) return cached;
+    const cached = await cacheGet<NicheLeaderboardResult | NicheLeaderboard>(cacheKey);
+
+    if (cached) {
+        if ("status" in cached) {
+            if (cached.status === "success" && cached.data) {
+                return {
+                    status: "success",
+                    data: {
+                        ...cached.data,
+                        lastUpdated: new Date(cached.data.lastUpdated),
+                        entries: cached.data.entries.map((e) => ({
+                            ...e,
+                            snapshotDate: new Date(e.snapshotDate),
+                        })),
+                    },
+                };
+            }
+            if (cached.status === "empty") {
+                return cached;
+            }
+        } else if ("entries" in cached) {
+            // Legacy cache format migration
+            return {
+                status: "success",
+                data: {
+                    ...cached,
+                    lastUpdated: new Date(cached.lastUpdated),
+                    entries: cached.entries.map((e) => ({
+                        ...e,
+                        snapshotDate: new Date(e.snapshotDate),
+                    })),
+                },
+            };
+        }
+    }
 
     try {
         const thirtyDaysAgo = new Date();
@@ -109,7 +148,11 @@ export async function getNicheLeaderboard(niche: Niche): Promise<NicheLeaderboar
             },
         });
 
-        if (sites.length === 0) return null;
+        if (sites.length === 0) {
+            const emptyResult: NicheLeaderboardResult = { status: "empty", data: null };
+            await cacheSet(cacheKey, emptyResult, EMPTY_CACHE_TTL);
+            return emptyResult;
+        }
 
         const rawEntries = sites
             .map((site) => {
@@ -153,12 +196,19 @@ export async function getNicheLeaderboard(niche: Niche): Promise<NicheLeaderboar
             lastUpdated: new Date(),
         };
 
-        await cacheSet(cacheKey, result);
-        return result;
+        const successResult: NicheLeaderboardResult = { status: "success", data: result };
+        await cacheSet(cacheKey, successResult, CACHE_TTL);
+        return successResult;
     } catch (err: unknown) {
-        logger.error("[Leaderboard] getNicheLeaderboard failed", { niche, error: (err as Error)?.message });
-        return null;
+        const errorMsg = (err as Error)?.message ?? "Database error";
+        logger.error("[Leaderboard] getNicheLeaderboard failed", { niche, error: errorMsg });
+        return { status: "error", error: errorMsg, data: null };
     }
+}
+
+export async function getNicheLeaderboard(niche: Niche): Promise<NicheLeaderboard | null> {
+    const result = await getNicheLeaderboardResult(niche);
+    return result.status === "success" ? result.data : null;
 }
 
 export async function getLeaderboardIndex(): Promise<LeaderboardIndex> {

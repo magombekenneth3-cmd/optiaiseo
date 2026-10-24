@@ -196,7 +196,7 @@ export default function FreeGsoCheckerPage() {
                 <Link href="/free/reddit-seo" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
                   🔴 Reddit SEO Opportunity Finder
                 </Link>
-                <Link href="/guide/what-is-generative-share-of-voice" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
+                <Link href="/geo" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">
                   📖 What is gSOV?
                 </Link>
                 <Link href="/vs" className="text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">

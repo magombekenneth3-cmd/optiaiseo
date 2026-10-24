@@ -1376,6 +1376,166 @@ export default function HomeClient({ faqItems, stats }: HomeClientProps) {
             </div>
           </div>
         </section>
+
+        {/* Priority Technical Resources & Indexing Hub */}
+        <section
+          id="featured-resources"
+          aria-labelledby="featured-resources-heading"
+          className="border-t border-white/10 bg-[#060b0e] py-20 text-white"
+        >
+          <div className="mx-auto max-w-7xl px-5 sm:px-6">
+            <div className="max-w-2xl mb-12">
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400 mb-4">
+                Technical Knowledge Base &amp; Free Audits
+              </div>
+              <h2 id="featured-resources-heading" className="text-2xl sm:text-3xl font-black tracking-tight text-white mb-3">
+                Explore Core SEO &amp; AI Search Resources
+              </h2>
+              <p className="text-sm sm:text-base text-white/60 leading-relaxed">
+                Direct access to our free diagnostic tools, technical Answer Engine Optimization blueprints, and platform benchmarks.
+              </p>
+            </div>
+
+            <div className="grid gap-8 md:grid-cols-3">
+              {/* Free Tools */}
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 hover:border-emerald-500/30 transition-colors">
+                <div className="text-xs font-bold uppercase tracking-widest text-emerald-400 mb-4">
+                  Free Diagnostic Tools
+                </div>
+                <ul className="space-y-4 text-sm">
+                  <li>
+                    <Link
+                      href="/free/seo-checker"
+                      className="group block font-semibold text-white hover:text-emerald-400 transition-colors"
+                    >
+                      <span>Free Instant SEO Audit</span>
+                      <p className="text-xs font-normal text-white/50 group-hover:text-white/70 mt-0.5">
+                        Comprehensive on-page, Core Web Vitals, and technical health score in 30 seconds.
+                      </p>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href="/free/gso-checker"
+                      className="group block font-semibold text-white hover:text-emerald-400 transition-colors"
+                    >
+                      <span>Generative Share of Voice Checker</span>
+                      <p className="text-xs font-normal text-white/50 group-hover:text-white/70 mt-0.5">
+                        Measure brand citation frequency across ChatGPT, Perplexity, and Claude answers.
+                      </p>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href="/aria"
+                      className="group block font-semibold text-white hover:text-emerald-400 transition-colors"
+                    >
+                      <span>Aria AI SEO Copilot</span>
+                      <p className="text-xs font-normal text-white/50 group-hover:text-white/70 mt-0.5">
+                        Autonomous technical diagnostics and automated GitHub pull requests for code fixes.
+                      </p>
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Verified Guides */}
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 hover:border-blue-500/30 transition-colors">
+                <div className="text-xs font-bold uppercase tracking-widest text-blue-400 mb-4">
+                  AEO &amp; GEO Architecture
+                </div>
+                <ul className="space-y-4 text-sm">
+                  <li>
+                    <Link
+                      href="/aeo-guide/topical-authority-ai-search"
+                      className="group block font-semibold text-white hover:text-blue-400 transition-colors"
+                    >
+                      <span>Topical Authority for AI Search</span>
+                      <p className="text-xs font-normal text-white/50 group-hover:text-white/70 mt-0.5">
+                        How entity breadth and semantic coverage dictate citation probability in LLMs.
+                      </p>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href="/aeo-guide/what-is-generative-engine-optimization"
+                      className="group block font-semibold text-white hover:text-blue-400 transition-colors"
+                    >
+                      <span>Generative Engine Optimization (GEO)</span>
+                      <p className="text-xs font-normal text-white/50 group-hover:text-white/70 mt-0.5">
+                        The definitive guide to engineering content for generative search answers.
+                      </p>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href="/guide/robots-txt-ai-search"
+                      className="group block font-semibold text-white hover:text-blue-400 transition-colors"
+                    >
+                      <span>Robots.txt &amp; AI Crawler Directives</span>
+                      <p className="text-xs font-normal text-white/50 group-hover:text-white/70 mt-0.5">
+                        Proper robots configuration for GPTBot, ClaudeBot, and PerplexityBot.
+                      </p>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href="/aeo-guide/structured-data-for-ai-search"
+                      className="group block font-semibold text-white hover:text-blue-400 transition-colors"
+                    >
+                      <span>Structured Data &amp; Schema for AI</span>
+                      <p className="text-xs font-normal text-white/50 group-hover:text-white/70 mt-0.5">
+                        JSON-LD schemas that search engines and answer engines extract directly.
+                      </p>
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Benchmarks & Comparisons */}
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 hover:border-violet-500/30 transition-colors">
+                <div className="text-xs font-bold uppercase tracking-widest text-violet-400 mb-4">
+                  Industry Benchmarks
+                </div>
+                <ul className="space-y-4 text-sm">
+                  <li>
+                    <Link
+                      href="/leaderboard"
+                      className="group block font-semibold text-white hover:text-violet-400 transition-colors"
+                    >
+                      <span>AI Visibility Leaderboard</span>
+                      <p className="text-xs font-normal text-white/50 group-hover:text-white/70 mt-0.5">
+                        Weekly industry rankings tracking which websites dominate AI search citations.
+                      </p>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href="/vs/semrush"
+                      className="group block font-semibold text-white hover:text-violet-400 transition-colors"
+                    >
+                      <span>OptiAISEO vs Semrush</span>
+                      <p className="text-xs font-normal text-white/50 group-hover:text-white/70 mt-0.5">
+                        Comparing AI citation tracking with legacy keyword rank tracking.
+                      </p>
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href="/vs/ahrefs"
+                      className="group block font-semibold text-white hover:text-violet-400 transition-colors"
+                    >
+                      <span>OptiAISEO vs Ahrefs</span>
+                      <p className="text-xs font-normal text-white/50 group-hover:text-white/70 mt-0.5">
+                        Traditional backlink index analysis versus generative search presence.
+                      </p>
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
 
       {/* Footer */}

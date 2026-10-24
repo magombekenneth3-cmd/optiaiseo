@@ -5,14 +5,19 @@ import SiteFooter from "@/components/marketing/SiteFooter";
 import { TrendingUp, TrendingDown, Minus, Zap } from "lucide-react";
 import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 import {
-    getNicheLeaderboard,
+    getNicheLeaderboardResult,
     NICHES,
     NICHE_META,
     type Niche,
     type LeaderboardEntry,
 } from "@/lib/leaderboard";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+const CANONICAL_SITE_URL = "https://optiaiseo.online";
+const SITE_URL = (
+    process.env.NEXT_PUBLIC_SITE_URL?.startsWith("http") && !process.env.NEXT_PUBLIC_SITE_URL.includes("localhost")
+        ? process.env.NEXT_PUBLIC_SITE_URL
+        : CANONICAL_SITE_URL
+).replace(/\/$/, "");
 
 export function generateStaticParams() {
     return NICHES.map((niche) => ({ niche }));
@@ -23,10 +28,16 @@ export async function generateMetadata({ params }: { params: Promise<{ niche: st
     if (!NICHES.includes(niche as Niche)) return {};
     const meta = NICHE_META[niche as Niche];
     const year = new Date().getFullYear();
+    const result = await getNicheLeaderboardResult(niche as Niche);
+    const isConfirmedEmpty = result.status === "empty";
+
     return {
         title: `Top AI-Visible ${meta.label} ${year} — AI Visibility Leaderboard`,
         description: `Which ${meta.label} are most cited by ChatGPT, Perplexity, and Google AI? Weekly-updated ranking of the most AI-visible ${meta.description.toLowerCase()}.`,
         alternates: { canonical: `${SITE_URL}/leaderboard/${niche}` },
+        robots: isConfirmedEmpty
+            ? { index: false, follow: true }
+            : { index: true, follow: true },
         openGraph: {
             title: `Most AI-Visible ${meta.label} in ${year}`,
             description: `Weekly ranking of ${meta.label} by Generative Share of Voice — how often each site appears in ChatGPT, Perplexity, and Google AI answers.`,
@@ -153,7 +164,10 @@ export default async function NicheLeaderboardPage({ params }: { params: Promise
     const { niche } = await params;
     if (!NICHES.includes(niche as Niche)) notFound();
 
-    const lb   = await getNicheLeaderboard(niche as Niche);
+    const result = await getNicheLeaderboardResult(niche as Niche);
+    const lb = result.status === "success" ? result.data : null;
+    const isError = result.status === "error";
+    const isEmpty = result.status === "empty";
     const meta = NICHE_META[niche as Niche];
     const year  = new Date().getFullYear();
     const month = new Date().toLocaleString("en-US", { month: "long" });
@@ -194,7 +208,7 @@ export default async function NicheLeaderboardPage({ params }: { params: Promise
                         Ranked by <strong>Generative Share of Voice</strong> — how often each site is cited when users ask
                         ChatGPT, Perplexity, Claude, or Google AI questions about {meta.description.toLowerCase()}.
                     </p>
-                    {lb && (
+                    {lb && lb.entries.length > 0 && (
                         <div className="flex flex-wrap gap-5 mt-6 text-sm">
                             <span className="text-muted-foreground">
                                 <strong className="text-foreground">{lb.totalSitesTracked.toLocaleString()}</strong> sites tracked
@@ -209,63 +223,65 @@ export default async function NicheLeaderboardPage({ params }: { params: Promise
                     )}
                 </div>
 
-                {lb && (
-                    <script
-                        type="application/ld+json"
-                        dangerouslySetInnerHTML={{
-                            __html: JSON.stringify({
-                                "@context": "https://schema.org",
-                                "@type": "ItemList",
-                                "name": `Most AI-Visible ${meta.label} — ${month} ${year}`,
-                                "description": `Top ${meta.label} ranked by Generative Share of Voice in ChatGPT, Perplexity, and Google AI Overview.`,
-                                "numberOfItems": lb.entries.length,
-                                "itemListElement": lb.entries.map((e) => ({
-                                    "@type": "ListItem",
-                                    "position": e.rank,
-                                    "item": {
-                                        "@type": "WebSite",
-                                        "name": e.domain,
-                                        "url": `https://${e.domain}`,
-                                        "additionalProperty": [
-                                            {
-                                                "@type": "PropertyValue",
-                                                "name": "AEO Score",
-                                                "value": e.aeoScore,
-                                            },
-                                            {
-                                                "@type": "PropertyValue",
-                                                "name": "Generative Share of Voice",
-                                                "value": `${e.generativeShareOfVoice}%`,
-                                            },
-                                            {
-                                                "@type": "PropertyValue",
-                                                "name": "AI Visibility Grade",
-                                                "value": e.grade,
-                                            },
-                                        ],
-                                    },
-                                })),
-                            }),
-                        }}
-                    />
-                )}
+                {lb && lb.entries.length > 0 && (
+                    <>
+                        <script
+                            type="application/ld+json"
+                            dangerouslySetInnerHTML={{
+                                __html: JSON.stringify({
+                                    "@context": "https://schema.org",
+                                    "@type": "ItemList",
+                                    "name": `Most AI-Visible ${meta.label} — ${month} ${year}`,
+                                    "description": `Top ${meta.label} ranked by Generative Share of Voice in ChatGPT, Perplexity, and Google AI Overview.`,
+                                    "numberOfItems": lb.entries.length,
+                                    "itemListElement": lb.entries.map((e) => ({
+                                        "@type": "ListItem",
+                                        "position": e.rank,
+                                        "item": {
+                                            "@type": "WebSite",
+                                            "name": e.domain,
+                                            "url": `https://${e.domain}`,
+                                            "additionalProperty": [
+                                                {
+                                                    "@type": "PropertyValue",
+                                                    "name": "AEO Score",
+                                                    "value": e.aeoScore,
+                                                },
+                                                {
+                                                    "@type": "PropertyValue",
+                                                    "name": "Generative Share of Voice",
+                                                    "value": `${e.generativeShareOfVoice}%`,
+                                                },
+                                                {
+                                                    "@type": "PropertyValue",
+                                                    "name": "AI Visibility Grade",
+                                                    "value": e.grade,
+                                                },
+                                            ],
+                                        },
+                                    })),
+                                }),
+                            }}
+                        />
 
-                <script
-                    type="application/ld+json"
-                    dangerouslySetInnerHTML={{
-                        __html: JSON.stringify({
-                            "@context": "https://schema.org",
-                            "@type": "Dataset",
-                            "name": `Most AI-Visible ${meta.label} — ${month} ${year}`,
-                            "description": `Rankings of ${meta.label} by generative share of voice across ChatGPT, Perplexity, and Google AI Overviews.`,
-                            "url": `${SITE_URL}/leaderboard/${niche}`,
-                            "license": "https://creativecommons.org/licenses/by/4.0/",
-                            "creator": { "@type": "Organization", "name": "OptiAISEO", "url": SITE_URL },
-                            "temporalCoverage": year.toString(),
-                            "keywords": ["AI SEO", "GSoV", "generative AI", "AEO", meta.label],
-                        }),
-                    }}
-                />
+                        <script
+                            type="application/ld+json"
+                            dangerouslySetInnerHTML={{
+                                __html: JSON.stringify({
+                                    "@context": "https://schema.org",
+                                    "@type": "Dataset",
+                                    "name": `Most AI-Visible ${meta.label} — ${month} ${year}`,
+                                    "description": `Rankings of ${meta.label} by generative share of voice across ChatGPT, Perplexity, and Google AI Overviews.`,
+                                    "url": `${SITE_URL}/leaderboard/${niche}`,
+                                    "license": "https://creativecommons.org/licenses/by/4.0/",
+                                    "creator": { "@type": "Organization", "name": "OptiAISEO", "url": SITE_URL },
+                                    "temporalCoverage": year.toString(),
+                                    "keywords": ["AI SEO", "GSoV", "generative AI", "AEO", meta.label],
+                                }),
+                            }}
+                        />
+                    </>
+                )}
 
                 {/* BreadcrumbList schema — 3-level trail: Home → Leaderboard → Niche */}
                 <script
@@ -305,12 +321,27 @@ export default async function NicheLeaderboardPage({ params }: { params: Promise
                             ))}
                         </div>
                     </section>
+                ) : isError ? (
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-12 text-center mb-16">
+                        <p className="font-semibold text-amber-500 mb-2">Rankings update in progress</p>
+                        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                            Leaderboard data is currently refreshing from the live index pipeline. Please check back shortly for updated rankings.
+                        </p>
+                    </div>
                 ) : (
                     <div className="rounded-xl border border-dashed bg-muted/20 p-12 text-center mb-16">
-                        <p className="font-medium mb-2">No rankings available yet</p>
+                        <p className="font-medium mb-2">No rankings published yet</p>
                         <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                            We need more verified {meta.label} with AI visibility data to publish this leaderboard. Be among the first.
+                            We require a verified cohort of {meta.label} with live AI visibility data before publishing this leaderboard. Submit your site to be among the first tracked.
                         </p>
+                        <div className="mt-6">
+                            <Link
+                                href="/signup"
+                                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-foreground text-background hover:opacity-90 transition-opacity"
+                            >
+                                Track your {meta.label} site →
+                            </Link>
+                        </div>
                     </div>
                 )}
 

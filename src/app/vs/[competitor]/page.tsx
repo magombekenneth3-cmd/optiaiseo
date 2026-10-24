@@ -2478,7 +2478,7 @@ export default async function VsPage({ params }: Props) {
                 desc: "AI tools are more likely to cite brands that have clear, consistent entity information. Schema markup — the structured data that tells search engines what your site is about — directly affects this. Broken schema makes it harder for AI models to identify and reference your brand confidently. That's a technical SEO problem with a direct impact on AI visibility.",
                 tracked: "OptiAISEO tracks this and fixes it automatically via GitHub",
                 notTracked: `${c.name}: not tracked`,
-                link: "/blog/entity-seo-guide",
+                link: "/aeo-guide/knowledge-graph-seo",
                 linkText: "How entity SEO affects AI search visibility",
               },
               {
@@ -2486,7 +2486,7 @@ export default async function VsPage({ params }: Props) {
                 desc: "AI models are more likely to mention brands that appear consistently across trusted sources. This overlaps with traditional link building, but the mechanism is different — it's about co-occurrence patterns with a topic across the web, not just PageRank.",
                 tracked: "Partially overlaps with backlink data",
                 notTracked: "No single tool fully measures this yet",
-                link: "/blog/ai-citation-guide",
+                link: "/aeo-guide/ai-citation-tracking",
                 linkText: "How AI citation patterns work",
               },
               {
@@ -2494,7 +2494,7 @@ export default async function VsPage({ params }: Props) {
                 desc: "AI models tend to prefer sources that comprehensively answer a topic rather than covering it shallowly. Content gap analysis helps with this — but only if you're actually producing content to fill those gaps at scale.",
                 tracked: "OptiAISEO generates content for missing topics automatically",
                 notTracked: `${c.name}: identifies keyword gaps but doesn't help fill them`,
-                link: "/blog/topical-authority-guide",
+                link: "/aeo-guide/topical-authority-ai-search",
                 linkText: "Building topical authority for AI search",
               },
               {
@@ -2502,7 +2502,7 @@ export default async function VsPage({ params }: Props) {
                 desc: "Newer brands can gain AI visibility faster when their citation rate is actively growing. This is a long-term metric — you typically need 90+ days of data to see a meaningful trend. Short-term tracking is noisy.",
                 tracked: "OptiAISEO tracks Generative Search Occupancy (GSoV) continuously",
                 notTracked: `${c.name}: no equivalent metric`,
-                link: "/blog/gsov-tracking-guide",
+                link: "/geo",
                 linkText: "What is Generative Search Occupancy?",
               },
             ].map(({ signal, desc, tracked, notTracked, link, linkText }) => (
@@ -2661,11 +2661,11 @@ export default async function VsPage({ params }: Props) {
             <div className="flex flex-wrap justify-center gap-3">
               <Link href="/guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">SEO and AEO Guide Hub</Link>
               <Link href="/aeo-guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">AEO Guide Hub</Link>
-              <Link href="/blog/generative-search-occupancy-guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">How AI search visibility is measured</Link>
-              <Link href="/blog/automated-schema-fix-github" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">How to fix broken schema automatically</Link>
+              <Link href="/geo" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">How AI search visibility is measured</Link>
+              <Link href="/aeo-guide/structured-data-for-ai-search" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">How to fix broken schema automatically</Link>
               <Link href="/free/seo-checker" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">Free SEO audit tool</Link>
-              <Link href="/blog/nextjs-seo-guide" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">SEO for Next.js and headless CMSs</Link>
-              <Link href="/blog/entity-seo-2026" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">Entity SEO in 2026</Link>
+              <Link href="/guide/robots-txt-ai-search" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">Robots.txt & Technical SEO for AI</Link>
+              <Link href="/aeo-guide/eeat-for-ai-search" className="text-xs font-semibold px-3 py-1.5 rounded-full border border-border hover:border-brand hover:text-brand transition-colors">Entity SEO & E-E-A-T</Link>
             </div>
             <div className="mt-4 flex flex-wrap justify-center gap-3">
               {(c.slug === "clearscope" || c.slug === "surfer-seo") && (
