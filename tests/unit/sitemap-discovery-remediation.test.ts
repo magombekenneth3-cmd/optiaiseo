@@ -9,6 +9,13 @@ vi.mock("@/components/marketing/MarketingNav", () => ({ MarketingNav: () => null
 vi.mock("@/components/home/HomeClient", () => ({ default: () => null }));
 vi.mock("@/app/actions/stats", () => ({ getPublicStats: vi.fn().mockResolvedValue({}) }));
 vi.mock("@/lib/auth", () => ({ authOptions: {} }));
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    blog: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+  },
+}));
 vi.mock("next/font/google", () => ({
   Inter: () => ({ variable: "--font-inter", className: "inter" }),
   Montserrat: () => ({ variable: "--font-montserrat", className: "montserrat" }),
