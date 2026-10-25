@@ -196,7 +196,7 @@ function KeywordStep({
                 </p>
             </div>
 
-            <div className="relative mb-4">
+            <div className="relative mb-3">
                 <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                 <input
                     id="target-keyword"
@@ -207,10 +207,51 @@ function KeywordStep({
                         setCustom(e.target.value);
                         onSelect(e.target.value);
                     }}
-                    placeholder="Type or search target keyword…"
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter" && canContinue) {
+                            e.preventDefault();
+                            onNext();
+                        }
+                    }}
+                    placeholder="Type or search target keyword… (Press Enter to continue)"
                     className={`${inputCls} pl-10`}
                     autoFocus={!initialKeyword}
                 />
+            </div>
+
+            {/* Quick Intent Inspiration Chips */}
+            <div className="mb-4 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mr-1 flex items-center gap-1">
+                    <Sparkles className="h-3 w-3 text-purple-400" /> Intent Style:
+                </span>
+                {[
+                    { label: "AI Overview Answer", prefix: "what is " },
+                    { label: "Definitive Guide", suffix: " complete guide" },
+                    { label: "Comparison / Vs", suffix: " vs alternatives" },
+                    { label: "Best Tools / Ranking", prefix: "best " },
+                ].map((chip) => (
+                    <button
+                        key={chip.label}
+                        type="button"
+                        onClick={() => {
+                            let updated = custom.trim();
+                            if (!updated) {
+                                updated = chip.prefix ? `${chip.prefix}topic` : `topic${chip.suffix}`;
+                            } else {
+                                if (chip.prefix && !updated.toLowerCase().startsWith(chip.prefix)) {
+                                    updated = `${chip.prefix}${updated}`;
+                                } else if (chip.suffix && !updated.toLowerCase().includes(chip.suffix.trim())) {
+                                    updated = `${updated}${chip.suffix}`;
+                                }
+                            }
+                            setCustom(updated);
+                            onSelect(updated);
+                        }}
+                        className="rounded-md border border-white/5 bg-zinc-900/60 px-2 py-0.5 text-[10px] font-medium text-zinc-400 transition-colors hover:border-purple-500/40 hover:bg-purple-500/10 hover:text-purple-300"
+                    >
+                        + {chip.label}
+                    </button>
+                ))}
             </div>
 
             {/* Filter Tabs */}
@@ -443,6 +484,78 @@ function AuthorStep({
                         </span>
                     ))}
                 </div>
+
+                {/* 1-Click Author Persona Presets */}
+                <div className="mt-3.5 rounded-xl border border-white/10 bg-zinc-900/40 p-2.5">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                            <Sparkles className="h-3 w-3 text-purple-400" /> Quick-Fill Persona Presets:
+                        </span>
+                        <span className="text-[10px] text-zinc-500">1-click fill high-scoring E-E-A-T credentials</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        {[
+                            {
+                                id: "founder",
+                                label: "Founder / Architect",
+                                role: "Founder & Lead Technical Architect",
+                                bio: "Over 8 years scaling AI-first technical SEO, organic discovery architectures, and semantic knowledge graph integrations.",
+                                realExperience: "Engineered high-scale schema & semantic clustering pipelines that eliminated crawl waste and achieved rank-zero citation answers.",
+                                realNumbers: "18% to 0% rank drop recovery, 4.2x crawl efficiency, $450/mo server savings",
+                                localContext: "Global SaaS & North America / EMEA markets",
+                            },
+                            {
+                                id: "strategist",
+                                label: "Senior SEO Strategist",
+                                role: "Senior SEO & Search Intent Strategist",
+                                bio: "Specialist in topical authority, generative engine optimization (GEO), and algorithmic search entity disambiguation.",
+                                realExperience: "Led multi-market organic growth audits and reverse-engineered SERP intent shifts across competitive software niches.",
+                                realNumbers: "Top 3 rankings for 42 high-intent queries, 140% organic impressions lift",
+                                localContext: "US & European enterprise market",
+                            },
+                            {
+                                id: "analyst",
+                                label: "Data Analyst",
+                                role: "Lead Industry Analyst & Data Journalist",
+                                bio: "Data-driven researcher analyzing enterprise benchmarks, SERP layout dynamics, and search engine documentation.",
+                                realExperience: "Synthesized multi-source benchmark datasets to identify actionable ranking patterns and correlation models.",
+                                realNumbers: "Analyzed 10,000+ SERP instances, 99.4% factual accuracy rate",
+                                localContext: "Global search market",
+                            },
+                        ].map((preset) => (
+                            <button
+                                key={preset.id}
+                                type="button"
+                                onClick={() => {
+                                    onChangeField("authorRole", preset.role);
+                                    onChangeField("authorBio", preset.bio);
+                                    onChangeField("realExperience", preset.realExperience);
+                                    onChangeField("realNumbers", preset.realNumbers);
+                                    onChangeField("localContext", preset.localContext);
+                                    if (!form.authorName.trim()) {
+                                        onChangeField("authorName", "Editorial Lead");
+                                    }
+                                }}
+                                className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-[11px] font-semibold text-purple-200 transition-colors hover:border-purple-500/60 hover:bg-purple-500/20 hover:text-white"
+                            >
+                                ⚡ {preset.label}
+                            </button>
+                        ))}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                onChangeField("authorRole", "");
+                                onChangeField("authorBio", "");
+                                onChangeField("realExperience", "");
+                                onChangeField("realNumbers", "");
+                                onChangeField("localContext", "");
+                            }}
+                            className="rounded-lg border border-white/5 bg-zinc-900/80 px-2 py-1 text-[10px] font-medium text-zinc-500 hover:text-zinc-300"
+                        >
+                            Reset
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
@@ -581,7 +694,7 @@ function AuthorStep({
     );
 }
 
-function GeneratingStep({ pipelineType }: { pipelineType?: string }) {
+function GeneratingStep({ pipelineType, onClose }: { pipelineType?: string; onClose?: () => void }) {
     const isDataReport = pipelineType === "DATA_REPORT";
     const [elapsed, setElapsed] = useState(0);
 
@@ -620,6 +733,15 @@ function GeneratingStep({ pipelineType }: { pipelineType?: string }) {
                 </p>
             </div>
             <Loader2 className="mt-2 h-6 w-6 animate-spin text-emerald-400" />
+            {onClose && (
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-zinc-900/80 px-4 py-2 text-xs font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:text-white"
+                >
+                    Continue in Background
+                </button>
+            )}
         </div>
     );
 }
@@ -652,7 +774,7 @@ export function GenerateBlogModal({
     useEffect(() => {
         if (initialAuthor) return;
         getSiteAuthorDetails(siteId).then((res) => {
-            if (res.success && res.site) {
+            if (res.success && res.site && (res.site.authorName || res.site.authorRole)) {
                 setForm((prev) => ({
                     ...prev,
                     authorName: res.site?.authorName || "",
@@ -662,6 +784,16 @@ export function GenerateBlogModal({
                     realNumbers: res.site?.realNumbers || "",
                     localContext: res.site?.localContext || "",
                 }));
+            } else if (typeof window !== "undefined") {
+                try {
+                    const cached = localStorage.getItem(`optiaiseo_persona_${siteId}`);
+                    if (cached) {
+                        const parsed = JSON.parse(cached);
+                        setForm((prev) => ({ ...prev, ...parsed }));
+                    }
+                } catch {
+                    // Ignore storage errors
+                }
             }
         });
     }, [siteId, initialAuthor]);
@@ -774,7 +906,7 @@ export function GenerateBlogModal({
                         />
                     )}
 
-                    {step === 2 && <GeneratingStep pipelineType={pipelineType} />}
+                    {step === 2 && <GeneratingStep pipelineType={pipelineType} onClose={onClose} />}
                 </div>
 
                 {step === 1 && (

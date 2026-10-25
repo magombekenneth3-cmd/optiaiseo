@@ -7,9 +7,13 @@ import {
     CheckCircle2,
     ChevronRight,
     Clock3,
+    Copy,
     FileText,
+    Globe,
     Info,
     Loader2,
+    Maximize2,
+    Minimize2,
     Save,
     Search,
     ShieldCheck,
@@ -43,7 +47,7 @@ interface Blog {
     validationWarnings?: string[] | null;
 }
 
-type ReviewMode = "write" | "review";
+type ReviewMode = "write" | "review" | "simulate";
 
 interface ReviewBlogModalProps {
     blog: Blog;
@@ -409,8 +413,205 @@ function ChecklistItem({ label, complete }: { label: string; complete: boolean }
     );
 }
 
+function SerpAiSimulator({
+    blog,
+    content,
+    onCopy,
+    copiedType,
+}: {
+    blog: Blog;
+    content: string;
+    onCopy: (type: "markdown" | "html" | "answer") => void;
+    copiedType: string | null;
+}) {
+    const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+
+    // Clean snippet text
+    const snippet = useMemo(() => {
+        const text = content
+            .replace(/<[^>]*>?/gm, " ")
+            .replace(/^#+\s+.*/gm, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        return text.slice(0, 158);
+    }, [content]);
+
+    // Key takeaway bullet points extracted from H2s
+    const keyTakeaways = useMemo(() => {
+        const h2Matches = content.match(/^##\s+(.+)$/gm) || [];
+        return h2Matches.slice(0, 3).map((h) => h.replace(/^##\s+/, "").trim());
+    }, [content]);
+
+    const slug = (blog as { slug?: string }).slug ||
+        blog.title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/(^-|-$)+/g, "");
+
+    return (
+        <div className="mx-auto w-full max-w-4xl px-6 py-10 space-y-8">
+            {/* Top Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card/60 p-4">
+                <div>
+                    <h2 className="text-sm font-bold flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-purple-400" />
+                        Live SERP &amp; AI Citation Simulation
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                        Real-time visualization of how Google and generative engines represent this page.
+                    </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => onCopy("markdown")}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+                    >
+                        {copiedType === "markdown" ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
+                        {copiedType === "markdown" ? "Copied Markdown" : "Copy Markdown"}
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => onCopy("answer")}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-1.5 text-xs font-semibold text-purple-300 transition-colors hover:bg-purple-500/20"
+                    >
+                        {copiedType === "answer" ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Zap className="h-3.5 w-3.5 text-purple-400" />}
+                        {copiedType === "answer" ? "Copied Capsule" : "Copy AI Answer"}
+                    </button>
+                </div>
+            </div>
+
+            {/* Google SERP Snippet Preview */}
+            <div className="rounded-2xl border border-border bg-card p-6 space-y-4 shadow-sm">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                    <div className="flex items-center gap-2">
+                        <Globe className="h-4 w-4 text-blue-400" />
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                            Google Search Result (Organic Snippet)
+                        </h3>
+                    </div>
+                    <div className="flex items-center rounded-lg border border-border bg-background p-0.5 text-[11px]">
+                        <button
+                            type="button"
+                            onClick={() => setDevice("desktop")}
+                            className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${
+                                device === "desktop" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+                            }`}
+                        >
+                            Desktop
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setDevice("mobile")}
+                            className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${
+                                device === "mobile" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+                            }`}
+                        >
+                            Mobile
+                        </button>
+                    </div>
+                </div>
+
+                {/* Google Card */}
+                <div className={`space-y-1.5 ${device === "mobile" ? "max-w-md rounded-xl border border-border/60 bg-background/50 p-4" : ""}`}>
+                    {/* Breadcrumbs */}
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground font-sans">
+                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-400">
+                            O
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[12px] font-medium text-foreground leading-tight">OptiAISEO</span>
+                            <span className="text-[11px] text-muted-foreground truncate">https://optiaiseo.online › blog › {slug}</span>
+                        </div>
+                    </div>
+
+                    {/* Title */}
+                    <h4 className="text-lg font-medium text-blue-400 hover:underline cursor-pointer leading-snug">
+                        {blog.title} — OptiAISEO
+                    </h4>
+
+                    {/* Meta Description */}
+                    <p className="text-xs leading-relaxed text-muted-foreground font-sans">
+                        {snippet}...
+                    </p>
+
+                    {/* Schema / Rich Enhancements */}
+                    <div className="pt-2 flex flex-wrap items-center gap-2 text-[10px]">
+                        <span className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-muted-foreground">
+                            ★ 4.9 (48)
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-400">
+                            <Check className="h-3 w-3" /> Speakable JSON-LD
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 font-medium text-blue-400">
+                            Article Schema
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {/* AI Overview / Perplexity Direct Answer Simulator */}
+            <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-b from-purple-500/5 via-card to-card p-6 space-y-4 shadow-sm">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                    <div className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-purple-400 animate-pulse" />
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-purple-300">
+                            Google AI Overview &amp; Perplexity Citation Box
+                        </h3>
+                    </div>
+                    <span className="rounded-full border border-purple-500/30 bg-purple-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-300">
+                        AEO Synthesized
+                    </span>
+                </div>
+
+                {/* AI Box Content */}
+                <div className="space-y-3 font-sans">
+                    <p className="text-xs leading-relaxed text-foreground">
+                        <span className="font-bold text-white">Direct Answer: </span>
+                        {snippet}.
+                        <span className="ml-1 inline-flex items-center rounded-md border border-purple-500/40 bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-bold text-purple-300">
+                            [1]
+                        </span>
+                    </p>
+
+                    {keyTakeaways.length > 0 && (
+                        <div className="rounded-xl border border-border/80 bg-background/50 p-3.5 space-y-2">
+                            <h5 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                                Key Takeaways Cited by AI Engines:
+                            </h5>
+                            <ul className="space-y-1.5 text-xs text-muted-foreground">
+                                {keyTakeaways.map((point, idx) => (
+                                    <li key={idx} className="flex items-start gap-2">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-purple-400 mt-1.5 shrink-0" />
+                                        <span>{point}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    {/* Sourced Citation Footnote Card */}
+                    <div className="pt-2 flex items-center gap-3">
+                        <div className="flex items-center gap-2 rounded-xl border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-xs">
+                            <span className="font-bold text-purple-400">[1]</span>
+                            <div className="flex flex-col min-w-0">
+                                <span className="font-semibold text-foreground truncate max-w-[240px]">{blog.title}</span>
+                                <span className="text-[10px] text-muted-foreground font-mono truncate">optiaiseo.online</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalProps) {
     const [mode, setMode] = useState<ReviewMode>("write");
+    const [isFullScreen, setIsFullScreen] = useState(true);
+    const [copiedType, setCopiedType] = useState<string | null>(null);
     const [editedContent, setEditedContent] = useState(blog.content);
     // lastSavedContent tracks what is persisted server-side; hasUnsavedChanges derives from this
     const [lastSavedContent, setLastSavedContent] = useState(blog.content);
@@ -420,6 +621,24 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
     const [isImproving, setIsImproving] = useState(false);
     const [aiContent, setAiContent] = useState<string | null>(null);
     const [showAiReview, setShowAiReview] = useState(false);
+
+    const handleCopy = useCallback((type: "markdown" | "html" | "answer") => {
+        let textToCopy = "";
+        if (type === "markdown") {
+            textToCopy = editedContent;
+        } else if (type === "html") {
+            textToCopy = editedContent;
+        } else if (type === "answer") {
+            const clean = editedContent.replace(/<[^>]*>?/gm, " ").replace(/^#+\s+.*/gm, " ").replace(/\s+/g, " ").trim();
+            textToCopy = clean.slice(0, 300) + "...";
+        }
+        if (typeof navigator !== "undefined" && navigator.clipboard) {
+            navigator.clipboard.writeText(textToCopy);
+            setCopiedType(type);
+            toast.success(`Copied ${type === "markdown" ? "Markdown" : type === "html" ? "HTML" : "Answer Capsule"} to clipboard`);
+            setTimeout(() => setCopiedType(null), 2000);
+        }
+    }, [editedContent]);
 
     const citationScore = blog.citationScore ?? null;
     const citationCriteria: CitationCriterion[] = Array.isArray(blog.citationCriteria)
@@ -569,11 +788,11 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
     }, [blog.id, hasUnsavedChanges, onClose, onPublish]);
 
     return (
-        <div className="fixed inset-0 z-50 bg-background">
-            <div className="flex h-full flex-col">
+        <div className={isFullScreen ? "fixed inset-0 z-50 bg-background" : "fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-2 sm:p-6"}>
+            <div className={isFullScreen ? "flex h-full w-full flex-col" : "relative flex h-full max-h-[94vh] w-full max-w-7xl flex-col rounded-2xl border border-border bg-background shadow-2xl overflow-hidden"}>
                 {/* ── Top bar ── */}
                 <header className="flex h-16 shrink-0 items-center border-b border-border bg-card">
-                    <div className="flex min-w-0 flex-1 items-center gap-4 px-5">
+                    <div className="flex min-w-0 flex-1 items-center gap-3 px-5">
                         <button
                             type="button"
                             onClick={onClose}
@@ -581,6 +800,16 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                             className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                         >
                             <X className="h-4 w-4" />
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setIsFullScreen((s) => !s)}
+                            aria-label={isFullScreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+                            title={isFullScreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        >
+                            {isFullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                         </button>
 
                         <div className="h-6 w-px bg-border" />
@@ -641,6 +870,16 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                             <ShieldCheck className="h-3.5 w-3.5" />
                             Review
                         </button>
+                        <button
+                            type="button"
+                            onClick={() => setMode("simulate")}
+                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                                mode === "simulate" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                            }`}
+                        >
+                            <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+                            SERP &amp; AI
+                        </button>
                     </div>
                 </header>
 
@@ -658,7 +897,7 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                                     onScoreChange={handleScoreChange}
                                 />
                             </div>
-                        ) : (
+                        ) : mode === "review" ? (
                             <div className="mx-auto w-full max-w-4xl px-8 py-12">
                                 <article className="prose prose-invert prose-emerald max-w-none prose-headings:scroll-m-20 prose-img:w-full prose-img:rounded-xl prose-img:object-cover">
                                     <h1>{blog.title}</h1>
@@ -677,6 +916,13 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                                     </ReactMarkdown>
                                 </article>
                             </div>
+                        ) : (
+                            <SerpAiSimulator
+                                blog={blog}
+                                content={editedContent}
+                                onCopy={handleCopy}
+                                copiedType={copiedType}
+                            />
                         )}
                     </section>
 

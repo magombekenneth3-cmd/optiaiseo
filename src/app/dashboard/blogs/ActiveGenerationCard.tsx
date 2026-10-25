@@ -60,18 +60,33 @@ export function ActiveGenerationCard({
 }: {
     generatingBlogs: GeneratingBlog[];
 }) {
-    const blog = generatingBlogs[0];
-    if (!blog) return null;
+    const [selectedId, setSelectedId] = useState<string>(generatingBlogs[0]?.id ?? "");
 
-    return <GenerationTracker blog={blog} allBlogs={generatingBlogs} />;
+    // Fallback to first if selected blog finishes
+    const activeBlog = generatingBlogs.find((b) => b.id === selectedId) ?? generatingBlogs[0];
+    if (!activeBlog) return null;
+
+    return (
+        <GenerationTracker
+            key={activeBlog.id}
+            blog={activeBlog}
+            allBlogs={generatingBlogs}
+            selectedId={activeBlog.id}
+            onSelectBlog={(id) => setSelectedId(id)}
+        />
+    );
 }
 
 function GenerationTracker({
     blog,
     allBlogs,
+    selectedId,
+    onSelectBlog,
 }: {
     blog: GeneratingBlog;
     allBlogs: GeneratingBlog[];
+    selectedId?: string;
+    onSelectBlog?: (id: string) => void;
 }) {
     const [step, setStep] = useState<string>("researching");
     const [failReason, setFailReason] = useState<string | null>(null);
@@ -181,6 +196,36 @@ function GenerationTracker({
 
     return (
         <div className="flex-1 overflow-hidden rounded-2xl border border-purple-500/30 bg-zinc-950/90 shadow-2xl shadow-purple-500/10 backdrop-blur-xl">
+            {/* Interactive Multi-Article Queue Bar */}
+            {allBlogs.length > 1 && (
+                <div className="flex items-center gap-2 overflow-x-auto border-b border-white/10 bg-zinc-950/90 px-6 py-2.5">
+                    <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-purple-400 shrink-0">
+                        <Sparkles className="h-3 w-3" /> Queue ({allBlogs.length}):
+                    </span>
+                    <div className="flex items-center gap-2">
+                        {allBlogs.map((b, i) => {
+                            const isSelected = b.id === (selectedId ?? blog.id);
+                            const bTitle = b.title || b.targetKeywords?.[0] || `Article #${i + 1}`;
+                            return (
+                                <button
+                                    key={b.id}
+                                    type="button"
+                                    onClick={() => onSelectBlog?.(b.id)}
+                                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-semibold transition-all shrink-0 ${
+                                        isSelected
+                                            ? "border-purple-500/60 bg-purple-500/25 text-white shadow-sm shadow-purple-500/20"
+                                            : "border-white/5 bg-zinc-900/60 text-zinc-400 hover:border-white/15 hover:text-white"
+                                    }`}
+                                >
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    <span className="truncate max-w-[160px]">{bTitle}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             {/* Top Telemetry Banner Header */}
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 bg-zinc-900/80 px-6 py-4">
                 <div className="flex items-center gap-3">
@@ -320,10 +365,11 @@ function GenerationTracker({
             {allBlogs.length > 1 && (
                 <div className="flex items-center justify-between border-t border-white/10 bg-zinc-900/60 px-6 py-2.5 text-xs text-zinc-400">
                     <span className="font-semibold text-purple-300">
-                        + {allBlogs.length - 1} additional article{allBlogs.length - 1 > 1 ? "s" : ""} in generation queue
+                        Inspecting article {allBlogs.findIndex((b) => b.id === blog.id) + 1} of {allBlogs.length} in active pipeline
                     </span>
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
-                        Parallel Inngest Processing
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                        Background Workers Active
                     </span>
                 </div>
             )}
