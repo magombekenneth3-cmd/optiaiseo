@@ -5,11 +5,27 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/marketing/SiteFooter", () => ({ default: () => null }));
 vi.mock("@/components/marketing/NavAuthSection", () => ({ NavAuthSection: () => null }));
+vi.mock("@/components/marketing/MarketingNav", () => ({ MarketingNav: () => null }));
+vi.mock("@/components/home/HomeClient", () => ({ default: () => null }));
+vi.mock("@/app/actions/stats", () => ({ getPublicStats: vi.fn().mockResolvedValue({}) }));
+vi.mock("@/lib/auth", () => ({ authOptions: {} }));
+vi.mock("next/font/google", () => ({
+  Inter: () => ({ variable: "--font-inter", className: "inter" }),
+  Montserrat: () => ({ variable: "--font-montserrat", className: "montserrat" }),
+}));
 
 import fs from "fs";
 import path from "path";
 import sitemap from "@/app/sitemap";
 import robots from "@/app/robots";
+import { metadata as rootMetadata } from "@/app/layout";
+import { metadata as homeMetadata } from "@/app/page";
+import { metadata as termsMetadata } from "@/app/terms/page";
+import { metadata as privacyMetadata } from "@/app/privacy/page";
+import { metadata as securityMetadata } from "@/app/security/page";
+import { generateMetadata as generateToolsMetadata } from "@/app/tools/[slug]/page";
+import { generateMetadata as generateAeoGuideMetadata } from "@/app/aeo-guide/[slug]/page";
+import { generateMetadata as generateGuideMetadata } from "@/app/guide/[slug]/page";
 import { GUIDES } from "@/data/guides";
 import KEYWORDS from "@/data/keywords.json";
 import { NICHES, getNicheLeaderboardResult } from "@/lib/leaderboard";
@@ -166,13 +182,65 @@ describe("Programmatic Content & Internal Link Integrity", () => {
       expect(content.includes("www.optiaiseo.online")).toBe(false);
     });
 
-    it("configures 301 permanent redirects for www and railway domains in next.config.ts", () => {
+      it("configures 301 permanent redirects for www and railway domains in next.config.ts", () => {
       const configText = fs.readFileSync(path.resolve(process.cwd(), "next.config.ts"), "utf-8");
       expect(configText).toContain('value: "www.optiaiseo.online"');
       expect(configText).toContain("https://optiaiseo.online/:path*");
       expect(configText).toContain("optiaiseo-production.up.railway.app");
       expect(configText).toContain("optiaiseo-production-ac11.up.railway.app");
       expect(configText).toContain("statusCode: 301");
+    });
+  });
+
+  describe("Rendered Canonical Tags Audit & Child Inheritance Prevention", () => {
+    it("ensures root layout does NOT define alternates.canonical so child pages never inherit homepage canonical", () => {
+      expect(rootMetadata.alternates?.canonical).toBeUndefined();
+    });
+
+    it("ensures homepage explicitly defines canonical to https://optiaiseo.online/", () => {
+      expect(homeMetadata.alternates?.canonical).toBe("https://optiaiseo.online/");
+    });
+
+    it("ensures static legal and security pages define their own explicit canonical URLs", () => {
+      expect(termsMetadata.alternates?.canonical).toBe("https://optiaiseo.online/terms");
+      expect(privacyMetadata.alternates?.canonical).toBe("https://optiaiseo.online/privacy");
+      expect(securityMetadata.alternates?.canonical).toBe("https://optiaiseo.online/security");
+    });
+
+    it("ensures representative tools page generates its own distinct canonical URL and truthful dateModified", async () => {
+      const meta = await generateToolsMetadata({ params: Promise.resolve({ slug: "ai-seo-tools-usa" }) });
+      expect(meta.alternates?.canonical).toBe("https://optiaiseo.online/tools/ai-seo-tools-usa");
+      expect(meta.alternates?.canonical).not.toBe("https://optiaiseo.online/");
+
+      const toolsPageSource = fs.readFileSync(path.resolve(process.cwd(), "src/app/tools/[slug]/page.tsx"), "utf-8");
+      expect(toolsPageSource.includes('dateModified: "2026-09-15"')).toBe(false);
+    });
+
+    it("ensures representative aeo-guide page generates its own distinct canonical URL", async () => {
+      const meta = await generateAeoGuideMetadata({ params: Promise.resolve({ slug: "topical-authority-ai-search" }) });
+      expect(meta.alternates?.canonical).toBe("https://optiaiseo.online/aeo-guide/topical-authority-ai-search");
+      expect(meta.alternates?.canonical).not.toBe("https://optiaiseo.online/");
+    });
+
+    it("ensures representative guide page generates its own distinct canonical URL", async () => {
+      const meta = await generateGuideMetadata({ params: Promise.resolve({ slug: "how-to-rank-in-chatgpt" }) });
+      expect(meta.alternates?.canonical).toBe("https://optiaiseo.online/guide/how-to-rank-in-chatgpt");
+      expect(meta.alternates?.canonical).not.toBe("https://optiaiseo.online/");
+    });
+  });
+
+  describe("Redirect Relevance & Junk URL Handling", () => {
+    it("maps obsolete blog URLs to specific topical replacements and avoids generic hub Soft 404s", () => {
+      const configText = fs.readFileSync(path.resolve(process.cwd(), "next.config.ts"), "utf-8");
+      expect(configText).toContain("source: '/blog/topical-authority-guide', destination: '/aeo-guide/topical-authority-ai-search'");
+      expect(configText).toContain("source: '/blog/ai-citation-guide', destination: '/aeo-guide/ai-citation-tracking'");
+      expect(configText).toContain("source: '/blog/automated-schema-fix-github', destination: '/guide/schema-markup-ai-search'");
+      expect(configText).toContain("source: '/blog/nextjs-seo-guide', destination: '/seo'");
+    });
+
+    it("does not redirect /100 to homepage, permitting a natural 404 response", () => {
+      const configText = fs.readFileSync(path.resolve(process.cwd(), "next.config.ts"), "utf-8");
+      expect(configText.includes("source: '/100'")).toBe(false);
     });
   });
 });

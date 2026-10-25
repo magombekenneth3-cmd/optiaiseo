@@ -4,7 +4,9 @@ import Link from "next/link";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
+
+const SITE_URL = CANONICAL_SITE_URL;
 
 // Each slug targets a specific low-competition long-tail query.
 

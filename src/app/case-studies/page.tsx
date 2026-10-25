@@ -3,7 +3,9 @@ import Link from "next/link";
 import { ArrowRight, BarChart2, TrendingUp, Users } from "lucide-react";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
+
+const SITE_URL = CANONICAL_SITE_URL;
 
 export const metadata: Metadata = {
     title: "SEO Case Studies | Proven Results | OptiAISEO",

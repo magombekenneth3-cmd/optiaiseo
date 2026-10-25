@@ -5,7 +5,9 @@ import { ArrowRight, BookOpen, Sparkles } from "lucide-react";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 
-const BLOG_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
+
+const BLOG_SITE_URL = CANONICAL_SITE_URL;
 
 export const metadata: Metadata = {
     title: "SEO & AI Search Blog — Guides, Research & Insights | OptiAISEO",

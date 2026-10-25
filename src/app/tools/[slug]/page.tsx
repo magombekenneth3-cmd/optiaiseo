@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import KEYWORDS from "@/data/keywords.json";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
 
 // Types
 
@@ -56,7 +57,7 @@ export async function generateMetadata({
   if (!page) return { title: "Not Found" };
 
   const description = `Discover the best ${page.keyword} in 2026. Honest comparison of pricing, features, and ROI.${page.region && page.region !== "Global" ? ` Optimised for ${page.region}.` : ""} Updated monthly.`;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online";
+  const siteUrl = CANONICAL_SITE_URL;
 
   return {
     title: page.title,
@@ -131,7 +132,7 @@ function buildSchema(page: Keyword, siteUrl: string) {
         description: `Discover the best ${page.keyword} in 2026.`,
         url: `${siteUrl}/tools/${page.slug}`,
         datePublished: "2026-01-01",
-        dateModified: "2026-09-15",
+        dateModified: "2026-01-01",
         publisher: {
           "@type": "Organization",
           name: "OptiAISEO",
@@ -189,7 +190,7 @@ export default async function ToolsPage({
   if (!page) notFound();
 
   const related = getRelated(page);
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online";
+  const siteUrl = CANONICAL_SITE_URL;
 
   const intentLabel: Record<string, string> = {
     free: "Free Tools",

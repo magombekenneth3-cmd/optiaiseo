@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import UseCasePage from "@/components/marketing/UseCasePage";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
+
+const SITE_URL = CANONICAL_SITE_URL;
 
 export const metadata: Metadata = {
   title: "SEO & AI Visibility Platform for SaaS Companies | OptiAISEO",

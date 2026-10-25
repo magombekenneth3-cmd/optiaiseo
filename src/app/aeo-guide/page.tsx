@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import AEO_PAGES from "@/data/aeo-pages.json";
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
 
 interface AeoPage {
   slug: string;
@@ -14,12 +15,11 @@ export const metadata: Metadata = {
   description:
     "Browse 60+ AEO guides covering how to rank in ChatGPT, Perplexity, and Google AI Overviews. Updated for 2026.",
   alternates: {
-    canonical:
-      (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online") + "/aeo-guide",
+    canonical: "https://optiaiseo.online/aeo-guide",
   },
 };
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = CANONICAL_SITE_URL;
 
 const aeoGuideSchema = {
   "@context": "https://schema.org",

@@ -5,6 +5,9 @@ import Link from "next/link";
 export const metadata: Metadata = {
     title: "Security & Data Privacy | OptiAISEO",
     description: "How OptiAISEO protects your data: encryption at rest and in transit, no AI training on your data, GDPR compliance, data retention policies, and our SOC 2 roadmap.",
+    alternates: {
+        canonical: "https://optiaiseo.online/security",
+    },
 };
 
 const SECURITY_SCHEMA = {

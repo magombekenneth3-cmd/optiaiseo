@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import SiteFooter from "@/components/marketing/SiteFooter";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
+
+const SITE_URL = CANONICAL_SITE_URL;
 const PAGE_URL = `${SITE_URL}/aeo`;
 const TITLE = "Track Your Brand in ChatGPT, Claude & Perplexity | OptiAISEO";
 const DESC = "See exactly where your brand appears across ChatGPT, Claude, Perplexity & Gemini. Daily AI citation tracking in one dashboard. Try free.";

@@ -7,9 +7,7 @@ export const metadata: Metadata = {
   description:
     "Browse 100+ curated SEO tool guides by region, pricing, and intent. Find the best free, cheap, and AI-powered SEO tools for your market.",
   alternates: {
-    canonical:
-      (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online") +
-      "/tools",
+    canonical: "https://optiaiseo.online/tools",
   },
 };
 

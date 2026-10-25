@@ -3,7 +3,9 @@ import Link from "next/link";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import GeoContext from "@/components/seoContext/GeoContext";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
+
+const SITE_URL = CANONICAL_SITE_URL;
 const PAGE_URL = `${SITE_URL}/geo`;
 const TITLE = "Generative Engine Optimization (GEO) — Complete Guide 2026";
 const DESC = "GEO helps your brand appear in AI-generated answers from ChatGPT, Perplexity, Claude, and Google AI Overviews. Learn the strategies that work.";

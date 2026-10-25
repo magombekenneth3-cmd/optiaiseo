@@ -5,11 +5,11 @@ import HomeClient from "@/components/home/HomeClient";
 import { getPublicStats } from "@/app/actions/stats";
 import { authOptions } from "@/lib/auth";
 
+import { CANONICAL_SITE_URL, getCanonicalUrl } from "@/lib/canonical";
+
 // Stats are cached via unstable_cache (1h TTL) in src/app/actions/stats.ts
 
-const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online"
-).replace(/\/$/, "");
+const SITE_URL = CANONICAL_SITE_URL;
 
 const PAGE_TITLE = "OptiAISEO — AI SEO Platform That Fixes Itself | Start Free";
 const PAGE_DESC =
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
   title: PAGE_TITLE,
   description: PAGE_DESC,
   alternates: {
-    canonical: SITE_URL,
+    canonical: getCanonicalUrl("/"),
   },
   openGraph: {
     siteName: "OptiAISEO",

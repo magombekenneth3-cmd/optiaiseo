@@ -196,22 +196,21 @@ const nextConfig: NextConfig = {
       { source: '/guide/what-is-generative-share-of-voice', destination: '/geo', statusCode: 301 },
       { source: '/tools/free-backlink-checker-usa', destination: '/tools/free-backlink-checker', statusCode: 301 },
 
-      // ── Deleted blog posts — 301 to hub ─────────────────────────────────
-      // These were published, indexed by Google, then unpublished/deleted.
-      // 301 reclaims residual link equity and clears GSC 404 errors.
-      { source: '/blog/entity-seo-2026', destination: '/blog', statusCode: 301 },
-      { source: '/blog/entity-seo-guide', destination: '/blog', statusCode: 301 },
-      { source: '/blog/gsov-tracking-guide', destination: '/blog', statusCode: 301 },
-      { source: '/blog/topical-authority-guide', destination: '/blog', statusCode: 301 },
-      { source: '/blog/generative-search-occupancy-guide', destination: '/blog', statusCode: 301 },
-      { source: '/blog/ai-citation-guide', destination: '/blog', statusCode: 301 },
-      { source: '/blog/automated-schema-fix-github', destination: '/blog', statusCode: 301 },
-      { source: '/blog/nextjs-seo-guide', destination: '/blog', statusCode: 301 },
+      // ── Obsolete blog posts — 301 to relevant topical guide ─────────────
+      // Map to exact topical replacements instead of generic /blog hub to prevent Soft 404s.
+      { source: '/blog/entity-seo-2026', destination: '/aeo-guide/knowledge-graph-seo', statusCode: 301 },
+      { source: '/blog/entity-seo-guide', destination: '/aeo-guide/knowledge-graph-seo', statusCode: 301 },
+      { source: '/blog/gsov-tracking-guide', destination: '/aeo-guide/what-is-generative-engine-optimization', statusCode: 301 },
+      { source: '/blog/topical-authority-guide', destination: '/aeo-guide/topical-authority-ai-search', statusCode: 301 },
+      { source: '/blog/generative-search-occupancy-guide', destination: '/aeo-guide/what-is-generative-engine-optimization', statusCode: 301 },
+      { source: '/blog/ai-citation-guide', destination: '/aeo-guide/ai-citation-tracking', statusCode: 301 },
+      { source: '/blog/automated-schema-fix-github', destination: '/guide/schema-markup-ai-search', statusCode: 301 },
+      { source: '/blog/nextjs-seo-guide', destination: '/seo', statusCode: 301 },
 
-      // ── Junk URLs that Google crawled ───────────────────────────────────
-      // /$ — regex/template leak; /100 — spurious crawl from page content.
+      // ── Junk URLs from template typo ────────────────────────────────────
+      // /$ was a regex/template link artifact for the homepage.
+      // Note: /100 was removed so it returns a natural 404 rather than a Soft 404 redirect.
       { source: '/$', destination: '/', statusCode: 301 },
-      { source: '/100', destination: '/', statusCode: 301 },
     ];
   },
 };

@@ -5,6 +5,9 @@ import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 export const metadata: Metadata = {
     title: "Terms of Service | OptiAISEO",
     description: "Read the Terms of Service for OptiAISEO.",
+    alternates: {
+        canonical: "https://optiaiseo.online/terms",
+    },
 };
 
 const TERMS_SCHEMA = {

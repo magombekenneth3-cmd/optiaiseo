@@ -1,6 +1,7 @@
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
 import { Metadata } from "next";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+const SITE_URL = CANONICAL_SITE_URL;
 
 export const metadata: Metadata = {
     title: "SEO Tool Pricing — Free Plan Available | OptiAISEO",

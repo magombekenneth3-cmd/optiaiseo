@@ -31,7 +31,9 @@ function sanitize(html: string) {
     return sanitizeHtml(html, SANITIZE_OPTS);
 }
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
+
+const SITE_URL = CANONICAL_SITE_URL;
 
 interface Props { params: Promise<{ slug: string }> }
 

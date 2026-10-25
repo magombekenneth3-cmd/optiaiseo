@@ -118,6 +118,20 @@ const PUBLIC_PAGE_PREFIXES = [
 ];
 
 export async function middleware(request: NextRequest) {
+    // ── Canonical host consolidation ─────────────────────────────────────────
+    // Fast-path redirect for non-canonical hostnames directly to apex HTTPS.
+    // Preserves pathname and search query in a single 301 hop.
+    const rawHost = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
+    const host = rawHost.toLowerCase().split(":")[0];
+    if (
+        host === "www.optiaiseo.online" ||
+        host === "optiaiseo-production.up.railway.app" ||
+        host === "optiaiseo-production-ac11.up.railway.app"
+    ) {
+        const canonicalUrl = new URL(request.nextUrl.pathname + request.nextUrl.search, "https://optiaiseo.online");
+        return NextResponse.redirect(canonicalUrl, 301);
+    }
+
     const { pathname } = request.nextUrl;
 
     const nonce = Buffer.from(crypto.randomUUID()).toString("base64");

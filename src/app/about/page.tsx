@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import SiteFooter from "@/components/marketing/SiteFooter";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
+
+const SITE_URL = CANONICAL_SITE_URL;
 
 export const metadata: Metadata = {
   title: "About OptiAISEO — AI SEO & Automated Audit Platform",

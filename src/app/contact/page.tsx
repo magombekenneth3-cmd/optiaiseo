@@ -3,7 +3,9 @@ import Link from "next/link";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import { CopyEmailButton } from "./CopyEmailButton";
 
-const CONTACT_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
+
+const CONTACT_SITE_URL = CANONICAL_SITE_URL;
 
 export const metadata: Metadata = {
   title: "Contact OptiAISEO — Get in Touch",

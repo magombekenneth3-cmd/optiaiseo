@@ -54,9 +54,6 @@ const SITE_DESC =
 
 export const metadata: Metadata = {
   metadataBase: SITE_ORIGIN,
-  alternates: {
-    canonical: "/",
-  },
   title: {
     default: SITE_TITLE,
     template: "%s | OptiAISEO",

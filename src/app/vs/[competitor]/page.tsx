@@ -18,6 +18,7 @@ import {
 import { ALTERNATIVES } from "../alternatives-data";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import { NavAuthSection } from "@/components/marketing/NavAuthSection";
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
 
 interface CompetitorData {
   slug: string;
@@ -1695,9 +1696,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { competitor } = await params;
   const c = COMPETITORS[competitor];
   if (!c) return {};
-  const siteUrl = (
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online"
-  ).replace(/\/$/, "");
+  const siteUrl = CANONICAL_SITE_URL;
   const m = META[competitor] ?? {
     title: `Best ${c.name} Alternatives in 2026 (Tested and Compared)`,
     description: `Looking for a ${c.name} alternative? OptiAISEO adds AI search visibility tracking across ChatGPT and Claude, automated GitHub code fixes, and AI content generation — at a fraction of ${c.name}'s price.`,
@@ -1741,9 +1740,7 @@ export default async function VsPage({ params }: Props) {
   const testRows = getTestDataRows(competitor, c.name, c.pricing);
   const meta = META[competitor];
   const useCases = USE_CASES[competitor];
-  const siteUrl = (
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online"
-  ).replace(/\/$/, "");
+  const siteUrl = CANONICAL_SITE_URL;
 
   const competitorScore = OVERALL_SCORES[competitor] ?? 0;
   const optiScore = OVERALL_SCORES["optiaiseo"] ?? 88;

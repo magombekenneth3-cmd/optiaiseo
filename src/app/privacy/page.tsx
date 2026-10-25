@@ -5,6 +5,9 @@ import { NavAuthSection } from "@/components/marketing/NavAuthSection";
 export const metadata: Metadata = {
     title: "Privacy Policy | OptiAISEO",
     description: "Read the Privacy Policy for OptiAISEO.",
+    alternates: {
+        canonical: "https://optiaiseo.online/privacy",
+    },
 };
 
 const PRIVACY_SCHEMA = {

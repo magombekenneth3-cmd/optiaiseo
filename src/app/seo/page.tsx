@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import SiteFooter from "@/components/marketing/SiteFooter";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
+
+const SITE_URL = CANONICAL_SITE_URL;
 const PAGE_URL = `${SITE_URL}/seo`;
 const TITLE = "What Is SEO? Complete Guide for 2026 | OptiAISEO";
 const DESC = "Learn what SEO is, how it works, and how to rank higher on Google in 2026. Step-by-step SEO guide for beginners and advanced users.";

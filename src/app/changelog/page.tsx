@@ -1,7 +1,9 @@
 import { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 
-const CHANGELOG_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
+
+const CHANGELOG_SITE_URL = CANONICAL_SITE_URL;
 
 export const metadata: Metadata = {
     title: "Changelog | OptiAISEO",

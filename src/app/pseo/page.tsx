@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import SiteFooter from "@/components/marketing/SiteFooter";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
+
+const SITE_URL = CANONICAL_SITE_URL;
 const PAGE_URL = `${SITE_URL}/pseo`;
 const TITLE = "What Is Programmatic SEO (pSEO)? Complete Guide 2026 | OptiAISEO";
 const DESC = "Learn what programmatic SEO is, how it works, and how to scale to thousands of pages in 2026. Real examples, templates, and step-by-step playbook.";

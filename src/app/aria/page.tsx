@@ -3,7 +3,9 @@ import Link from "next/link";
 import { ArrowLeft, Mic, GitPullRequest, Zap, Code, LayoutDashboard } from "lucide-react";
 import { AriaDemoInterface } from "@/components/home/AriaDemoInterface";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
+
+const SITE_URL = CANONICAL_SITE_URL;
 
 export const metadata: Metadata = {
   title: "Manage SEO by Voice — Meet Aria | OptiAISEO",

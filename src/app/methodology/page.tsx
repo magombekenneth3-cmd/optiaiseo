@@ -1,7 +1,9 @@
 import { Metadata } from "next";
 import { Brain, RefreshCw, Target, BarChart2, AlertCircle, Calendar } from "lucide-react";
 
-const METHODOLOGY_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online").replace(/\/$/, "");
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
+
+const METHODOLOGY_SITE_URL = CANONICAL_SITE_URL;
 
 export const metadata: Metadata = {
     title: "AEO Methodology — How We Measure AI Search Visibility | OptiAISEO",

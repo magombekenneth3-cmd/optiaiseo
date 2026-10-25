@@ -5,6 +5,7 @@ import AEO_PAGES from "@/data/aeo-pages.json";
 import { AEO_CONTENT } from "@/data/aeo-content";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
+import { CANONICAL_SITE_URL } from "@/lib/canonical";
 
 // Types
 
@@ -43,7 +44,7 @@ export async function generateMetadata({
   if (!page) return { title: "Not Found" };
 
   const description = buildDescription(page);
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online";
+  const siteUrl = CANONICAL_SITE_URL;
 
   return {
     title: page.title,
@@ -144,7 +145,7 @@ export default async function AeoGuidePage({
   const pageContent = AEO_CONTENT[slug];
   if (!pageContent) notFound();
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://optiaiseo.online";
+  const siteUrl = CANONICAL_SITE_URL;
   const sections = pageContent.sections;
   const faqs = pageContent.faqs;
   const related = getRelated(page);
