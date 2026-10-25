@@ -6,7 +6,10 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/components/marketing/SiteFooter", () => ({ default: () => null }));
 vi.mock("@/components/marketing/NavAuthSection", () => ({ NavAuthSection: () => null }));
 
+import fs from "fs";
+import path from "path";
 import sitemap from "@/app/sitemap";
+import robots from "@/app/robots";
 import { GUIDES } from "@/data/guides";
 import KEYWORDS from "@/data/keywords.json";
 import { NICHES, getNicheLeaderboardResult } from "@/lib/leaderboard";
@@ -142,5 +145,34 @@ describe("Programmatic Content & Internal Link Integrity", () => {
         }
       }
     }
+  });
+
+  describe("Canonical Hostname & WWW Consolidation", () => {
+    it("enforces https://optiaiseo.online host and sitemap in robots.ts", () => {
+      const r = robots();
+      expect(r.host).toBe("https://optiaiseo.online");
+      expect(r.sitemap).toBe("https://optiaiseo.online/sitemap.xml");
+    });
+
+    it("contains no www.optiaiseo.online URLs in public/llms.txt", () => {
+      const content = fs.readFileSync(path.resolve(process.cwd(), "public/llms.txt"), "utf-8");
+      expect(content.includes("www.optiaiseo.online")).toBe(false);
+      expect(content.includes("https://optiaiseo.online")).toBe(true);
+    });
+
+    it("declares canonical production server in public/openapi.yaml", () => {
+      const content = fs.readFileSync(path.resolve(process.cwd(), "public/openapi.yaml"), "utf-8");
+      expect(content.includes("https://optiaiseo.online/api/v1")).toBe(true);
+      expect(content.includes("www.optiaiseo.online")).toBe(false);
+    });
+
+    it("configures 301 permanent redirects for www and railway domains in next.config.ts", () => {
+      const configText = fs.readFileSync(path.resolve(process.cwd(), "next.config.ts"), "utf-8");
+      expect(configText).toContain('value: "www.optiaiseo.online"');
+      expect(configText).toContain("https://optiaiseo.online/:path*");
+      expect(configText).toContain("optiaiseo-production.up.railway.app");
+      expect(configText).toContain("optiaiseo-production-ac11.up.railway.app");
+      expect(configText).toContain("statusCode: 301");
+    });
   });
 });

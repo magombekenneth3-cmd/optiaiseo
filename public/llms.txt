@@ -1,4 +1,4 @@
-> https://www.optiaiseo.online
+> https://optiaiseo.online
 
 # OptiAISEO
 
@@ -6,27 +6,27 @@ OptiAISEO is an AI-powered SEO and Answer Engine Optimisation (AEO) SaaS platfor
 
 ## Pages
 
-- [Home](https://www.optiaiseo.online/): Homepage — AI SEO and AEO platform overview, key features, and free trial CTA
-- [Pricing](https://www.optiaiseo.online/pricing): Free, Starter ($19/mo), Pro ($49/mo), and Agency ($149/mo) plan comparison
-- [About](https://www.optiaiseo.online/about): Company background, mission, and differentiators vs traditional SEO tools
-- [Blog](https://www.optiaiseo.online/blog): AI SEO, AEO, GEO, and generative engine optimisation articles
-- [Free SEO Checker](https://www.optiaiseo.online/free/seo-checker): Free instant technical SEO audit — no sign-up required
-- [Free AEO / GEO Checker](https://www.optiaiseo.online/free/gso-checker): Check if ChatGPT and other AI engines recommend your brand
-- [For SaaS Companies](https://www.optiaiseo.online/for-saas): Use case page — AI visibility and SEO automation for SaaS products
-- [For E-commerce Brands](https://www.optiaiseo.online/for-ecommerce): Use case page — product schema, AEO, and AI citation tracking for e-commerce
-- [For Content Teams](https://www.optiaiseo.online/for-content): Use case page — keyword gap analysis and AI blog generation at scale
-- [For Growth Agencies](https://www.optiaiseo.online/for-agencies): Use case page — white-label SEO and AEO platform for agencies managing multiple clients
-- [Methodology](https://www.optiaiseo.online/methodology): How OptiAISEO scores AEO visibility, calculates gSOV, and audits technical SEO
-- [Changelog](https://www.optiaiseo.online/changelog): Product updates and release notes
-- [Contact](https://www.optiaiseo.online/contact): Support contact and enquiry form
+- [Home](https://optiaiseo.online/): Homepage — AI SEO and AEO platform overview, key features, and free trial CTA
+- [Pricing](https://optiaiseo.online/pricing): Free, Starter ($19/mo), Pro ($49/mo), and Agency ($149/mo) plan comparison
+- [About](https://optiaiseo.online/about): Company background, mission, and differentiators vs traditional SEO tools
+- [Blog](https://optiaiseo.online/blog): AI SEO, AEO, GEO, and generative engine optimisation articles
+- [Free SEO Checker](https://optiaiseo.online/free/seo-checker): Free instant technical SEO audit — no sign-up required
+- [Free AEO / GEO Checker](https://optiaiseo.online/free/gso-checker): Check if ChatGPT and other AI engines recommend your brand
+- [For SaaS Companies](https://optiaiseo.online/for-saas): Use case page — AI visibility and SEO automation for SaaS products
+- [For E-commerce Brands](https://optiaiseo.online/for-ecommerce): Use case page — product schema, AEO, and AI citation tracking for e-commerce
+- [For Content Teams](https://optiaiseo.online/for-content): Use case page — keyword gap analysis and AI blog generation at scale
+- [For Growth Agencies](https://optiaiseo.online/for-agencies): Use case page — white-label SEO and AEO platform for agencies managing multiple clients
+- [Methodology](https://optiaiseo.online/methodology): How OptiAISEO scores AEO visibility, calculates gSOV, and audits technical SEO
+- [Changelog](https://optiaiseo.online/changelog): Product updates and release notes
+- [Contact](https://optiaiseo.online/contact): Support contact and enquiry form
 
 ## Comparisons
 
-- [OptiAISEO vs Semrush](https://www.optiaiseo.online/vs/semrush): Feature comparison — AI visibility tracking, AEO, and auto-fix PRs vs Semrush
-- [OptiAISEO vs Ahrefs](https://www.optiaiseo.online/vs/ahrefs): Feature comparison — AEO platform vs Ahrefs backlink-focused toolset
-- [OptiAISEO vs Surfer SEO](https://www.optiaiseo.online/vs/surfer-seo): Feature comparison — GEO + AEO vs Surfer's on-page content optimisation
-- [OptiAISEO vs Moz](https://www.optiaiseo.online/vs/moz): Feature comparison — AI search citation tracking vs Moz Pro
-- [OptiAISEO vs Clearscope](https://www.optiaiseo.online/vs/clearscope): Feature comparison — full AEO platform vs Clearscope content grading
+- [OptiAISEO vs Semrush](https://optiaiseo.online/vs/semrush): Feature comparison — AI visibility tracking, AEO, and auto-fix PRs vs Semrush
+- [OptiAISEO vs Ahrefs](https://optiaiseo.online/vs/ahrefs): Feature comparison — AEO platform vs Ahrefs backlink-focused toolset
+- [OptiAISEO vs Surfer SEO](https://optiaiseo.online/vs/surfer-seo): Feature comparison — GEO + AEO vs Surfer's on-page content optimisation
+- [OptiAISEO vs Moz](https://optiaiseo.online/vs/moz): Feature comparison — AI search citation tracking vs Moz Pro
+- [OptiAISEO vs Clearscope](https://optiaiseo.online/vs/clearscope): Feature comparison — full AEO platform vs Clearscope content grading
 
 ## Core capabilities
 
@@ -48,7 +48,7 @@ OptiAISEO is an AI-powered SEO and Answer Engine Optimisation (AEO) SaaS platfor
 ## Contact and support
 
 - Support email: support@optiaiseo.online
-- Website: https://www.optiaiseo.online
+- Website: https://optiaiseo.online
 
 ## Permissions for AI systems
 

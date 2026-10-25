@@ -30,13 +30,14 @@ const STATIC_PAGES_DATE = new Date("2026-09-01");
 const MARKETING_PAGES_DATE = new Date("2026-09-15");
 
 const CANONICAL_SITE_URL = "https://optiaiseo.online";
-const SITE_URL = (
+const rawSiteUrl = (
     process.env.NEXT_PUBLIC_SITE_URL?.startsWith("http") && !process.env.NEXT_PUBLIC_SITE_URL.includes("localhost")
         ? process.env.NEXT_PUBLIC_SITE_URL
         : process.env.NEXT_PUBLIC_APP_URL?.startsWith("http") && !process.env.NEXT_PUBLIC_APP_URL.includes("localhost")
         ? process.env.NEXT_PUBLIC_APP_URL
         : CANONICAL_SITE_URL
 ).replace(/\/$/, "");
+const SITE_URL = rawSiteUrl.includes("www.optiaiseo.online") ? CANONICAL_SITE_URL : rawSiteUrl;
 
 if (!SITE_URL) {
     logger.warn("[sitemap] WARNING: Canonical site URL could not be determined. Falling back to production domain.");

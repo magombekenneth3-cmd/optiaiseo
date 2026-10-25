@@ -22,7 +22,7 @@ info:
     | 503    | Endpoint temporarily unavailable |
 
 servers:
-  - url: https://www.optiaiseo.online/api/v1
+  - url: https://optiaiseo.online/api/v1
     description: Production
 
 security:

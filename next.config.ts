@@ -155,6 +155,17 @@ const nextConfig: NextConfig = {
         destination: 'https://optiaiseo.online/:path*',
         statusCode: 301,
       },
+      {
+        source: '/:path*',
+        has: [
+          {
+            type: 'host',
+            value: 'optiaiseo-production-ac11.up.railway.app',
+          },
+        ],
+        destination: 'https://optiaiseo.online/:path*',
+        statusCode: 301,
+      },
 
       // ── AEO guide consolidation — 301 redirects ─────────────────────────
       // 21 consolidated slugs → their canonical pages.

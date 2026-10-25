@@ -6,7 +6,7 @@
 
 /** Chrome-like UA avoids WAF blocks from Cloudflare / Akamai while remaining honest about purpose. */
 export const CRAWLER_USER_AGENT =
-    "Mozilla/5.0 (compatible; OptiAISEO/1.0; +https://optiaiseo.com/bot) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    "Mozilla/5.0 (compatible; OptiAISEO/1.0; +https://optiaiseo.online/bot) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 /** Maximum redirect hops before giving up — matches Googlebot's behaviour. */
 export const MAX_REDIRECT_HOPS = 5;

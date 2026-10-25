@@ -1,10 +1,14 @@
 import type { MetadataRoute } from "next";
 
-const SITE = (
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "https://optiaiseo.online"
+const CANONICAL_SITE_URL = "https://optiaiseo.online";
+const rawSite = (
+    process.env.NEXT_PUBLIC_SITE_URL?.startsWith("http") && !process.env.NEXT_PUBLIC_SITE_URL.includes("localhost")
+        ? process.env.NEXT_PUBLIC_SITE_URL
+        : process.env.NEXT_PUBLIC_APP_URL?.startsWith("http") && !process.env.NEXT_PUBLIC_APP_URL.includes("localhost")
+        ? process.env.NEXT_PUBLIC_APP_URL
+        : CANONICAL_SITE_URL
 ).replace(/\/$/, "");
+const SITE = rawSite.includes("www.optiaiseo.online") ? CANONICAL_SITE_URL : rawSite;
 
 export default function robots(): MetadataRoute.Robots {
     return {

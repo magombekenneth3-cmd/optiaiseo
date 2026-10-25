@@ -31,7 +31,15 @@ const FALLBACK_ORIGIN = "https://optiaiseo.online";
 function getSiteOrigin(): URL {
   const raw = process.env.NEXT_PUBLIC_SITE_URL || "";
   try {
-    return new URL(raw);
+    const url = new URL(raw);
+    if (
+      url.hostname.includes("localhost") ||
+      url.hostname.includes("127.0.0.1") ||
+      url.hostname.includes("www.optiaiseo.online")
+    ) {
+      return new URL(FALLBACK_ORIGIN);
+    }
+    return url;
   } catch {
     return new URL(FALLBACK_ORIGIN);
   }
@@ -46,6 +54,9 @@ const SITE_DESC =
 
 export const metadata: Metadata = {
   metadataBase: SITE_ORIGIN,
+  alternates: {
+    canonical: "/",
+  },
   title: {
     default: SITE_TITLE,
     template: "%s | OptiAISEO",
