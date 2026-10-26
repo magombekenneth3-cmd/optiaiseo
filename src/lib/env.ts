@@ -194,6 +194,8 @@ export function validateEnv() {
         UPSTASH_REDIS_REST_URL: "Upstash Redis rate limiting",
         GOOGLE_CLIENT_EMAIL: "Google Service Account (GSC indexing)",
         SERPAPI_KEY: "SERP data (SerpAPI)",
+        SERPER_API_KEY: "SERP data (Serper)",
+        DATAFORSEO_LOGIN: "Keyword volume, difficulty and backlinks (DataForSEO)",
         BROWSERLESS_URL: "JS-rendered crawling (Browserless)",
     };
 
@@ -231,6 +233,9 @@ if (
     if (!process.env.STRIPE_STARTER_PRICE_ID) missing.push("STRIPE_STARTER_PRICE_ID")
     if (!process.env.STRIPE_AGENCY_PRICE_ID)  missing.push("STRIPE_AGENCY_PRICE_ID")
     if (!process.env.STRIPE_CREDIT_PACK_PRICE_ID) missing.push("STRIPE_CREDIT_PACK_PRICE_ID")
+    if (!process.env.STRIPE_STARTER_ANNUAL_PRICE_ID) missing.push("STRIPE_STARTER_ANNUAL_PRICE_ID")
+    if (!process.env.STRIPE_PRO_ANNUAL_PRICE_ID)     missing.push("STRIPE_PRO_ANNUAL_PRICE_ID")
+    if (!process.env.STRIPE_AGENCY_ANNUAL_PRICE_ID)  missing.push("STRIPE_AGENCY_ANNUAL_PRICE_ID")
     if (!process.env.UPSTASH_REDIS_REST_URL)  missing.push("UPSTASH_REDIS_REST_URL")
     if (!process.env.UPSTASH_REDIS_REST_TOKEN) missing.push("UPSTASH_REDIS_REST_TOKEN")
     if (missing.length > 0) {

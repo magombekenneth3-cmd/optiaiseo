@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { Network, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Search } from "lucide-react";
+import { Network, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Search, CheckCircle2 } from "lucide-react";
 
 interface BrandFact {
     factType: string;
@@ -18,9 +18,7 @@ interface BrandFact {
 interface EntityNodeData {
     name: string;
     type: string;
-    strength: number; // 0-100
-    isYours: boolean;
-    competitorDomain?: string;
+    verified: boolean;
 }
 
 interface EntityPanelProps {
@@ -30,32 +28,29 @@ interface EntityPanelProps {
     competitorDomains: string[];
 }
 
-function strengthColor(s: number) {
-    if (s >= 70) return "text-emerald-400 bg-emerald-500/8 border-emerald-500/20";
-    if (s >= 40) return "text-amber-400 bg-amber-500/8 border-amber-500/20";
-    return "text-rose-400 bg-rose-500/8 border-rose-500/20";
+function coverageColor(pct: number) {
+    if (pct >= 70) return { text: "text-emerald-400", bar: "bg-emerald-500" };
+    if (pct >= 40) return { text: "text-amber-400", bar: "bg-amber-500" };
+    return { text: "text-rose-400", bar: "bg-rose-500" };
 }
 
 function EntityNode({ entity }: { entity: EntityNodeData }) {
-    const colorClass = entity.isYours ? strengthColor(entity.strength) : "text-muted-foreground bg-muted/30 border-border";
+    const colorClass = entity.verified
+        ? "text-emerald-400 bg-emerald-500/8 border-emerald-500/20"
+        : "text-amber-400 bg-amber-500/8 border-amber-500/20";
     return (
         <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm ${colorClass}`}>
             <div className="flex items-center gap-2.5 min-w-0">
                 <span className="text-[10px] font-bold uppercase tracking-wider opacity-60 shrink-0">{entity.type}</span>
                 <span className="font-medium truncate">{entity.name}</span>
             </div>
-            <div className="flex items-center gap-2 shrink-0 ml-2">
-                {!entity.isYours && entity.competitorDomain && (
-                    <span className="text-[10px] text-muted-foreground">{entity.competitorDomain}</span>
+            <span className="flex items-center gap-1 shrink-0 ml-2 text-[11px] font-semibold">
+                {entity.verified ? (
+                    <><CheckCircle2 className="w-3.5 h-3.5" /> Verified</>
+                ) : (
+                    <><AlertCircle className="w-3.5 h-3.5" /> Unverified</>
                 )}
-                <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div
-                        className={`h-full rounded-full ${entity.strength >= 70 ? "bg-emerald-500" : entity.strength >= 40 ? "bg-amber-500" : "bg-rose-500"}`}
-                        style={{ width: `${entity.strength}%` }}
-                    />
-                </div>
-                <span className="text-[10px] font-bold w-7 text-right">{entity.strength}</span>
-            </div>
+            </span>
         </div>
     );
 }
@@ -66,18 +61,15 @@ type WikidataStatus =
     | { status: "found"; qid: string; label: string; description: string }
     | { status: "not-found" };
 
-export function BrandEntityPanel({ siteId, domain, brandFacts, competitorDomains }: EntityPanelProps) {
+export function BrandEntityPanel({ domain, brandFacts }: EntityPanelProps) {
     const [expanded, setExpanded] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [enriched, setEnriched] = useState<EntityNodeData[]>([]);
     const [wikidata, setWikidata] = useState<WikidataStatus>({ status: "idle" });
 
     // Derive entities from brandFacts — each fact type is an entity relationship
     const yourEntities: EntityNodeData[] = brandFacts.map(f => ({
         name: f.value,
         type: f.factType,
-        strength: f.verified ? Math.floor(60 + Math.random() * 30) : Math.floor(30 + Math.random() * 30),
-        isYours: true,
+        verified: f.verified,
     }));
 
     // Missing entities = competitor entities not in yourEntities (synthetic based on domain patterns)
@@ -89,24 +81,11 @@ export function BrandEntityPanel({ siteId, domain, brandFacts, competitorDomains
         { name: "Local Business", type: "localbusiness", hint: "Add LocalBusiness schema with NAP data" },
     ].filter(o => !brandFacts.some(f => f.value.toLowerCase().includes(o.name.toLowerCase())));
 
-    const overallStrength = yourEntities.length > 0
-        ? Math.round(yourEntities.reduce((sum, e) => sum + e.strength, 0) / yourEntities.length)
+    const verifiedCount = yourEntities.filter(e => e.verified).length;
+    const verificationCoverage = yourEntities.length > 0
+        ? Math.round((verifiedCount / yourEntities.length) * 100)
         : 0;
-
-    async function loadEnrichedEntities() {
-        if (enriched.length > 0) return;
-        setLoading(true);
-        try {
-            const res = await fetch(`/api/entity-panel?siteId=${siteId}`);
-            if (res.ok) {
-                const data = await res.json();
-                setEnriched(data.entities ?? []);
-            }
-        } catch {
-        } finally {
-            setLoading(false);
-        }
-    }
+    const coverageTone = coverageColor(verificationCoverage);
 
     async function fetchWikidata() {
         if (wikidata.status !== "idle") return;
@@ -129,12 +108,11 @@ export function BrandEntityPanel({ siteId, domain, brandFacts, competitorDomains
 
     useEffect(() => {
         if (expanded) {
-            loadEnrichedEntities();
             fetchWikidata();
         }
     }, [expanded]);
 
-    const displayEntities = enriched.length > 0 ? enriched : yourEntities;
+    const displayEntities = yourEntities;
 
     return (
         <div className="card-elevated overflow-hidden">
@@ -149,11 +127,11 @@ export function BrandEntityPanel({ siteId, domain, brandFacts, competitorDomains
                         <Network className="w-[18px] h-[18px] text-violet-400" />
                     </div>
                     <div>
-                        <h3 className="text-sm font-semibold text-foreground">Brand Entity Strength</h3>
+                        <h3 className="text-sm font-semibold text-foreground">Brand Entity Verification</h3>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                            {yourEntities.length} entities · Overall strength{" "}
-                            <span className={`font-bold ${overallStrength >= 70 ? "text-emerald-400" : overallStrength >= 40 ? "text-amber-400" : "text-rose-400"}`}>
-                                {overallStrength}/100
+                            {yourEntities.length} entities · Verified{" "}
+                            <span className={`font-bold ${coverageTone.text}`}>
+                                {verifiedCount}/{yourEntities.length}
                             </span>
                         </p>
                     </div>
@@ -162,11 +140,11 @@ export function BrandEntityPanel({ siteId, domain, brandFacts, competitorDomains
                     <div className="hidden sm:flex items-center gap-1.5">
                         <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
                             <div
-                                className={`h-full rounded-full transition-all ${overallStrength >= 70 ? "bg-emerald-500" : overallStrength >= 40 ? "bg-amber-500" : "bg-rose-500"}`}
-                                style={{ width: `${overallStrength}%` }}
+                                className={`h-full rounded-full transition-all ${coverageTone.bar}`}
+                                style={{ width: `${verificationCoverage}%` }}
                             />
                         </div>
-                        <span className="text-xs font-bold text-muted-foreground">{overallStrength}%</span>
+                        <span className="text-xs font-bold text-muted-foreground">{verificationCoverage}%</span>
                     </div>
                     {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                 </div>
@@ -180,12 +158,7 @@ export function BrandEntityPanel({ siteId, domain, brandFacts, competitorDomains
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
                             <Zap className="w-3.5 h-3.5 text-violet-400" /> Your Brand Entities
                         </p>
-                        {loading ? (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground py-4">
-                                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />
-                                Loading entity data…
-                            </div>
-                        ) : displayEntities.length > 0 ? (
+                        {displayEntities.length > 0 ? (
                             <div className="space-y-2">
                                 {displayEntities.slice(0, 8).map((e, i) => (
                                     <EntityNode key={i} entity={e} />
@@ -203,7 +176,7 @@ export function BrandEntityPanel({ siteId, domain, brandFacts, competitorDomains
                     {missingOpportunities.length > 0 && (
                         <div>
                             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                                <TrendingUp className="w-3.5 h-3.5 text-amber-400" /> AEO Content Opportunities — Entities You&apos;re Missing
+                                <TrendingUp className="w-3.5 h-3.5 text-amber-400" /> Recommended Entity Signals Not Yet Recorded
                             </p>
                             <div className="space-y-2">
                                 {missingOpportunities.slice(0, 5).map((opp, i) => (

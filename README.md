@@ -1,263 +1,187 @@
-# AISEO — Voice-First AI SEO Strategist
+# OptiAISEO
 
-> **Built for the [Gemini Live Agent Challenge](https://geminiliveagentchallenge.devpost.com) — #GeminiLiveAgentChallenge**
->
-> **Challenge Categories Tackled:**
->
-> 1. **🗣️ Live Agents:** Native voice-in/voice-out utilizing Gemini 2.5 Flash Native Audio Preview + LiveKit. Sub-second latency, barge-in support.
-> 2. **☸️ UI Navigators:** Integrated Multimodal Vision. Aria can independently use Playwright to take screenshots of live URLs and use `gemini-2.5-pro` to evaluate visual UX complexity, accessibility, and design conversion.
+**Get cited by AI search — and prove it.**
 
-AISEO is a real-time, voice-driven AI platform that turns SEO from a manual grind into a live, interrupted conversation. Talk to **Aria**, your AI SEO strategist: she audits your site, visually critiques your design, checks your visibility in AI search engines (ChatGPT, Perplexity, Claude), and even stages GitHub Pull Requests to fix issues automatically.
+OptiAISEO is an SEO and AEO (Answer Engine Optimization) platform. It audits your site, tracks whether ChatGPT, Perplexity, Claude, and Gemini cite your brand, proposes fixes as GitHub pull requests or CMS updates, and verifies whether each fix actually shipped and moved the needle.
+
+Production: [optiaiseo.online](https://optiaiseo.online)
 
 ---
 
-## ✨ Key Features
+## Core activation path
 
-| Feature                           | Description                                                                                                 |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| 🎙️ **Live Voice Agent (Aria)**    | Real-time bidirectional voice via Gemini 2.5 Flash Native Audio + LiveKit WebRTC. Supports natural barge-in |
-| 👁️ **Multimodal UX Vision**       | Ask Aria to "Look at my design." She spins up Playwright, screenshots the DOM, and critiques the visual UI  |
-| 🔍 **Technical SEO Audits**       | Full crawl: Core Web Vitals, meta tags, heading hierarchy, schema markup, canonical URLs                    |
-| 🤖 **AEO (AI Search) Visibility** | Checks if your brand appears when ChatGPT, Perplexity, Claude, and Gemini answer industry queries           |
-| 📊 **Competitor Gap Analysis**    | Keyword gap analysis using Google Search data                                                               |
-| 🛠️ **Auto-Fix Pull Requests**     | Aria detects missing optimizations and stages a GitHub PR to fix them — automatically                       |
-| 📝 **AI Blog Generation**         | Gemini 3.1 Pro View generates and publishes SEO-optimized blog posts                                        |
+1. **Connect a site** — domain, Google Search Console, optional GA4 and GitHub.
+2. **Run an audit** — technical SEO, on-page, schema, and AI-search visibility.
+3. **Approve the first fix** — auto-fix PR (GitHub) or guided CMS change.
+4. **See the verified result** — PR state, deployment commit, and before/after GSC metrics.
 
 ---
 
-## 🏗️ Architecture
+## Features
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         User's Browser                              │
-│   Next.js React App  ←─── LiveKit WebRTC ───→  Aria Voice Agent     │
-└─────────────────┬───────────────────────────────────────────────────┘
-                  │ HTTPS / WSS
-                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Google Cloud Run                                  │
-│                                                                      │
-│  ┌────────────────────┐       ┌──────────────────────────────────┐   │
-│  │  aiseo-frontend    │       │      aiseo-agent (Worker)        │   │
-│  │  Next.js + WS      │       │  @livekit/agents + Gemini Live   │   │
-│  │  (Port 3000)       │       │  (Port 8081)                     │   │
-│  └─────────┬──────────┘       └──────────────┬───────────────────┘   │
-│            │                                 │                       │
-└────────────┼─────────────────────────────────┼───────────────────────┘
-             │                                 │
-    ┌────────▼───────────┐       ┌─────────────▼──────────────────┐
-    │  Google Cloud      │       │  LiveKit Cloud (WebRTC)        │
-    │  Firestore         │       │  Room, Track routing           │
-    │  (Sessions, Logs)  │       │  Barge-in / VAD                │
-    └────────────────────┘       └────────────────────────────────┘
-             │                                 │
-    ┌────────▼─────────────────────────────────▼──────────────────┐
-    │              Gemini 2.0 Flash Live API                       │
-    │  (Multimodal: Audio In → Audio Out, native VAD)              │
-    └─────────────────────────────────────────────────────────────┘
-             │
-    ┌────────▼────────────────────────────────────────────────────┐
-    │  External Integrations                                       │
-    │  GitHub API  ·  Stripe  ·  OpenAI  ·  Anthropic             │
-    │  Perplexity  ·  Google Search Console  ·  Inngest (BG Jobs) │
-    └─────────────────────────────────────────────────────────────┘
-```
+| Area | What it does |
+| --- | --- |
+| Technical SEO audits | Crawl, Core Web Vitals, meta, headings, canonicals, schema, indexability |
+| AEO visibility | Brand citation tracking across ChatGPT, Perplexity, Claude, and Gemini |
+| Auto-fix | GitHub PRs with fix proposals; manual guides for CMS platforms without write access |
+| Keyword research | GSC data first, DataForSEO for measured volume/difficulty; unmeasured metrics are shown as unavailable, never estimated silently |
+| Rank tracking | SERP snapshots via SerpAPI or Serper |
+| Blog generation | Evidence-gated pipeline with claim ledger, publication gate, and content lint |
+| Publishing | WordPress, Ghost, Shopify, Webflow, Wix, Framer, Next.js, plus Medium and Hashnode syndication |
+| Competitors and backlinks | Competitor gap analysis and backlink data via DataForSEO |
+| Reports | Weekly email digests, client portal, and PDF reports |
+| Voice strategist | Optional LiveKit voice agent ("Aria") for conversational audits |
 
 ---
 
-## 🚀 Local Setup (< 5 minutes)
+## Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| App | Next.js 15 (App Router), React 18, Tailwind CSS 4, custom Node server (`server.ts`) |
+| Database | PostgreSQL + Prisma 5 |
+| Background jobs | Inngest |
+| AI | Gemini (`@google/genai`) as primary; OpenAI, Anthropic, Perplexity for AEO checks and fallbacks |
+| Data providers | Google Search Console, GA4, DataForSEO, SerpAPI / Serper |
+| Payments | Stripe (monthly and annual plans, credit packs) |
+| Caching / rate limits | Upstash Redis |
+| Email | Resend |
+| Monitoring | Sentry |
+| Hosting | Railway (Dockerfile build, `/api/health` healthcheck) |
+
+---
+
+## Local setup
 
 ### Prerequisites
 
-- **Node.js 20+** and **pnpm** (`npm install -g pnpm`)
-- **ffmpeg** — `brew install ffmpeg` (macOS) or `apt install ffmpeg` (Linux)
-- **PostgreSQL** database (or use the provided Docker Compose)
-- A **LiveKit Cloud** account (free tier at [livekit.io](https://livekit.io)) — get `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
-- A **Gemini API key** from [Google AI Studio](https://aistudio.google.com)
+- Node.js 20+ and pnpm 8 (`corepack enable`)
+- PostgreSQL (or Docker)
+- A Gemini API key from [Google AI Studio](https://aistudio.google.com)
 
 ### Steps
 
-````bash
-# 1. Clone the repository
-git clone https://github.com/YOUR_USERNAME/aiseo
-cd aiseo
+```bash
+git clone https://github.com/magombekenneth3-cmd/optiaiseo.git
+cd optiaiseo
 
-# 2. Install all dependencies
 pnpm install
 
-# 3. Configure environment variables
 cp .env.example .env
-# → Edit .env and fill in at minimum:
-#   DATABASE_URL, NEXTAUTH_SECRET, GEMINI_API_KEY,
-#   LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET
+# Fill in at minimum: DATABASE_URL, NEXTAUTH_SECRET, NEXTAUTH_URL,
+# NEXT_PUBLIC_APP_URL, GEMINI_API_KEY
 
-# 4. Start the database
-docker-compose up db -d
-
-# 5. Create DB schema
-pnpm prisma db push
-
-# 6. Start the Next.js app (Terminal 1)
-pnpm dev
-
-# 7. Start the Aria voice agent worker (Terminal 2)
-pnpm agent
-
-### Dev Quickstart (demo mode)
-
-To try the app locally without configuring AI or LiveKit keys, use demo mode.
-
-1. Copy the example env and enable demo mode:
-
-```bash
-cp .env.example .env
-# Edit .env and set DEMO_MODE=1 or run the command below to set it for the session
-export DEMO_MODE=1
-````
-
-2. Start a minimal local stack (Postgres + Redis):
-
-```bash
 docker-compose -f docker-compose.dev.yml up -d
+
+pnpm migrate
+
+pnpm dev
 ```
 
-3. Start the app in demo mode:
+In a second terminal, run the Inngest dev server so background jobs execute:
 
 ```bash
-pnpm install
+pnpm inngest
+```
+
+Open http://localhost:3000.
+
+### Demo mode
+
+To explore the UI without AI or LiveKit keys:
+
+```bash
 DEMO_MODE=1 pnpm dev
 ```
 
-Demo mode uses canned responses and avoids calling external AI/LiveKit services so you can explore the UI and voice flows with reduced configuration.
+Demo mode returns canned AI responses and skips external AI/LiveKit calls.
 
-````
+### Voice agent (optional)
 
-Open **http://localhost:3000** → Sign up → Dashboard → **Talk to Aria** → click "🎙 Start Voice Session"
-
----
-
-## ☁️ Google Cloud Deployment
-
-### Quick Deploy (one command)
+Requires `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET`:
 
 ```bash
-# Make sure gcloud is authenticated
-gcloud auth login
-
-# Deploy everything to Cloud Run
-chmod +x deploy.sh
-./deploy.sh YOUR_GCP_PROJECT_ID
-````
-
-### Or via Google Cloud Build (CI/CD)
-
-```bash
-gcloud builds submit --config cloudbuild.yaml --project YOUR_PROJECT_ID
-```
-
-### Or via GitHub Actions
-
-1. In your GitHub repo → **Settings → Secrets**, add:
-   - `GCP_PROJECT_ID` — your GCP project ID
-   - `GCP_SA_KEY` — contents of your GCP service account JSON key
-2. Push to `main` — deployment runs automatically via `.github/workflows/deploy.yml`
-
-### Set Cloud Run Environment Variables
-
-After first deploy, configure secrets:
-
-```bash
-gcloud run services update aiseo-frontend \
-  --region=us-central1 \
-  --set-env-vars="NODE_ENV=production,NEXTAUTH_URL=https://YOUR_DOMAIN" \
-  --set-secrets="DATABASE_URL=database-url:latest,GEMINI_API_KEY=gemini-api-key:latest,..."
+pnpm agent
 ```
 
 ---
 
-## 🔑 Environment Variables
+## Environment variables
 
-| Variable                                    | Description                               | Required    |
-| ------------------------------------------- | ----------------------------------------- | ----------- |
-| `DATABASE_URL`                              | PostgreSQL connection string              | ✅          |
-| `NEXTAUTH_SECRET`                           | Random 32-char string for JWT signing     | ✅          |
-| `NEXTAUTH_URL`                              | App URL (e.g. `https://your-app.run.app`) | ✅          |
-| `GEMINI_API_KEY`                            | Google AI Studio API Key                  | ✅          |
-| `LIVEKIT_URL`                               | LiveKit WebSocket URL (`wss://...`)       | ✅          |
-| `LIVEKIT_API_KEY`                           | LiveKit API Key                           | ✅          |
-| `LIVEKIT_API_SECRET`                        | LiveKit API Secret                        | ✅          |
-| `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET` | Google OAuth (for login + Search Console) | Recommended |
-| `GITHUB_ID` & `GITHUB_SECRET`               | GitHub OAuth (for Auto-Fix PRs)           | Recommended |
-| `OPENAI_API_KEY`                            | AEO visibility check on ChatGPT           | Optional    |
-| `ANTHROPIC_API_KEY`                         | AEO visibility on Claude                  | Optional    |
-| `PERPLEXITY_API_KEY`                        | AEO visibility on Perplexity              | Optional    |
-| `STRIPE_SECRET_KEY`                         | Payments and usage limits                 | Optional    |
-| `UPSTASH_REDIS_REST_URL`                    | Rate limiting & caching                   | Optional    |
-| `RESEND_API_KEY`                            | Email digest alerts                       | Optional    |
-| `INNGEST_EVENT_KEY` & `INNGEST_SIGNING_KEY` | Background job queuing                    | Optional    |
+See [`.env.example`](.env.example) for the full list. Variables marked `[REQUIRED IN PRODUCTION]` cause a startup failure when missing in production. The app also logs startup warnings for missing data-provider and Stripe price variables.
 
-For Google Search Console, add this exact OAuth redirect URI in Google Cloud for
-each environment:
+| Variable | Purpose | Required |
+| --- | --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string | ✅ |
+| `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `NEXT_PUBLIC_APP_URL` | Auth and canonical app URL | ✅ |
+| `GEMINI_API_KEY` | Primary AI provider | ✅ |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Payments | ✅ in production |
+| `STRIPE_STARTER_PRICE_ID`, `STRIPE_PRO_PRICE_ID`, `STRIPE_AGENCY_PRICE_ID` | Monthly plan checkout | ✅ in production |
+| `STRIPE_*_ANNUAL_PRICE_ID` | Annual plan checkout | Recommended |
+| `CRON_SECRET` | Authenticates cron endpoints | ✅ in production |
+| `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` | Background jobs | ✅ in production |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Rate limiting and caching | ✅ in production |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google login, Search Console, GA4 | Recommended |
+| `GITHUB_ID`, `GITHUB_SECRET` | Auto-fix pull requests | Recommended |
+| `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` | Measured keyword volume, difficulty, backlinks | Recommended |
+| `SERPAPI_KEY` or `SERPER_API_KEY` | Rank tracking | Recommended |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `PERPLEXITY_API_KEY` | Multi-engine AEO checks | Optional |
+| `RESEND_API_KEY` | Transactional and digest email | Optional |
+| `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Voice agent | Optional |
+
+### Google Search Console OAuth
+
+Register this redirect URI for each environment:
 
 ```
 https://your-domain/api/auth/callback/google-gsc
 ```
 
-For local development, use `http://localhost:3000/api/auth/callback/google-gsc`.
-The app uses a dedicated `google-gsc` provider because it requests Search Console
-scopes; registering only `/api/auth/callback/google` is not sufficient.
-| `SERPAPI_KEY` or `SERPER_API_KEY`           | SERP rank tracking                        | Optional    |
+For local development use `http://localhost:3000/api/auth/callback/google-gsc`. The app uses a dedicated `google-gsc` provider because it requests Search Console scopes; registering only `/api/auth/callback/google` is not sufficient.
 
 ---
 
-## 🛠️ Tech Stack
+## Deployment
 
-| Layer               | Technology                                                      |
-| ------------------- | --------------------------------------------------------------- |
-| **AI Voice**        | Gemini 2.0 Flash Realtime (via `@livekit/agents-plugin-google`) |
-| **AI Text/Audit**   | `@google/genai` SDK — Gemini Flash                              |
-| **WebRTC**          | LiveKit Cloud (room management, VAD, barge-in)                  |
-| **Frontend**        | Next.js 15, React 19, TailwindCSS                               |
-| **Backend**         | Node.js custom server with WebSocket                            |
-| **Database**        | PostgreSQL + Prisma ORM                                         |
-| **Cloud**           | Google Cloud Run, Google Cloud Firestore, Google Cloud Build    |
-| **Background Jobs** | Inngest                                                         |
-| **Payments**        | Stripe                                                          |
+Production runs on **Railway** using the root `Dockerfile` (see [`railway.toml`](railway.toml)). Railway health-checks `/api/health`.
+
+Apply database migrations before or during release:
+
+```bash
+pnpm migrate:deploy
+```
 
 ---
 
-## 📁 Project Structure
+## Testing
+
+```bash
+pnpm test          # unit and integration tests (Vitest)
+pnpm test:e2e      # end-to-end tests (Playwright)
+pnpm lint
+```
+
+---
+
+## Project structure
 
 ```
-aiseo/
-├── Dockerfile              # Frontend + WebSocket server
+.
+├── Dockerfile              # App + custom server image (Railway)
 ├── Dockerfile.agent        # LiveKit voice agent worker
-├── docker-compose.yml      # Full local stack
-├── cloudbuild.yaml         # GCP Cloud Build pipeline
-├── deploy.sh               # One-shot deploy script
-├── .github/workflows/      # GitHub Actions CI/CD
-├── livekit-agent.ts        # Aria voice agent entry point
+├── railway.toml            # Railway build and deploy config
 ├── server.ts               # Custom Next.js + WebSocket server
+├── livekit-agent.ts        # Voice agent entry point
+├── prisma/                 # Schema and migrations
 ├── src/
-│   ├── app/
-│   │   ├── dashboard/voice/ # Voice UI page
-│   │   └── api/livekit/     # LiveKit token endpoint
-│   ├── components/agents-ui/ # LiveKit React voice components
-│   └── lib/
-│       ├── gemini/          # Gemini AI actions
-│       └── voice/           # Voice session management
-└── prisma/                  # Database schema
+│   ├── app/                # Routes, dashboard pages, API routes
+│   ├── components/         # UI components
+│   └── lib/                # Domain logic (audits, AEO, keywords, publishers, Inngest jobs)
+└── tests/                  # Vitest and Playwright suites
 ```
-
----
-
-## 📜 License
-
-MIT © 2026 — Built with ❤️ for the Google Gemini Live Agent Challenge
 
 ---
 
 ## Contributing
 
-Pull requests welcome. Please run `pnpm lint` and `pnpm test` before submitting.
-See `.github/workflows/deploy.yml` for the CI pipeline configuration.
+Run `pnpm lint` and `pnpm test` before opening a pull request. CI is defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).

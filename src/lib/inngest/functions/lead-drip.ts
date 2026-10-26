@@ -76,7 +76,7 @@ function emailShell(body: string, userId: string): string {
 <table width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;margin:40px auto;">
   <tr><td style="padding:0 28px;">
     <div style="margin-bottom:28px;">
-      <span style="font-size:18px;font-weight:700;color:#fff;letter-spacing:-.3px;">AISEO</span>
+      <span style="font-size:18px;font-weight:700;color:#fff;letter-spacing:-.3px;">OptiAISEO</span>
       <span style="display:inline-block;width:6px;height:6px;background:#10b981;border-radius:50%;margin-left:6px;vertical-align:middle;"></span>
     </div>
     ${body}
@@ -181,10 +181,10 @@ function buildDay5Html(name: string, userId: string): string {
       <p style="color:#d1fae5;font-size:14px;font-style:italic;margin:0 0 8px;">
         "We added FAQ schema and a definition section to 12 pages. Within 3 weeks, Perplexity started citing us for 7 of our target keywords."
       </p>
-      <span style="color:#6b7280;font-size:12px;">— Agency client using AISEO Pro</span>
+      <span style="color:#6b7280;font-size:12px;">— Agency client using OptiAISEO Pro</span>
     </div>
     <p style="color:#9ca3af;font-size:15px;line-height:1.7;margin:0 0 24px;">
-      The AISEO blog generator scores every draft against our 8-criterion AI Citation rubric before it's approved for publish.
+      The OptiAISEO blog generator scores every draft against our 8-criterion AI Citation rubric before it's approved for publish.
     </p>
     <a href="${appUrl()}/dashboard"
        style="display:inline-block;background:#10b981;color:#fff;font-weight:700;font-size:15px;text-decoration:none;padding:13px 24px;border-radius:10px;">

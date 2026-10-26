@@ -8,6 +8,14 @@ This is a code-informed product audit of the authenticated OptiAISEO experience.
 
 The product has strong feature depth, helpful empty states, a reusable component base, and a clear dark visual language. Its primary usability problem is **decision overload**: users can reach more than 30 dashboard destinations, while navigation presents many of them as peers. The product should guide a user through a small daily loop—**understand → decide → act → verify**—and keep specialist tools discoverable but secondary.
 
+## Status
+
+| Item | State |
+|---|---|
+| Replace blocking `alert()` calls | ✅ Done — no `alert()` calls remain in `src/app` or `src/components`; feedback uses Sonner toasts. |
+| Dashboard command center | ⏳ Open — prototype exists on `fix/dashboard-command-center-ui`; needs rebasing onto `main`. |
+| Funnel instrumentation | ⏳ Open |
+
 ## Findings and remediation order
 
 | Priority | Finding | User impact | Fix | Acceptance criteria |

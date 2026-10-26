@@ -150,7 +150,7 @@ export async function buildKnowledgeGraph(domain: string) {
                 "@type": "HowToStep",
                 "position": 2,
                 "name": "Execution & Optimization",
-                "text": `Apply AISEO recommendations for ${blog.title}`
+                "text": `Apply OptiAISEO recommendations for ${blog.title}`
             }
         ]
     }));

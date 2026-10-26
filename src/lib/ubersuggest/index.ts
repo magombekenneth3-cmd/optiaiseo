@@ -2,28 +2,31 @@ import { logger } from "@/lib/logger";
 
 import { redis, redisErrorCode } from "@/lib/redis";
 
+export type MetricSource = "measured" | "estimated" | "unavailable"
+
 export interface KeywordIdea {
     keyword: string
-    searchVolume: number
-    cpc: number
-    difficulty: number
+    searchVolume: number | null
+    cpc: number | null
+    difficulty: number | null
     intent: "informational" | "navigational" | "commercial" | "transactional"
+    source: MetricSource
 }
 
 export interface ContentIdea {
     title: string
     url: string
-    estimatedVisits: number
-    backlinks: number
-    socialShares: number
+    estimatedVisits: number | null
+    backlinks: number | null
+    socialShares: number | null
 }
 
 export interface DomainOverview {
     domain: string
-    organicMonthlyTraffic: number
-    organicKeywords: number
-    domainScore: number
-    backlinks: number
+    organicMonthlyTraffic: number | null
+    organicKeywords: number | null
+    performanceScore: number | null
+    backlinks: number | null
 }
 
 // Map intent to our internal enum type safely
@@ -60,7 +63,7 @@ export const getKeywordIdeas = async (
 ): Promise<KeywordIdea[]> => {
 
     // CACHE LAYER
-    const cacheKey = `keywords:autocomplete:${country}:${language}:${keyword.toLowerCase().replace(/\s+/g, '-')}`
+    const cacheKey = `keywords:autocomplete:v2:${country}:${language}:${keyword.toLowerCase().replace(/\s+/g, '-')}`
     try {
         const cached = await redis.get(cacheKey)
         if (cached) return JSON.parse(cached as string)
@@ -93,10 +96,11 @@ export const getKeywordIdeas = async (
                 if (!suggestions.find(s => s.keyword === suggestion)) {
                     suggestions.push({
                         keyword: suggestion,
-                        searchVolume: 0, // Google Autocomplete doesn't provide volume
-                        cpc: 0,
-                        difficulty: 30 + Math.floor(Math.random() * 40), // Estimated
+                        searchVolume: null,
+                        cpc: null,
+                        difficulty: null,
                         intent: estimateIntent(suggestion),
+                        source: "unavailable",
                     })
                 }
             }
@@ -117,15 +121,7 @@ export const getKeywordIdeas = async (
      
     } catch (err: unknown) {
         logger.warn("[Keywords] Google Autocomplete fetch failed:", { error: (err as Error)?.message || String(err) })
-
-        // Final fallback: static mock data
-        return [
-            { keyword: `${keyword} guide`, searchVolume: 2400, cpc: 1.20, difficulty: 35, intent: "informational" },
-            { keyword: `best ${keyword}`, searchVolume: 5800, cpc: 2.40, difficulty: 62, intent: "commercial" },
-            { keyword: `${keyword} tutorial`, searchVolume: 1900, cpc: 0.90, difficulty: 28, intent: "informational" },
-            { keyword: `how to use ${keyword}`, searchVolume: 1200, cpc: 0.75, difficulty: 22, intent: "informational" },
-            { keyword: `${keyword} pricing`, searchVolume: 800, cpc: 3.50, difficulty: 45, intent: "commercial" },
-        ]
+        return []
     }
 }
 
@@ -138,7 +134,7 @@ export const getContentIdeas = async (
     country = "us"
 ): Promise<ContentIdea[]> => {
 
-    const cacheKey = `content:ideas:${country}:${keyword.toLowerCase().replace(/\s+/g, '-')}`
+    const cacheKey = `content:ideas:v2:${country}:${keyword.toLowerCase().replace(/\s+/g, '-')}`
      
     try {
         const cached = await redis.get(cacheKey)
@@ -162,13 +158,12 @@ export const getContentIdeas = async (
             if (res.ok) {
                 const data = await res.json()
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const mapped: ContentIdea[] = (data.organic ?? []).map((item: any, i: number) => ({
+                const mapped: ContentIdea[] = (data.organic ?? []).map((item: any) => ({
                     title: item.title ?? "",
                     url: item.link ?? "",
-                    estimatedVisits: Math.max(500, 5000 - i * 400),
-                    backlinks: 0,
-                     
-                    socialShares: 0,
+                    estimatedVisits: null,
+                    backlinks: null,
+                    socialShares: null,
                 }))
 
                 try {
@@ -185,11 +180,7 @@ export const getContentIdeas = async (
         }
     }
 
-    // Fallback mock
-    return [
-        { title: `The Complete Guide to ${keyword}`, url: "https://example.com/guide", estimatedVisits: 4500, backlinks: 120, socialShares: 890 },
-        { title: `${keyword}: Everything You Need to Know`, url: "https://example2.com/post", estimatedVisits: 3200, backlinks: 85, socialShares: 650 },
-    ]
+    return []
 }
 
 // =============================================================================
@@ -199,9 +190,9 @@ export const getContentIdeas = async (
 export const getUbersuggestDomainOverview = async (
      
     domain: string
-): Promise<DomainOverview> => {
+): Promise<DomainOverview | null> => {
 
-    const cacheKey = `domain:overview:${domain.toLowerCase()}`
+    const cacheKey = `domain:overview:v2:${domain.toLowerCase()}`
     try {
         const cached = await redis.get(cacheKey)
         if (cached) return JSON.parse(cached as string)
@@ -215,15 +206,13 @@ export const getUbersuggestDomainOverview = async (
             const res = await fetch(url)
             if (res.ok) {
                 const data = await res.json()
-                const score = Math.round((data.lighthouseResult?.categories?.performance?.score ?? 0.5) * 100)
+                const score = data.lighthouseResult?.categories?.performance?.score
                 const overview: DomainOverview = {
-                     
                     domain,
-                    organicMonthlyTraffic: 0,   // Not available from PageSpeed
-                    organicKeywords: 0,          // Not available from PageSpeed
-                     
-                    domainScore: score,          // Performance score as proxy
-                    backlinks: 0,               // Use OpenLinkProfiler separately
+                    organicMonthlyTraffic: null,
+                    organicKeywords: null,
+                    performanceScore: typeof score === "number" ? Math.round(score * 100) : null,
+                    backlinks: null,
                 }
                 try {
                     await redis.set(cacheKey, JSON.stringify(overview), { ex: 60 * 60 * 48 });
@@ -237,12 +226,5 @@ export const getUbersuggestDomainOverview = async (
         }
     }
 
-    // Fallback mock
-    return {
-        domain,
-        organicMonthlyTraffic: 8500,
-        organicKeywords: 1200,
-        domainScore: 52,
-        backlinks: 2300,
-    }
+    return null
 }

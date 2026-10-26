@@ -36,6 +36,7 @@ export interface EnrichedKeyword {
     opportunityScore: number;
     recommendation: string;
     cluster?: string;
+    metricsSource?: "measured" | "estimated" | "unavailable";
 }
 
 export interface KeywordCluster {
@@ -110,6 +111,7 @@ export const getEnrichedKeywords = async (opts: {
                     gscUrl: kw.url,
                     opportunityScore: 0,
                     recommendation: "",
+                    metricsSource: "unavailable",
                 });
             }
         } catch (err: unknown) {
@@ -134,6 +136,7 @@ export const getEnrichedKeywords = async (opts: {
                     difficulty: data.keywordDifficulty ?? existing.difficulty,
                     keywordDifficulty: data.keywordDifficulty ?? existing.keywordDifficulty,
                     cpc: data.cpc > 0 ? data.cpc : existing.cpc,
+                    metricsSource: data.searchVolume > 0 || data.keywordDifficulty != null ? "measured" : existing.metricsSource,
                 });
             }
             logger.debug("[keywords] DataForSEO enrichment complete", {
@@ -151,24 +154,26 @@ export const getEnrichedKeywords = async (opts: {
             for (const idea of ideas) {
                 const existing = enriched.get(idea.keyword);
                 if (existing) {
-                    if (!existing.searchVolume && idea.searchVolume > 0) {
+                    if (!existing.searchVolume && idea.searchVolume != null && idea.searchVolume > 0) {
                         enriched.set(idea.keyword, {
                             ...existing,
                             searchVolume: idea.searchVolume,
-                            difficulty: idea.difficulty,
-                            cpc: idea.cpc,
+                            difficulty: idea.difficulty ?? existing.difficulty,
+                            cpc: idea.cpc ?? existing.cpc,
                             intent: existing.intent ?? idea.intent,
+                            metricsSource: idea.source,
                         });
                     }
                 } else {
                     enriched.set(idea.keyword, {
                         keyword: idea.keyword,
-                        searchVolume: idea.searchVolume,
-                        difficulty: idea.difficulty,
-                        cpc: idea.cpc,
+                        searchVolume: idea.searchVolume ?? undefined,
+                        difficulty: idea.difficulty ?? undefined,
+                        cpc: idea.cpc ?? undefined,
                         intent: idea.intent,
                         opportunityScore: 0,
                         recommendation: "",
+                        metricsSource: idea.source,
                     });
                 }
             }

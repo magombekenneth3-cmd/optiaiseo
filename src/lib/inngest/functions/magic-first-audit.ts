@@ -121,7 +121,7 @@ export const magicFirstAuditJob = inngest.createFunction(
         to: email,
         subject: healthResult
           ? `We scanned ${domain} — ${issues.length} issue${issues.length === 1 ? "" : "s"} found`
-          : `Welcome to AISEO — your site is queued for analysis`,
+          : `Welcome to OptiAISEO — your site is queued for analysis`,
         html,
       });
     });
@@ -183,7 +183,7 @@ function buildActivationEmail(params: {
 
       <!-- Header -->
       <div style="margin-bottom:32px;">
-        <div style="font-size:22px;font-weight:700;color:#fff;margin-bottom:4px;">AISEO</div>
+        <div style="font-size:22px;font-weight:700;color:#fff;margin-bottom:4px;">OptiAISEO</div>
         <div style="width:40px;height:3px;background:linear-gradient(90deg,#10b981,#3b82f6);border-radius:2px;"></div>
       </div>
 
@@ -223,7 +223,7 @@ function buildActivationEmail(params: {
       </table>
 
       <p style="color:#4b5563;font-size:13px;text-align:center;">
-        © AISEO &middot;
+        © OptiAISEO &middot;
         <a href="${baseUrl}/api/unsubscribe?token=${signUnsubToken(userId)}" style="color:#4b5563;">Unsubscribe</a>
       </p>
       <p style="color:#374151;font-size:11px;text-align:center;margin-top:4px;">OptiAISEO Ltd &middot; 20-22 Wenlock Road &middot; London &middot; N1 7GU &middot; UK</p>
