@@ -36,6 +36,9 @@ import { computeAggregateExpiry } from "./freshness";
 import { detectGscSignals } from "./source-detectors/gsc-detector";
 import { detectAuditSignals } from "./source-detectors/audit-detector";
 import { detectContentSignals } from "./source-detectors/content-detector";
+import { detectPerformanceSignals } from "./source-detectors/performance-detector";
+import { detectCompetitorSignals } from "./source-detectors/competitor-detector";
+import { detectCrawlSignals } from "./source-detectors/crawl-detector";
 import { createOpportunityFingerprint } from "@/lib/opportunity-engine/findings-to-opportunities";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
@@ -49,7 +52,9 @@ const DETECTORS: Record<string, DetectorFn> = {
   GSC: detectGscSignals,
   AUDIT: detectAuditSignals,
   CONTENT: detectContentSignals,
-  // CRAWL, COMPETITOR, PERFORMANCE are stubs for D.2+
+  PERFORMANCE: detectPerformanceSignals,
+  COMPETITOR: detectCompetitorSignals,
+  CRAWL: detectCrawlSignals,
 };
 
 // ── Public API ──────────────────────────────────────────────────────────────
