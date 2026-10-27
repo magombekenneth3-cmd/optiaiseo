@@ -147,6 +147,9 @@ export async function handleCheckoutCompleted(session: Stripe.Checkout.Session):
 
     await bumpSessionVersion(userId)
 
+    const { trackFunnelEvent } = await import("@/lib/funnel")
+    await trackFunnelEvent(userId, "checkout_completed", subscriptionId, { tier, priceId })
+
     logger.debug("[Webhook] User upgraded", { userId, tier })
 }
 

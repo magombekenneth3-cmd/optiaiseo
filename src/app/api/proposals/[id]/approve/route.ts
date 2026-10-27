@@ -19,6 +19,7 @@ import { logger } from "@/lib/logger";
 import { hashProposedChanges, evaluatePolicy } from "@/lib/proposals";
 import type { ActionType, ProposedChange } from "@/lib/proposals";
 import { transitionOpportunity } from "@/lib/proposals/opportunity-lifecycle";
+import { trackFunnelEvent } from "@/lib/funnel";
 
 export async function POST(
   req: NextRequest,
@@ -103,6 +104,12 @@ export async function POST(
     logger.info("[ProposalsAPI] Proposal approved", {
       proposalId: proposal.id,
       approvedBy: userId,
+    });
+
+    await trackFunnelEvent(userId, "fix_approved", proposal.siteId, {
+      source: "proposal",
+      proposalId: proposal.id,
+      actionType: proposal.actionType,
     });
 
     return NextResponse.json({

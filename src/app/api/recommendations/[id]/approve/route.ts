@@ -6,6 +6,7 @@ import { getRedis } from "@/lib/redis";
 import { executeGrowthDecision } from "@/lib/growth/execution-engine";
 import { logger } from "@/lib/logger";
 import { hashCanonicalMutation } from "@/lib/mutations";
+import { trackFunnelEvent } from "@/lib/funnel";
 
 export async function POST(
     req: NextRequest,
@@ -57,6 +58,12 @@ export async function POST(
 
         // ── 3. Execute via mutation lifecycle ────────────────────────────────
         const execResult = await executeGrowthDecision(decisionId, decision.siteId);
+
+        await trackFunnelEvent(session.user.id, "fix_approved", decision.siteId, {
+            source: "recommendation",
+            decisionId,
+            executed: execResult.success,
+        });
 
         logger.info("[RecommendationsAPI] Approved and executed recommendation", {
             decisionId,

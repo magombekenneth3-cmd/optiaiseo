@@ -14,6 +14,7 @@ import {
     validateFixOutput,
 } from "@/lib/seo/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { trackFunnelEvent } from "@/lib/funnel";
 import { z } from "zod";
 
 import {
@@ -539,5 +540,6 @@ export async function pushAuditFixPR(
     await (prisma as any).seoFixProposal.update({
         where: { id: proposal.id }, data: { status: "DISPATCHED", dispatchedAt: new Date(), prUrl: prResult.prUrl },
     });
+    await trackFunnelEvent(session.user.id, "fix_approved", site.id, { source: "github_pr", proposalId: proposal.id });
     return { success: true, prUrl: prResult.prUrl! };
 }

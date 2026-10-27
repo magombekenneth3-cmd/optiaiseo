@@ -120,6 +120,9 @@ export async function createSite(data: {
             logger.warn("Inngest site.created event failed", { error: (err as Error)?.message });
         }
 
+        const { trackFunnelEvent } = await import("@/lib/funnel");
+        await trackFunnelEvent(user.id, "site_connected", newSite.id, { siteCount: currentSiteCount + 1 });
+
         return { success: true, site: newSite };
     } catch (error: unknown) {
         const { TierError } = await import("@/lib/stripe/guards");

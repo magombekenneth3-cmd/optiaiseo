@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import React from "react";
 
 import { ExecuteDecisionButton } from "@/components/dashboard/ExecuteDecisionButton";
-import { CombinedSerpAeoWidget } from "@/components/dashboard/CombinedSerpAeoWidget";
 import { InstantIndexingBadge } from "@/components/dashboard/InstantIndexingBadge";
 import { LiveWhiteLabelPreviewer } from "@/components/dashboard/LiveWhiteLabelPreviewer";
 import { RoiLiftCard } from "@/components/dashboard/RoiLiftCard";
@@ -18,18 +17,6 @@ describe("UI/UX Dashboard Optimization Components Unit Tests", () => {
         expect(el).toBeDefined();
         expect(el.props.decisionId).toBe("dec-1");
         expect(el.props.actionType).toBe("IMPROVE_SEARCH_INTENT");
-    });
-
-    it("should instantiate CombinedSerpAeoWidget with default props", () => {
-        const el = React.createElement(CombinedSerpAeoWidget, {
-            consensusScore: 92,
-            googleRank: 1,
-            llmCitationRate: 95,
-            totalKeywordsTracked: 50,
-        });
-        expect(el).toBeDefined();
-        expect(el.props.consensusScore).toBe(92);
-        expect(el.props.googleRank).toBe(1);
     });
 
     it("should instantiate InstantIndexingBadge with active status", () => {

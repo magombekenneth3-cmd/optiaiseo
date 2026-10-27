@@ -16,6 +16,7 @@ import { releaseAuditLease } from "@/lib/audit-lock";
 import { fireWhiteLabelWebhook } from "@/lib/webhooks/white-label";
 import { persistFindingWithEvidence } from "@/lib/seo-audit/diagnostic-persistence";
 import type { DiagnosticFinding } from "@/lib/seo-audit/root-cause-engine";
+import { trackFunnelEvent } from "@/lib/funnel";
 
 function resolveFixStatus(
     d: { fixed: unknown[]; newIssues?: unknown[] } | null,
@@ -184,6 +185,14 @@ export const processManualAuditJob = inngest.createFunction(
                 auditId,
             });
         });
+
+        await step.run("track-audit-funnel", async () =>
+            trackFunnelEvent(userId, "audit_completed", siteId, {
+                auditId,
+                mode: auditMode ?? "full",
+                score: auditResult.overallScore,
+            }),
+        );
 
         logger.info("[ManualAudit] Homepage audit complete", {
             domain,
