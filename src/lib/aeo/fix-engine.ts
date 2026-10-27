@@ -197,22 +197,23 @@ export async function generateAeoFixInternal(
 
         const framework = frameworkResult.framework;
 
-        // WordPress: never generate code — return manual guide
-        if (framework === "wordpress") {
-            logFallback(check.id, "not_implemented");
-            return {
-                success: false,
-                error:
-                    "WordPress sites require manual implementation. Please follow the step-by-step guide below.",
-                fallbackGuide: getFallbackGuide(check.id, check.label, framework),
-            };
-        }
-
         // Gap 2: Speakable requires real cssSelector paths — short-circuit the generic
         // Gemini path which guesses selectors. We derive them deterministically from
         // the scanned HTML and emit a valid JSON-LD block (no extra AI call).
         if (check.id === "schema-speakable" || check.label.toLowerCase().includes("speakable")) {
             return generateSpeakableFix(check, domain, content, framework);
+        }
+
+        // WordPress: Schema checks produce actionable JSON-LD/functions.php markup;
+        // platform configuration issues (e.g. sitemaps, robots) return step-by-step guides.
+        if (framework === "wordpress" && !check.id.startsWith("schema") && !check.label.toLowerCase().includes("schema")) {
+            logFallback(check.id, "not_implemented");
+            return {
+                success: false,
+                error:
+                    "This WordPress setting requires manual configuration. Please follow the step-by-step guide below.",
+                fallbackGuide: getFallbackGuide(check.id, check.label, framework),
+            };
         }
 
         const filePath = resolveFilePath(check.id, framework, frameworkResult.monorepoRoot);
