@@ -147,6 +147,15 @@ export async function requireWithinLimit(
 ): Promise<void> {
     const tier = await getUserTier(userId);
     if (!withinLimit(tier, limitKey, currentUsage)) {
+        const { isFairUseExceeded, AGENCY_FAIR_USE_LIMITS } = await import("./plans");
+        if (isFairUseExceeded(tier, limitKey, currentUsage)) {
+            const fairLimit = AGENCY_FAIR_USE_LIMITS[limitKey];
+            throw new TierError(
+                `You have reached the Agency fair-use limit for ${limitKey} (${fairLimit}). Please contact support for custom enterprise provisioning.`,
+                tier,
+                ["AGENCY"]
+            );
+        }
         const limit = getPlan(tier).limits[limitKey];
         throw new TierError(
             `You have reached the ${limit} ${limitKey} limit on the ${tier} plan. Upgrade to continue.`,

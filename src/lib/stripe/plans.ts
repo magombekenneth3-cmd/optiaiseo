@@ -140,14 +140,32 @@ export function hasFeature(tier: string, feature: FeatureKey): boolean {
     return getPlan(tier).features[feature]
 }
 
+export const AGENCY_FAIR_USE_LIMITS: Record<LimitKey, number> = {
+    sites: 100,
+    auditsPerMonth: 500,
+    blogsPerMonth: 1000,
+    aeoAuditsPerMonth: 1000,
+    keywordsTracked: 5000,
+    competitorsPerSite: 100,
+};
+
+export function isFairUseExceeded(tier: string, limitKey: LimitKey, currentUsage: number): boolean {
+    if (tier !== "AGENCY") return false;
+    const fairUseLimit = AGENCY_FAIR_USE_LIMITS[limitKey];
+    return fairUseLimit !== undefined && currentUsage >= fairUseLimit;
+}
+
 export function withinLimit(tier: string, limitKey: LimitKey, currentUsage: number): boolean {
-    const limit = getPlan(tier).limits[limitKey]
-    return limit === -1 || currentUsage < limit
+    if (isFairUseExceeded(tier, limitKey, currentUsage)) {
+        return false;
+    }
+    const limit = getPlan(tier).limits[limitKey];
+    return limit === -1 || currentUsage < limit;
 }
 
 export function displayLimit(tier: string, limitKey: LimitKey): string {
-    const limit = getPlan(tier).limits[limitKey]
-    return limit === -1 ? "Unlimited" : String(limit)
+    const limit = getPlan(tier).limits[limitKey];
+    return limit === -1 ? "Unlimited" : String(limit);
 }
 
 export function nextTier(tier: string): Tier | null {
