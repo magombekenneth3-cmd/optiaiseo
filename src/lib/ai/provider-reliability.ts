@@ -188,3 +188,49 @@ export function logProviderFallback(
     });
 }
 
+export interface FallbackProviderStep<T> {
+    provider: AIProviderName;
+    modelId: string;
+    call: (attempt: number) => Promise<T>;
+}
+
+export async function withProviderFallbackChain<T>(params: {
+    requestId: string;
+    timeoutMs: number;
+    steps: FallbackProviderStep<T>[];
+}): Promise<{ result: T; providerUsed: AIProviderName; modelUsed: string; fallbackOccurred: boolean }> {
+    if (!params.steps || params.steps.length === 0) {
+        throw new Error("withProviderFallbackChain requires at least one provider step");
+    }
+
+    let lastError: unknown;
+    for (let i = 0; i < params.steps.length; i++) {
+        const step = params.steps[i];
+        try {
+            const result = await withProviderRetries({
+                provider: step.provider,
+                modelId: step.modelId,
+                requestId: params.requestId,
+                timeoutMs: params.timeoutMs,
+                maxAttempts: 2,
+                call: step.call,
+            });
+            return {
+                result,
+                providerUsed: step.provider,
+                modelUsed: step.modelId,
+                fallbackOccurred: i > 0,
+            };
+        } catch (error: unknown) {
+            lastError = error;
+            const nextStep = params.steps[i + 1];
+            if (nextStep) {
+                const classified = classifyProviderError(error, step.provider, step.modelId, params.requestId);
+                logProviderFallback(classified, nextStep.provider);
+            }
+        }
+    }
+
+    throw lastError;
+}
+
