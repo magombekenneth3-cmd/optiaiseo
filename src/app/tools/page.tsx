@@ -51,7 +51,7 @@ const TOOLS_SCHEMA = {
 };
 
 export default function ToolsIndexPage() {
-  const keywords = KEYWORDS as Keyword[];
+  const keywords = (KEYWORDS as Keyword[]).filter((k) => k.slug !== "free-backlink-checker-usa");
 
   return (
     

@@ -83,7 +83,7 @@ export async function generateMetadata({
 
 function getRelated(current: Keyword, count = 6): Keyword[] {
   return (KEYWORDS as Keyword[])
-    .filter((k) => k.slug !== current.slug)
+    .filter((k) => k.slug !== current.slug && k.slug !== "free-backlink-checker-usa")
     .sort((a, b) => {
       const aScore =
         (a.intent === current.intent ? 2 : 0) +
