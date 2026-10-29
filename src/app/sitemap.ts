@@ -62,33 +62,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             return [] as { slug: string; updatedAt: Date }[];
         });
 
-    // Handle leaderboard niches with deliberate inclusion policy:
-    // 1. Confirmed populated: include with real lastUpdated timestamp.
-    // 2. Confirmed empty: exclude from sitemap to prevent indexing soft-404s.
-    // 3. Operational error: fail-safe include so temporary DB issues don't drop URLs.
+    // Include all leaderboard category pages in the sitemap for complete coverage
     const leaderboardEntries: MetadataRoute.Sitemap = [];
     for (const niche of NICHES) {
         try {
             const result = await getNicheLeaderboardResult(niche);
-            if (result.status === "success") {
-                leaderboardEntries.push({
-                    url: `${SITE_URL}/leaderboard/${niche}`,
-                    lastModified: new Date(result.data.lastUpdated),
-                    changeFrequency: "weekly" as const,
-                    priority: 0.8,
-                });
-            } else if (result.status === "error") {
-                logger.error("[sitemap] Leaderboard query error for niche, preserving sitemap URL as fail-safe", { niche });
-                leaderboardEntries.push({
-                    url: `${SITE_URL}/leaderboard/${niche}`,
-                    lastModified: MARKETING_PAGES_DATE,
-                    changeFrequency: "weekly" as const,
-                    priority: 0.8,
-                });
-            } else {
-                // Confirmed empty: excluded from sitemap
-                logger.info("[sitemap] Excluding confirmed empty leaderboard category from sitemap", { niche });
-            }
+            const lastModified = result.status === "success" && result.data
+                ? new Date(result.data.lastUpdated)
+                : MARKETING_PAGES_DATE;
+
+            leaderboardEntries.push({
+                url: `${SITE_URL}/leaderboard/${niche}`,
+                lastModified,
+                changeFrequency: "weekly" as const,
+                priority: 0.8,
+            });
         } catch (err) {
             logger.error("[sitemap] Unexpected error checking leaderboard niche, fail-safe including URL", {
                 niche,

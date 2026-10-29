@@ -89,34 +89,23 @@ describe("Sitemap Generation & Deduplication", () => {
 });
 
 describe("Leaderboard Safe Handling & SEO Indexability Policy", () => {
-  it("distinguishes empty categories and marks them noindex, follow", async () => {
+  it("ensures all leaderboard category pages are indexable with canonical tags", async () => {
     for (const niche of NICHES) {
-      const result = await getNicheLeaderboardResult(niche);
-      // In current database state, all 6 niches have 0 qualifying snapshot rows
-      if (result.status === "empty") {
-        const metadata = await generateLeaderboardMetadata({
-          params: Promise.resolve({ niche }),
-        });
-        expect(metadata.robots).toEqual({ index: false, follow: true });
-        expect(metadata.alternates?.canonical).toBe(`https://optiaiseo.online/leaderboard/${niche}`);
-      } else if (result.status === "success") {
-        const metadata = await generateLeaderboardMetadata({
-          params: Promise.resolve({ niche }),
-        });
-        expect(metadata.robots).toEqual({ index: true, follow: true });
-      }
+      const metadata = await generateLeaderboardMetadata({
+        params: Promise.resolve({ niche }),
+      });
+      expect((metadata.robots as any)?.index).toBe(true);
+      expect((metadata.robots as any)?.follow).toBe(true);
+      expect(metadata.alternates?.canonical).toBe(`https://optiaiseo.online/leaderboard/${niche}`);
     }
   });
 
-  it("excludes confirmed empty leaderboards from sitemap", async () => {
+  it("includes all leaderboard categories in sitemap", async () => {
     const entries = await sitemap();
     const urls = new Set(entries.map((e) => e.url));
 
     for (const niche of NICHES) {
-      const result = await getNicheLeaderboardResult(niche);
-      if (result.status === "empty") {
-        expect(urls.has(`https://optiaiseo.online/leaderboard/${niche}`)).toBe(false);
-      }
+      expect(urls.has(`https://optiaiseo.online/leaderboard/${niche}`)).toBe(true);
     }
   });
 });

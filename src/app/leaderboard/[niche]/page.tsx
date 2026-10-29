@@ -35,9 +35,17 @@ export async function generateMetadata({ params }: { params: Promise<{ niche: st
         title: `Top AI-Visible ${meta.label} ${year} — AI Visibility Leaderboard`,
         description: `Which ${meta.label} are most cited by ChatGPT, Perplexity, and Google AI? Weekly-updated ranking of the most AI-visible ${meta.description.toLowerCase()}.`,
         alternates: { canonical: `${SITE_URL}/leaderboard/${niche}` },
-        robots: isConfirmedEmpty
-            ? { index: false, follow: true }
-            : { index: true, follow: true },
+        robots: {
+            index: true,
+            follow: true,
+            googleBot: {
+                index: true,
+                follow: true,
+                "max-video-preview": -1,
+                "max-image-preview": "large",
+                "max-snippet": -1,
+            },
+        },
         openGraph: {
             title: `Most AI-Visible ${meta.label} in ${year}`,
             description: `Weekly ranking of ${meta.label} by Generative Share of Voice — how often each site appears in ChatGPT, Perplexity, and Google AI answers.`,
