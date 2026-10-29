@@ -36,15 +36,15 @@ export async function detectPerformanceSignals(
     prisma.metricSnapshot.findMany({
       where: {
         siteId,
-        createdAt: { gte: since },
+        capturedAt: { gte: since },
       },
       select: {
         id: true,
         coreWebVitals: true,
         overallScore: true,
-        createdAt: true,
+        capturedAt: true,
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { capturedAt: "desc" },
       take: 2,
     }),
   ]);
@@ -140,7 +140,7 @@ export async function detectPerformanceSignals(
         sourceType: "PERFORMANCE",
         metric: "coreWebVitals",
         value: `${previous.coreWebVitals} -> ${current.coreWebVitals}`,
-        observedAt: current.createdAt,
+        observedAt: current.capturedAt ?? (current as any).createdAt ?? new Date(),
         metadata: { drop: previous.coreWebVitals - current.coreWebVitals },
       };
 

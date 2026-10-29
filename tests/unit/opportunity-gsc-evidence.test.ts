@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { getUserGscToken } from "@/lib/gsc/token";
 import { getAuthorizedGscProperty } from "@/lib/gsc/property-resolver";
@@ -39,6 +39,8 @@ const recentDates = Array.from({ length: 7 }, (_, index) => ({
 
 describe("fetchGscEvidenceResult", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
     vi.clearAllMocks();
     vi.mocked(prisma.site.findUnique).mockResolvedValue(site as never);
     vi.mocked(prisma.gscDailyPerformance.findMany).mockResolvedValue([] as never);
@@ -47,6 +49,10 @@ describe("fetchGscEvidenceResult", () => {
     vi.mocked(getUserGscToken).mockRejectedValue(new Error("GSC_NOT_CONNECTED"));
     vi.mocked(getAuthorizedGscProperty).mockResolvedValue("https://example.com" as never);
     vi.mocked(fetchGSCKeywords).mockResolvedValue([] as never);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("returns NOT_CONNECTED with null data instead of pretending GSC returned no rows", async () => {

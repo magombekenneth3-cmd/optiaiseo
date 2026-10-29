@@ -35,8 +35,8 @@ describe("Discovery New Detectors Unit Tests", () => {
       },
     ]);
     mockMetricSnapshotFindMany.mockResolvedValueOnce([
-      { id: "snap-1", coreWebVitals: 65, overallScore: 70, createdAt: now },
-      { id: "snap-2", coreWebVitals: 85, overallScore: 82, createdAt: new Date(now.getTime() - 86400000) },
+      { id: "snap-1", coreWebVitals: 65, overallScore: 70, capturedAt: now, createdAt: now },
+      { id: "snap-2", coreWebVitals: 85, overallScore: 82, capturedAt: new Date(now.getTime() - 86400000), createdAt: new Date(now.getTime() - 86400000) },
     ]);
 
     const signals = await detectPerformanceSignals("site-1", "run-1");
