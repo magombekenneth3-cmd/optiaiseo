@@ -29,17 +29,19 @@ export async function generateMetadata({ params }: { params: Promise<{ niche: st
     const meta = NICHE_META[niche as Niche];
     const year = new Date().getFullYear();
     const result = await getNicheLeaderboardResult(niche as Niche);
-    const isConfirmedEmpty = result.status === "empty";
+    const hasPublishedRankings =
+        result.status === "success" &&
+        result.data.entries.length > 0;
 
     return {
         title: `Top AI-Visible ${meta.label} ${year} — AI Visibility Leaderboard`,
         description: `Which ${meta.label} are most cited by ChatGPT, Perplexity, and Google AI? Weekly-updated ranking of the most AI-visible ${meta.description.toLowerCase()}.`,
         alternates: { canonical: `${SITE_URL}/leaderboard/${niche}` },
         robots: {
-            index: true,
+            index: hasPublishedRankings,
             follow: true,
             googleBot: {
-                index: true,
+                index: hasPublishedRankings,
                 follow: true,
                 "max-video-preview": -1,
                 "max-image-preview": "large",

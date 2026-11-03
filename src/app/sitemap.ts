@@ -62,32 +62,34 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             return [] as { slug: string; updatedAt: Date }[];
         });
 
-    // Include all leaderboard category pages in the sitemap for complete coverage
+    // Only include leaderboard pages that have published rankings
     const leaderboardEntries: MetadataRoute.Sitemap = [];
     for (const niche of NICHES) {
         try {
             const result = await getNicheLeaderboardResult(niche);
-            const lastModified = result.status === "success" && result.data
-                ? new Date(result.data.lastUpdated)
-                : MARKETING_PAGES_DATE;
+
+            if (
+                result.status !== "success" ||
+                !result.data ||
+                result.data.entries.length === 0
+            ) {
+                continue;
+            }
 
             leaderboardEntries.push({
                 url: `${SITE_URL}/leaderboard/${niche}`,
-                lastModified,
+                lastModified: new Date(result.data.lastUpdated),
                 changeFrequency: "weekly" as const,
                 priority: 0.8,
             });
         } catch (err) {
-            logger.error("[sitemap] Unexpected error checking leaderboard niche, fail-safe including URL", {
-                niche,
-                error: formatError(err),
-            });
-            leaderboardEntries.push({
-                url: `${SITE_URL}/leaderboard/${niche}`,
-                lastModified: MARKETING_PAGES_DATE,
-                changeFrequency: "weekly" as const,
-                priority: 0.8,
-            });
+            logger.error(
+                "[sitemap] Failed to verify leaderboard publication",
+                {
+                    niche,
+                    error: formatError(err),
+                }
+            );
         }
     }
 
