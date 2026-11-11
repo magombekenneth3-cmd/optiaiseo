@@ -352,6 +352,10 @@ export async function refundCreditsIdempotent(
             return { success: true, refunded: true };
         });
     } catch (error) {
+        if ((error as { code?: string })?.code === "P2002") {
+            logger.info("[Credits] Idempotent refund skipped (concurrent duplicate)", { userId, referenceId });
+            return { success: true, refunded: false };
+        }
         logger.error("[Credits] Idempotent refund failed", { userId, referenceId, error: (error as Error)?.message || String(error) });
         return { success: false, refunded: false };
     }

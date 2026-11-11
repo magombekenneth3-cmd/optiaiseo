@@ -516,7 +516,7 @@ export async function generateBlog(
         // other, so run them concurrently. Typical saving: ~600–1200ms per call.
         const [siteContext, gscResult, compKeyword, usedBlogKeywords, seedKeywords] =
             await Promise.all([
-                extractSiteContext(site.domain),
+                extractSiteContext(site.domain, { timeoutMs: 5000 }),
 
                 // GSC — typed availability semantics; API_ERROR ≠ NO_DATA ≠ NOT_CONNECTED
                 (async (): Promise<{ opportunities: Awaited<ReturnType<typeof findOpportunities>>; gscStatus: GscDataResult<unknown>["status"]; gscProperty?: string }> => {

@@ -5,7 +5,6 @@ import { consumeCredits } from "@/lib/credits";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth/require-user";
-import { extractSiteContext } from "@/lib/blog/context";
 import { getAiClient, buildBlogResponseSchema, GeminiBlogResponse, buildPost, evaluateDraftForPublication } from "@/lib/blog";
 import { buildPromptContext } from "@/lib/blog/prompt-context";
 import { fetchGSCDecayData, normaliseSiteUrl } from "@/lib/gsc";
@@ -302,8 +301,6 @@ export async function refreshDecayingContent(
 
         const ai = getAiClient();
         if (!ai) return { success: false, error: "Gemini AI is not configured." };
-
-        await extractSiteContext(site.domain);
 
         const ctx = buildPromptContext({
             keyword: primaryKeyword,

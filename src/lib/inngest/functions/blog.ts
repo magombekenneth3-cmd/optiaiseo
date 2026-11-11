@@ -80,9 +80,14 @@ async function runFactCheckValidation(content: string): Promise<{
         };
     }
 
-    const results = await Promise.all(
-        chunks.map((chunk, idx) =>
-            callGeminiJson<{ qualityScore: number; issues: string[]; suggestions: string[] }>(
+    type FactCheckChunkResult = { qualityScore: number; issues: string[]; suggestions: string[] };
+    const FACT_CHECK_CONCURRENCY = 3;
+    const FACT_CHECK_MAX_ATTEMPTS = 3;
+
+    const checkChunk = async (chunk: string, idx: number): Promise<FactCheckChunkResult | null> => {
+        for (let attempt = 1; attempt <= FACT_CHECK_MAX_ATTEMPTS; attempt++) {
+            try {
+                return await callGeminiJson<FactCheckChunkResult>(
                 `You are a fact-checking editor. Review this article excerpt (chunk ${idx + 1}/${chunks.length}) and:
 1. Identify vague claims with no supporting data
 2. Identify statistics that appear fabricated or unverifiable
@@ -104,14 +109,32 @@ Only output valid JSON, nothing else.
 Article excerpt:
 ${chunk}`,
                 { maxOutputTokens: 2048, temperature: 0.2, timeoutMs: 60000 }
-            ).catch((error: unknown): null => {
-                logger.warn(`[Blog/FactCheck] Chunk ${idx + 1} failed`, {
-                    error: error instanceof Error ? error.message : String(error),
-                });
+                );
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : String(error);
+                const rateLimited = /429|rate.?limit|resource.?exhausted|quota/i.test(message);
+                if (rateLimited && attempt < FACT_CHECK_MAX_ATTEMPTS) {
+                    const delayMs = 2000 * 2 ** (attempt - 1) + Math.floor(Math.random() * 500);
+                    logger.warn(`[Blog/FactCheck] Chunk ${idx + 1} rate limited — retrying in ${delayMs}ms`, { attempt });
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
+                    continue;
+                }
+                logger.warn(`[Blog/FactCheck] Chunk ${idx + 1} failed`, { error: message, attempt });
                 return null;
-            })
-        )
-    );
+            }
+        }
+        return null;
+    };
+
+    const results: (FactCheckChunkResult | null)[] = new Array(chunks.length).fill(null);
+    let nextIndex = 0;
+    const workers = Array.from({ length: Math.min(FACT_CHECK_CONCURRENCY, chunks.length) }, async () => {
+        while (nextIndex < chunks.length) {
+            const idx = nextIndex++;
+            results[idx] = await checkChunk(chunks[idx], idx);
+        }
+    });
+    await Promise.all(workers);
 
     const validResults = results.filter(
         (r): r is { qualityScore: number; issues: string[]; suggestions: string[] } => r !== null
@@ -277,7 +300,10 @@ export const generateBlogJob = inngest.createFunction(
         // A recovered dispatch reuses its attempt ID. A deliberate retry gets a
         // new attempt ID and therefore can run against the same blog row.
         idempotency: "event.data.attemptId",
-        concurrency: { limit: 5 },
+        concurrency: [
+            { limit: 2, key: "event.data.userId" },
+            { limit: 8 },
+        ],
         rateLimit: {
             limit: 10,
             period: "1m",
@@ -336,7 +362,7 @@ export const generateBlogJob = inngest.createFunction(
                         where: {
                             id: blogId,
                             status: "GENERATING",
-                            ...(attemptId ? { generationAttemptId: attemptId } : {}),
+                            generationAttemptId: attemptId ?? null,
                         },
                         data: {
                             status: "FAILED",
@@ -357,9 +383,16 @@ export const generateBlogJob = inngest.createFunction(
                 // A failed downstream enrichment after save-blog must not turn
                 // a persisted article into a failed job or refund its charge.
                 if (failed.count === 0) {
-                    logger.warn("[Inngest/Blog] Failure arrived after the generation row left GENERATING", { blogId, attemptId });
+                    const current = attemptId
+                        ? await prisma.blog.findUnique({ where: { id: blogId }, select: { status: true, generationAttemptId: true } }).catch(() => null)
+                        : null;
+                    const alreadyFailedThisAttempt = current?.status === "FAILED" && current.generationAttemptId === attemptId;
+                    if (!alreadyFailedThisAttempt) {
+                        logger.warn("[Inngest/Blog] Failure arrived after the generation row left GENERATING", { blogId, attemptId });
+                        return;
+                    }
+                    logger.info("[Inngest/Blog] Resuming failure handling for an attempt already marked FAILED", { blogId, attemptId });
                 }
-                if (failed.count === 0) return;
             } else {
                 logger.error("[Inngest/Blog] onFailure: missing blogId — refusing to infer a target blog", { siteId });
                 return;
@@ -380,6 +413,7 @@ export const generateBlogJob = inngest.createFunction(
 
             try {
                 await inngest.send({
+                    ...(attemptId ? { id: `blog-generation-failed:${blogId}:${attemptId}` } : {}),
                     name: "blog/generation.failed",
                     data: {
                         runId: runId ?? "unknown",
@@ -402,18 +436,29 @@ export const generateBlogJob = inngest.createFunction(
             }
 
             // Refund only the attempt that transitioned GENERATING → FAILED.
-            if (userId && blogId) {
+            if (userId && blogId && attemptId) {
                 try {
                     const { refundCreditsIdempotent } = await import("@/lib/credits");
-                    const refId = `refund:blog-generation:${blogId}:${attemptId ?? "legacy"}`;
-                    await refundCreditsIdempotent(userId, 10, refId, "Refund: Failed Blog Generation");
-                    logger.info("[Inngest/Blog] Idempotently refunded failed generation attempt", { userId, blogId, attemptId });
+                    const { blogGenerationEventId } = await import("@/lib/blog/generation-recovery");
+                    const debitRef = blogGenerationEventId(blogId, attemptId);
+                    const debit = await prisma.creditLedger.findUnique({
+                        where: { userId_referenceId: { userId, referenceId: debitRef } },
+                        select: { amount: true, type: true },
+                    });
+                    if (!debit || debit.type !== "DEBIT" || debit.amount <= 0) {
+                        logger.warn("[Inngest/Blog] No debit found for failed attempt — skipping refund", { userId, blogId, attemptId });
+                        return;
+                    }
+                    const result = await refundCreditsIdempotent(userId, debit.amount, `refund:${debitRef}`, "Refund: Failed Blog Generation");
+                    if (!result.success) throw new Error("Refund transaction failed");
+                    logger.info("[Inngest/Blog] Idempotently refunded failed generation attempt", { userId, blogId, attemptId, refunded: result.refunded });
                 } catch (refundErr) {
-                    logger.error("[Inngest/Blog] Failed to refund credits — manual action required", {
+                    logger.error("[Inngest/Blog] Failed to refund credits — will retry", {
                         blogId,
                         userId,
                         errorName: refundErr instanceof Error ? refundErr.name : "unknown",
                     });
+                    throw refundErr;
                 }
             }
         },
@@ -468,15 +513,15 @@ export const generateBlogJob = inngest.createFunction(
             return s;
         });
 
+        const displayName = cleanDomainToDisplayName(site.domain);
         const author = {
-            name: (event.data.authorName as string | undefined)?.trim() || site.authorName || "Editorial Team",
+            name: (event.data.authorName as string | undefined)?.trim() || site.authorName?.trim() || site.user?.name?.trim() || displayName || site.domain,
             role: (event.data.authorRole as string | undefined)?.trim() || site.authorRole || undefined,
             bio: (event.data.authorBio as string | undefined)?.trim() || site.authorBio || undefined,
             realExperience: (event.data.realExperience as string | undefined)?.trim() ?? site.realExperience ?? null,
             realNumbers: (event.data.realNumbers as string | undefined)?.trim() ?? site.realNumbers ?? null,
             localContext: (event.data.localContext as string | undefined)?.trim() ?? site.localContext ?? null,
         };
-        const displayName = cleanDomainToDisplayName(site.domain);
 
         const detectedIntent = detectIntent(keyword ?? "");
         // Runs before generation so the writer knows the competitive landscape.
@@ -1064,13 +1109,36 @@ ${liveBlogPost.content.substring(0, 120000)}`,
         // ── 7. FAQ Extraction & Schema Markup Generation ────────────────────
         function extractFaqsFromContent(content: string): { question: string; answer: string }[] {
             const faqs: { question: string; answer: string }[] = [];
-            const matches = [...content.matchAll(/<h3[^>]*>(.+?)<\/h3>\s*<p[^>]*>(.+?)<\/p>/gi)];
-            for (const match of matches) {
-                const q = match[1].replace(/<[^>]+>/g, "").trim();
-                const a = match[2].replace(/<[^>]+>/g, "").trim();
-                if (q && a && (q.endsWith("?") || /^(what|how|why|can|is|are|does|do|where|when|who)\b/i.test(q))) {
-                    faqs.push({ question: q, answer: a });
-                }
+            const seen = new Set<string>();
+            const toText = (fragment: string) => fragment
+                .replace(/<(?:script|style|figure)[^>]*>[\s\S]*?<\/(?:script|style|figure)>/gi, " ")
+                .replace(/<\/(?:p|li|tr|div|ul|ol|table|blockquote)>/gi, " ")
+                .replace(/<li[^>]*>/gi, " • ")
+                .replace(/<[^>]+>/g, " ")
+                .replace(/&nbsp;/gi, " ")
+                .replace(/&amp;/gi, "&")
+                .replace(/&quot;/gi, "\"")
+                .replace(/&#39;|&apos;/gi, "'")
+                .replace(/\s+/g, " ")
+                .trim();
+            const headingPattern = /<h([23])[^>]*>([\s\S]+?)<\/h\1>/gi;
+            const headings = [...content.matchAll(headingPattern)];
+            for (let i = 0; i < headings.length; i++) {
+                const match = headings[i];
+                const q = toText(match[2]);
+                if (!q || !(q.endsWith("?") || /^(what|how|why|can|is|are|does|do|where|when|who|which|should|will)\b/i.test(q))) continue;
+                const start = (match.index ?? 0) + match[0].length;
+                const rest = content.slice(start);
+                const nextHeading = rest.search(/<h[1-6][\s>]/i);
+                const block = nextHeading === -1 ? rest : rest.slice(0, nextHeading);
+                let a = toText(block);
+                if (!a) continue;
+                if (a.length > 1200) a = `${a.slice(0, 1200).replace(/\s+\S*$/, "")}…`;
+                const key = q.toLowerCase();
+                if (seen.has(key)) continue;
+                seen.add(key);
+                faqs.push({ question: q, answer: a });
+                if (faqs.length >= 10) break;
             }
             return faqs;
         }
@@ -1489,12 +1557,12 @@ ${liveBlogPost.content.substring(0, 120000)}`,
         });
 
         // Only for non-failed blogs with at least one target keyword to track.
-        if (blogStatus === "DRAFT" && liveBlogPost.targetKeywords.length > 0) {
+        if (resolvedBlogId && blogStatus === "DRAFT" && liveBlogPost.targetKeywords.length > 0) {
             await step.sendEvent("trigger-citation-monitor", {
                 name: "blog.published",
                 data: {
                     siteId,
-                    blogId: event.data.blogId ?? "new",
+                    blogId: resolvedBlogId,
                     targetKeywords: liveBlogPost.targetKeywords.slice(0, 5),
                     publishedAt: new Date().toISOString(),
                     status: blogStatus,
@@ -1502,12 +1570,12 @@ ${liveBlogPost.content.substring(0, 120000)}`,
             });
         }
 
-        if (blogStatus === "DRAFT") {
+        if (resolvedBlogId && blogStatus === "DRAFT") {
             await step.sendEvent("trigger-internal-links", {
                 name: "blog.published" as const,
                 data: {
                     siteId,
-                    blogId: event.data.blogId ?? "new",
+                    blogId: resolvedBlogId,
                     blogUrl: `https://${site.domain}/${liveBlogPost.slug}`,
                     keyword: keyword || liveBlogPost.targetKeywords[0] || "",
                 },

@@ -37,6 +37,7 @@ import { runFullPipeline } from "./pipeline";
 import type { EvidencePacket, PublicationGateResult, ResearchPacket } from "./contracts";
 import { buildResearchPacket } from "./research-packet";
 import { extractEvidencePacket } from "./evidence-extractor";
+import { markdownToHtml, inlineMarkdownToHtml } from "./markdown";
 
 export interface BlogPostDraft {
     title: string;
@@ -141,11 +142,7 @@ async function fetchBlogPhotos(heroQuery: string, sectionQueries: string[]) {
 }
 
 function mdToHtml(text: string): string {
-    return text
-        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-        .replace(/\*(.+?)\*/g, "<em>$1</em>")
-        .replace(/`(.+?)`/g, "<code>$1</code>")
-        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    return inlineMarkdownToHtml(text);
 }
 
 function assembleHtml(params: {
@@ -161,31 +158,19 @@ function assembleHtml(params: {
 }): string {
     const { content, faqs, hero, inlinePhotos, quickAnswer, comparisonTable, author, funnelHtml, ctx } = params;
 
-    let html = content
-        .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-        .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-        .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-        .replace(/\*(.+?)\*/g, "<em>$1</em>")
-        .replace(/^\s*[-*] (.+)$/gm, "<li>$1</li>")
-        .replace(/(<li>.*<\/li>\n?)+/g, "<ul>$&</ul>")
-        .replace(/^\d+\. (.+)$/gm, "<li>$1</li>")
-        .replace(/(<li>.*<\/li>\n?)+/g, (match) => {
-            if (match.includes('<ul>')) return match;
-            return `<ol>${match}</ol>`;
-        })
-        .replace(/^(?!<[hul]|<\/[hul]|\|)(.+)$/gm, "<p>$1</p>")
-        .replace(/<p>\s*<\/p>/g, "")
-        .replace(/<p>(<h[1-6]>)/g, "$1")
-        .replace(/(<\/h[1-6]>)<\/p>/g, "$1");
+    let html = markdownToHtml(content);
 
-    html = html.replace(/<h1>[^<]*<\/h1>/gi, "");
-    html = html.replace(/<h2>(.+?)<\/h2>/g, (_m, heading: string) => {
-        const id = heading.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    html = html.replace(/<h1(?:\s[^>]*)?>[\s\S]*?<\/h1>/gi, "");
+    const usedIds = new Map<string, number>();
+    html = html.replace(/<h2>([\s\S]+?)<\/h2>/g, (_m, heading: string) => {
+        const base = heading.replace(/<[^>]*>/g, "").replace(/&[a-z#0-9]+;/gi, " ").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "section";
+        const seen = usedIds.get(base) ?? 0;
+        usedIds.set(base, seen + 1);
+        const id = seen === 0 ? base : `${base}-${seen + 1}`;
         return `<h2 id="${id}">${heading}</h2>`;
     });
 
-    const h2Matches = [...html.matchAll(/<h2 id="([^"]+)">(.+?)<\/h2>/g)];
+    const h2Matches = [...html.matchAll(/<h2 id="([^"]+)">([\s\S]+?)<\/h2>/g)];
     const tocHtml = h2Matches.length >= 3 ? `
 <nav style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:1.25rem 1.5rem;margin:1.5rem 0;" aria-label="Table of contents">
   <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin:0 0 0.75rem;">In This Article</p>
@@ -257,12 +242,12 @@ function assembleHtml(params: {
 </div>`;
 
     let photoIdx = 0;
-    html = html.replace(/<h2 id="([^"]+)">(.+?)<\/h2>/g, (match) => {
+    html = html.replace(/<h2 id="([^"]+)">([\s\S]+?)<\/h2>/g, (match) => {
         const photo = inlinePhotos[photoIdx++];
         if (!photo) return match;
         return `${match}
 <figure style="margin:1.5rem 0;border-radius:12px;overflow:hidden;">
-  <img src="${photo.url}" alt="${photo.alt}" loading="lazy" style="width:100%;height:320px;object-fit:cover;display:block;" />
+  <img src="${photo.url}" alt="${photo.alt}" loading="lazy" style="width:100%;height:auto;aspect-ratio:16/9;max-height:420px;object-fit:cover;display:block;" />
   <figcaption style="font-size:0.75rem;color:#6b7280;padding:6px 10px;background:#f9fafb;">
     Photo by <a href="${photo.photographerUrl}" target="_blank" rel="noopener">${photo.photographer}</a> on <a href="${photo.unsplashUrl}" target="_blank" rel="noopener">Unsplash</a>
   </figcaption>
@@ -303,7 +288,7 @@ function assembleHtml(params: {
 </p>
 ${hero ? `
 <figure style="margin:1.5rem 0;border-radius:16px;overflow:hidden;">
-  <img src="${hero.url}" alt="${hero.alt}" style="width:100%;height:420px;object-fit:cover;display:block;" />
+  <img src="${hero.url}" alt="${hero.alt}" fetchpriority="high" style="width:100%;height:auto;aspect-ratio:16/9;max-height:520px;object-fit:cover;display:block;" />
   <figcaption style="font-size:0.75rem;color:#6b7280;padding:6px 10px;background:#f9fafb;">
     Photo by <a href="${hero.photographerUrl}" target="_blank" rel="noopener">${hero.photographer}</a> on <a href="${hero.unsplashUrl}" target="_blank" rel="noopener">Unsplash</a>
   </figcaption>

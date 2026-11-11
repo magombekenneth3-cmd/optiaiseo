@@ -18,21 +18,45 @@ export interface SiteContext {
 }
 
 
+const MAX_CONTEXT_HTML_BYTES = 2_000_000;
+
+async function readCappedText(res: Response, maxBytes: number): Promise<string> {
+    if (!res.body) return (await res.text()).slice(0, maxBytes);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let received = 0;
+    let text = "";
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value.byteLength;
+        text += decoder.decode(value, { stream: true });
+        if (received >= maxBytes) {
+            await reader.cancel().catch(() => undefined);
+            break;
+        }
+    }
+    return text + decoder.decode();
+}
+
 /**
  * Crawls the live site to extract real content context.
  * Returns structured data used to ground blog generation.
  */
-export async function extractSiteContext(domain: string): Promise<SiteContext | null> {
+export async function extractSiteContext(domain: string, options: { timeoutMs?: number } = {}): Promise<SiteContext | null> {
     try {
         const url = domain.startsWith("http") ? domain : `https://${domain}`;
         const res = await fetch(url, {
             headers: { "User-Agent": "Mozilla/5.0 (compatible; SEOBot/1.0)" },
-            signal: AbortSignal.timeout(15000),
+            signal: AbortSignal.timeout(options.timeoutMs ?? 8000),
+            redirect: "follow",
         });
 
         if (!res.ok) return null;
+        const contentType = res.headers.get("content-type") ?? "";
+        if (contentType && !/html|xml|text\/plain/i.test(contentType)) return null;
 
-        const html = await res.text();
+        const html = await readCappedText(res, MAX_CONTEXT_HTML_BYTES);
 
         // Use node-html-parser for robust parsing (handles multiline, encoded chars etc.)
         const root = parse(html);

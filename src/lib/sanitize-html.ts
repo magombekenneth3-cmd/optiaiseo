@@ -14,14 +14,14 @@ const ALLOWED_TAGS = new Set([
     "u", "ul", "var", "video", "wbr",
 ]);
 
-const SAFE_CSS_PROPERTIES = /^(color|background-color|font-size|font-weight|font-style|font-family|text-align|text-decoration|margin|margin-top|margin-right|margin-bottom|margin-left|padding|padding-top|padding-right|padding-bottom|padding-left|border|border-radius|width|height|max-width|max-height|display|flex|flex-direction|align-items|justify-content|gap|line-height|letter-spacing|list-style|opacity|overflow|white-space|word-break|vertical-align)\s*:/i;
+const SAFE_CSS_PROPERTIES = /^(color|background-color|font-size|font-weight|font-style|font-family|text-align|text-decoration|margin|margin-top|margin-right|margin-bottom|margin-left|padding|padding-top|padding-right|padding-bottom|padding-left|border|border-radius|width|height|max-width|max-height|aspect-ratio|object-fit|object-position|display|flex|flex-direction|align-items|justify-content|gap|line-height|letter-spacing|list-style|opacity|overflow|white-space|word-break|vertical-align)\s*:/i;
 
 const ALLOWED_ATTRS = new Set([
     "alt", "aria-checked", "aria-describedby", "aria-disabled", "aria-expanded",
     "aria-hidden", "aria-label", "aria-labelledby", "aria-live", "aria-required",
     "aria-selected", "border", "cellpadding", "cellspacing",
     "class", "colspan", "controls", "coords", "datetime",
-    "decoding", "download", "headers", "height",
+    "decoding", "download", "fetchpriority", "headers", "height",
     "hidden", "href", "id", "kind", "label", "lang",
     "loading", "loop", "max", "maxlength", "media", "min",
     "muted", "name", "open", "poster", "preload",

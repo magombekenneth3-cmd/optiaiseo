@@ -80,13 +80,6 @@ export async function GET(request: Request) {
         }
 
         const attemptId = randomUUID();
-        const creditRef = `blog-generation:cron:${site.id}:${attemptId}`;
-        const creditResult = await consumeCreditsIdempotent(site.userId, "blog_generation", creditRef);
-        if (!creditResult.allowed) {
-            logger.info(`[Cron/Blog] Site ${site.domain} — insufficient credits (${creditResult.remaining}), skipping`);
-            skipped++;
-            continue;
-        }
 
         const blog = await prisma.blog.create({
             data: {
@@ -111,10 +104,29 @@ export async function GET(request: Request) {
             ...(competitorDomain ? { competitorDomain, searchVolume, difficulty } : {}),
         };
 
-        await prisma.blog.update({
-            where: { id: blog.id },
-            data: { generationInput: eventData as any },
-        });
+        try {
+            await prisma.blog.update({
+                where: { id: blog.id },
+                data: { generationInput: eventData as any },
+            });
+        } catch (err) {
+            await prisma.blog.delete({ where: { id: blog.id } }).catch(() => null);
+            logger.warn("[Cron/Blog] Failed to persist generation input", { blogId: blog.id, error: (err as Error)?.message });
+            skipped++;
+            continue;
+        }
+
+        const creditResult = await consumeCreditsIdempotent(
+            site.userId,
+            "blog_generation",
+            blogGenerationEventId(blog.id, attemptId),
+        );
+        if (!creditResult.allowed) {
+            await prisma.blog.delete({ where: { id: blog.id } }).catch(() => null);
+            logger.info(`[Cron/Blog] Site ${site.domain} — insufficient credits (${creditResult.remaining}), skipping`);
+            skipped++;
+            continue;
+        }
 
         try {
             await inngest.send({
