@@ -45,8 +45,7 @@ export async function POST(
         }
 
         // SECURITY: rate limit AI generation — 10 calls/min per authenticated user IP
-        const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
-        const rl = await checkRateLimit(`blog-improve:${ip}`, 10, 60);
+        const rl = await checkRateLimit(`blog-improve:${user.id}`, 10, 60);
         if (!rl.allowed) {
             return NextResponse.json({ error: "Too many requests — please wait before retrying" }, { status: 429 });
         }
@@ -70,7 +69,10 @@ export async function POST(
 
         const { issues, scoreData } = parsed.data;
 
-        const dbUser = await prisma.user.findUnique({ where: { email: user!.email } });
+        if (issues.length === 0 && !scoreData) {
+            return NextResponse.json({ error: "No issues to fix — content looks good" }, { status: 400 });
+        }
+
         if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
         const blog = await prisma.blog.findFirst({
@@ -94,11 +96,14 @@ Current content score context:
 - Missing headings: ${scoreData.missingHeadings?.join(", ") || "none"}
 ` : "";
 
+        const contentIsTruncated = blog.content.length > 28000;
+        const contentForPrompt = blog.content.substring(0, 28000);
+
         const prompt = `You are an expert SEO content editor${groundedCtx ? ` working for ${groundedCtx.data.domain}` : ""}.
 ${groundedCtx?.contextBlock ?? ""}
 
 Your task is to improve the following HTML blog post to better meet SEO content scoring requirements.
-
+${contentIsTruncated ? `\nWARNING: The content was truncated from ${blog.content.length} characters to 28000 for processing. Preserve ALL content you receive and do not add a premature ending.\n` : ""}
 TARGET KEYWORD: ${blog.targetKeywords?.[0] || "not specified"}
 
 ISSUES TO FIX:
@@ -114,12 +119,12 @@ IMPORTANT RULES:
 7. Return ONLY the improved HTML content — no explanations, no markdown code fences, just the raw HTML
 
 CURRENT CONTENT:
-${blog.content.substring(0, 28000)}`;
+${contentForPrompt}`;
 
         const response = await ai.models.generateContent({
             model: AI_MODELS.GEMINI_PRO,
             contents: prompt,
-            config: { temperature: 0.4, maxOutputTokens: 8192 },
+            config: { temperature: 0.2, maxOutputTokens: 16384 },
         });
 
         const improvedContent = response.text?.trim();
@@ -133,7 +138,29 @@ ${blog.content.substring(0, 28000)}`;
             .replace(/\n?```$/i, "")
             .trim();
 
-        return NextResponse.json({ content: cleaned });
+        if (cleaned.length < contentForPrompt.length * 0.5) {
+            return NextResponse.json(
+                { error: "AI output was too short — content may have been lost. Please try again." },
+                { status: 500 }
+            );
+        }
+
+        const countTags = (html: string, tag: string) =>
+            (html.match(new RegExp(`<${tag}[\\s>]`, "gi")) || []).length;
+        const origScripts = countTags(contentForPrompt, "script");
+        const origFigures = countTags(contentForPrompt, "figure");
+        const newScripts = countTags(cleaned, "script");
+        const newFigures = countTags(cleaned, "figure");
+
+        const warnings: string[] = [];
+        if (origScripts > 0 && newScripts < origScripts) warnings.push(`${origScripts - newScripts} <script> tag(s) were dropped`);
+        if (origFigures > 0 && newFigures < origFigures) warnings.push(`${origFigures - newFigures} <figure> tag(s) were dropped`);
+
+        return NextResponse.json({
+            content: cleaned,
+            ...(contentIsTruncated && { truncated: true, originalLength: blog.content.length }),
+            ...(warnings.length > 0 && { warnings }),
+        });
 
     } catch (err: unknown) {
         logger.error("[Blog AI Improve] Error:", { error: (err as Error)?.message || String(err) });

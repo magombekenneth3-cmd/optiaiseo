@@ -741,11 +741,19 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
             }
 
             setImprovingStep("Reviewing changes…");
-            const { content } = await res.json();
-            if (!content) throw new Error("AI returned no content");
+            const data = await res.json();
+            if (!data.content) throw new Error("AI returned no content");
 
-            setAiContent(content);
+            setAiContent(data.content);
             setShowAiReview(true);
+
+            if (data.truncated) {
+                toast.warning("Content was truncated for AI processing — review carefully for completeness.");
+            }
+            if (data.warnings?.length) {
+                data.warnings.forEach((w: string) => toast.warning(w));
+            }
+
             toast.success("AI improvement is ready to review");
         } catch (error) {
             const msg = error instanceof Error ? error.message : "AI improvement failed.";

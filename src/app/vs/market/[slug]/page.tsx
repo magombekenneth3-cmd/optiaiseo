@@ -48,8 +48,25 @@ export default async function MarketComparisonPage(
     notFound();
   }
 
+  const SITE_URL = "https://optiaiseo.online";
+
+  const itemListSchema = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: `Best ${category.subcategory} in ${category.geo === "Global" ? "the World" : category.geo}`,
+    url: `${SITE_URL}/vs/market/${slug}`,
+    numberOfItems: category.competitors.length,
+    itemListElement: category.competitors.map((comp, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name: comp.name || comp.domain,
+      url: `https://${comp.domain}`,
+    })),
+  };
+
   return (
     <div className="max-w-4xl mx-auto py-24 px-6">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }} />
       <div className="text-center mb-16">
         <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-6 capitalize">
           Best {category.subcategory} in {category.geo === "Global" ? "the World" : category.geo}

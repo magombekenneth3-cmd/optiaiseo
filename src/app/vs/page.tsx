@@ -181,9 +181,36 @@ const RELATED = [
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
+const itemListSchema = {
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  name: "SEO Tool Comparisons — OptiAISEO vs Competitors",
+  description: "Compare OptiAISEO with leading SEO tools including Ahrefs, Semrush, Surfer SEO, Moz, and more.",
+  url: `${SITE_URL}/vs`,
+  numberOfItems: COMPARISONS.length,
+  itemListElement: COMPARISONS.map((c, i) => ({
+    "@type": "ListItem",
+    position: i + 1,
+    name: `OptiAISEO vs ${c.name}`,
+    url: `${SITE_URL}/vs/${c.slug}`,
+    description: c.verdict,
+  })),
+};
+
+const vsBreadcrumbSchema = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+    { "@type": "ListItem", position: 2, name: "Comparisons", item: `${SITE_URL}/vs` },
+  ],
+};
+
 export default function VsIndexPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(vsBreadcrumbSchema) }} />
       <nav className="w-full border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5" aria-label="OptiAISEO home">

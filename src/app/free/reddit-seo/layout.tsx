@@ -26,6 +26,50 @@ export const metadata: Metadata = {
   },
 };
 
+const redditSeoSchema = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  name: "Free Reddit SEO Tool",
+  url: `${SITE_URL}/free/reddit-seo`,
+  applicationCategory: "UtilityApplication",
+  operatingSystem: "Web",
+  description:
+    "Find Reddit threads ranking on Google's first page for your keywords. Join the conversation, get referral traffic, and build brand signals for AI search. Free, no login.",
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
+    description: "100% free — no account required",
+  },
+  provider: {
+    "@type": "Organization",
+    name: "OptiAISEO",
+    url: SITE_URL,
+  },
+  featureList: [
+    "Find Reddit threads ranking on Google page 1",
+    "Keyword-based Reddit opportunity discovery",
+    "Referral traffic and brand signal analysis",
+    "AI search visibility boost through Reddit presence",
+  ],
+};
+
+const redditBreadcrumbSchema = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+    { "@type": "ListItem", position: 2, name: "Free Tools", item: `${SITE_URL}/free/reddit-seo` },
+    { "@type": "ListItem", position: 3, name: "Reddit SEO Tool", item: `${SITE_URL}/free/reddit-seo` },
+  ],
+};
+
 export default function RedditSeoLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(redditSeoSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(redditBreadcrumbSchema) }} />
+      {children}
+    </>
+  );
 }
