@@ -618,8 +618,10 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
     const [isSaving, setIsSaving] = useState(false);
     const [isPublishing, setIsPublishing] = useState(false);
     const [isImproving, setIsImproving] = useState(false);
+    const [improvingStep, setImprovingStep] = useState("");
     const [aiContent, setAiContent] = useState<string | null>(null);
     const [showAiReview, setShowAiReview] = useState(false);
+    const [preAiContent, setPreAiContent] = useState<string | null>(null);
 
     const handleCopy = useCallback((type: "markdown" | "html" | "answer") => {
         let textToCopy = "";
@@ -699,6 +701,7 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
 
     const handleAIImprove = useCallback(async () => {
         setIsImproving(true);
+        setImprovingStep("Analyzing issues…");
         try {
             const issues: string[] = [];
             if (scoreResult) {
@@ -709,10 +712,11 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                 if (missingHeadings?.length) issues.push(`Add missing headings: ${missingHeadings.join(", ")}`);
             }
 
+            setImprovingStep("Preparing citation fixes…");
             const citationIssues = failedCitationCriteria
-                .slice(0, 3)
                 .map((c) => `[CITATION] ${c.fix}`);
 
+            setImprovingStep("Rewriting content…");
             const res = await fetch(`/api/blogs/${blog.id}/improve`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -736,6 +740,7 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                 throw new Error(err.error || "AI improvement failed");
             }
 
+            setImprovingStep("Reviewing changes…");
             const { content } = await res.json();
             if (!content) throw new Error("AI returned no content");
 
@@ -743,22 +748,39 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
             setShowAiReview(true);
             toast.success("AI improvement is ready to review");
         } catch (error) {
-            const msg = error instanceof Error ? error.message : "AI improvement failed. Please try again.";
+            const msg = error instanceof Error ? error.message : "AI improvement failed.";
+            const userMsg = msg.includes("429") || msg.includes("rate")
+                ? "AI is busy — please try again in a moment."
+                : msg.includes("too long") || msg.includes("token")
+                    ? "Article is too long for a single pass. Try improving one section at a time."
+                    : msg;
             logger.error("AI improvement failed", { error: msg });
-            toast.error(msg);
+            toast.error(userMsg);
         } finally {
             setIsImproving(false);
+            setImprovingStep("");
         }
     }, [blog.id, citationScore, failedCitationCriteria, scoreResult]);
 
     const acceptAiChanges = useCallback(() => {
         if (!aiContent) return;
-        setEditedContent(aiContent); // hasUnsavedChanges recomputes automatically via useMemo
+        setPreAiContent(editedContent);
+        setEditedContent(aiContent);
         setAiContent(null);
         setShowAiReview(false);
         setMode("write");
-        toast.success("AI changes applied to draft");
-    }, [aiContent]);
+        toast.success("AI changes applied to draft", {
+            action: {
+                label: "Undo",
+                onClick: () => {
+                    setEditedContent(preAiContent ?? blog.content);
+                    setPreAiContent(null);
+                    toast.info("AI changes reverted");
+                },
+            },
+            duration: 8000,
+        });
+    }, [aiContent, editedContent, preAiContent, blog.content]);
 
     const rejectAiChanges = useCallback(() => {
         setAiContent(null);
@@ -958,16 +980,61 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                             ) : null}
 
                             {/* AI improve action */}
-                            {issueCount > 0 && (
-                                <section className="rounded-xl border border-border bg-card p-4">
+                            {issueCount > 0 ? (
+                                <section className="rounded-xl border border-brand/20 bg-brand/[0.04] p-4">
                                     <div className="flex items-start gap-3">
                                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
                                             <Sparkles className="h-4 w-4 text-primary" />
                                         </div>
                                         <div className="min-w-0">
-                                            <h3 className="text-xs font-semibold">Recommended improvement</h3>
+                                            <h3 className="text-xs font-semibold">Recommended improvements</h3>
+                                            <ul className="mt-1.5 space-y-1">
+                                                {failedCitationCriteria.slice(0, 2).map((c, i) => (
+                                                    <li key={i} className="text-[11px] leading-relaxed text-muted-foreground flex items-start gap-1.5">
+                                                        <span className="mt-0.5 h-1 w-1 shrink-0 rounded-full bg-rose-400" />
+                                                        {c.fix}
+                                                    </li>
+                                                ))}
+                                                {scoreResult?.topOpportunities?.slice(0, 2).map((o, i) => (
+                                                    <li key={`o-${i}`} className="text-[11px] leading-relaxed text-muted-foreground flex items-start gap-1.5">
+                                                        <span className="mt-0.5 h-1 w-1 shrink-0 rounded-full bg-amber-400" />
+                                                        {o}
+                                                    </li>
+                                                ))}
+                                                {issueCount > 4 && (
+                                                    <li className="text-[10px] text-muted-foreground/60">
+                                                        +{issueCount - 4} more issue{issueCount - 4 > 1 ? "s" : ""}
+                                                    </li>
+                                                )}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    <p className="mt-3 text-[10px] text-muted-foreground/70">
+                                        AI will rewrite your content to fix these — you review a diff before applying.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={handleAIImprove}
+                                        disabled={isImproving || isPublishing}
+                                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        {isImproving ? (
+                                            <><Loader2 className="h-3.5 w-3.5 animate-spin" />{improvingStep || "Improving…"}</>
+                                        ) : (
+                                            <><Zap className="h-3.5 w-3.5" />Fix {issueCount} issue{issueCount !== 1 ? "s" : ""} with AI</>
+                                        )}
+                                    </button>
+                                </section>
+                            ) : activeScore !== null && activeScore < 95 ? (
+                                <section className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4">
+                                    <div className="flex items-start gap-3">
+                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+                                            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h3 className="text-xs font-semibold text-emerald-400">Looking good!</h3>
                                             <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                                                AI can address the highest-impact issues without changing your draft until you approve.
+                                                No critical issues found. AI can still fine-tune for a higher score.
                                             </p>
                                         </div>
                                     </div>
@@ -975,16 +1042,16 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                                         type="button"
                                         onClick={handleAIImprove}
                                         disabled={isImproving || isPublishing}
-                                        className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                         {isImproving ? (
-                                            <><Loader2 className="h-3.5 w-3.5 animate-spin" />Improving content...</>
+                                            <><Loader2 className="h-3.5 w-3.5 animate-spin" />{improvingStep || "Fine-tuning…"}</>
                                         ) : (
-                                            <><Zap className="h-3.5 w-3.5" />Fix {issueCount} issues with AI</>
+                                            <><Sparkles className="h-3.5 w-3.5" />Fine-tune with AI</>
                                         )}
                                     </button>
                                 </section>
-                            )}
+                            ) : null}
 
                             <SerpResearchPanel
                                 brief={blog.serpCompetitiveBrief}
@@ -1100,7 +1167,7 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                     }}
                     onReject={rejectAiChanges}
                     title="Review AI Improvements"
-                    subtitle={`Addressing ${issueCount} detected content & citation opportunities.`}
+                    subtitle={`Addressing ${issueCount} detected content & citation issue${issueCount !== 1 ? "s" : ""}. Review the diff below.`}
                 />
             )}
         </div>
