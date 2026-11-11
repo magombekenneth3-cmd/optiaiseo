@@ -388,7 +388,7 @@ export const generateBlogJob = inngest.createFunction(
                         userId: userId ?? null,
                         stage: "inngest-job",
                         errorCode,
-                        errorMessage: errorCode,
+                        errorMessage: errorMessage,
                         retryable: isProviderFailure,
                         failedAt: new Date().toISOString(),
                     },
@@ -486,26 +486,31 @@ export const generateBlogJob = inngest.createFunction(
         const researchBrief = await step.run("perplexity-research", async () => {
             if (!process.env.PERPLEXITY_API_KEY) return null;
 
-            // Circuit breaker: skip Perplexity when it is known-bad to avoid
-            // blocking every blog job for 30 s on a rate-limit or outage.
             const CB_KEY = "cb:perplexity:state";
             const CB_FAIL = "cb:perplexity:failures";
             const CB_AT = "cb:perplexity:openedAt";
             const CB_MAX = 5;
-            const CB_TTL = 90_000; // 90 s cool-down
+            const CB_TTL = 90_000;
             let cbOpen = false;
+
+            let redis: Awaited<typeof import("@/lib/redis")>["redis"] | null = null;
             try {
-                const { redis } = await import("@/lib/redis");
-                const state = await redis.get<string>(CB_KEY);
-                const openedAt = await redis.get<number>(CB_AT);
-                if (state === "OPEN" && openedAt && Date.now() - openedAt < CB_TTL) {
-                    cbOpen = true;
-                    logger.warn("[Blog/Research] Perplexity circuit is OPEN — skipping");
-                } else if (state === "OPEN") {
-                    // Cool-down elapsed — allow one probe through
-                    await redis.del(CB_KEY);
-                }
+                const mod = await import("@/lib/redis");
+                redis = mod.redis;
             } catch { /* Redis unavailable — fail open */ }
+
+            try {
+                if (redis) {
+                    const state = await redis.get<string>(CB_KEY);
+                    const openedAt = await redis.get<number>(CB_AT);
+                    if (state === "OPEN" && openedAt && Date.now() - openedAt < CB_TTL) {
+                        cbOpen = true;
+                        logger.warn("[Blog/Research] Perplexity circuit is OPEN — skipping");
+                    } else if (state === "OPEN") {
+                        await redis.del(CB_KEY);
+                    }
+                }
+            } catch { /* non-fatal */ }
 
             if (cbOpen) return null;
 
@@ -541,20 +546,18 @@ Be specific and concise. This will be used to write a better article.`,
 
                 if (!res.ok) {
                     logger.warn(`[Blog/Research] Perplexity returned ${res.status}`);
-                    // Record failure toward circuit breaker
                     try {
-                        const { redis } = await import("@/lib/redis");
-                        const f = await redis.incr(CB_FAIL);
-                        await redis.expire(CB_FAIL, 300);
-                        if (f >= CB_MAX) { await redis.set(CB_KEY, "OPEN"); await redis.set(CB_AT, Date.now()); }
+                        if (redis) {
+                            const f = await redis.incr(CB_FAIL);
+                            await redis.expire(CB_FAIL, 300);
+                            if (f >= CB_MAX) { await redis.set(CB_KEY, "OPEN"); await redis.set(CB_AT, Date.now()); }
+                        }
                     } catch { /* non-fatal */ }
                     return null;
                 }
 
-                // Success — reset failure counter
                 try {
-                    const { redis } = await import("@/lib/redis");
-                    await redis.del(CB_KEY, CB_FAIL, CB_AT);
+                    if (redis) { await redis.del(CB_KEY, CB_FAIL, CB_AT); }
                 } catch { /* non-fatal */ }
 
                 const data = await res.json();
@@ -569,12 +572,12 @@ Be specific and concise. This will be used to write a better article.`,
                 logger.warn("[Blog/Research] Perplexity research failed — continuing without brief", {
                     error: (err as Error)?.message,
                 });
-                // Record failure toward circuit breaker
                 try {
-                    const { redis } = await import("@/lib/redis");
-                    const f = await redis.incr(CB_FAIL);
-                    await redis.expire(CB_FAIL, 300);
-                    if (f >= CB_MAX) { await redis.set(CB_KEY, "OPEN"); await redis.set(CB_AT, Date.now()); }
+                    if (redis) {
+                        const f = await redis.incr(CB_FAIL);
+                        await redis.expire(CB_FAIL, 300);
+                        if (f >= CB_MAX) { await redis.set(CB_KEY, "OPEN"); await redis.set(CB_AT, Date.now()); }
+                    }
                 } catch { /* non-fatal */ }
                 return null;
             }
@@ -819,7 +822,7 @@ Be specific and concise. This will be used to write a better article.`,
                     },
                     body: JSON.stringify({
                         model: AI_MODELS.ANTHROPIC_SONNET,
-                        max_tokens: 8192,
+                        max_tokens: 16384,
                         messages: [{
                             role: "user",
                             content: `You are an expert human editor. Your job is to make this SEO article sound like it was written by a knowledgeable practitioner — not an AI. Apply ALL of the following edits in a single pass:
@@ -861,7 +864,7 @@ ${authorContext ? `AUTHOR CONTEXT:\n${authorContext}\n` : ""}${groundedContext ?
 Return ONLY the edited HTML, starting with the first HTML element. No preamble, no explanation, no markdown fences.
 
 ARTICLE TO EDIT:
-${liveBlogPost.content.substring(0, 80000)}`,
+${liveBlogPost.content.substring(0, 120000)}`,
                         }],
                     }),
                     signal: AbortSignal.timeout(150000),
@@ -922,7 +925,24 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                     htmlCursor++;
                 }
 
-                liveBlogPost.content = liveBlogPost.content.slice(0, htmlCursor) + "</p>";
+                let truncated = liveBlogPost.content.slice(0, htmlCursor);
+                const openTags: string[] = [];
+                const tagRegex = /<\/?([a-zA-Z][a-zA-Z0-9]*)[^>]*>/g;
+                let tagMatch;
+                while ((tagMatch = tagRegex.exec(truncated)) !== null) {
+                    const isClosing = tagMatch[0][1] === "/";
+                    const tagName = tagMatch[1].toLowerCase();
+                    const selfClosing = /\/>$/.test(tagMatch[0]) || ["br", "hr", "img", "input", "meta", "link"].includes(tagName);
+                    if (selfClosing) continue;
+                    if (isClosing) {
+                        const idx = openTags.lastIndexOf(tagName);
+                        if (idx !== -1) openTags.splice(idx, 1);
+                    } else {
+                        openTags.push(tagName);
+                    }
+                }
+                const closingTags = openTags.reverse().map(t => `</${t}>`).join("");
+                liveBlogPost.content = truncated + closingTags;
                 wordCount = MAX_WORDS;
 
                 liveBlogPost.validationWarnings.push(
@@ -994,9 +1014,6 @@ ${liveBlogPost.content.substring(0, 80000)}`,
             }
         });
         liveBlogPost.content = finalContent;
-        if (liveBlogPost.contentMarkdown) {
-            liveBlogPost.contentMarkdown = finalContent;
-        }
 
         // ── 4. Placeholder & Secondary Surface Validation ──────────────────
         const PLACEHOLDER_PATTERN = /\[Section generation failed|\[EDITOR:|\bTODO\b|\bTBD\b|\bFIXME\b|lorem ipsum|Example Company|YourCompany|\{\{[^}]+\}\}|\[INSERT STAT\]|\[IMAGE HERE\]/i;
@@ -1448,30 +1465,23 @@ ${liveBlogPost.content.substring(0, 80000)}`,
 
         await step.run("save-enrichment-data", async () => {
             try {
-                const existingBlog = event.data.blogId
-                    ? await prisma.blog.findUnique({ where: { id: event.data.blogId }, select: { citationCriteria: true } })
-                    : null;
+                if (!resolvedBlogId) return;
+                const existingBlog = await prisma.blog.findUnique({ where: { id: resolvedBlogId }, select: { citationCriteria: true } });
                 const existingCriteria = existingBlog?.citationCriteria as Record<string, unknown> | null;
-                const targetId = event.data.blogId ?? (
-                    await prisma.blog.findUnique({ where: { siteId_slug: { siteId, slug: liveBlogPost.slug } }, select: { id: true } })
-                )?.id;
-                if (targetId) {
-                    await prisma.blog.update({
-                        where: { id: targetId },
-                        data: {
-                            citationCriteria: {
-                                ...(existingCriteria ?? {}),
-                                missingEntities: enrichment.missingEntities,
-                                enrichmentScore: enrichment.enrichmentScore,
-                                enrichmentAvailable: enrichment.available,
-                                expectedEntities: enrichment.expectedEntities,
-                                factCheckScore: factCheck.qualityScore,
-                            },
+                await prisma.blog.update({
+                    where: { id: resolvedBlogId },
+                    data: {
+                        citationCriteria: {
+                            ...(existingCriteria ?? {}),
+                            missingEntities: enrichment.missingEntities,
+                            enrichmentScore: enrichment.enrichmentScore,
+                            enrichmentAvailable: enrichment.available,
+                            expectedEntities: enrichment.expectedEntities,
+                            factCheckScore: factCheck.qualityScore,
                         },
-                    });
-                }
+                    },
+                });
             } catch (enrichErr: unknown) {
-                // Non-critical enrichment step — blog is already saved, never crash the job
                 logger.warn("[Blog/Enrichment] save-enrichment-data failed — skipping", {
                     error: (enrichErr as Error)?.message, siteId,
                 });
@@ -1487,6 +1497,7 @@ ${liveBlogPost.content.substring(0, 80000)}`,
                     blogId: event.data.blogId ?? "new",
                     targetKeywords: liveBlogPost.targetKeywords.slice(0, 5),
                     publishedAt: new Date().toISOString(),
+                    status: blogStatus,
                 },
             });
         }

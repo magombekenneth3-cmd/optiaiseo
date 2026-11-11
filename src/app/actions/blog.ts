@@ -646,8 +646,8 @@ export async function generateBlog(
             const GSC_LAG_DAYS = 3;
             const endDate = new Date();
             endDate.setDate(endDate.getDate() - GSC_LAG_DAYS);
-            const startDate = new Date();
-            startDate.setDate(endDate.getDate() - 90);
+            const startDate = new Date(endDate);
+            startDate.setDate(startDate.getDate() - 90);
             const fmtDate = (d: Date) => d.toISOString().split("T")[0];
 
             const rawEvidence = {

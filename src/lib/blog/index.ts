@@ -400,7 +400,7 @@ export async function humanizePost(content: string, ctx: PromptContext): Promise
             // Use Pro for final editorial quality — Flash produces noticeable AI stiffness
             model: AI_MODELS.GEMINI_PRO,
             contents: getHumanizePrompt(content, ctx),
-            config: { maxOutputTokens: 8000 },
+            config: { maxOutputTokens: 16384 },
         });
         const humanized = response.text?.trim();
         if (!humanized || humanized.length < content.length * 0.5) return content;
