@@ -438,10 +438,9 @@ export function IssueRow({
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                        {/* Fix CTA */}
                         {fixState.status === "idle" && (() => {
-                            const isPending = fixStatus === "PENDING" || fixStatus === "IN_PROGRESS";
-                            const isActive = fixStatus === "COMPLETED" || fixStatus == null;
+                            const isPending = fixStatus === "IN_PROGRESS";
+                            const isActive = !isPending;
                             return (
                                 <button
                                     onClick={(e) => {

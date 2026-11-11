@@ -17,23 +17,25 @@ import { fireWhiteLabelWebhook } from "@/lib/webhooks/white-label";
 import { persistFindingWithEvidence } from "@/lib/seo-audit/diagnostic-persistence";
 import type { DiagnosticFinding } from "@/lib/seo-audit/root-cause-engine";
 import { trackFunnelEvent } from "@/lib/funnel";
+import { refundCreditsIdempotent, CREDIT_COSTS } from "@/lib/credits";
+import { extractAuditVitalsAndSchema } from "@/lib/audit";
 
 function resolveFixStatus(
     d: { fixed: unknown[]; newIssues?: unknown[] } | null,
     isFirstRun: boolean
-): "FIRST_RUN" | "FIXED" | "IMPROVED" | "PENDING" {
+): "FIRST_RUN" | "FIXED" | "IMPROVED" | "COMPLETED" {
     if (isFirstRun || d === null) return "FIRST_RUN";
     if (d.fixed.length > 0 && (!d.newIssues || d.newIssues.length === 0)) return "FIXED";
     if (d.fixed.length > 0) return "IMPROVED";
-    return "PENDING";
+    return "COMPLETED";
 }
 
-function getPerfMetric(
-    cat: { items?: { id: string; value?: number }[] } | undefined,
-    id: string
-): number | null {
-    const item = cat?.items?.find((i) => i.id === id);
-    return typeof item?.value === "number" ? item.value : null;
+function countAuditIssues(categories?: Array<{ items?: Array<{ status?: string }> }>): number {
+    const allItems = categories?.flatMap((c) => c.items ?? []) ?? [];
+    return allItems.filter((i) => {
+        const s = i.status?.toLowerCase();
+        return s === "fail" || s === "warning";
+    }).length;
 }
 
 export const processManualAuditJob = inngest.createFunction(
@@ -50,17 +52,18 @@ export const processManualAuditJob = inngest.createFunction(
             const data = event.data?.event?.data as Record<string, unknown> | undefined;
             const lockKey = data?.lockKey as string | undefined;
             const auditId = data?.auditId as string | undefined;
+            const userId = data?.userId as string | undefined;
+            const auditMode = data?.auditMode as string | undefined;
             if (auditId) {
-                // A retry-exhausted parent must be terminal; otherwise the UI and
-                // reconciler see a permanently-running audit.
                 await prisma.audit.updateMany({
                     where: { id: auditId, fixStatus: { notIn: ["COMPLETED", "FAILED", "PARTIAL"] } },
                     data: { fixStatus: "FAILED" },
                 }).catch(() => null);
+                if (userId && auditMode !== "homepage") {
+                    await refundCreditsIdempotent(userId, CREDIT_COSTS.full_site_audit, `refund:audit:${auditId}`, "manual_audit_failed").catch(() => null);
+                }
             }
             if (lockKey && auditId) {
-                // Never blindly DEL a lease: this worker may be stale and a newer
-                // audit may already own the same key.
                 await releaseAuditLease(lockKey, auditId).catch(() => null);
                 logger.warn("[ManualAudit] Released audit lock after terminal failure", { lockKey });
             }
@@ -79,9 +82,17 @@ export const processManualAuditJob = inngest.createFunction(
             lockKey?: string;
         };
         const auditResult = await step.run("run-homepage-audit", async () => {
+            const site = await prisma.site.findUnique({
+                where: { id: siteId },
+                select: { targetKeyword: true },
+            });
             const engine = getFullAuditEngine();
             const url = domain.startsWith("http") ? domain : `https://${domain}`;
-            return engine.runAudit(url, { userId, siteId });
+            return engine.runAudit(url, {
+                userId,
+                siteId,
+                targetKeyword: site?.targetKeyword ?? undefined,
+            });
         });
         const fanOut = auditMode !== "homepage";
 
@@ -90,6 +101,7 @@ export const processManualAuditJob = inngest.createFunction(
             auditResult.categories.forEach((cat: { id: string; score: number }) => {
                 categoryScores[cat.id] = cat.score;
             });
+            const vitals = extractAuditVitalsAndSchema(auditResult);
 
             await prisma.audit.update({
                 where: { id: auditId },
@@ -97,21 +109,23 @@ export const processManualAuditJob = inngest.createFunction(
                     categoryScores,
                     issueList: auditResult as any,
                     fixStatus: fanOut ? "IN_PROGRESS" : "COMPLETED",
+                    lcp: vitals.lcp,
+                    cls: vitals.cls,
+                    inp: vitals.inp,
                 },
             });
-
 
             await writeMetricSnapshot({
                 siteId,
                 overallScore: auditResult.overallScore,
-                schemaScore: null,
-                lcp: null,
-                cls: null,
-                inp: null,
+                aeoScore: vitals.aeoScore,
+                schemaScore: vitals.schemaScore,
+                lcp: vitals.lcp,
+                cls: vitals.cls,
+                inp: vitals.inp,
             }).catch(() => {});
         });
 
-        // Persist diagnostic findings (non-fatal if tables don't exist)
         await step.run("persist-diagnostic-findings", async () => {
             const dr = auditResult.diagnosticResult;
             if (!dr?.findings?.length) return { persisted: 0 };
@@ -120,14 +134,11 @@ export const processManualAuditJob = inngest.createFunction(
                 try {
                     await persistFindingWithEvidence(siteId, finding);
                     persisted++;
-                } catch { /* non-fatal */ }
+                } catch {}
             }
             return { persisted };
         });
 
-        // A full-site audit retains its lease through page fan-out. The final
-        // page worker (or coordinator failure handler) releases it with the
-        // audit ID token once the parent has a terminal state.
         if (lockKey && !fanOut) {
             await step.run("release-audit-lock", async () => {
                 await releaseAuditLease(lockKey, auditId).catch(() => null);
@@ -137,62 +148,57 @@ export const processManualAuditJob = inngest.createFunction(
         if (fanOut) {
             await step.sendEvent("queue-page-audits", {
                 name: "audit.pages.run" as const,
-                data: { siteId, auditId, domain, tier, auditMode },
+                data: { siteId, auditId, domain, tier, auditMode, userId },
             });
             logger.info("[ManualAudit] Queued multi-page audit", { domain, auditId, tier });
+        } else {
+            await step.run("fire-audit-webhook", async () => {
+                await fireWhiteLabelWebhook(userId, {
+                    event: "audit.completed",
+                    siteId,
+                    domain,
+                    timestamp: new Date().toISOString(),
+                    data: { auditId, seoScore: auditResult.overallScore },
+                });
+            });
+
+            await step.run("send-audit-complete-email", async () => {
+                const dbUser = await prisma.user.findUnique({
+                    where: { id: userId },
+                    select: { email: true, name: true, preferences: true },
+                });
+                if (!dbUser?.email) return;
+                const prefs = (dbUser.preferences as Record<string, unknown>) ?? {};
+                if (prefs.emailDigest === false) return;
+                await sendAuditCompleteEmail({
+                    toEmail: dbUser.email,
+                    userName: dbUser.name ?? dbUser.email.split("@")[0],
+                    domain,
+                    auditId,
+                    score: auditResult.overallScore,
+                });
+            });
+
+            await step.run("notify-audit-complete", async () => {
+                const issueCount = countAuditIssues(auditResult.categories);
+                await notifyAuditComplete({
+                    userId,
+                    siteId,
+                    domain,
+                    overallScore: auditResult.overallScore,
+                    issueCount,
+                    auditId,
+                });
+            });
+
+            await step.run("track-audit-funnel", async () =>
+                trackFunnelEvent(userId, "audit_completed", siteId, {
+                    auditId,
+                    mode: auditMode ?? "homepage",
+                    score: auditResult.overallScore,
+                }),
+            );
         }
-
-        await step.run("fire-audit-webhook", async () => {
-            await fireWhiteLabelWebhook(userId, {
-                event: "audit.completed",
-                siteId,
-                domain,
-                timestamp: new Date().toISOString(),
-                data: { auditId, seoScore: auditResult.overallScore },
-            });
-        });
-
-        await step.run("send-audit-complete-email", async () => {
-            const dbUser = await prisma.user.findUnique({
-                where: { id: userId },
-                select: { email: true, name: true, preferences: true },
-            });
-            if (!dbUser?.email) return;
-            const prefs = (dbUser.preferences as Record<string, unknown>) ?? {};
-            if (prefs.emailDigest === false) return;
-            await sendAuditCompleteEmail({
-                toEmail: dbUser.email,
-                userName: dbUser.name ?? dbUser.email.split("@")[0],
-                domain,
-                auditId,
-                score: auditResult.overallScore,
-            });
-        });
-
-        await step.run("notify-audit-complete", async () => {
-            const allItems = auditResult.categories?.flatMap(
-                (c: { items?: { status?: string }[] }) => c.items ?? []
-            ) ?? [];
-            const issueCount = allItems.filter(
-                (i: { status?: string }) => i.status === "fail" || i.status === "warning"
-            ).length;
-            await notifyAuditComplete({
-                userId,
-                siteId,
-                domain,
-                overallScore: auditResult.overallScore,
-                issueCount,
-                auditId,
-            });
-        });
-
-        await step.run("track-audit-funnel", async () =>
-            trackFunnelEvent(userId, "audit_completed", siteId, {
-                auditId,
-                mode: auditMode ?? "full",
-                score: auditResult.overallScore,
-            }),
-        );
 
         logger.info("[ManualAudit] Homepage audit complete", {
             domain,
@@ -242,7 +248,11 @@ export const runWeeklyAuditJob = inngest.createFunction(
         const auditResult = await step.run("run-audit", async () => {
             const engine = getFullAuditEngine();
             const url = site.domain.startsWith("http") ? site.domain : `https://${site.domain}`;
-            return await engine.runAudit(url, { userId: site.userId, siteId: site.id });
+            return await engine.runAudit(url, {
+                userId: site.userId,
+                siteId: site.id,
+                targetKeyword: site.targetKeyword ?? undefined,
+            });
         });
 
         const previousAudit = await step.run("fetch-previous-audit", async () => {
@@ -268,10 +278,7 @@ export const runWeeklyAuditJob = inngest.createFunction(
             })();
 
             const diff = prevItems.length > 0 ? diffAuditSnapshots(prevItems, allItems) : null;
-
-            const perfCat = auditResult.categories.find(
-                (c: any) => c.id === "performance"
-            ) as { items?: { id: string; value?: number }[] } | undefined;
+            const vitals = extractAuditVitalsAndSchema(auditResult);
 
             const created = await prisma.audit.create({
                 data: {
@@ -282,41 +289,34 @@ export const runWeeklyAuditJob = inngest.createFunction(
                     ),
                     issueList: auditResult as any,
                     fixStatus: resolveFixStatus(diff, prevItems.length === 0),
-                    lcp: getPerfMetric(perfCat, "lcp"),
-                    cls: getPerfMetric(perfCat, "cls"),
-                    inp: getPerfMetric(perfCat, "inp"),
+                    lcp: vitals.lcp,
+                    cls: vitals.cls,
+                    inp: vitals.inp,
                 },
             });
-            const perfCatForSnap = auditResult.categories.find(
-                (c: any) => c.id === "performance"
-            ) as { items?: { id: string; value?: number }[] } | undefined;
-            const schemaCat = auditResult.categories.find(
-                (c: any) => c.id === "schema"
-            ) as { score?: number } | undefined;
             await writeMetricSnapshot({
                 siteId: site.id,
                 overallScore: auditResult.overallScore,
-                schemaScore: schemaCat?.score ?? null,
-                lcp: getPerfMetric(perfCatForSnap, "lcp"),
-                cls: getPerfMetric(perfCatForSnap, "cls"),
-                inp: getPerfMetric(perfCatForSnap, "inp"),
+                aeoScore: vitals.aeoScore,
+                schemaScore: vitals.schemaScore,
+                lcp: vitals.lcp,
+                cls: vitals.cls,
+                inp: vitals.inp,
             }).catch(() => {});
 
             return { score: auditResult.overallScore, diff: diff?.summary, auditId: created.id };
 
         });
 
-        // Persist diagnostic findings (non-fatal if tables don't exist)
         await step.run("persist-diagnostic-findings", async () => {
             const dr = auditResult.diagnosticResult;
             if (!dr?.findings?.length) return { persisted: 0 };
             let persisted = 0;
-            const url = site.domain.startsWith("http") ? site.domain : `https://${site.domain}`;
             for (const finding of dr.findings as DiagnosticFinding[]) {
                 try {
                     await persistFindingWithEvidence(site.id, finding);
                     persisted++;
-                } catch { /* non-fatal */ }
+                } catch {}
             }
             return { persisted };
         });
@@ -324,8 +324,19 @@ export const runWeeklyAuditJob = inngest.createFunction(
         await step.run("maybe-trigger-healing", async () => {
             if (!previousAudit) return;
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const prevScore: number = (previousAudit.categoryScores as any)?.seo ?? 0;
+            const prevIssueList = previousAudit.issueList as { overallScore?: number } | null;
+            const storedPrevScore = typeof prevIssueList?.overallScore === "number"
+                ? prevIssueList.overallScore
+                : null;
+            const prevCatScores = Object.entries((previousAudit.categoryScores as Record<string, number>) ?? {})
+                .filter(([k, v]) => k !== "seo" && typeof v === "number")
+                .map(([, v]) => v);
+            const fallbackPrevScore = prevCatScores.length > 0
+                ? Math.round(prevCatScores.reduce((a, b) => a + b, 0) / prevCatScores.length)
+                : 0;
+            const prevScore = storedPrevScore ?? fallbackPrevScore;
+            if (prevScore <= 0) return;
+
             const scoreDelta = prevScore - auditResult.overallScore;
             const REGRESSION_THRESHOLD = Number(process.env.AUDIT_REGRESSION_THRESHOLD ?? 5);
 
@@ -373,12 +384,7 @@ export const runWeeklyAuditJob = inngest.createFunction(
         });
 
         await step.run("notify-weekly-audit-complete", async () => {
-            const allItems = auditResult.categories?.flatMap(
-                (c: { items?: { status?: string }[] }) => c.items ?? []
-            ) ?? [];
-            const issueCount = allItems.filter(
-                (i: { status?: string }) => i.status === "fail" || i.status === "warning"
-            ).length;
+            const issueCount = countAuditIssues(auditResult.categories);
             await notifyAuditComplete({
                 userId: site.userId,
                 siteId: site.id,
@@ -408,17 +414,23 @@ export const auditPostFixJob = inngest.createFunction(
 
         const newAudit = await step.run("run-full-audit", async () => {
             const { getFullAuditEngine } = await import("@/lib/seo-audit");
-            const site = await prisma.site.findUnique({ where: { id: siteId }, select: { domain: true, userId: true } });
+            const site = await prisma.site.findUnique({
+                where: { id: siteId },
+                select: { domain: true, userId: true, targetKeyword: true },
+            });
             if (!site) throw new Error("Site not found");
             const engine = getFullAuditEngine();
             const url = site.domain.startsWith("http") ? site.domain : `https://${site.domain}`;
-            return engine.runAudit(url, { userId: site.userId, siteId });
+            return engine.runAudit(url, {
+                userId: site.userId,
+                siteId,
+                targetKeyword: site.targetKeyword ?? undefined,
+            });
         });
 
         await step.run("save-impact", async () => {
-            const scoreValues = newAudit.categories.map((c: { score: number }) => c.score);
-            const newScore = scoreValues.length > 0
-                ? scoreValues.reduce((a: number, b: number) => a + b, 0) / scoreValues.length
+            const newScore = typeof newAudit.overallScore === "number"
+                ? newAudit.overallScore
                 : 0;
             const impact = Math.round(newScore - baselineScore);
 

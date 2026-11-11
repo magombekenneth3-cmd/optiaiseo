@@ -147,7 +147,18 @@ export function rankGrowthDecisions(
             score,
             whyNow: {
                 signals: whyNowSignals,
-                urgency: whyNowSignals.some(s => s.severity === "HIGH") ? "HIGH" : "MEDIUM"
+                urgency: whyNowSignals.some(s => s.severity === "HIGH") ? "HIGH" : "MEDIUM",
+                gscMetrics: {
+                    impressions: opp.impressions,
+                    clicks: opp.clicks,
+                    position: Math.round(opp.position * 10) / 10,
+                    previousPosition: opp.previousPosition != null
+                        ? Math.round(opp.previousPosition * 10) / 10
+                        : undefined,
+                    trend: opp.previousClicks && opp.previousClicks > 0
+                        ? Math.round(((opp.clicks - opp.previousClicks) / opp.previousClicks) * 100)
+                        : undefined,
+                },
             },
             impact: {
                 trafficPotential: {

@@ -6,9 +6,80 @@ import { getAuditEngine } from "@/lib/seo-audit";
 import { discoverPages } from "@/lib/seo-audit/crawler";
 import { logger } from "@/lib/logger";
 import { releaseAuditLease, renewAuditLease } from "@/lib/audit-lock";
+import { fireWhiteLabelWebhook } from "@/lib/webhooks/white-label";
+import { sendAuditCompleteEmail } from "@/lib/email";
+import { notifyAuditComplete } from "@/lib/notifications";
+import { trackFunnelEvent } from "@/lib/funnel";
 
-/** Terminal states — once reached, the audit must not be overwritten. */
 const TERMINAL_STATES = ["COMPLETED", "FAILED", "PARTIAL"] as const;
+
+async function emitParentAuditCompletion(auditId: string, siteId: string): Promise<void> {
+  const audit = await prisma.audit.findUnique({
+    where: { id: auditId },
+    select: {
+      id: true,
+      issueList: true,
+      site: {
+        select: {
+          id: true,
+          domain: true,
+          userId: true,
+          user: { select: { email: true, name: true, preferences: true } },
+        },
+      },
+    },
+  });
+  if (!audit?.site) return;
+
+  const { site } = audit;
+  const issueList = audit.issueList as {
+    overallScore?: number;
+    categories?: Array<{ items?: Array<{ status?: string }> }>;
+  } | null;
+  const overallScore = typeof issueList?.overallScore === "number" ? issueList.overallScore : 0;
+  const allItems = issueList?.categories?.flatMap((c) => c.items ?? []) ?? [];
+  const issueCount = allItems.filter((i) => {
+    const s = i.status?.toLowerCase();
+    return s === "fail" || s === "warning";
+  }).length;
+
+  await fireWhiteLabelWebhook(site.userId, {
+    event: "audit.completed",
+    siteId: site.id,
+    domain: site.domain,
+    timestamp: new Date().toISOString(),
+    data: { auditId, seoScore: overallScore },
+  }).catch(() => null);
+
+  const dbUser = site.user;
+  if (dbUser?.email) {
+    const prefs = (dbUser.preferences as Record<string, unknown>) ?? {};
+    if (prefs.emailDigest !== false) {
+      await sendAuditCompleteEmail({
+        toEmail: dbUser.email,
+        userName: dbUser.name ?? dbUser.email.split("@")[0],
+        domain: site.domain,
+        auditId,
+        score: overallScore,
+      }).catch(() => null);
+    }
+  }
+
+  await notifyAuditComplete({
+    userId: site.userId,
+    siteId: site.id,
+    domain: site.domain,
+    overallScore,
+    issueCount,
+    auditId,
+  }).catch(() => null);
+
+  await trackFunnelEvent(site.userId, "audit_completed", site.id, {
+    auditId,
+    mode: "full",
+    score: overallScore,
+  }).catch(() => null);
+}
 
 
 const PAGE_LIMIT: Record<string, number> = {
@@ -125,6 +196,7 @@ export const runPageAuditJob = inngest.createFunction(
         data: { fixStatus: "COMPLETED", totalPages: 0 },
       });
       await releaseParentLease(auditId, siteId).catch(() => null);
+      await emitParentAuditCompletion(auditId, siteId).catch(() => null);
       return { skipped: true, reason: "No sub-pages discovered" };
     }
 
@@ -292,6 +364,9 @@ export const processPageAuditJob = inngest.createFunction(
 
         if (count > 0) {
           await releaseParentLease(auditId, siteId).catch(() => null);
+          if (finalStatus !== "FAILED") {
+            await emitParentAuditCompletion(auditId, siteId).catch(() => null);
+          }
           logger.info("[PageAudit] All pages processed — audit finalized", {
             auditId,
             finalStatus,

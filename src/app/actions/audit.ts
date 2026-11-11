@@ -5,9 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { runSiteAudit } from "@/lib/audit";
 import { clearSessionCaches } from "@/lib/seo/ai";
-// Monthly audit count limit removed — credits are the single gate.
 import { getEffectiveTier, guardErrorToResult } from "@/lib/stripe/guards";
-import { consumeCredits } from "@/lib/credits";
+import { consumeCreditsIdempotent, refundCreditsIdempotent, CREDIT_COSTS } from "@/lib/credits";
 import { redis } from "@/lib/redis";
 import { inngest } from "@/lib/inngest/client";
 import { requireUser } from "@/lib/auth/require-user";
@@ -153,18 +152,32 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
     });
     auditId = newAudit.id;
 
-    // Acquire lease with auditId as token (renewable, conditional release).
-    // The 120s initial TTL is extended by the Inngest job's heartbeat for long audits.
     lockKey = `audit-lock:${user.id}:${site.id}`;
     const { acquireAuditLease } = await import("@/lib/audit-lock");
     const acquired = await acquireAuditLease(lockKey, auditId);
     if (!acquired) {
-      // Another audit is actively running — mark this one as duplicate and bail
       await prisma.audit.delete({ where: { id: auditId } }).catch(() => null);
       return {
         success: false,
         error: "An audit is already running for this site. Please wait for it to finish.",
       };
+    }
+
+    if (auditMode === "full") {
+      const creditResult = await consumeCreditsIdempotent(user.id, "full_site_audit", `audit:${auditId}`);
+      if (!creditResult.allowed) {
+        const { releaseAuditLease } = await import("@/lib/audit-lock");
+        await releaseAuditLease(lockKey, auditId).catch(() => null);
+        lockKey = undefined;
+        await prisma.audit.delete({ where: { id: auditId } }).catch(() => null);
+        auditId = undefined;
+        return {
+          success: false,
+          error: creditResult.reason === "credits_locked"
+            ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
+            : `Not enough credits (${creditResult.remaining} remaining, need 10). Buy a credit pack or upgrade your plan.`,
+        };
+      }
     }
 
     try {
@@ -177,14 +190,11 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
           userId: user.id,
           tier: effectiveTier,
           auditMode,
-          // Forward the key so the Inngest job can release it when done.
           lockKey,
         },
       });
       logger.info("[runAudit] Queued manual audit job", { domain: site.domain, auditId, auditMode });
     } catch (queueErr: unknown) {
-      // If Inngest is unavailable, fall back to synchronous execution.
-      // Lock cleanup is handled by the outer finally.
       logger.warn("[runAudit] Inngest unavailable — falling back to synchronous homepage-only audit", {
         error: (queueErr as Error)?.message,
       });
@@ -198,14 +208,13 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
           data: {
             categoryScores: liveAuditResult.categoryScores as object,
             issueList: (liveAuditResult.rawReport ?? liveAuditResult.issues) as object,
-            fixStatus: "COMPLETED",   // homepage-only is always terminal — no page fan-out
+            fixStatus: "COMPLETED",
             lcp: liveAuditResult.lcp ?? null,
             cls: liveAuditResult.cls ?? null,
             inp: liveAuditResult.inp ?? null,
           },
         });
       } catch (syncErr: unknown) {
-        // Synchronous fallback also failed — mark audit FAILED
         logger.error("[runAudit] Synchronous fallback failed", {
           error: (syncErr as Error)?.message,
           auditId,
@@ -214,11 +223,13 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
           where: { id: auditId },
           data: { fixStatus: "FAILED" },
         }).catch(() => null);
+        if (auditMode === "full") {
+          await refundCreditsIdempotent(user.id, CREDIT_COSTS.full_site_audit, `refund:audit:${auditId}`, "sync_fallback_failed").catch(() => null);
+        }
       } finally {
-        // Release lock on synchronous path (success or failure)
         const { releaseAuditLease } = await import("@/lib/audit-lock");
         await releaseAuditLease(lockKey, auditId).catch(() => null);
-        lockKey = undefined; // Prevent double-release in outer finally
+        lockKey = undefined;
       }
     }
 
@@ -266,17 +277,6 @@ export async function getPageAudits(auditId: string): Promise<GetPageAuditsResul
       },
     });
     if (!audit) return { success: false, error: "Audit not found", pages: [] };
-
-    const creditResult = await consumeCredits(user.id, "full_site_audit");
-    if (!creditResult.allowed) {
-        return {
-            success: false,
-            error: creditResult.reason === "credits_locked"
-                ? "Your credits are locked. Resubscribe or buy a credit pack to unlock them."
-                : `Not enough credits (${creditResult.remaining} remaining, need 10). Buy a credit pack or upgrade your plan.`,
-            pages: [], upsell: true,
-        };
-    }
 
     return { success: true, pages: audit.pageAudits };
   } catch (error: unknown) {

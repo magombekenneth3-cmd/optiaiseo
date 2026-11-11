@@ -346,11 +346,13 @@ function RecommendationCard({
   rec,
   onApprove,
   onDismiss,
+  onReview,
   actionLoading,
 }: {
   rec: Recommendation;
   onApprove: (id: string) => void;
   onDismiss: (id: string) => void;
+  onReview: (rec: Recommendation) => void;
   actionLoading: string | null;
 }) {
   const CategoryIcon = CATEGORY_ICONS[rec.category] ?? Lightbulb;
@@ -368,7 +370,8 @@ function RecommendationCard({
   const actions: OpportunityAction[] =
     isGsc && rec.opportunityId
       ? [
-          { label: "Review", href: `/dashboard/recommendations/${rec.opportunityId}`, icon: ArrowUpRight },
+          { label: "Review", onClick: () => onReview(rec), icon: Eye },
+          { label: "Workspace", href: `/dashboard/recommendations/${rec.opportunityId}`, icon: ArrowUpRight },
           {
             label: "Approve",
             onClick: () => onApprove(rec.opportunityId!),
@@ -378,7 +381,12 @@ function RecommendationCard({
           { label: "Dismiss", onClick: () => onDismiss(rec.opportunityId!), disabled: isPending, icon: XCircle },
         ]
       : !isSetupGsc && rec.cta
-        ? [{ label: rec.cta.label, href: rec.cta.href, external: rec.cta.external, icon: rec.cta.external ? ExternalLink : ChevronRight }]
+        ? [
+            ...(rec.whyNow || rec.executionPlan?.length
+              ? [{ label: "Details", onClick: () => onReview(rec), icon: Eye }]
+              : []),
+            { label: rec.cta.label, href: rec.cta.href, external: rec.cta.external, icon: rec.cta.external ? ExternalLink : ChevronRight },
+          ]
         : [];
 
   return (
@@ -568,7 +576,12 @@ export function RecommendationsDashboard({
       case "high":
         return rec.priority === "high";
       case "monitoring":
-        return rec.status === "MONITORING" || rec.status === "EXECUTED" || (rec.opportunityId && executedIds.has(rec.opportunityId));
+        return (
+          rec.status === "MONITORING" ||
+          rec.status === "EXECUTED" ||
+          rec.status === "APPROVED" ||
+          Boolean(rec.opportunityId && executedIds.has(rec.opportunityId))
+        );
       default:
         return true;
     }
@@ -674,6 +687,7 @@ export function RecommendationsDashboard({
               rec={rec}
               onApprove={handleApprove}
               onDismiss={handleDismiss}
+              onReview={setReviewRec}
               actionLoading={actionLoading}
             />
           ))}

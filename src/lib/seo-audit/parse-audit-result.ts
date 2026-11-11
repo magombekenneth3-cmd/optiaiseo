@@ -335,7 +335,7 @@ export function toNormalisedIssues(parsed: ParsedAuditResult): NormalisedIssue[]
 
                 return {
                     id:                 rec.itemId,
-                    title:              rec.itemId,
+                    title:              rec.label || item?.label || rec.itemId,
                     description:        rec.finding,
                     severity,
                     category:           rec.categoryId,

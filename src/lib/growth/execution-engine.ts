@@ -576,25 +576,38 @@ async function buildMutationPayload(
 
             const autoFixUrl = fullBaseUrl ? `${fullBaseUrl}${targetUrl}` : targetUrl;
             const fixResult = performOneClickAutoFix(blog.content, autoFixUrl);
-            const schemaMarkup = JSON.stringify({
-                "@context": "https://schema.org",
-                "@type": "FAQPage",
-                "mainEntity": [{
-                    "@type": "Question",
-                    "name": `What is ${primaryKeyword}?`,
-                    "acceptedAnswer": { "@type": "Answer", "text": `Comprehensive analysis of ${primaryKeyword}.` }
-                }]
-            });
+
+            let preservedSchema: string | undefined;
+            if (typeof blog.schemaMarkup === "string" && blog.schemaMarkup.trim().length > 0) {
+                try {
+                    const parsed = JSON.parse(blog.schemaMarkup);
+                    if (parsed && typeof parsed === "object") {
+                        preservedSchema = blog.schemaMarkup;
+                    }
+                } catch {}
+            }
+
+            const payload: Record<string, unknown> = {
+                content: fixResult.fixedHtml,
+            };
+            const affectedFields = ["content"];
+
+            if (!preservedSchema) {
+                payload.schemaMarkup = JSON.stringify({
+                    "@context": "https://schema.org",
+                    "@type": "Article",
+                    headline: blog.title || primaryKeyword,
+                    ...(autoFixUrl.startsWith("http") ? { mainEntityOfPage: { "@type": "WebPage", "@id": autoFixUrl } } : {}),
+                });
+                affectedFields.push("schemaMarkup");
+            }
 
             return {
                 success: true,
-                details: `Executed AutoFix Engine: Applied ${fixResult.changes.length} structural fixes & FAQ Schema.`,
+                details: `Executed AutoFix Engine: Applied ${fixResult.changes.length} structural fixes.`,
                 mutationType: "BLOG_CONTENT_UPDATE",
-                payload: {
-                    content: fixResult.fixedHtml,
-                    schemaMarkup,
-                },
-                affectedFields: ["content", "schemaMarkup"],
+                payload,
+                affectedFields,
             };
         }
 

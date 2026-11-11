@@ -12,8 +12,8 @@ import { computePriorityV4, fixabilityForRemediation, type PriorityComponents } 
  */
 
 
-export type EffortLevel  = "quick_win" | "medium" | "complex";
-export type ImpactTier   = "critical" | "high" | "medium" | "low";
+export type EffortLevel = "quick_win" | "medium" | "complex";
+export type ImpactTier = "critical" | "high" | "medium" | "low";
 export type RecommendationCategory = "technical" | "content" | "aeo" | "geo" | "eeat" | "schema";
 
 /**
@@ -31,51 +31,51 @@ export type ClaimSource =
     | "OPTIAISEO_HEURISTIC"
     | "OBSERVED_DATA"
     | "NONE";
-export type AeoGapType   = "missing_faq_schema" | "answer_too_long" | "no_entity_schema" | "no_speakable" | "topical_gap" | "none";
+export type AeoGapType = "missing_faq_schema" | "answer_too_long" | "no_entity_schema" | "no_speakable" | "topical_gap" | "none";
 
 export interface EnrichedRecommendation {
     /** Original issue ID from audit data, e.g. "schema_faq" */
-    checkId:        string;
+    checkId: string;
     /** Human-readable title */
-    title:          string;
+    title: string;
     /** One-sentence explanation of why this matters */
-    why:            string;
+    why: string;
     /** Exact action to take — page-specific when pageUrl is provided */
-    action:         string;
+    action: string;
     /** 0–100 composite priority (impact × confidence × ease) */
-    priorityScore:  number;
+    priorityScore: number;
     /** Effort level for the UI badge */
-    effort:         EffortLevel;
+    effort: EffortLevel;
     /** Impact tier for sorting and alerting */
-    impact:         ImpactTier;
+    impact: ImpactTier;
     /** Category for dashboard grouping */
-    category:       RecommendationCategory;
+    category: RecommendationCategory;
     /** Estimated monthly traffic uplift tier */
-    trafficUplift:  "significant" | "moderate" | "minor";
+    trafficUplift: "significant" | "moderate" | "minor";
     /** AEO-specific gap type — drives content brief generation */
-    aeoGap:         AeoGapType;
+    aeoGap: AeoGapType;
     /** True if GitHub auto-fix PR can handle this automatically */
-    autoFixable:    boolean;
+    autoFixable: boolean;
     /** Key for CHECK_TO_FILE in github-autofix.ts */
     autofixCheckId: string | null;
     /** GEO content brief pointer — what to create to get AI citations */
-    geoBrief:       GeoBrief | null;
+    geoBrief: GeoBrief | null;
     /** Page URL this applies to — null = applies site-wide */
-    pageUrl:        string | null;
+    pageUrl: string | null;
     /** Difficulty label for backward compat with email digest */
-    difficulty:     "Easy fix" | "Medium effort" | "Complex";
+    difficulty: "Easy fix" | "Medium effort" | "Complex";
     /**
      * Source of the claim in the `why` field.
      * NONE = explanatory guidance rather than a sourced empirical claim.
      */
-    claimSource:    ClaimSource;
+    claimSource: ClaimSource;
     /** URL of the supporting documentation. Null when claimSource is NONE or OPTIAISEO_HEURISTIC. */
-    claimUrl:       string | null;
+    claimUrl: string | null;
 }
 
 export interface GeoBrief {
     /** Recommended page to create or update */
-    targetPath:       string;
+    targetPath: string;
     /**
      * Suggested answer length in words for this content brief.
      * This is an OptiAISEO content recommendation target — not a universally
@@ -83,304 +83,304 @@ export interface GeoBrief {
      */
     idealAnswerWords: number;
     /** Schema type to add */
-    schemaType:       string;
+    schemaType: string;
     /** Content format recommended for this brief type */
-    format:           "definition" | "faq" | "how-to" | "comparison" | "statistic";
+    format: "definition" | "faq" | "how-to" | "comparison" | "statistic";
     /** Example opening sentence for the content */
-    starterSentence:  string;
+    starterSentence: string;
 }
 
 // Add new check IDs here to enrich them. Unknown IDs fall through to defaults.
 
 interface IssueMeta {
-    title:          string;
-    why:            string;
-    action:         string;
-    impact:         ImpactTier;
-    effort:         EffortLevel;
-    category:       RecommendationCategory;
-    trafficUplift:  EnrichedRecommendation["trafficUplift"];
-    aeoGap:         AeoGapType;
-    autoFixable:    boolean;
+    title: string;
+    why: string;
+    action: string;
+    impact: ImpactTier;
+    effort: EffortLevel;
+    category: RecommendationCategory;
+    trafficUplift: EnrichedRecommendation["trafficUplift"];
+    aeoGap: AeoGapType;
+    autoFixable: boolean;
     autofixCheckId: string | null;
-    geoBrief:       GeoBrief | null;
+    geoBrief: GeoBrief | null;
     /** Source of the claim in the `why` field. Defaults to NONE. */
-    claimSource?:   ClaimSource;
+    claimSource?: ClaimSource;
     /** Supporting URL. Only set when claimSource is GOOGLE_DOCUMENTATION or INDUSTRY_STUDY. */
-    claimUrl?:      string;
+    claimUrl?: string;
 }
 
 const ISSUE_META: Record<string, IssueMeta> = {
     schema_faq: {
-        title:          "FAQ schema missing",
-        why:            "FAQPage structured data is appropriate for pages with genuine Q&A content. It can help search systems understand qualifying structured content, but it does not guarantee AI citations. Note: FAQ rich results were deprecated by Google in May 2026.",
-        action:         "Add FAQPage JSON-LD only if this page contains real visitor questions and answers. Include 4–6 questions answered concisely.",
-        impact:         "low",
-        effort:         "quick_win",
-        category:       "schema",
-        trafficUplift:  "minor",
-        aeoGap:         "missing_faq_schema",
-        autoFixable:    true,
+        title: "FAQ schema missing",
+        why: "FAQPage structured data is appropriate for pages with genuine Q&A content. It can help search systems understand qualifying structured content, but it does not guarantee AI citations. Note: FAQ rich results were deprecated by Google in May 2026.",
+        action: "Add FAQPage JSON-LD only if this page contains real visitor questions and answers. Include 4–6 questions answered concisely.",
+        impact: "low",
+        effort: "quick_win",
+        category: "schema",
+        trafficUplift: "minor",
+        aeoGap: "missing_faq_schema",
+        autoFixable: true,
         autofixCheckId: "schema_faq",
-        claimSource:    "GOOGLE_DOCUMENTATION",
-        claimUrl:       "https://developers.google.com/search/docs/appearance/structured-data/faqpage",
+        claimSource: "GOOGLE_DOCUMENTATION",
+        claimUrl: "https://developers.google.com/search/docs/appearance/structured-data/faqpage",
         geoBrief: {
-            targetPath:       "/faq",
+            targetPath: "/faq",
             idealAnswerWords: 55,
-            schemaType:       "FAQPage",
-            format:           "faq",
-            starterSentence:  "[Tool/Service] is a [category] that [core value prop in one sentence].",
+            schemaType: "FAQPage",
+            format: "faq",
+            starterSentence: "[Tool/Service] is a [category] that [core value prop in one sentence].",
         },
     },
     schema_organization: {
-        title:          "Organization schema missing",
-        why:            "Organization JSON-LD helps search and AI systems identify your entity — including your name, website, logo, and official social profiles. Without it, automated systems rely on less reliable signals to identify who you are.",
-        action:         "Add Organization JSON-LD to your root layout with name, url, logo, and sameAs (LinkedIn, Twitter).",
-        impact:         "critical",
-        effort:         "quick_win",
-        category:       "schema",
-        trafficUplift:  "significant",
-        aeoGap:         "no_entity_schema",
-        autoFixable:    true,
+        title: "Organization schema missing",
+        why: "Organization JSON-LD helps search and AI systems identify your entity — including your name, website, logo, and official social profiles. Without it, automated systems rely on less reliable signals to identify who you are.",
+        action: "Add Organization JSON-LD to your root layout with name, url, logo, and sameAs (LinkedIn, Twitter).",
+        impact: "critical",
+        effort: "quick_win",
+        category: "schema",
+        trafficUplift: "significant",
+        aeoGap: "no_entity_schema",
+        autoFixable: true,
         autofixCheckId: "schema_organization",
-        claimSource:    "GOOGLE_DOCUMENTATION",
-        claimUrl:       "https://developers.google.com/search/docs/appearance/structured-data/organization",
+        claimSource: "GOOGLE_DOCUMENTATION",
+        claimUrl: "https://developers.google.com/search/docs/appearance/structured-data/organization",
         geoBrief: {
-            targetPath:       "/about",
+            targetPath: "/about",
             idealAnswerWords: 40,
-            schemaType:       "Organization",
-            format:           "definition",
-            starterSentence:  "[Company] is a [type] based in [location] that [core mission].",
+            schemaType: "Organization",
+            format: "definition",
+            starterSentence: "[Company] is a [type] based in [location] that [core mission].",
         },
     },
     schema_speakable: {
-        title:          "Speakable schema missing",
-        why:            "Speakable markup identifies which sections of article or news content are suitable for audio playback by voice assistants. It is only applicable to article and news-oriented pages.",
-        action:         "Add Speakable JSON-LD pointing to your key definition and summary sections. Only apply to pages with article or news content.",
-        impact:         "medium",
-        effort:         "quick_win",
-        category:       "schema",
-        trafficUplift:  "minor",
-        aeoGap:         "no_speakable",
-        autoFixable:    true,
+        title: "Speakable schema missing",
+        why: "Speakable markup identifies which sections of article or news content are suitable for audio playback by voice assistants. It is only applicable to article and news-oriented pages.",
+        action: "Add Speakable JSON-LD pointing to your key definition and summary sections. Only apply to pages with article or news content.",
+        impact: "medium",
+        effort: "quick_win",
+        category: "schema",
+        trafficUplift: "minor",
+        aeoGap: "no_speakable",
+        autoFixable: true,
         autofixCheckId: "schema_speakable",
-        claimSource:    "GOOGLE_DOCUMENTATION",
-        claimUrl:       "https://developers.google.com/search/docs/appearance/structured-data/speakable",
-        geoBrief:       null,
+        claimSource: "GOOGLE_DOCUMENTATION",
+        claimUrl: "https://developers.google.com/search/docs/appearance/structured-data/speakable",
+        geoBrief: null,
     },
     schema_howto: {
-        title:          "HowTo schema missing",
-        why:            "HowTo structured data describes step-by-step processes and increases eligibility for rich results in search. It is most appropriate for pages that already explain a clear procedure.",
-        action:         "Add HowTo JSON-LD for your primary process or guide page with numbered steps.",
-        impact:         "high",
-        effort:         "quick_win",
-        category:       "schema",
-        trafficUplift:  "moderate",
-        aeoGap:         "none",
-        autoFixable:    true,
+        title: "HowTo schema missing",
+        why: "HowTo structured data describes step-by-step processes and increases eligibility for rich results in search. It is most appropriate for pages that already explain a clear procedure.",
+        action: "Add HowTo JSON-LD for your primary process or guide page with numbered steps.",
+        impact: "high",
+        effort: "quick_win",
+        category: "schema",
+        trafficUplift: "moderate",
+        aeoGap: "none",
+        autoFixable: true,
         autofixCheckId: "schema_howto",
-        claimSource:    "GOOGLE_DOCUMENTATION",
-        claimUrl:       "https://developers.google.com/search/docs/appearance/structured-data/how-to",
+        claimSource: "GOOGLE_DOCUMENTATION",
+        claimUrl: "https://developers.google.com/search/docs/appearance/structured-data/how-to",
         geoBrief: {
-            targetPath:       "/how-it-works",
+            targetPath: "/how-it-works",
             idealAnswerWords: 60,
-            schemaType:       "HowTo",
-            format:           "how-to",
-            starterSentence:  "Here is how to [achieve goal] using [tool/service] in [N] steps:",
+            schemaType: "HowTo",
+            format: "how-to",
+            starterSentence: "Here is how to [achieve goal] using [tool/service] in [N] steps:",
         },
     },
 
     tech_canonical: {
-        title:          "Canonical tag missing",
-        why:            "Without a canonical tag, search engines may encounter duplicate URLs and split indexing signals across them. Adding a canonical tag identifies the preferred URL for a page.",
-        action:         "Add <link rel='canonical' href='https://yourdomain.com/path'> in every page <head>.",
-        impact:         "critical",
-        effort:         "quick_win",
-        category:       "technical",
-        trafficUplift:  "significant",
-        aeoGap:         "none",
-        autoFixable:    true,
+        title: "Canonical tag missing",
+        why: "Without a canonical tag, search engines may encounter duplicate URLs and split indexing signals across them. Adding a canonical tag identifies the preferred URL for a page.",
+        action: "Add <link rel='canonical' href='https://yourdomain.com/path'> in every page <head>.",
+        impact: "critical",
+        effort: "quick_win",
+        category: "technical",
+        trafficUplift: "significant",
+        aeoGap: "none",
+        autoFixable: true,
         autofixCheckId: "tech_canonical",
-        claimSource:    "GOOGLE_DOCUMENTATION",
-        claimUrl:       "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
-        geoBrief:       null,
+        claimSource: "GOOGLE_DOCUMENTATION",
+        claimUrl: "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
+        geoBrief: null,
     },
     tech_sitemap: {
-        title:          "XML sitemap missing or incomplete",
-        why:            "Crawlers discover content via sitemaps. Pages not listed in a sitemap may take longer to be crawled and indexed.",
-        action:         "Generate a sitemap.xml at /sitemap.xml covering all public pages and submit to Google Search Console.",
-        impact:         "high",
-        effort:         "quick_win",
-        category:       "technical",
-        trafficUplift:  "moderate",
-        aeoGap:         "none",
-        autoFixable:    true,
+        title: "XML sitemap missing or incomplete",
+        why: "Crawlers discover content via sitemaps. Pages not listed in a sitemap may take longer to be crawled and indexed.",
+        action: "Generate a sitemap.xml at /sitemap.xml covering all public pages and submit to Google Search Console.",
+        impact: "high",
+        effort: "quick_win",
+        category: "technical",
+        trafficUplift: "moderate",
+        aeoGap: "none",
+        autoFixable: true,
         autofixCheckId: "tech_sitemap",
-        claimSource:    "GOOGLE_DOCUMENTATION",
-        claimUrl:       "https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview",
-        geoBrief:       null,
+        claimSource: "GOOGLE_DOCUMENTATION",
+        claimUrl: "https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview",
+        geoBrief: null,
     },
     missing_h1: {
-        title:          "Missing H1 heading",
-        why:            "An H1 heading establishes the primary topic of a page. Pages without a clear H1 may be harder for search and AI systems to categorise accurately.",
-        action:         "Add a single <h1> tag at the top of each page that clearly describes the page's primary topic.",
-        impact:         "high",
-        effort:         "quick_win",
-        category:       "technical",
-        trafficUplift:  "moderate",
-        aeoGap:         "none",
-        autoFixable:    false,
+        title: "Missing H1 heading",
+        why: "An H1 heading establishes the primary topic of a page. Pages without a clear H1 may be harder for search and AI systems to categorise accurately.",
+        action: "Add a single <h1> tag at the top of each page that clearly describes the page's primary topic.",
+        impact: "high",
+        effort: "quick_win",
+        category: "technical",
+        trafficUplift: "moderate",
+        aeoGap: "none",
+        autoFixable: false,
         autofixCheckId: null,
-        claimSource:    "OPTIAISEO_HEURISTIC",
-        geoBrief:       null,
+        claimSource: "OPTIAISEO_HEURISTIC",
+        geoBrief: null,
     },
     slow_lcp: {
-        title:          "Slow Largest Contentful Paint (LCP)",
-        why:            "LCP above 2.5s is a Core Web Vital failure. Google uses page experience signals including Core Web Vitals as a ranking input.",
-        action:         "Optimise your hero image (use next/image or <img loading='lazy'>) and defer non-critical JS.",
-        impact:         "critical",
-        effort:         "medium",
-        category:       "technical",
-        trafficUplift:  "significant",
-        aeoGap:         "none",
-        autoFixable:    false,
+        title: "Slow Largest Contentful Paint (LCP)",
+        why: "LCP above 2.5s is a Core Web Vital failure. Google uses page experience signals including Core Web Vitals as a ranking input.",
+        action: "Optimise your hero image (use next/image or <img loading='lazy'>) and defer non-critical JS.",
+        impact: "critical",
+        effort: "medium",
+        category: "technical",
+        trafficUplift: "significant",
+        aeoGap: "none",
+        autoFixable: false,
         autofixCheckId: null,
-        claimSource:    "GOOGLE_DOCUMENTATION",
-        claimUrl:       "https://developers.google.com/search/docs/appearance/core-web-vitals",
-        geoBrief:       null,
+        claimSource: "GOOGLE_DOCUMENTATION",
+        claimUrl: "https://developers.google.com/search/docs/appearance/core-web-vitals",
+        geoBrief: null,
     },
 
     eeat_about: {
-        title:          "About page missing or thin",
-        why:            "Google's quality evaluator guidelines emphasise demonstrating Experience, Expertise, Authoritativeness, and Trustworthiness (E-E-A-T). An About page with team credentials, founding story, and contact information supports these signals.",
-        action:         "Create a detailed /about page: team bios, credentials, founding story, and contact details.",
-        impact:         "high",
-        effort:         "medium",
-        category:       "eeat",
-        trafficUplift:  "moderate",
-        aeoGap:         "none",
-        autoFixable:    true,
+        title: "About page missing or thin",
+        why: "Google's quality evaluator guidelines emphasise demonstrating Experience, Expertise, Authoritativeness, and Trustworthiness (E-E-A-T). An About page with team credentials, founding story, and contact information supports these signals.",
+        action: "Create a detailed /about page: team bios, credentials, founding story, and contact details.",
+        impact: "high",
+        effort: "medium",
+        category: "eeat",
+        trafficUplift: "moderate",
+        aeoGap: "none",
+        autoFixable: true,
         autofixCheckId: "eeat_about",
-        claimSource:    "GOOGLE_DOCUMENTATION",
-        claimUrl:       "https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
-        geoBrief:       null,
+        claimSource: "GOOGLE_DOCUMENTATION",
+        claimUrl: "https://developers.google.com/search/docs/fundamentals/creating-helpful-content",
+        geoBrief: null,
     },
     eeat_contact: {
-        title:          "Contact page missing",
-        why:            "A visible contact page is a trust signal for users and search evaluators. Depending on your jurisdiction and audience, applicable laws may also require contact information to be available. Review what applies to your site.",
-        action:         "Add a /contact page with email and a contact form. Include a physical address if required by the laws applicable to your site.",
-        impact:         "high",
-        effort:         "quick_win",
-        category:       "eeat",
-        trafficUplift:  "minor",
-        aeoGap:         "none",
-        autoFixable:    true,
+        title: "Contact page missing",
+        why: "A visible contact page is a trust signal for users and search evaluators. Depending on your jurisdiction and audience, applicable laws may also require contact information to be available. Review what applies to your site.",
+        action: "Add a /contact page with email and a contact form. Include a physical address if required by the laws applicable to your site.",
+        impact: "high",
+        effort: "quick_win",
+        category: "eeat",
+        trafficUplift: "minor",
+        aeoGap: "none",
+        autoFixable: true,
         autofixCheckId: "eeat_contact",
-        claimSource:    "OPTIAISEO_HEURISTIC",
-        geoBrief:       null,
+        claimSource: "OPTIAISEO_HEURISTIC",
+        geoBrief: null,
     },
     eeat_privacy: {
-        title:          "Privacy policy missing",
-        why:            "Many jurisdictions require a privacy policy for sites that collect personal data. Google's policies also require privacy disclosures for sites using certain monetisation features. Review the requirements applicable to your site and audience.",
-        action:         "Add a /privacy-policy page that accurately describes your data collection and processing practices.",
-        impact:         "critical",
-        effort:         "quick_win",
-        category:       "eeat",
-        trafficUplift:  "minor",
-        aeoGap:         "none",
-        autoFixable:    true,
+        title: "Privacy policy missing",
+        why: "Many jurisdictions require a privacy policy for sites that collect personal data. Google's policies also require privacy disclosures for sites using certain monetisation features. Review the requirements applicable to your site and audience.",
+        action: "Add a /privacy-policy page that accurately describes your data collection and processing practices.",
+        impact: "critical",
+        effort: "quick_win",
+        category: "eeat",
+        trafficUplift: "minor",
+        aeoGap: "none",
+        autoFixable: true,
         autofixCheckId: "eeat_privacy",
-        claimSource:    "OPTIAISEO_HEURISTIC",
-        geoBrief:       null,
+        claimSource: "OPTIAISEO_HEURISTIC",
+        geoBrief: null,
     },
 
     content_faq_section: {
-        title:          "No FAQ section on key pages",
-        why:            "Structured Q&A content helps search and AI systems identify questions your page answers. Pages with clear question-and-answer sections are easier for systems to extract relevant answers from.",
-        action:         "Add a <section> with <details>/<summary> Q&A markup to pages that address common user questions.",
-        impact:         "medium",
-        effort:         "medium",
-        category:       "content",
-        trafficUplift:  "moderate",
-        aeoGap:         "missing_faq_schema",
-        autoFixable:    true,
+        title: "No FAQ section on key pages",
+        why: "Structured Q&A content helps search and AI systems identify questions your page answers. Pages with clear question-and-answer sections are easier for systems to extract relevant answers from.",
+        action: "Add a <section> with <details>/<summary> Q&A markup to pages that address common user questions.",
+        impact: "medium",
+        effort: "medium",
+        category: "content",
+        trafficUplift: "moderate",
+        aeoGap: "missing_faq_schema",
+        autoFixable: true,
         autofixCheckId: "content_faq_section",
-        claimSource:    "OPTIAISEO_HEURISTIC",
+        claimSource: "OPTIAISEO_HEURISTIC",
         geoBrief: {
-            targetPath:       "/",
+            targetPath: "/",
             idealAnswerWords: 55,
-            schemaType:       "FAQPage",
-            format:           "faq",
-            starterSentence:  "Frequently asked questions about [product/service]:",
+            schemaType: "FAQPage",
+            format: "faq",
+            starterSentence: "Frequently asked questions about [product/service]:",
         },
     },
     answer_length: {
-        title:          "Long answers may reduce extractability",
-        why:            "Concise, directly answerable passages make important information easier to identify and reuse. Evaluate answer completeness and clarity rather than enforcing a universal word-count threshold.",
-        action:         "Add a concise summary or TL;DR at the top of key definition and how-to pages. Aim for clarity over brevity — ensure the summary is complete.",
-        impact:         "medium",
-        effort:         "medium",
-        category:       "geo",
-        trafficUplift:  "moderate",
-        aeoGap:         "answer_too_long",
-        autoFixable:    false,
+        title: "Long answers may reduce extractability",
+        why: "Concise, directly answerable passages make important information easier to identify and reuse. Evaluate answer completeness and clarity rather than enforcing a universal word-count threshold.",
+        action: "Add a concise summary or TL;DR at the top of key definition and how-to pages. Aim for clarity over brevity — ensure the summary is complete.",
+        impact: "medium",
+        effort: "medium",
+        category: "geo",
+        trafficUplift: "moderate",
+        aeoGap: "answer_too_long",
+        autoFixable: false,
         autofixCheckId: null,
-        claimSource:    "OPTIAISEO_HEURISTIC",
+        claimSource: "OPTIAISEO_HEURISTIC",
         geoBrief: {
-            targetPath:       "/",
+            targetPath: "/",
             idealAnswerWords: 55,
-            schemaType:       "FAQPage",
-            format:           "definition",
-            starterSentence:  "[Topic] is [concise definition in 15 words or fewer].",
+            schemaType: "FAQPage",
+            format: "definition",
+            starterSentence: "[Topic] is [concise definition in 15 words or fewer].",
         },
     },
     topical_gap: {
-        title:          "Topical authority gap detected",
-        why:            "Search and AI systems are more likely to reference sources with published content on a topic. Pages that address relevant topics help establish your site as a useful source for those subjects.",
-        action:         "Create a dedicated page for each detected topic gap. Include a clear definition, relevant schema, and internal links from related content.",
-        impact:         "high",
-        effort:         "complex",
-        category:       "geo",
-        trafficUplift:  "significant",
-        aeoGap:         "topical_gap",
-        autoFixable:    false,
+        title: "Topical authority gap detected",
+        why: "Search and AI systems are more likely to reference sources with published content on a topic. Pages that address relevant topics help establish your site as a useful source for those subjects.",
+        action: "Create a dedicated page for each detected topic gap. Include a clear definition, relevant schema, and internal links from related content.",
+        impact: "high",
+        effort: "complex",
+        category: "geo",
+        trafficUplift: "significant",
+        aeoGap: "topical_gap",
+        autoFixable: false,
         autofixCheckId: null,
-        claimSource:    "OPTIAISEO_HEURISTIC",
+        claimSource: "OPTIAISEO_HEURISTIC",
         geoBrief: {
-            targetPath:       "/[topic-slug]",
+            targetPath: "/[topic-slug]",
             idealAnswerWords: 60,
-            schemaType:       "Article",
-            format:           "definition",
-            starterSentence:  "[Topic] is [definition]. Here is everything you need to know:",
+            schemaType: "Article",
+            format: "definition",
+            starterSentence: "[Topic] is [definition]. Here is everything you need to know:",
         },
     },
     "content-decay-detector": {
-        title:          "Stale content detected",
-        why:            "Content can become less useful when important information becomes outdated. Review pages whose facts, products, policies, or other time-sensitive information may have changed.",
-        action:         "Update top-performing pages with current information, refreshed examples, and new FAQ entries where appropriate.",
-        impact:         "medium",
-        effort:         "medium",
-        category:       "content",
-        trafficUplift:  "moderate",
-        aeoGap:         "none",
-        autoFixable:    true,
+        title: "Stale content detected",
+        why: "Content can become less useful when important information becomes outdated. Review pages whose facts, products, policies, or other time-sensitive information may have changed.",
+        action: "Update top-performing pages with current information, refreshed examples, and new FAQ entries where appropriate.",
+        impact: "medium",
+        effort: "medium",
+        category: "content",
+        trafficUplift: "moderate",
+        aeoGap: "none",
+        autoFixable: true,
         autofixCheckId: "content-decay-detector",
-        claimSource:    "OPTIAISEO_HEURISTIC",
-        geoBrief:       null,
+        claimSource: "OPTIAISEO_HEURISTIC",
+        geoBrief: null,
     },
     "header-tag-strategy": {
-        title:          "Suboptimal heading structure",
-        why:            "Clear heading structure helps organise page content and makes important subtopics easier for users and systems to understand.",
-        action:         "Restructure headings so each major subtopic has its own H2. Use descriptive heading text that reflects the content of that section.",
-        impact:         "medium",
-        effort:         "medium",
-        category:       "content",
-        trafficUplift:  "moderate",
-        aeoGap:         "none",
-        autoFixable:    true,
+        title: "Suboptimal heading structure",
+        why: "Clear heading structure helps organise page content and makes important subtopics easier for users and systems to understand.",
+        action: "Restructure headings so each major subtopic has its own H2. Use descriptive heading text that reflects the content of that section.",
+        impact: "medium",
+        effort: "medium",
+        category: "content",
+        trafficUplift: "moderate",
+        aeoGap: "none",
+        autoFixable: true,
         autofixCheckId: "header-tag-strategy",
-        claimSource:    "OPTIAISEO_HEURISTIC",
-        geoBrief:       null,
+        claimSource: "OPTIAISEO_HEURISTIC",
+        geoBrief: null,
     },
 };
 
@@ -390,8 +390,8 @@ const ISSUE_META: Record<string, IssueMeta> = {
  * lookup tables for enrichment labels. They no longer feed an independent
  * priority formula — all priority flows through computePriorityV4().
  */
-const IMPACT_SCORE: Record<ImpactTier, number>   = { critical: 40, high: 30, medium: 20, low: 10 };
-const EFFORT_SCORE: Record<EffortLevel, number>   = { quick_win: 30, medium: 20, complex: 10 };
+const IMPACT_SCORE: Record<ImpactTier, number> = { critical: 40, high: 30, medium: 20, low: 10 };
+const EFFORT_SCORE: Record<EffortLevel, number> = { quick_win: 30, medium: 20, complex: 10 };
 const UPLIFT_SCORE: Record<EnrichedRecommendation["trafficUplift"], number> = {
     significant: 30, moderate: 20, minor: 10,
 };
@@ -415,15 +415,15 @@ function computeRecommendationPriority(meta: IssueMeta): number {
     };
 
     const priorityInput: PriorityComponents = {
-        businessImpact:   impactToBusinessImpact[meta.impact],
-        searchImpact:     impactToSearchImpact[meta.impact],
-        affectedScope:    0.5,    // unknown at recommendation level
-        confidence:       meta.autoFixable ? 0.9 : 0.7,
-        fixability:       meta.autoFixable
+        businessImpact: impactToBusinessImpact[meta.impact],
+        searchImpact: impactToSearchImpact[meta.impact],
+        affectedScope: 0.5,    // unknown at recommendation level
+        confidence: meta.autoFixable ? 0.9 : 0.7,
+        fixability: meta.autoFixable
             ? fixabilityForRemediation('DETERMINISTIC')
             : effortToFixability[meta.effort],
         evidenceStrength: 0.5,    // recommendations lack direct evidence
-        recency:          0.8,    // assume reasonably recent
+        recency: 0.8,    // assume reasonably recent
     };
 
     return computePriorityV4(priorityInput).score;
@@ -431,48 +431,108 @@ function computeRecommendationPriority(meta: IssueMeta): number {
 
 function effortToLabel(effort: EffortLevel): EnrichedRecommendation["difficulty"] {
     if (effort === "quick_win") return "Easy fix";
-    if (effort === "medium")    return "Medium effort";
+    if (effort === "medium") return "Medium effort";
     return "Complex";
 }
 
 
+const CHECK_ID_ALIASES: Record<string, string> = {
+    "schema-missing-faq": "schema_faq",
+    "schema-faq": "schema_faq",
+    "schema-missing-org": "schema_organization",
+    "schema-organization": "schema_organization",
+    "schema-presence": "schema_organization",
+    "technical.schema-quick-check": "schema_organization",
+    "schema-article": "schema_article",
+    "schema-missing-article": "schema_article",
+    "schema-breadcrumb": "schema_breadcrumb",
+    "schema-missing-breadcrumb": "schema_breadcrumb",
+    "aeo-voice-speakable": "schema_speakable",
+    "llms-txt": "ai_crawler_llms_txt",
+    "ai-bot-robots": "ai_crawler_robots_txt",
+    "aeo-conversational-headings": "content_question_headings",
+    "aeo-answer-box-structure": "content_direct_answers",
+    "direct-answer-block": "content_direct_answers",
+    "eeat-author-attribution": "eeat_author_signals",
+    "eeat-author-byline": "eeat_author_signals",
+    "eeat-dates": "content_freshness",
+    "eeat-external-citations": "aeo_entity_links",
+    "aeo-citation-readiness": "aeo_entity_links",
+    "canonical-tag": "tech_canonical",
+    "xml-sitemap": "tech_sitemap",
+    "robots-txt": "tech_robots_disallow",
+    "robots-meta": "tech_robots_disallow",
+    "indexability": "tech_robots_disallow",
+    "meta-description": "missing_meta_description",
+    "title-tag": "missing_title",
+    "h1-tag": "missing_h1",
+    "image-alt-text": "missing_alt_text",
+    "cwv-mobile-lcp": "slow_lcp",
+    "core-web-vitals-lcp": "slow_lcp",
+    "cwv-mobile-cls": "high_cls",
+    "core-web-vitals-cls": "high_cls",
+    "ssl-certificate": "no_https",
+    "mobile-ux": "not_mobile_friendly",
+};
+
 function defaultMeta(raw: Record<string, unknown>): IssueMeta {
-    const sev = String(raw.severity ?? raw.type ?? "warning").toLowerCase();
-    const impact: ImpactTier = sev === "error" ? "high" : sev === "warning" ? "medium" : "low";
+    const rawPri = String(raw.priority ?? raw.severity ?? raw.type ?? raw.status ?? "warning").toLowerCase();
+    const impact: ImpactTier =
+        rawPri === "critical" || rawPri === "fail" ? "critical"
+            : rawPri === "high" || rawPri === "error" ? "high"
+                : rawPri === "medium" || rawPri === "warning" ? "medium"
+                    : "low";
+    const catId = String(raw.categoryId ?? raw.category ?? "").toLowerCase();
+    const category: IssueMeta["category"] =
+        catId.includes("schema") ? "schema"
+            : catId.includes("ai") || catId.includes("aeo") ? "aeo"
+                : catId.includes("eeat") ? "eeat"
+                    : catId.includes("content") || catId.includes("on-page") || catId.includes("onpage") || catId.includes("keyword") ? "content"
+                        : "technical";
+    const recVal = raw.recommendation;
+    const actionText = typeof recVal === "string"
+        ? recVal
+        : recVal && typeof recVal === "object" && "text" in recVal
+            ? String((recVal as { text?: unknown }).text ?? "Review and fix this issue.")
+            : String(raw.fixSuggestion ?? "Review and fix this issue.");
     return {
-        title:          String(raw.title ?? raw.itemId ?? "SEO issue detected"),
-        why:            String(raw.detail ?? raw.finding ?? "This issue affects search engine visibility."),
-        action:         String(raw.fixSuggestion ?? raw.recommendation ?? "Review and fix this issue."),
+        title: String(raw.label ?? raw.title ?? raw.itemId ?? raw.id ?? "SEO issue detected"),
+        why: String(raw.detail ?? raw.finding ?? "This issue affects search engine visibility."),
+        action: actionText,
         impact,
-        effort:         "medium",
-        category:       "technical",
-        trafficUplift:  impact === "high" ? "moderate" : "minor",
-        aeoGap:         "none",
-        autoFixable:    false,
+        effort: impact === "critical" || impact === "high" ? "medium" : "quick_win",
+        category,
+        trafficUplift: impact === "critical" ? "significant" : impact === "high" ? "moderate" : "minor",
+        aeoGap: category === "aeo" || category === "schema" ? "missing_faq_schema" : "none",
+        autoFixable: false,
         autofixCheckId: null,
-        geoBrief:       null,
-        claimSource:    "NONE",
-        claimUrl:       undefined,
+        geoBrief: null,
+        claimSource: "NONE",
+        claimUrl: undefined,
     };
 }
 
 
 export interface RawIssue {
-    id?:              string;
-    checkId?:         string;
-    itemId?:          string;
-    severity?:        string;
-    type?:            string;
-    title?:           string;
-    detail?:          string;
-    finding?:         string;
-    recommendation?:  string;
-    fixSuggestion?:   string;
-    passed?:          boolean;
-    impact?:          string;
-    pageUrl?:         string;
-    priorityScore?:   number;
-    [key: string]:    unknown;
+    id?: string;
+    checkId?: string;
+    itemId?: string;
+    label?: string;
+    categoryId?: string;
+    priority?: string;
+    status?: string;
+    severity?: string;
+    type?: string;
+    title?: string;
+    detail?: string;
+    finding?: string;
+    recommendation?: string | { text?: string; priority?: string };
+    fixSuggestion?: string;
+    passed?: boolean;
+    impact?: string;
+    pageUrl?: string;
+    priorityScore?: number;
+    [key: string]: unknown;
 }
 
 /**
@@ -480,34 +540,45 @@ export interface RawIssue {
  * Falls back gracefully for unknown check IDs.
  */
 export function enrichIssue(raw: RawIssue, pageUrl?: string): EnrichedRecommendation {
-    const checkId = raw.checkId ?? raw.id ?? raw.itemId ?? "unknown";
-    const meta    = ISSUE_META[checkId] ?? defaultMeta(raw as Record<string, unknown>);
-    const score   = typeof raw.priorityScore === "number" ? raw.priorityScore : computeRecommendationPriority(meta);
+    const rawId = raw.checkId ?? raw.itemId ?? raw.id ?? "unknown";
+    const checkId = CHECK_ID_ALIASES[rawId] ?? rawId;
+    const staticMeta = ISSUE_META[checkId];
+    const fallback = defaultMeta(raw as Record<string, unknown>);
+    const meta: IssueMeta = staticMeta
+        ? {
+            ...staticMeta,
+            title: raw.label || raw.title || staticMeta.title,
+            why: raw.finding || raw.detail || staticMeta.why,
+            action: (typeof raw.recommendation === "string" && raw.recommendation)
+                ? raw.recommendation
+                : staticMeta.action,
+        }
+        : fallback;
+    const score = typeof raw.priorityScore === "number" ? raw.priorityScore : computeRecommendationPriority(meta);
 
-    // Personalise action with page URL when available
     const resolvedPageUrl = pageUrl ?? raw.pageUrl ?? null;
     const action = resolvedPageUrl
         ? meta.action.replace("your page", resolvedPageUrl).replace("each page", resolvedPageUrl)
         : meta.action;
 
     return {
-        checkId,
-        title:          meta.title,
-        why:            meta.why,
+        checkId: rawId,
+        title: meta.title,
+        why: meta.why,
         action,
-        priorityScore:  Math.min(100, score),
-        effort:         meta.effort,
-        impact:         meta.impact,
-        category:       meta.category,
-        trafficUplift:  meta.trafficUplift,
-        aeoGap:         meta.aeoGap,
-        autoFixable:    meta.autoFixable,
+        priorityScore: Math.min(100, score),
+        effort: meta.effort,
+        impact: meta.impact,
+        category: meta.category,
+        trafficUplift: meta.trafficUplift,
+        aeoGap: meta.aeoGap,
+        autoFixable: meta.autoFixable,
         autofixCheckId: meta.autofixCheckId,
-        geoBrief:       meta.geoBrief,
-        pageUrl:        resolvedPageUrl,
-        difficulty:     effortToLabel(meta.effort),
-        claimSource:    meta.claimSource ?? "NONE",
-        claimUrl:       meta.claimUrl ?? null,
+        geoBrief: meta.geoBrief,
+        pageUrl: resolvedPageUrl,
+        difficulty: effortToLabel(meta.effort),
+        claimSource: meta.claimSource ?? "NONE",
+        claimUrl: meta.claimUrl ?? null,
     };
 }
 
@@ -530,20 +601,41 @@ export function extractEnrichedRecommendations(
     let raws: RawIssue[] = [];
 
     if (Array.isArray(issueList)) {
-        raws = issueList as RawIssue[];
+        const first = issueList[0] as Record<string, unknown> | undefined;
+        if (first && Array.isArray(first.items)) {
+            raws = (issueList as Array<{ id?: string; items?: RawIssue[] }>).flatMap((cat) =>
+                (cat.items ?? []).map((item) => ({ ...item, categoryId: item.categoryId ?? cat.id }))
+            );
+        } else {
+            raws = issueList as RawIssue[];
+        }
     } else if (issueList && typeof issueList === "object") {
         const obj = issueList as Record<string, unknown>;
-        if (Array.isArray(obj.recommendations)) raws = obj.recommendations as RawIssue[];
-        else if (Array.isArray(obj.issues))          raws = obj.issues as RawIssue[];
-        else if (Array.isArray(obj.checks))          raws = obj.checks as RawIssue[];
+        if (Array.isArray(obj.recommendations) && obj.recommendations.length > 0) {
+            raws = obj.recommendations as RawIssue[];
+        } else if (Array.isArray(obj.categories)) {
+            raws = (obj.categories as Array<{ id?: string; items?: RawIssue[] }>).flatMap((cat) =>
+                (cat.items ?? []).map((item) => ({ ...item, categoryId: item.categoryId ?? cat.id }))
+            );
+        } else if (Array.isArray(obj.issues)) {
+            raws = obj.issues as RawIssue[];
+        } else if (Array.isArray(obj.checks)) {
+            raws = obj.checks as RawIssue[];
+        }
     }
 
     return raws
         .filter((r) => {
-            // Include failing checks and error/warning severity items
             if (r.passed === false) return true;
-            const sev = String(r.severity ?? r.type ?? "").toLowerCase();
-            return sev === "error" || sev === "warning";
+            if (r.passed === true) return false;
+            const status = String(r.status ?? "").toLowerCase();
+            if (status === "fail" || status === "warning") return true;
+            if (status === "pass" || status === "info" || status === "skipped" || status === "notapplicable") return false;
+            const sev = String(r.severity ?? r.type ?? r.priority ?? "").toLowerCase();
+            if (sev === "error" || sev === "warning" || sev === "critical" || sev === "high" || sev === "medium" || sev === "low") {
+                return true;
+            }
+            return Boolean(r.itemId && r.recommendation);
         })
         .map((raw) => enrichIssue(raw))
         .filter((rec) => {

@@ -56,7 +56,7 @@ export default async function RecommendationsPage({
         operatingMode:       true,
         indexNowConfig:      true,
         trackedKeywords:     { select: { id: true }, take: 1 },
-        blogs:               { select: { id: true }, where: { status: "published" }, take: 1 },
+        blogs:               { select: { id: true }, where: { status: { in: ["PUBLISHED", "published"] } }, take: 1 },
       },
     }),
     prisma.user.findUnique({

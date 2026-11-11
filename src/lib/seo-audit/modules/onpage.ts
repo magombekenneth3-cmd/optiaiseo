@@ -309,26 +309,42 @@ export const OnPageModule: AuditModule = {
         });
 
         const canonicalEl = root.querySelector('link[rel="canonical"]');
-        const canonicalHref = canonicalEl?.getAttribute('href') ?? '';
+        const canonicalHref = (canonicalEl?.getAttribute('href') ?? '').trim();
 
-        let canonicalStatus: AuditStatus = canonicalEl ? 'Pass' : 'Fail';
-        let canonicalFinding = canonicalEl
+        let canonicalStatus: AuditStatus = canonicalEl && canonicalHref ? 'Pass' : 'Fail';
+        let canonicalFinding = canonicalEl && canonicalHref
             ? `Canonical tag present: ${canonicalHref}.`
             : 'No canonical tag found. Google may pick the wrong URL, causing duplicate content issues.';
-        let canonicalRec: ChecklistItem['recommendation'] = !canonicalEl
+        let canonicalRec: ChecklistItem['recommendation'] = !canonicalEl || !canonicalHref
             ? { text: 'Add <link rel="canonical" href="https://yourdomain.com/this-page"> in <head> of every page.', priority: 'High' }
             : undefined;
+        let canonicalIsSelf = false;
 
         if (canonicalEl && canonicalHref) {
+            const isRelativeCanonical = !/^https?:\/\//i.test(canonicalHref);
             try {
-                const pageOrigin = new URL(context.url).origin;
-                const canonicalOrigin = new URL(canonicalHref).origin;
-                if (canonicalOrigin !== pageOrigin) {
+                const pageUrlObj = new URL(context.url);
+                const canonicalUrlObj = new URL(canonicalHref, context.url);
+                const normPath = (p: string) => p.replace(/\/+$/, '') || '/';
+                canonicalIsSelf =
+                    canonicalUrlObj.origin === pageUrlObj.origin &&
+                    normPath(canonicalUrlObj.pathname) === normPath(pageUrlObj.pathname) &&
+                    canonicalUrlObj.search === pageUrlObj.search;
+
+                if (canonicalUrlObj.origin !== pageUrlObj.origin) {
                     canonicalStatus = 'Warning';
-                    canonicalFinding = `Cross-domain canonical detected: page on ${pageOrigin} but canonical points to ${canonicalOrigin}. Verify this is intentional.`;
+                    canonicalFinding = `Cross-domain canonical detected: page on ${pageUrlObj.origin} but canonical points to ${canonicalUrlObj.origin}. Verify this is intentional.`;
                     canonicalRec = { text: 'If syndicated content, this is correct. Otherwise update to a self-referencing canonical.', priority: 'Medium' };
+                } else if (isRelativeCanonical) {
+                    canonicalStatus = 'Warning';
+                    canonicalFinding = `Relative canonical URL detected ("${canonicalHref}"). Google recommends using absolute URLs (including https:// and domain) in rel="canonical".`;
+                    canonicalRec = { text: `Update <link rel="canonical"> to use the full absolute URL: ${canonicalUrlObj.href}`, priority: 'Medium' };
                 }
-            } catch { /* malformed URL — leave status as Pass */ }
+            } catch {
+                canonicalStatus = 'Warning';
+                canonicalFinding = `Malformed canonical URL detected ("${canonicalHref}").`;
+                canonicalRec = { text: 'Update <link rel="canonical"> to a valid absolute URL.', priority: 'High' };
+            }
         }
 
         items.push({
@@ -339,7 +355,7 @@ export const OnPageModule: AuditModule = {
             recommendation: canonicalRec,
             roiImpact: 80,
             aiVisibilityImpact: 70,
-            details: canonicalHref ? { canonicalUrl: canonicalHref } : undefined,
+            details: canonicalHref ? { canonicalUrl: canonicalHref, canonicalIsSelf } : undefined,
         });
 
         const robotsMeta = root.querySelector('meta[name="robots"]');

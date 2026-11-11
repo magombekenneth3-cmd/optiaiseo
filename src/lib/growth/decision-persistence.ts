@@ -86,9 +86,12 @@ export async function savePersistedDecisions(siteId: string, decisions: GrowthDe
     }
 }
 
-export async function getPersistedDecisions(siteId: string): Promise<GrowthDecision[]> {
+export async function getPersistedDecisions(
+    siteId: string,
+    includeActioned = false,
+): Promise<GrowthDecision[]> {
     const redis = getRedis();
-    if (redis) {
+    if (redis && !includeActioned) {
         try {
             const compressedBase64 = await redis.get<string>(`growth_decisions_compressed:${siteId}`);
             if (compressedBase64 && typeof compressedBase64 === "string") {
@@ -99,12 +102,17 @@ export async function getPersistedDecisions(siteId: string): Promise<GrowthDecis
                     return parsed as GrowthDecision[];
                 }
             }
-        } catch { /* Fallback to DB */ }
+        } catch {}
     }
 
     try {
         const records = await (prisma as any).growthDecision.findMany({
-            where: { siteId, status: "ACTIVE" },
+            where: {
+                siteId,
+                status: includeActioned
+                    ? { in: ["ACTIVE", "APPROVED", "EXECUTED", "MONITORING", "COMPLETED"] }
+                    : "ACTIVE",
+            },
             orderBy: { generatedAt: "desc" },
         });
 
@@ -116,6 +124,7 @@ export async function getPersistedDecisions(siteId: string): Promise<GrowthDecis
             primaryCategory: r.primaryCategory as GrowthDecision["primaryCategory"],
             opportunityCategories: r.opportunityCategories as GrowthDecision["opportunityCategories"],
             action: r.action as GrowthDecision["action"],
+            status: r.status ?? "ACTIVE",
             score: typeof r.score === "string" ? JSON.parse(r.score) : r.score,
             whyNow: typeof r.whyNow === "string" ? JSON.parse(r.whyNow) : r.whyNow,
             impact: typeof r.impact === "string" ? JSON.parse(r.impact) : r.impact,

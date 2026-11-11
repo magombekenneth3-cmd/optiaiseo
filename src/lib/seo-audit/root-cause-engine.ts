@@ -469,6 +469,24 @@ export function evaluateCondition(
   const matching = evidence.filter(e => e.source === condition.source);
   if (matching.length === 0) return false;
 
+  if (condition.operator === "not_exists") {
+    const anyDefined = matching.some(e => {
+      const v = getField(e, condition.field);
+      return v !== undefined && v !== null && v !== "";
+    });
+    if (anyDefined) return false;
+
+    return matching.some(e => {
+      const obs = e.observedValue as Record<string, unknown> | null | undefined;
+      if (!obs || typeof obs !== "object") return true;
+      if (condition.field in obs) {
+        const val = obs[condition.field];
+        return val === undefined || val === null || val === "";
+      }
+      return !("checkId" in obs);
+    });
+  }
+
   return matching.some(e => {
     const fieldValue = getField(e, condition.field);
 
@@ -476,7 +494,7 @@ export function evaluateCondition(
       case "eq":
         return fieldValue === condition.value;
       case "neq":
-        return fieldValue !== condition.value;
+        return fieldValue !== undefined && fieldValue !== condition.value;
       case "contains":
         return typeof fieldValue === "string" &&
           typeof condition.value === "string" &&
@@ -494,9 +512,7 @@ export function evaluateCondition(
       case "lte":
         return typeof fieldValue === "number" && fieldValue <= (condition.value as number);
       case "exists":
-        return fieldValue !== undefined && fieldValue !== null;
-      case "not_exists":
-        return fieldValue === undefined || fieldValue === null;
+        return fieldValue !== undefined && fieldValue !== null && fieldValue !== "";
       case "regex":
         return typeof fieldValue === "string" && new RegExp(condition.value as string, "i").test(fieldValue);
       default:

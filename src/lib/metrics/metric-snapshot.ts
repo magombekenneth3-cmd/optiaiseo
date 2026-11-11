@@ -20,13 +20,12 @@ export interface AuditMetricsInput {
     organicTraffic?: number | null;
 }
 
-/** Composite CWV score: average of normalised LCP/CLS/INP percentages */
 function cwvComposite(lcp?: number | null, cls?: number | null, inp?: number | null): number | null {
-    // LCP: good < 2500ms → score = clamp(1 - lcp/4000, 0, 1) * 100
-    // CLS: good < 0.1 → score = clamp(1 - cls/0.25, 0, 1) * 100
-    // INP: good < 200ms → score = clamp(1 - inp/500, 0, 1) * 100
     const scores: number[] = [];
-    if (lcp != null) scores.push(Math.max(0, Math.min(100, (1 - lcp / 4000) * 100)));
+    if (lcp != null) {
+        const lcpMs = lcp <= 30 ? lcp * 1000 : lcp;
+        scores.push(Math.max(0, Math.min(100, (1 - lcpMs / 4000) * 100)));
+    }
     if (cls != null) scores.push(Math.max(0, Math.min(100, (1 - cls / 0.25) * 100)));
     if (inp != null) scores.push(Math.max(0, Math.min(100, (1 - inp / 500) * 100)));
     if (scores.length === 0) return null;

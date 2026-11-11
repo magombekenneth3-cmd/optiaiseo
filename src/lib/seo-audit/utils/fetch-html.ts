@@ -24,7 +24,18 @@ function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+export interface FetchHtmlResult {
+    html: string;
+    headers: Record<string, string>;
+    status: number;
+}
+
 export async function fetchHtml(url: string, redirectDepth = 0): Promise<string> {
+    const result = await fetchHtmlWithMeta(url, redirectDepth);
+    return result.html;
+}
+
+export async function fetchHtmlWithMeta(url: string, redirectDepth = 0): Promise<FetchHtmlResult> {
     // SSRF guard — reject private/internal targets before any network call
     try {
         const { hostname } = new URL(url);
@@ -109,11 +120,19 @@ export async function fetchHtml(url: string, redirectDepth = 0): Promise<string>
                 }
                 const location = response.headers.get('location');
                 if (!location) throw new Error(`HTTP ${response.status} redirect with no Location header`);
-                return fetchHtml(new URL(location, url).href, redirectDepth + 1);
+                return fetchHtmlWithMeta(new URL(location, url).href, redirectDepth + 1);
             }
 
             if (response.ok) {
-                return await response.text();
+                const headers: Record<string, string> = {};
+                response.headers.forEach((value, key) => {
+                    headers[key.toLowerCase()] = value;
+                });
+                return {
+                    html: await response.text(),
+                    headers,
+                    status: response.status,
+                };
             }
 
             // Retryable HTTP errors (cold-start, rate-limit, bad gateway)

@@ -194,10 +194,18 @@ export interface GrowthDecision {
     primaryCategory: OpportunityCategory;
     opportunityCategories: OpportunityCategory[];
     action: GrowthAction;
+    status?: string;
     score: ExplainableScore;
     whyNow: {
         signals: DeterministicWhyNowSignal[];
         urgency: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+        gscMetrics?: {
+            impressions?: number;
+            clicks?: number;
+            position?: number;
+            previousPosition?: number;
+            trend?: number;
+        };
     };
     impact: {
         trafficPotential: { low: number; expected: number; high: number; confidence: number };

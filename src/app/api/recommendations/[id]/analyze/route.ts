@@ -4,13 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { inngest } from "@/lib/inngest/client";
 import { logger } from "@/lib/logger";
+import { rateLimit } from "@/lib/rate-limit";
 
-/**
- * POST /api/recommendations/[id]/analyze
- *
- * Triggers a SERP gap analysis for the opportunity's keyword.
- * Reuses the existing runSerpGapAnalysisJob Inngest function.
- */
 export async function POST(
     _req: NextRequest,
     context: { params: Promise<{ id: string }> }
@@ -19,6 +14,11 @@ export async function POST(
         const session = await getServerSession(authOptions);
         if (!session?.user?.id) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const limited = await rateLimit("competitorAnalyse", session.user.id);
+        if (limited) {
+            return limited;
         }
 
         const { id: decisionId } = await context.params;
@@ -60,18 +60,21 @@ export async function POST(
             });
         }
 
-        // 3. Create SerpGapAnalysis record
+        const parsedWhyNow = typeof decision.whyNow === "string"
+            ? (() => { try { return JSON.parse(decision.whyNow); } catch { return null; } })()
+            : (decision.whyNow as Record<string, any> | null);
+        const rawPos = parsedWhyNow?.gscMetrics?.position;
+        const resolvedPosition = typeof rawPos === "number" && Number.isFinite(rawPos) && rawPos > 0
+            ? Math.round(rawPos)
+            : 15;
+
         const analysis = await prisma.serpGapAnalysis.create({
             data: {
                 siteId: decision.siteId,
                 userId: session.user.id,
                 keyword: decision.primaryKeyword,
                 clientUrl: decision.url,
-                clientPosition: Math.round(
-                    typeof decision.score === "string"
-                        ? JSON.parse(decision.score)?.components?.rankingOpportunity ?? 15
-                        : (decision.score as any)?.components?.rankingOpportunity ?? 15
-                ),
+                clientPosition: resolvedPosition,
                 status: "PENDING",
                 autoQueued: true,
             },

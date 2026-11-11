@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 import { AuditModule, AuditModuleContext, FullAuditReport, NormalizedRecommendation, ModulePerfEntry, AeoScoreBreakdown, AuditCategoryResult } from './types';
-import { fetchHtml } from './utils/fetch-html';
+import { fetchHtmlWithMeta } from './utils/fetch-html';
 import { runDiagnosticPipeline, type DiagnosticPipelineResult } from './diagnostic-engine';
 import { computePriorityV4, fixabilityForRemediation, type PriorityComponents } from './prioritization';
 
@@ -51,10 +51,13 @@ export class AuditEngine {
         // requiresHtml: false (e.g. schema-only or API-only audit subsets).
         const needsHtml = this.modules.some((m) => m.requiresHtml !== false);
         let html = "";
+        let headers: Record<string, string> = {};
 
         if (needsHtml) {
             logger.debug(`[Audit Engine] Pre-fetching HTML for ${url}…`);
-            html = await fetchHtml(url);
+            const fetched = await fetchHtmlWithMeta(url);
+            html = fetched.html;
+            headers = fetched.headers;
 
             if (!html) {
                 logger.error(`[Audit Engine] Could not fetch HTML for ${url} after all retries. Failing audit.`);
@@ -69,6 +72,7 @@ export class AuditEngine {
         const context: AuditModuleContext = {
             url,
             html: html ?? "",
+            headers,
             frameworkHints: [],
             targetKeyword: opts?.targetKeyword ?? undefined,
             userId: opts?.userId ?? undefined,

@@ -164,6 +164,7 @@ export interface ModulePerfEntry {
 export interface AuditModuleContext {
     readonly url: string;
     readonly html: string;
+    readonly headers?: Record<string, string>;
     /** Modules append detected framework hints; engine resolves consensus after Promise.all */
     readonly frameworkHints: string[];
     readonly pageType?: string;

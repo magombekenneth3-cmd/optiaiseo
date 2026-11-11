@@ -60,16 +60,30 @@ function scoreLabel(score: number): string {
 
 const CATEGORY_LABELS: Record<string, string> = {
   technical: "Technical",
+  "technical-seo": "Technical",
   content: "Content",
+  "content-quality": "Content",
   performance: "Performance",
   schema: "Schema",
+  "schema-markup": "Schema",
   onpage: "On-Page",
+  "on-page": "On-Page",
   accessibility: "Accessibility",
   basics: "Basics",
+  "basics-analytics": "Basics",
   social: "Social",
+  "social-branding": "Social",
   local: "Local",
+  "local-seo": "Local",
   offpage: "Off-Page",
+  "off-page": "Off-Page",
   keywords: "Keywords",
+  "keyword-optimisation": "Keywords",
+  "keyword-optimization": "Keywords",
+  "ai-visibility": "AI Visibility",
+  eeat: "E-E-A-T",
+  "crawl-depth": "Crawl Depth",
+  hreflang: "Hreflang",
 };
 
 // Radial score ring SVG

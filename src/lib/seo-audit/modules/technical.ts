@@ -612,25 +612,26 @@ export const TechnicalModule: AuditModule = {
         let httpProtocol = 'Unknown';
         let hstsHeader = '';
         try {
-            const ttfbStart = Date.now();
-            const gzipRes = await fetch(context.url, {
-                method: 'GET',
-                headers: {
-                    'Accept-Encoding': 'gzip, br, deflate',
-                    'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)',
-                },
-                signal: AbortSignal.timeout(8000),
-                cache: 'no-store',
-            });
-            ttfbMs = Date.now() - ttfbStart;
-            hstsHeader = gzipRes.headers.get('strict-transport-security') || '';
-            const altSvc = (gzipRes.headers.get('alt-svc') || '').toLowerCase();
-            const cfRay = gzipRes.headers.get('cf-ray');
-            const xPoweredBy = (gzipRes.headers.get('x-powered-by') || '').toLowerCase();
+            const ctxHeaders = context.headers ?? {};
+            const hasCtxHeaders = Object.keys(ctxHeaders).length > 0;
+            let getHeader = (name: string): string => ctxHeaders[name.toLowerCase()] ?? ctxHeaders[name] ?? '';
+
+            if (!hasCtxHeaders) {
+                const { fetchHtmlWithMeta } = await import('../utils/fetch-html');
+                const ttfbStart = Date.now();
+                const meta = await fetchHtmlWithMeta(context.url);
+                ttfbMs = Date.now() - ttfbStart;
+                getHeader = (name: string): string => meta.headers[name.toLowerCase()] ?? meta.headers[name] ?? '';
+            }
+
+            hstsHeader = getHeader('strict-transport-security');
+            const altSvc = getHeader('alt-svc').toLowerCase();
+            const cfRay = getHeader('cf-ray');
+            const xPoweredBy = getHeader('x-powered-by').toLowerCase();
             httpProtocol = (altSvc.includes('h3') || altSvc.includes('h2') || cfRay || xPoweredBy.includes('next'))
                 ? 'HTTP/2'
                 : 'HTTP/1.1';
-            const encoding = (gzipRes.headers.get('content-encoding') || '').toLowerCase();
+            const encoding = getHeader('content-encoding').toLowerCase();
             if (encoding.includes('br') || encoding.includes('brotli')) {
                 gzipStatus = 'Pass';
                 gzipEncoding = 'Brotli';

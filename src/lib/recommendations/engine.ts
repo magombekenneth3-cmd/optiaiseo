@@ -12,6 +12,8 @@ import { getPersistedDecisions } from "@/lib/growth/decision-persistence";
 import type { GrowthDecision, ExplainableScore } from "@/lib/opportunity-engine/types";
 import { runGrowthDecisionPipeline } from "@/lib/opportunity-engine";
 import { generateLlmOptimizationRules } from "@/lib/aeo/llm-recommendations";
+import { prisma } from "@/lib/prisma";
+import { parseAuditResult, toNormalisedIssues } from "@/lib/seo-audit/parse-audit-result";
 
 export type RecommendationPriority = "critical" | "high" | "medium" | "low";
 export type RecommendationEffort   = "low" | "medium" | "high";
@@ -219,7 +221,7 @@ function decisionToRecommendation(dec: GrowthDecision): { rec: Recommendation; e
     description: evidenceText,
     impact: `~${expectedTraffic} extra clicks/mo expected (${dec.impact.trafficPotential.low}–${dec.impact.trafficPotential.high} range)`,
     effort,
-    status: "ACTIVE",
+    status: dec.status ?? "ACTIVE",
     tags: [dec.primaryCategory, dec.action, "GSC"],
     url: dec.url,
     primaryKeyword: dec.primaryKeyword,
@@ -229,6 +231,7 @@ function decisionToRecommendation(dec: GrowthDecision): { rec: Recommendation; e
     whyNow: {
       headline,
       evidenceText,
+      gscMetrics: dec.whyNow.gscMetrics,
     },
     executionPlan: dec.executionPlan,
     cta: { label: "Review Opportunity", href: `#review-${dec.id}` },
@@ -237,37 +240,110 @@ function decisionToRecommendation(dec: GrowthDecision): { rec: Recommendation; e
   return { rec, estimatedLift: expectedTraffic };
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Public API
-// ────────────────────────────────────────────────────────────────────────────
+async function buildAuditRecommendations(ctx: SiteContext): Promise<Recommendation[]> {
+  try {
+    const latestAudit = await prisma.audit.findFirst({
+      where: {
+        siteId: ctx.siteId,
+        fixStatus: { notIn: ["PENDING", "IN_PROGRESS", "FAILED"] },
+      },
+      orderBy: { runTimestamp: "desc" },
+      select: { id: true, issueList: true },
+    });
+    if (!latestAudit?.issueList) return [];
 
-/**
- * Reads persisted opportunities from PostgreSQL — no live GSC API round-trips needed.
- */
+    const parsed = parseAuditResult(latestAudit.issueList);
+    const issues = toNormalisedIssues(parsed)
+      .filter((i) => i.severity === "critical" || i.severity === "high")
+      .sort((a, b) => b.priorityScore - a.priorityScore)
+      .slice(0, 12);
+
+    const defaultUrl = ctx.domain.startsWith("http") ? ctx.domain : `https://${ctx.domain}`;
+
+    return issues.map((issue): Recommendation => {
+      const catLower = (issue.category ?? "").toLowerCase();
+      const isContent =
+        catLower.includes("content") ||
+        catLower.includes("on-page") ||
+        catLower.includes("onpage") ||
+        catLower.includes("keyword") ||
+        catLower.includes("eeat");
+      const source: RecommendationSource = isContent ? "content" : "technical";
+      const priority: RecommendationPriority = issue.severity === "critical" ? "critical" : "high";
+      const effort: RecommendationEffort =
+        catLower.includes("basics") || catLower.includes("on-page") || catLower.includes("schema")
+          ? "low"
+          : catLower.includes("performance") || catLower.includes("off-page")
+            ? "high"
+            : "medium";
+      const recText = issue.recommendation || "Review and resolve this audit finding.";
+
+      return {
+        id: `audit-${latestAudit.id}-${issue.id}`,
+        priority,
+        source,
+        category: issue.category || (isContent ? "On-Page & Content" : "Technical SEO"),
+        title: issue.title || issue.id,
+        description: issue.finding || issue.description || recText,
+        impact: `Priority ${issue.priorityScore}/100 · ROI ${issue.roiImpact}% · AI Vis ${issue.aiVisibilityImpact}%`,
+        effort,
+        status: "ACTIVE",
+        tags: [issue.category || "SEO Audit", issue.severity.toUpperCase()],
+        url: parsed.url || defaultUrl,
+        scoreOverall: issue.priorityScore,
+        stats: [
+          { label: "Priority Score", value: `${issue.priorityScore}/100`, highlight: issue.priorityScore >= 75 },
+          { label: "ROI Impact", value: `${issue.roiImpact}%` },
+          { label: "AI Visibility", value: `${issue.aiVisibilityImpact}%` },
+        ],
+        whyNow: {
+          headline: `${issue.title || issue.id} (${issue.severity.toUpperCase()})`,
+          evidenceText: issue.finding || issue.description || recText,
+        },
+        executionPlan: [
+          {
+            step: 1,
+            action: recText,
+            expectedOutcome: "Resolves the audit finding and improves page health score.",
+          },
+        ],
+        cta: {
+          label: "Fix in Audit Report",
+          href: `/dashboard/audits/${latestAudit.id}#section-fixes`,
+        },
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
 export async function buildRecommendations(
   ctx: SiteContext,
 ): Promise<RecommendationResult> {
-  // 1. Query persisted decisions from PostgreSQL
-  let dbDecisions: GrowthDecision[] = await getPersistedDecisions(ctx.siteId);
+  let dbDecisions: GrowthDecision[] = await getPersistedDecisions(ctx.siteId, true);
 
-  // 2. If no decisions exist in DB yet and GSC is connected, trigger the opportunity pipeline
   if (dbDecisions.length === 0 && ctx.hasGsc) {
     await runGrowthDecisionPipeline(ctx.siteId);
-    dbDecisions = await getPersistedDecisions(ctx.siteId);
+    dbDecisions = await getPersistedDecisions(ctx.siteId, true);
   }
 
-  // 3. Map DB GrowthDecision records into presentation Recommendation objects
   let totalMissedClicks = 0;
   const gscRecs: Recommendation[] = dbDecisions.map((dec) => {
     const { rec, estimatedLift } = decisionToRecommendation(dec);
-    totalMissedClicks += estimatedLift;
+    if (rec.status === "ACTIVE") {
+      totalMissedClicks += estimatedLift;
+    }
     return rec;
   });
 
-  const setupRecs = buildSetupRecommendations(ctx);
-  const llmRecs   = buildLlmRecommendations(ctx.domain);
+  const [auditRecs, setupRecs, llmRecs] = await Promise.all([
+    buildAuditRecommendations(ctx),
+    Promise.resolve(buildSetupRecommendations(ctx)),
+    Promise.resolve(buildLlmRecommendations(ctx.domain)),
+  ]);
 
-  const all = [...gscRecs, ...llmRecs, ...setupRecs];
+  const all = [...gscRecs, ...auditRecs, ...llmRecs, ...setupRecs];
 
   const PRIORITY_ORDER: Record<RecommendationPriority, number> = {
     critical: 0,
@@ -281,6 +357,9 @@ export async function buildRecommendations(
     if (byPriority !== 0) return byPriority;
     if (a.source === "gsc" && b.source !== "gsc") return -1;
     if (a.source !== "gsc" && b.source === "gsc") return 1;
+    if ((b.scoreOverall ?? 0) !== (a.scoreOverall ?? 0)) {
+      return (b.scoreOverall ?? 0) - (a.scoreOverall ?? 0);
+    }
     return 0;
   });
 
@@ -288,11 +367,11 @@ export async function buildRecommendations(
     recommendations: sorted,
     gscConnected: ctx.hasGsc,
     summary: {
-      totalOpportunities: gscRecs.length,
+      totalOpportunities: gscRecs.length + auditRecs.length,
       estimatedMissedClicks: totalMissedClicks,
       criticalCount: sorted.filter((r) => r.priority === "critical").length,
       highCount:     sorted.filter((r) => r.priority === "high").length,
-      monitoringCount: sorted.filter((r) => r.status === "MONITORING" || r.status === "EXECUTED").length,
+      monitoringCount: sorted.filter((r) => r.status === "MONITORING" || r.status === "EXECUTED" || r.status === "APPROVED").length,
     },
   };
 }
