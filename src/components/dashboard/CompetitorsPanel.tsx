@@ -121,19 +121,25 @@ export function CompetitorsPanel({ siteId, isPaid, initial }: Props) {
     };
 
     const handleDeleteService = async (serviceId: string) => {
-        if (!confirm("Remove this service and all its competitors?")) return;
-        const res = await deleteService(serviceId);
-        if (res.success) {
-            setServices(prev => prev.filter(s => s.id !== serviceId));
-            setSuggestions(prev => {
-                const next = { ...prev };
-                delete next[serviceId];
-                return next;
-            });
-            toast.success("Service removed.");
-        } else {
-            toast.error(res.error ?? "Failed to delete service.");
-        }
+        toast("Remove this service and all its competitors?", {
+            action: {
+                label: "Remove",
+                onClick: async () => {
+                    const res = await deleteService(serviceId);
+                    if (res.success) {
+                        setServices(prev => prev.filter(s => s.id !== serviceId));
+                        setSuggestions(prev => {
+                            const next = { ...prev };
+                            delete next[serviceId];
+                            return next;
+                        });
+                        toast.success("Service removed.");
+                    } else {
+                        toast.error(res.error ?? "Failed to delete service.");
+                    }
+                },
+            },
+        });
     };
 
     return (

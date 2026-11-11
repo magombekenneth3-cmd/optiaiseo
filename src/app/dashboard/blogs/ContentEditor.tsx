@@ -503,30 +503,25 @@ export function ContentEditor({
     const keywordOpportunities = useMemo(() => {
         if (!keyword) return [];
         return [
-            { keyword: `${keyword} tutorial`, volume: 1200, difficulty: 24, difficultyColor: "text-emerald-400" },
-            { keyword: `${keyword} tools`, volume: 850, difficulty: 38, difficultyColor: "text-amber-400" },
-            { keyword: `${keyword} strategy`, volume: 540, difficulty: 45, difficultyColor: "text-amber-400" },
-            { keyword: `${keyword} enterprise`, volume: 320, difficulty: 62, difficultyColor: "text-rose-400" },
+            { keyword: `${keyword} tutorial`, volume: null, difficulty: null, difficultyColor: "text-muted-foreground" },
+            { keyword: `${keyword} tools`, volume: null, difficulty: null, difficultyColor: "text-muted-foreground" },
+            { keyword: `${keyword} strategy`, volume: null, difficulty: null, difficultyColor: "text-muted-foreground" },
+            { keyword: `${keyword} enterprise`, volume: null, difficulty: null, difficultyColor: "text-muted-foreground" },
         ];
     }, [keyword]);
 
-    const rankingChips = useMemo(() => {
+    const rankingChips = useMemo((): { keyword: string; position: string; delta: { isUp: boolean; val: number } | null }[] => {
         if (!keyword) return [];
         return [
-            { keyword, position: scoreData ? Math.max(1, Math.round(95 - scoreData.score * 0.9)) : "—", delta: scoreData ? { val: 2, isUp: true } : null },
-            { keyword: `${keyword} guide`, position: scoreData ? Math.max(1, Math.round(110 - scoreData.score)) : "—", delta: null },
+            { keyword, position: "—", delta: null },
+            { keyword: `${keyword} guide`, position: "—", delta: null },
             { keyword: `best ${keyword}`, position: "—", delta: null },
         ];
-    }, [keyword, scoreData]);
-
-    const competitorKeywordGaps = useMemo(() => {
-        if (!keyword) return [];
-        return [
-            { keyword: `${keyword} checklist`, competitor: "competitor.com", volume: 450 },
-            { keyword: `how to optimize ${keyword}`, competitor: "industryleader.net", volume: 380 },
-            { keyword: `${keyword} templates`, competitor: "topresource.org", volume: 290 },
-        ];
     }, [keyword]);
+
+    const competitorKeywordGaps = useMemo((): { keyword: string; competitor: string; volume: number | null }[] => {
+        return [];
+    }, []);
 
     const metaParsed = useMemo(() => {
         const titleMatch = content.match(/<title>([\s\S]*?)<\/title>/i) || content.match(/^# (.*)$/m);
@@ -927,7 +922,9 @@ export function ContentEditor({
                                         <button
                                             type="button"
                                             onClick={() => toast.success("Auto-injecting schema to page <head>...")}
-                                            className="rounded border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-[10px] font-bold text-amber-300 hover:bg-amber-500/25"
+                                            disabled
+                                            title="Coming soon"
+                                            className="rounded border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-[10px] font-bold text-amber-300 disabled:opacity-40 disabled:cursor-not-allowed"
                                         >
                                             Inject schema
                                         </button>
@@ -949,15 +946,17 @@ export function ContentEditor({
                                     <div className="grid grid-cols-2 gap-2">
                                         <button
                                             type="button"
-                                            onClick={() => toast.success("Injecting JSON-LD schema...")}
-                                            className="rounded-lg border border-border bg-card py-1.5 text-[11px] font-bold text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                                            disabled
+                                            title="Coming soon"
+                                            className="rounded-lg border border-border bg-card py-1.5 text-[11px] font-bold text-muted-foreground disabled:opacity-40 disabled:cursor-not-allowed"
                                         >
                                             Inject schema
                                         </button>
                                         <button
                                             type="button"
-                                            onClick={() => toast.info("Opening GitHub PR with automated SEO repairs...")}
-                                            className="rounded-lg border border-border bg-card py-1.5 text-[11px] font-bold text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                                            disabled
+                                            title="Coming soon"
+                                            className="rounded-lg border border-border bg-card py-1.5 text-[11px] font-bold text-muted-foreground disabled:opacity-40 disabled:cursor-not-allowed"
                                         >
                                             Auto-fix via GitHub PR
                                         </button>

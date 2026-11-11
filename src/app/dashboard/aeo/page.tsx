@@ -693,7 +693,7 @@ function TabContent({
 
 function PageSkeleton() {
     return (
-        <div className="flex gap-6">
+        <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex-1 min-w-0 flex flex-col gap-4">
                 <div className="h-10 w-48 rounded-lg shimmer" />
                 <div className="h-44 rounded-2xl shimmer" />
@@ -715,9 +715,14 @@ function AeoRankPageInner() {
     const [sites, setSites] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [primaryBrandFacts, setPrimaryBrandFacts] = useState<{ factType: string; value: string; verified: boolean }[]>([]);
-    const [mainTab, setMainTab] = useState<MainTabId>("overview");
+    const searchParams = useSearchParams();
+    const router = useRouter();
 
-    // Scan state — lifted from individual SiteRow to page level
+    const tabParam = searchParams.get("tab") as MainTabId | null;
+    const [mainTab, setMainTab] = useState<MainTabId>(
+        tabParam && MAIN_TABS.some(t => t.id === tabParam) ? tabParam : "overview"
+    );
+
     const [activeResult, setActiveResult] = useState<any>(null);
     const [scanning, setScanning] = useState(false);
     const [deepScanning, setDeepScanning] = useState(false);
@@ -726,8 +731,6 @@ function AeoRankPageInner() {
     const [pendingReportId, setPendingReportId] = useState<string | null>(null);
     const [scanError, setScanError] = useState<string | null>(null);
 
-    const searchParams = useSearchParams();
-    const router = useRouter();
     const urlSiteId = searchParams.get("siteId");
 
     // Load all sites
@@ -887,7 +890,7 @@ function AeoRankPageInner() {
 
             {/* Main 2-column layout */}
             {!loading && sites.length > 0 && (
-                <div className="flex gap-6 items-start">
+                <div className="flex flex-col lg:flex-row gap-6 items-start">
                     {/* ── Left: main content ── */}
                     <div className="flex-1 min-w-0 flex flex-col gap-4">
 

@@ -83,6 +83,7 @@ export default async function SerpGapPage({
 
     return (
         <SerpGapDashboard
+            key={activeSiteId}
             sites={userSites}
             activeSiteId={activeSiteId}
             activeSiteDomain={activeSite?.domain ?? ""}

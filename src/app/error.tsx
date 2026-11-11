@@ -14,20 +14,19 @@ export default function GlobalError({
     }, [error]);
 
     return (
-        <html>
-            <body
-                style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    minHeight: "100vh",
-                    gap: "1.5rem",
-                    fontFamily: "system-ui, -apple-system, sans-serif",
-                    background: "#0a0a0a",
-                    color: "#fafafa",
-                    margin: 0,
-                    padding: "2rem",
+        <div
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                minHeight: "100vh",
+                gap: "1.5rem",
+                fontFamily: "system-ui, -apple-system, sans-serif",
+                background: "#0a0a0a",
+                color: "#fafafa",
+                margin: 0,
+                padding: "2rem",
                     textAlign: "center",
                 }}
             >
@@ -104,11 +103,10 @@ export default function GlobalError({
                                 alignItems: "center",
                             }}
                         >
-                            ← Back to Dashboard
+                            &#8592; Back to Dashboard
                         </a>
                     </div>
                 </div>
-            </body>
-        </html>
+            </div>
     );
 }

@@ -199,12 +199,18 @@ function RowMenu({ comp, siteId, isPaid, onRefresh, onDelete }: {
   };
 
   const handleDelete = () => {
-    if (!confirm(`Remove ${comp.domain}?`)) return;
-    setOpen(false);
-    go(async () => {
-      const r = await deleteCompetitor(siteId, comp.id);
-      if (r.success) { toast.success(`${comp.domain} removed.`); onDelete(); }
-      else toast.error(r.error ?? "Failed.");
+    toast(`Remove ${comp.domain}?`, {
+      action: {
+        label: "Remove",
+        onClick: () => {
+          setOpen(false);
+          go(async () => {
+            const r = await deleteCompetitor(siteId, comp.id);
+            if (r.success) { toast.success(`${comp.domain} removed.`); onDelete(); }
+            else toast.error(r.error ?? "Failed.");
+          });
+        },
+      },
     });
   };
 

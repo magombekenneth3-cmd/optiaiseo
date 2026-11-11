@@ -251,6 +251,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       diagnosticVerifiedCount = verifiedCount;
       diagnosticDeterministicCount = deterministicCount;
 
+      const sorted = [...diagnosticFindings].sort((a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0));
+      for (const finding of sorted.slice(0, 3)) {
+        priorityActions.push({
+          id: finding.id,
+          impact: finding.severity === "critical" ? "critical" : finding.severity === "high" ? "high" : "medium",
+          title: (finding as any).title ?? finding.issueType,
+          subtitle: (finding as any).category || "Diagnostic finding",
+          reason: finding.rootCause || "Identified by AI diagnostic engine.",
+          confidence: String(finding.confidence) || "High confidence",
+          href: "/dashboard/diagnostics",
+          ctaLabel: "View diagnosis",
+        });
+      }
 
     }
   } catch {
@@ -466,13 +479,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           )}
 
           {/* ── Legacy attention queue (audit checklist fallback only) ───── */}
-          {attentionItems.length > 0 && <DashboardAttentionQueue items={attentionItems} />}
+          {diagnosticFindingCount === 0 && attentionItems.length > 0 && <DashboardAttentionQueue items={attentionItems} />}
 
           {/* ── Diagnostic priority queue ─────────────────────────────────── */}
           {primarySiteId && <DiagnosticPriorityQueue siteId={primarySiteId} />}
 
           {/* ── Health + AI readiness ─────────────────────────────────────── */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
             {primarySiteId && <DiagnosticHealthSummary siteId={primarySiteId} />}
             {primarySiteId && <AiReadinessPanel siteId={primarySiteId} />}
           </div>

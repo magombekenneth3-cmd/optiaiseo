@@ -103,11 +103,11 @@ interface AiReadinessData {
 }
 
 function scoreColor(s: number) {
-  return s >= 65 ? "text-emerald-400" : s >= 40 ? "text-amber-400" : "text-rose-400";
+  return s >= 80 ? "text-emerald-400" : s >= 60 ? "text-amber-400" : "text-rose-400";
 }
 
 function scoreBg(s: number) {
-  return s >= 65 ? "bg-emerald-500" : s >= 40 ? "bg-amber-500" : "bg-rose-500";
+  return s >= 80 ? "bg-emerald-500" : s >= 60 ? "bg-amber-500" : "bg-rose-500";
 }
 
 function gradeStyle(g: string) {

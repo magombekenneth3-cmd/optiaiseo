@@ -62,6 +62,30 @@ const SEV_CONFIG: Record<string, { label: string; barCls: string; badgeCls: stri
         badgeCls: "bg-blue-500/10 text-blue-400 border-blue-500/30",
         dotCls: "bg-blue-400",
     },
+    critical: {
+        label: "Critical",
+        barCls: "bg-red-600",
+        badgeCls: "bg-red-600/10 text-red-400 border-red-600/30",
+        dotCls: "bg-red-500",
+    },
+    high: {
+        label: "High",
+        barCls: "bg-orange-500",
+        badgeCls: "bg-orange-500/10 text-orange-400 border-orange-500/30",
+        dotCls: "bg-orange-400",
+    },
+    medium: {
+        label: "Medium",
+        barCls: "bg-yellow-500",
+        badgeCls: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30",
+        dotCls: "bg-yellow-400",
+    },
+    low: {
+        label: "Low",
+        barCls: "bg-blue-400",
+        badgeCls: "bg-blue-400/10 text-blue-300 border-blue-400/30",
+        dotCls: "bg-blue-300",
+    },
 };
 
 

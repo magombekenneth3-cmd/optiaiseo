@@ -167,7 +167,7 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
                                         onClick={() => handleRemove(kw.id)}
                                         className="shrink-0 p-1.5 rounded-md text-muted-foreground
                                                    hover:text-destructive hover:bg-destructive/10 transition-colors
-                                                   opacity-0 group-hover:opacity-100"
+                                                   opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 sm:opacity-100 md:opacity-0 md:group-hover:opacity-100"
                                         aria-label={`Remove ${kw.keyword}`}
                                     >
                                         <Trash2 className="w-4 h-4" />

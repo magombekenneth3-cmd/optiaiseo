@@ -148,8 +148,9 @@ export function OnboardingWizard({ show, userName, hasSites = false }: Onboardin
                             You&apos;re all set
                         </h2>
                         <p className="text-muted-foreground text-sm mb-8 leading-relaxed">
-                            Add your first site from the dashboard to get your AI visibility
-                            score. Check the sidebar for all features.
+                            {hasSites
+                                ? "Your site is ready. Explore your audit results and AI visibility score from the dashboard."
+                                : "Add your first site from the dashboard to get your AI visibility score. Check the sidebar for all features."}
                         </p>
                         <button
                             onClick={dismiss}

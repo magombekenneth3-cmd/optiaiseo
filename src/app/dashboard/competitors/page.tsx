@@ -79,6 +79,7 @@ export default async function CompetitorsPage({ searchParams }: PageProps) {
 
   return (
     <CompetitorsDashboard
+      key={activeSiteId}
       sites={sites}
       activeSiteId={activeSiteId}
       activeSiteDomain={activeSite?.domain ?? null}

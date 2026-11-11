@@ -235,7 +235,7 @@ function ContextCanvas({ isConnected }: { isConnected: boolean }) {
                 <div className="flex flex-wrap gap-2">
                     {state.recommendedActions && state.recommendedActions.length > 0 ? (
                         state.recommendedActions.map((action, idx) => (
-                            <button key={idx} className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-medium text-emerald-300 hover:bg-emerald-500/20 transition-colors">
+                            <button key={idx} disabled title="Coming soon" className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-medium text-emerald-300 opacity-60 cursor-not-allowed">
                                 {action}
                             </button>
                         ))

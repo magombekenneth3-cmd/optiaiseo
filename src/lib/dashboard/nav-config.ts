@@ -18,8 +18,8 @@ export interface NavItem {
 
 /** Hub 1: Overview & Command Center */
 export const OVERVIEW_ITEMS: NavItem[] = [
-  { name: "Overview", href: "/dashboard", icon: LayoutDashboard, context: false },
-  { name: "Opportunities", href: "/dashboard/recommendations", icon: Lightbulb, context: false },
+  { name: "Overview", href: "/dashboard", icon: LayoutDashboard, context: true },
+  { name: "Opportunities", href: "/dashboard/recommendations", icon: Lightbulb, context: true },
 ];
 
 /** Hub 2: Intelligence & Audits */
@@ -34,17 +34,17 @@ export const INTELLIGENCE_ITEMS: NavItem[] = [
 
 /** Hub 3: Content Studio */
 export const CONTENT_STUDIO_ITEMS: NavItem[] = [
-  { name: "Articles", href: "/dashboard/blogs", icon: FileText, context: false },
-  { name: "Content Editor", href: "/dashboard/editor", icon: Highlighter, context: false },
+  { name: "Articles", href: "/dashboard/blogs", icon: FileText, context: true },
+  { name: "Content Editor", href: "/dashboard/editor", icon: Highlighter, context: true },
   { name: "Content Planner", href: "/dashboard/planner", icon: Calendar, context: true },
   { name: "Content Health", href: "/dashboard/content-decay", icon: TrendingDown, context: true },
-  { name: "Programmatic SEO", href: "/dashboard/pseo", icon: Zap, context: false },
+  { name: "Programmatic SEO", href: "/dashboard/pseo", icon: Zap, context: true },
 ];
 
 /** Hub 4: Autopilot & Operations */
 export const AUTOPILOT_ITEMS: NavItem[] = [
   { name: "Autopilot", href: "/dashboard/autopilot", icon: Bot, context: true },
-  { name: "Auto Indexer", href: "/dashboard/indexing", icon: Zap, context: false },
+  { name: "Auto Indexer", href: "/dashboard/indexing", icon: Zap, context: true },
   { name: "Auto-Heal Log", href: "/dashboard/healing", icon: Shield, context: true },
   { name: "Operations", href: "/dashboard/operations", icon: Activity, context: true },
   { name: "Campaigns", href: "/dashboard/campaign", icon: Target, context: true },

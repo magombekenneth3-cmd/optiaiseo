@@ -170,6 +170,7 @@ export default async function AuditsPage({
       <div id="audit-history" className="scroll-mt-6">
         <div className="mb-3 flex items-center justify-between"><div><h2 className="text-lg font-bold">Audit history</h2><p className="text-sm text-muted-foreground">Compare completed scans and investigate regressions.</p></div>{inProgress.length > 0 && <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 text-xs font-semibold text-blue-300"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-400" /> {inProgress.length} running</span>}</div>
       <AuditTable
+        key={selectedSite?.id}
         initialAudits={visibleAudits as Parameters<typeof AuditTable>[0]["initialAudits"]}
         initialCursor={nextCursor ?? null}
         siteId={selectedSite?.id}

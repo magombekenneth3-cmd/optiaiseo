@@ -10,47 +10,6 @@ export interface GuideItem {
 }
 
 export const GUIDES: Record<string, GuideItem> = {
-  "how-to-rank-in-chatgpt": {
-    title: "How to Rank in ChatGPT Answers (2026 Guide) | OptiAISEO",
-    description: "Learn exactly how to get your brand cited in ChatGPT responses. Step-by-step AEO guide covering schema, entity optimization, and citation tracking.",
-    h1: "How to Rank in ChatGPT Answers in 2026",
-    intro: "ChatGPT, Claude, and Perplexity now answer millions of questions that used to go to Google. Unlike traditional search, these models don't rank blue links — they cite sources. Getting cited requires a different strategy: Answer Engine Optimization (AEO). This guide covers exactly what you need to do.",
-    sections: [
-      {
-        heading: "Why ChatGPT cites some brands and not others",
-        body: "Large language models are trained on web data. They learn which brands, products, and organizations are authoritative by analysing how often they appear in high-quality sources — Wikipedia, trusted blogs, Reddit discussions, and news sites. If your brand is mentioned frequently in authoritative contexts, ChatGPT is more likely to recommend it. The key insight: you don't optimize for ChatGPT directly — you optimize for the sources ChatGPT trusts.",
-      },
-      {
-        heading: "Step 1: Implement structured data (JSON-LD schema)",
-        body: "Schema markup tells AI crawlers exactly what your product does, who it serves, and what category it belongs to. At minimum, implement: Organization schema (name, description, url, sameAs), Product or SoftwareApplication schema with pricing and features, FAQPage schema on every page that answers a question. OptiAISEO automatically injects and validates all required schema types — run a free audit to see what's missing.",
-      },
-      {
-        heading: "Step 2: Build entity associations",
-        body: "AI models understand entities — named things with relationships. To get cited, your brand needs strong entity associations: What category is it in? What problem does it solve? Who uses it? Build these by creating content that explicitly defines your category (e.g. 'OptiAISEO is a Generative Engine Optimization platform'), getting mentioned on authoritative third-party sites, and ensuring consistent NAP (name, address, phone) data across directories.",
-      },
-      {
-        heading: "Step 3: Publish factual, citable content",
-        body: "ChatGPT prefers to cite content that is factual, structured, and specific. Write content with clear definitions, named statistics, and attributed claims. Use headers, bullet points, and numbered lists — these are easy for AI to parse and extract. Avoid marketing fluff; write like an encyclopedia entry for your category.",
-      },
-      {
-        heading: "Step 4: Track your Generative Share of Voice (gSOV)",
-        body: "gSOV measures how often your brand appears in AI answers compared to competitors. Run weekly prompts like 'best AI SEO tools', 'alternatives to Semrush', and 'how to track AI citations' — then log whether your brand is cited. OptiAISEO automates this tracking and alerts you when competitors gain or lose citation share.",
-      },
-    ],
-    faqs: [
-      { q: "How long does it take to rank in ChatGPT?", a: "Most brands see their first ChatGPT citations within 3–6 months of implementing AEO best practices. The timeline depends on your existing domain authority and how aggressively you build entity associations." },
-      { q: "Does Google SEO help with ChatGPT rankings?", a: "Partially. Google authority signals (backlinks, E-E-A-T) correlate with AI citation rates because both measure trustworthiness. But AEO requires additional steps: schema markup, entity definitions, and structured factual content that traditional SEO doesn't require." },
-      { q: "What schema type helps most for ChatGPT citations?", a: "Organization, FAQPage, and Article schema have the highest correlation with AI citations. SoftwareApplication schema is critical if you're a SaaS product." },
-    ],
-    cta: "Track your ChatGPT citation rate free",
-    related: [
-      { href: "/aeo", label: "AEO Guide" },
-      { href: "/geo", label: "GEO Guide" },
-      { href: "/free/gso-checker", label: "Free AI visibility checker" },
-      { href: "/guide/generative-engine-optimization-checklist", label: "GEO checklist" },
-    ],
-  },
-
   "generative-engine-optimization-checklist": {
     title: "Generative Engine Optimization Checklist 2026 | OptiAISEO",
     description: "Complete GEO checklist: 23 actions to get your brand cited in ChatGPT, Claude, Perplexity and Google AI Overviews. Free, actionable, updated for 2026.",
@@ -81,7 +40,7 @@ export const GUIDES: Record<string, GuideItem> = {
     ],
     cta: "Run a free GEO audit on your site",
     related: [
-      { href: "/guide/how-to-rank-in-chatgpt", label: "Rank in ChatGPT" },
+      { href: "/aeo-guide/how-to-rank-in-chatgpt-search", label: "Rank in ChatGPT" },
       { href: "/guide/schema-markup-ai-search", label: "Schema markup guide" },
       { href: "/free/gso-checker", label: "Free gSOV checker" },
       { href: "/pricing", label: "OptiAISEO plans" },
@@ -122,7 +81,7 @@ export const GUIDES: Record<string, GuideItem> = {
     ],
     cta: "Audit your schema markup free",
     related: [
-      { href: "/guide/how-to-rank-in-chatgpt", label: "Rank in ChatGPT" },
+      { href: "/aeo-guide/how-to-rank-in-chatgpt-search", label: "Rank in ChatGPT" },
       { href: "/guide/robots-txt-ai-search", label: "Robots.txt for AI crawlers" },
       { href: "/free/seo-checker", label: "Free technical SEO audit" },
       { href: "/aio", label: "AI SEO platform" },
@@ -160,7 +119,7 @@ export const GUIDES: Record<string, GuideItem> = {
     cta: "Check your gSOV score free",
     related: [
       { href: "/free/gso-checker", label: "Free gSOV checker" },
-      { href: "/guide/how-to-rank-in-chatgpt", label: "Rank in ChatGPT" },
+      { href: "/aeo-guide/how-to-rank-in-chatgpt-search", label: "Rank in ChatGPT" },
       { href: "/guide/generative-engine-optimization-checklist", label: "GEO checklist" },
       { href: "/pricing", label: "OptiAISEO pricing" },
     ],
@@ -197,7 +156,7 @@ export const GUIDES: Record<string, GuideItem> = {
     cta: "Audit your robots.txt with OptiAISEO",
     related: [
       { href: "/guide/schema-markup-ai-search", label: "Schema markup guide" },
-      { href: "/guide/how-to-rank-in-chatgpt", label: "Rank in ChatGPT" },
+      { href: "/aeo-guide/how-to-rank-in-chatgpt-search", label: "Rank in ChatGPT" },
       { href: "/free/seo-checker", label: "Free technical audit" },
       { href: "/security", label: "OptiAISEO security" },
     ],

@@ -144,12 +144,14 @@ export function OnboardingInline({ onComplete }: Props) {
 
     const handleAskAria = () => {
         try { localStorage.setItem("aiseo_inline_complete", "1"); } catch { }
+        fetch("/api/user/onboarding-done", { method: "POST" }).catch(() => null);
         router.push(siteId ? `/aria?siteId=${siteId}` : "/aria");
         onComplete?.();
     };
 
     const handleRunAudit = () => {
         try { localStorage.setItem("aiseo_inline_complete", "1"); } catch { }
+        fetch("/api/user/onboarding-done", { method: "POST" }).catch(() => null);
         router.push(siteId ? `/dashboard/audits?siteId=${siteId}` : "/dashboard/audits");
         onComplete?.();
     };

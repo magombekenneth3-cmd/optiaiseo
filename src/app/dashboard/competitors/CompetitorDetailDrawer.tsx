@@ -340,7 +340,7 @@ export function CompetitorDetailDrawer({ comp, siteId, isPaid, onClose, onRefres
                             +{Math.round(estBestAction.searchVolume * 0.05)} clicks/mo
                           </p>
                         </div>
-                        <button className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#388bfd] text-white hover:bg-[#58a6ff] transition-colors">
+                        <button disabled title="Coming soon" className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#388bfd]/50 text-white/60 cursor-not-allowed">
                           Run page audit <ArrowRight className="w-3 h-3" />
                         </button>
                       </div>
@@ -480,7 +480,7 @@ export function CompetitorDetailDrawer({ comp, siteId, isPaid, onClose, onRefres
                     {[
                       { label: "Domain Rating", yours: gapReport.you.domainRating, theirs: gapReport.competitor.domainRating },
                       { label: "Referring Domains", yours: gapReport.you.referringDomains, theirs: gapReport.competitor.referringDomains },
-                      { label: "Total Backlinks", yours: 0, theirs: gapReport.gap.totalBacklinks },
+                      { label: "Total Backlinks", yours: (gapReport.you as any).totalBacklinks ?? 0, theirs: gapReport.gap.totalBacklinks },
                     ].map(({ label, yours, theirs }) => (
                       <div key={label} className="rounded-lg border border-[#21262d] bg-[#161b22] p-3">
                         <p className="text-[10px] text-[#6e7681] mb-1.5">{label}</p>

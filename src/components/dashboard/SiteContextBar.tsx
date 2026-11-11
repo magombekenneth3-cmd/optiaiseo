@@ -67,9 +67,14 @@ function SiteContextBarInner({ sites, defaultSiteId }: { sites: Site[]; defaultS
   const switchSite = (nextId: string) => {
     setOpen(false);
     if (siteId && siteId !== nextId) {
-      const next = new URLSearchParams(searchParams.toString());
-      next.set("siteId", nextId);
-      router.push(`${pathname}?${next.toString()}`);
+      const sitePathMatch = pathname.match(/^\/dashboard\/sites\/[^/]+/);
+      if (sitePathMatch) {
+        router.push(pathname.replace(/^\/dashboard\/sites\/[^/]+/, `/dashboard/sites/${nextId}`));
+      } else {
+        const next = new URLSearchParams(searchParams.toString());
+        next.set("siteId", nextId);
+        router.push(`${pathname}?${next.toString()}`);
+      }
     }
   };
 

@@ -395,24 +395,47 @@ export function TalkingRobot({
           )}
         </g>
 
-        {/* Right arm */}
-        <rect
-          x="138"
-          y="140"
-          width="16"
-          height="40"
-          rx="8"
-          fill="#27272a"
-          stroke="#3f3f46"
-          strokeWidth="1.5"
-          style={{
-            transformOrigin: "146px 140px",
-            transform: isSpeaking
-              ? `rotate(${armRotation + 8}deg)`
-              : "rotate(0deg)",
-            transition: "transform 0.3s",
-          }}
-        />
+        {/* Right eye */}
+        <g
+          transform={`translate(${104 + eyeScan}, 72)`}
+          style={{ transition: "transform 0.15s" }}
+        >
+          <rect
+            x="-14"
+            y="-13"
+            width="28"
+            height={blink ? 3 : 26}
+            rx={blink ? 1.5 : 8}
+            fill="#09090b"
+            style={{ transition: "height 0.08s, y 0.08s" }}
+          />
+          {!blink && (
+            <>
+              <circle cx="0" cy="0" r="8" fill={eyeColor} opacity="0.25" />
+              <circle
+                cx="0"
+                cy="0"
+                r="5"
+                fill={eyeColor}
+                filter="url(#glow-eye)"
+              />
+              <circle cx="0" cy="0" r="2.5" fill="white" opacity="0.9" />
+              <circle cx="2" cy="-2" r="1" fill="white" opacity="0.6" />
+              {isThinking && (
+                <rect
+                  x="-12"
+                  y="-1"
+                  width="24"
+                  height="2"
+                  rx="1"
+                  fill={eyeColor}
+                  opacity="0.3"
+                  style={{ animation: "scanH 1.2s linear infinite" }}
+                />
+              )}
+            </>
+          )}
+        </g>
 
         {/* ── Nose / center dot ─────────────────────────────── */}
         <circle

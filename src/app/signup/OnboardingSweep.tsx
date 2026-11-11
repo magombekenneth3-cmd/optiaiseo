@@ -301,11 +301,13 @@ function GscStep({ siteId, alreadyCited, upgradePlan, upgradeBilling }: { siteId
     };
 
     const handleConnect = () => {
+        fetch("/api/user/onboarding-done", { method: "POST" }).catch(() => {});
         const callbackUrl = buildDashboardUrl();
         void signIn("google-gsc", { callbackUrl });
     };
 
     const handleSkip = () => {
+        fetch("/api/user/onboarding-done", { method: "POST" }).catch(() => {});
         if (upgradePlan) {
             toast.success("Welcome! Let's set up your plan.");
         } else {

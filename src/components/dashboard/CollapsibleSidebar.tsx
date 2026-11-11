@@ -51,7 +51,7 @@ export function CollapsibleSidebar({ defaultSiteId, sites = [], isSuperAdmin = f
 
     return (
         <aside
-            className={`hidden md:flex flex-col sticky top-0 h-screen bg-sidebar border-r border-sidebar-border shrink-0 overflow-hidden isolate transition-[width] duration-200 ease-in-out ${
+            className={`hidden md:flex flex-col sticky top-0 h-screen bg-sidebar border-r border-sidebar-border shrink-0 overflow-visible isolate transition-[width] duration-200 ease-in-out ${
                 collapsed ? "w-16" : "w-[240px]"
             }`}
         >
@@ -138,7 +138,7 @@ export function CollapsibleSidebar({ defaultSiteId, sites = [], isSuperAdmin = f
             <div className={`border-t border-sidebar-border mt-auto ${collapsed ? "p-2" : "p-3"}`}>
                 {!collapsed && (
                     <a
-                        href="/dashboard/billing?tab=credits"
+                        href="/dashboard/billing"
                         className={`flex items-center gap-2 px-2.5 py-1.5 mb-2 rounded-lg border transition-colors group ${
                             user.creditsLocked
                                 ? "bg-rose-500/10 border-rose-500/30 hover:bg-rose-500/15"
@@ -169,7 +169,7 @@ export function CollapsibleSidebar({ defaultSiteId, sites = [], isSuperAdmin = f
                         <Tooltip>
                             <TooltipTrigger
                                 render={<a
-                                    href="/dashboard/billing?tab=credits"
+                                    href="/dashboard/billing"
                                     className="flex justify-center items-center w-10 h-7 mx-auto mb-1.5 rounded-lg bg-muted/40 border border-border hover:bg-muted transition-colors"
                                 />}
                             >

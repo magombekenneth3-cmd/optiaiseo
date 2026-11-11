@@ -170,7 +170,7 @@ function SiteSwitcher({
                                 key={site.id}
                                 onClick={() => {
                                     setOpen(false);
-                                    router.push(`/dashboard/campaigns?siteId=${site.id}`);
+                                    router.push(`/dashboard/campaign?siteId=${site.id}`);
                                 }}
                                 className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-left text-[#c9d1d9] hover:bg-[#21262d] transition-colors"
                             >

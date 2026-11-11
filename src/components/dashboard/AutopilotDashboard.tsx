@@ -200,6 +200,7 @@ export function AutopilotDashboard({ canManage = false }: { canManage?: boolean 
       if (!res.ok) throw new Error("Failed to load");
       const data = await res.json();
       setDetail(data.proposal);
+      setPipelineState((prev) => ({ ...prev, proposalId: id }));
     } catch {
       setDetail(null);
     } finally {
@@ -395,7 +396,7 @@ export function AutopilotDashboard({ canManage = false }: { canManage?: boolean 
       )}
 
       {/* ── Main Content: List + Detail ─────────────────────────────────── */}
-      <div className="flex gap-4 min-h-[500px]">
+      <div className="flex flex-col lg:flex-row gap-4 min-h-[500px]">
         {/* Proposals list */}
         <div className={`flex-1 flex flex-col gap-2 transition-all ${selectedId ? "max-w-[55%]" : ""}`}>
           {loading ? (

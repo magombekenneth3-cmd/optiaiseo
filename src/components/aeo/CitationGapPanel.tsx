@@ -124,7 +124,7 @@ function GapCard({ gap }: { gap: CitationGap }) {
                 {gap.embeddingGapSignals.map((signal) => (
                   <a
                     key={signal}
-                    href={`/dashboard/blogs/new?addSection=${encodeURIComponent(signal)}&keyword=${encodeURIComponent(gap.keyword)}`}
+                    href={`/dashboard/blogs?addSection=${encodeURIComponent(signal)}&keyword=${encodeURIComponent(gap.keyword)}`}
                     className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full hover:bg-red-500/20 transition-colors"
                     title={`Click to open blog editor pre-seeded to add: ${signal}`}
                   >

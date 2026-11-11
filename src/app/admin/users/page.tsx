@@ -22,11 +22,11 @@ interface UsersResponse {
   pages: number;
 }
 
-const TIER_OPTS = ["", "FREE", "PRO", "AGENCY"] as const;
+const TIER_OPTS = ["", "FREE", "STARTER", "PRO", "AGENCY"] as const;
 
 function TierBadge({ tier }: { tier: string }) {
   const cls =
-    tier === "PRO"
+    tier === "PRO" || tier === "STARTER"
       ? "admin-tier-pro"
       : tier === "AGENCY"
         ? "admin-tier-agency"
@@ -146,7 +146,7 @@ export default function AdminUsersPage() {
                   <td>
                     <UserSubscriptionEditor
                       userId={user.id}
-                      currentTier={user.tier as "FREE" | "PRO" | "AGENCY"}
+                      currentTier={user.tier as "FREE" | "STARTER" | "PRO" | "AGENCY"}
                       onUpdate={(newTier) => handleTierUpdate(user.id, newTier)}
                     />
                   </td>

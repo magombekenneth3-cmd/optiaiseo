@@ -373,6 +373,17 @@ const PAGE_TITLE_PREFIX: Array<[string, string]> = [
     ["/dashboard/content-decay", "Content Decay"],
     ["/dashboard/healing", "Self-Healing Log"],
     ["/dashboard/diagnostics", "Diagnostic Findings"],
+    ["/dashboard/autopilot", "Autopilot"],
+    ["/dashboard/recommendations", "Opportunities"],
+    ["/dashboard/competitors", "Competitor Analysis"],
+    ["/dashboard/backlinks", "Backlinks"],
+    ["/dashboard/serp-gap", "SERP Gap Analysis"],
+    ["/dashboard/pseo", "Programmatic SEO"],
+    ["/dashboard/campaign", "Campaigns"],
+    ["/dashboard/operations", "Operations"],
+    ["/dashboard/agency", "Agency Portal"],
+    ["/dashboard/team", "Team Management"],
+    ["/dashboard/referral", "Referral Program"],
 ];
 
 function getTitle(path: string): string {
@@ -419,40 +430,39 @@ export function TopHeader({ mobileSidebar }: { mobileSidebar?: ReactNode }) {
     const contextCta = (() => {
         if (pathname.startsWith("/dashboard/audits")) {
             return (
-                <Link href="/dashboard/audits" className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+                <Link href={`/dashboard/audits?run=true${siteId ? '&siteId=' + siteId : ''}`} className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
                     <ClipboardList className="w-3.5 h-3.5" /> Run Audit
                 </Link>
             );
         }
         if (pathname.startsWith("/dashboard/blogs") || pathname.startsWith("/dashboard/editor") || pathname.startsWith("/dashboard/planner")) {
             return (
-                <Link href="/dashboard/blogs" className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+                <Link href={`/dashboard/blogs?tab=new${siteId ? '&siteId=' + siteId : ''}`} className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
                     <Sparkles className="w-3.5 h-3.5" /> Generate content
                 </Link>
             );
         }
         if (pathname.startsWith("/dashboard/aeo")) {
             return (
-                <Link href="/dashboard/aeo" className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+                <Link href={`/dashboard/aeo?scan=true${siteId ? '&siteId=' + siteId : ''}`} className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
                     <Sparkles className="w-3.5 h-3.5" /> Run AEO scan
                 </Link>
             );
         }
         if (pathname.startsWith("/dashboard/keywords")) {
             return (
-                <Link href="/dashboard/keywords" className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+                <Link href={`/dashboard/keywords?action=track${siteId ? '&siteId=' + siteId : ''}`} className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
                     <Zap className="w-3.5 h-3.5" /> Track keywords
                 </Link>
             );
         }
         if (pathname.startsWith("/dashboard/operations") || pathname.startsWith("/dashboard/healing") || pathname.startsWith("/dashboard/diagnostics")) {
             return (
-                <Link href="/dashboard/operations" className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+                <Link href={`/dashboard/operations${siteId ? '?siteId=' + siteId : ''}`} className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
                     <Zap className="w-3.5 h-3.5" /> Review operations
                 </Link>
             );
         }
-        // No CTA for dashboard home, settings, billing, etc. — page headers handle their own actions
         return null;
     })();
 

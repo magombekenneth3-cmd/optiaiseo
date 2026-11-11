@@ -129,9 +129,9 @@ export function AeoDiagnosisPanel({ diagnosis }: Props) {
                     <div className="space-y-3">
                         {/* Your brand — always 0 */}
                         <div className="flex items-center gap-3">
-                            <div className="w-32 text-xs text-red-400 font-semibold truncate shrink-0">Your Brand</div>
+                            <div className="w-32 text-xs text-rose-400 font-semibold truncate shrink-0">Your Brand</div>
                             <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                                <div className="h-full bg-red-500 rounded-full" style={{ width: `${(0 / maxCompCount) * 100}%` }} />
+                                <div className="h-full bg-red-500 rounded-full" style={{ width: "0%" }} />
                             </div>
                             <div className="text-xs text-muted-foreground w-8 text-right">0</div>
                         </div>

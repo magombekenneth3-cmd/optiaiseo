@@ -223,21 +223,27 @@ export default function OperationsPage() {
 
     async function handleRollback() {
         if (!selectedId || !detail?.canRollback) return;
-        if (!confirm("Are you sure you want to rollback this operation? The target will be restored to its pre-mutation state.")) return;
-        setRollbackLoading(true);
-        try {
-            const res = await fetch(`/api/operations/${selectedId}/rollback`, { method: "POST" });
-            if (!res.ok) {
-                const errData = await res.json();
-                toast.error(errData.error || "Rollback failed");
-                return;
-            }
-            // Refresh
-            await loadDetail(selectedId);
-            await fetchOperations();
-        } finally {
-            setRollbackLoading(false);
-        }
+        toast("Rollback this operation? The target will be restored to its pre-mutation state.", {
+            action: {
+                label: "Confirm Rollback",
+                onClick: async () => {
+                    setRollbackLoading(true);
+                    try {
+                        const res = await fetch(`/api/operations/${selectedId}/rollback`, { method: "POST" });
+                        if (!res.ok) {
+                            const errData = await res.json();
+                            toast.error(errData.error || "Rollback failed");
+                            return;
+                        }
+                        await loadDetail(selectedId);
+                        await fetchOperations();
+                        setRollbackLoading(false);
+                    } catch {
+                        setRollbackLoading(false);
+                    }
+                },
+            },
+        });
     }
 
     // No site selected
@@ -326,8 +332,8 @@ export default function OperationsPage() {
                     {error}
                 </div>
             )}
-            <div className="flex gap-4 min-h-[500px]">
-                <div className={`flex-1 flex flex-col gap-2 ${selectedId ? "max-w-[55%]" : ""}`}>
+            <div className="flex flex-col lg:flex-row gap-4 min-h-[500px]">
+                <div className={`flex-1 flex flex-col gap-2 ${selectedId ? "lg:max-w-[55%]" : ""}`}>
                     {loading ? (
                         <div className="flex items-center justify-center gap-3 py-20">
                             <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />

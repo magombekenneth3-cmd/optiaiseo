@@ -428,7 +428,7 @@
   padding: 0.5rem 1.125rem;
   border-radius: calc(var(--radius) * 1.2);
   background: var(--brand);
-  color: #fff;
+  color: #000;
   font-size: 0.875rem;
   font-weight: 600;
   border: none;
@@ -652,7 +652,7 @@ a[role="button"]:active {
   z-index: 9999;
   padding: 0.75rem 1.5rem;
   background: var(--brand);
-  color: #fff;
+  color: #000;
   font-weight: 700;
   font-size: 0.875rem;
   border-radius: 0 0 0.5rem 0;

@@ -212,7 +212,14 @@ export function ContentDecayClient({
       />
 
       {/* Why Breakdown Banner (Item 9 from Brief) */}
-      {!loading && !error && hasData && (
+      {!loading && !error && hasData && (() => {
+        const avgDrop = isAuditSource
+          ? Math.round(riskRows.reduce((s, r) => s + r.dropPercentage, 0) / riskRows.length)
+          : Math.round(gscRows.reduce((s, r) => s + r.dropPercentage, 0) / gscRows.length);
+        const avgPosDrop = !isAuditSource && gscRows.length > 0
+          ? (gscRows.reduce((s, r) => s + ((r as any).currentPosition ?? 0) - ((r as any).previousPosition ?? 0), 0) / gscRows.length).toFixed(1)
+          : null;
+        return (
         <div className="rounded-2xl border border-rose-500/20 bg-rose-500/[0.04] p-5 sm:p-6 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
@@ -227,22 +234,23 @@ export function ContentDecayClient({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="p-3 rounded-xl bg-card border border-border flex flex-col gap-0.5">
               <span className="text-[11px] text-muted-foreground font-medium">Google Clicks</span>
-              <span className="text-lg font-extrabold text-rose-400">↓ 31% avg</span>
+              <span className="text-lg font-extrabold text-rose-400">↓ {avgDrop}% avg</span>
               <span className="text-[10px] text-muted-foreground">Loss vs prior 90 days</span>
             </div>
             <div className="p-3 rounded-xl bg-card border border-border flex flex-col gap-0.5">
               <span className="text-[11px] text-muted-foreground font-medium">Average Position</span>
-              <span className="text-lg font-extrabold text-amber-400">↓ 4.2 positions</span>
+              <span className="text-lg font-extrabold text-amber-400">{avgPosDrop ? `↓ ${avgPosDrop} positions` : "—"}</span>
               <span className="text-[10px] text-muted-foreground">Competitors updated content</span>
             </div>
             <div className="p-3 rounded-xl bg-card border border-border flex flex-col gap-0.5">
-              <span className="text-[11px] text-muted-foreground font-medium">AI Citation Coverage</span>
-              <span className="text-lg font-extrabold text-rose-400">↓ 18% citations</span>
-              <span className="text-[10px] text-muted-foreground">Outdated stats & schemas</span>
+              <span className="text-[11px] text-muted-foreground font-medium">Total Click Loss</span>
+              <span className="text-lg font-extrabold text-rose-400">{totalLostClicks > 0 ? `-${totalLostClicks.toLocaleString()}` : "—"}</span>
+              <span className="text-[10px] text-muted-foreground">Clicks lost across affected pages</span>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Loading */}
       {loading && (

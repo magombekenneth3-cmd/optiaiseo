@@ -281,7 +281,7 @@ export function KeywordDetailDrawer({ keyword: kw, siteId, onClose }: {
                                         </li>
                                     ))}
                                 </ul>
-                                <button className="mt-3 flex items-center gap-1 text-xs font-medium text-info hover:text-info/80 transition-colors">
+                                <button disabled title="Coming soon" className="mt-3 flex items-center gap-1 text-xs font-medium text-info hover:text-info/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                     View full recommendations
                                     <ArrowRight className="w-3 h-3" />
                                 </button>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
     Loader2,
@@ -802,7 +803,12 @@ export function GenerateBlogModal({
         Object.values(form).some((value) => value.trim().length > 0);
 
     const requestClose = useCallback(() => {
-        if (isDirty && !window.confirm("Discard this article draft? Your entered details will be lost.")) return;
+        if (isDirty) {
+            toast("Discard this article draft? Your entered details will be lost.", {
+                action: { label: "Discard", onClick: () => onClose() },
+            });
+            return;
+        }
         onClose();
     }, [isDirty, onClose]);
 

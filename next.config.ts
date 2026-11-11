@@ -206,6 +206,11 @@ const nextConfig: NextConfig = {
       { source: '/blog/ai-citation-guide', destination: '/aeo-guide/ai-citation-tracking', statusCode: 301 },
       { source: '/blog/automated-schema-fix-github', destination: '/guide/schema-markup-ai-search', statusCode: 301 },
       { source: '/blog/nextjs-seo-guide', destination: '/seo', statusCode: 301 },
+      {
+        source: '/guide/how-to-rank-in-chatgpt',
+        destination: '/aeo-guide/how-to-rank-in-chatgpt-search',
+        statusCode: 301,
+      },
 
       // ── Junk URLs from template typo ────────────────────────────────────
       // /$ was a regex/template link artifact for the homepage.

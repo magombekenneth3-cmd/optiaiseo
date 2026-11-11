@@ -41,15 +41,7 @@ export function UserSubscriptionEditor({
   const [saving, setSaving] = useState(false);
 
   const handleSelect = async (tier: Tier) => {
-    // Silently close if same tier
     if (tier === selected) { setOpen(false); return; }
-
-    // Prevent downgrade in the UI before even hitting the API
-    if (TIER_RANK[tier] < TIER_RANK[selected]) {
-      toast.error(`Cannot downgrade from ${selected} to ${tier}. Use the billing cancellation flow.`);
-      setOpen(false);
-      return;
-    }
 
     setSaving(true);
     setOpen(false);

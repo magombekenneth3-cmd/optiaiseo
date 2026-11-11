@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { isAdminSession } from "@/lib/admin-guard";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { AdminMobileMenu } from "@/components/admin/AdminMobileMenu";
 import { Toaster } from "sonner";
 import type { Metadata } from "next";
 import "@/app/admin/admin.css";
@@ -30,13 +31,14 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       <AdminSidebar />
 
       {/* Mobile header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-50 h-14 admin-mobile-header flex items-center px-4 border-b border-white/10">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50 h-14 admin-mobile-header flex items-center justify-between px-4 border-b border-white/10">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg admin-logo-badge flex items-center justify-center">
             <span className="text-white text-[10px] font-black">A</span>
           </div>
           <span className="text-white font-bold text-sm">Admin Panel</span>
         </div>
+        <AdminMobileMenu />
       </div>
 
       {/* Main */}

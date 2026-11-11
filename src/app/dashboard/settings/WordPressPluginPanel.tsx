@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
 import { Copy, Check, Eye, EyeOff, RefreshCw, Download } from "lucide-react";
 
 interface Props {
@@ -47,13 +48,19 @@ export function WordPressPluginPanel({ siteId }: Props) {
     }
   };
 
-  const handleRevoke = async () => {
-    if (!confirm("Revoke this API key? Your WordPress plugin will stop working immediately.")) return;
-    await fetch("/api/user/api-key", { method: "DELETE" });
-    setHasKey(false);
-    setMaskedKey(null);
-    setFullKey(null);
-    setShowKey(false);
+  const handleRevoke = () => {
+    toast("Revoke this API key? Your WordPress plugin will stop working immediately.", {
+      action: {
+        label: "Revoke",
+        onClick: async () => {
+          await fetch("/api/user/api-key", { method: "DELETE" });
+          setHasKey(false);
+          setMaskedKey(null);
+          setFullKey(null);
+          setShowKey(false);
+        },
+      },
+    });
   };
 
   const copy = async (text: string, which: "key" | "siteId") => {

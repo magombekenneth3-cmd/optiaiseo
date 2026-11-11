@@ -20,6 +20,7 @@ import {
     Sparkles,
     X,
     Zap,
+    PanelRight,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
@@ -522,8 +523,8 @@ function SerpAiSimulator({
                             O
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-[12px] font-medium text-foreground leading-tight">OptiAISEO</span>
-                            <span className="text-[11px] text-muted-foreground truncate">https://optiaiseo.online › blog › {slug}</span>
+                            <span className="text-[12px] font-medium text-foreground leading-tight">Your Site</span>
+                            <span className="text-[11px] text-muted-foreground truncate">yoursite.com › blog › {slug}</span>
                         </div>
                     </div>
 
@@ -539,9 +540,6 @@ function SerpAiSimulator({
 
                     {/* Schema / Rich Enhancements */}
                     <div className="pt-2 flex flex-wrap items-center gap-2 text-[10px]">
-                        <span className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-muted-foreground">
-                            ★ 4.9 (48)
-                        </span>
                         <span className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-400">
                             <Check className="h-3 w-3" /> Speakable JSON-LD
                         </span>
@@ -598,7 +596,7 @@ function SerpAiSimulator({
                             <span className="font-bold text-purple-400">[1]</span>
                             <div className="flex flex-col min-w-0">
                                 <span className="font-semibold text-foreground truncate max-w-[240px]">{blog.title}</span>
-                                <span className="text-[10px] text-muted-foreground font-mono truncate">optiaiseo.online</span>
+                                <span className="text-[10px] text-muted-foreground font-mono truncate">yoursite.com</span>
                             </div>
                         </div>
                     </div>
@@ -611,6 +609,7 @@ function SerpAiSimulator({
 export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalProps) {
     const [mode, setMode] = useState<ReviewMode>("write");
     const [isFullScreen, setIsFullScreen] = useState(true);
+    const [showSidebar, setShowSidebar] = useState(false);
     const [copiedType, setCopiedType] = useState<string | null>(null);
     const [editedContent, setEditedContent] = useState(blog.content);
     // lastSavedContent tracks what is persisted server-side; hasUnsavedChanges derives from this
@@ -635,7 +634,7 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
         if (typeof navigator !== "undefined" && navigator.clipboard) {
             navigator.clipboard.writeText(textToCopy);
             setCopiedType(type);
-            toast.success(`Copied ${type === "markdown" ? "Markdown" : type === "html" ? "HTML" : "Answer Capsule"} to clipboard`);
+            toast.success(`Copied ${type === "markdown" ? "Markdown" : type === "html" ? "Markdown" : "Answer Capsule"} to clipboard`);
             setTimeout(() => setCopiedType(null), 2000);
         }
     }, [editedContent]);
@@ -848,6 +847,16 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                         )}
                     </div>
 
+                    {/* Sidebar toggle for mobile/tablet */}
+                    <button
+                        type="button"
+                        onClick={() => setShowSidebar(s => !s)}
+                        className="mr-2 xl:hidden flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                        <PanelRight className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Optimize</span>
+                    </button>
+
                     {/* Mode switch */}
                     <div className="mr-4 flex rounded-lg border border-border bg-background p-1">
                         <button
@@ -927,7 +936,7 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                     </section>
 
                     {/* ── Sidebar ── */}
-                    <aside className="hidden w-[360px] shrink-0 overflow-y-auto border-l border-border bg-card/40 xl:block">
+                    <aside className={`${showSidebar ? "absolute inset-y-0 right-0 z-40 w-[360px]" : "hidden"} xl:relative xl:block w-[360px] shrink-0 overflow-y-auto border-l border-border bg-card/95 xl:bg-card/40 backdrop-blur-sm xl:backdrop-blur-none`}>
                         <div className="space-y-4 p-4">
                             <div>
                                 <h2 className="text-sm font-semibold">Optimization</h2>

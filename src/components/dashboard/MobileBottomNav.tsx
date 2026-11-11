@@ -6,7 +6,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { LayoutDashboard, MonitorSmartphone, FileText, Bot, MoreHorizontal, X, LogOut } from "lucide-react";
 import { useState } from "react";
 import { signOut } from "next-auth/react";
@@ -31,6 +31,8 @@ export function MobileBottomNav({
   userName, userTier, defaultSiteId, sites, isSuperAdmin,
 }: MobileBottomNavProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentSiteId = searchParams?.get?.("siteId") ?? null;
   const [moreOpen, setMoreOpen] = useState(false);
 
   return (
@@ -45,10 +47,11 @@ export function MobileBottomNav({
           {BOTTOM_TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
+            const tabHref = currentSiteId ? `${tab.href}?siteId=${currentSiteId}` : tab.href;
             return (
               <Link
                 key={tab.name}
-                href={tab.href}
+                href={tabHref}
                 id={`mobile-tab-${tab.name.toLowerCase()}`}
                 className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-colors ${
                   isActive

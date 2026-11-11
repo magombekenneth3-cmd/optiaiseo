@@ -35,9 +35,9 @@ const PLANS: Plan[] = [
         color: "border-blue-500/30 hover:border-blue-500/60",
         glow: "hover:shadow-[0_0_40px_rgba(59,130,246,0.15)]",
         icon: <Zap className="w-4 h-4 text-blue-400" />,
-        blogs: "30 blogs/month",
+        blogs: "150 credits/month",
         features: [
-            "30 AI blog posts/month",
+            "150 credits/month (~15 blog posts)",
             "GSC keyword gap analysis",
             "Competitor gap blogging",
             "Citation readiness score",
@@ -55,9 +55,9 @@ const PLANS: Plan[] = [
         glow: "hover:shadow-[0_0_60px_rgba(16,185,129,0.2)] shadow-[0_0_30px_rgba(16,185,129,0.1)]",
         badge: "Most Popular",
         icon: <Sparkles className="w-4 h-4 text-emerald-400" />,
-        blogs: "300 blogs/month",
+        blogs: "500 credits/month",
         features: [
-            "300 AI blog posts/month",
+            "500 credits/month (~50 blog posts)",
             "Full AEO visibility audits",
             "Semantic gap analysis",
             "90-day visibility forecast",

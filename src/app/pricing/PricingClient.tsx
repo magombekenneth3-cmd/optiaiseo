@@ -45,7 +45,7 @@ export default function PricingClient({ plans, featureRows, faqs }: PricingClien
 
     const displayPrice = (plan: Plan) => {
         const p = billingAnnual ? plan.price.annual : plan.price.monthly;
-        return p === 0 ? "$0" : `${p}`;
+        return p === 0 ? "$0" : `$${p}`;
     };
 
     return (

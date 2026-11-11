@@ -178,8 +178,8 @@ export default async function DashboardLayout({
       {/* ⌘K Command palette — global navigation shortcut */}
       <CommandPalette />
 
-      {/* Voice AI discovery — floating bottom-right for PRO/AGENCY */}
-      <VoiceDiscoveryButtonClient userTier={effectiveTier} />
+
+
     </div>
     </JobProvider>
   );

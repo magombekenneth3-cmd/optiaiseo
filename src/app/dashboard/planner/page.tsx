@@ -571,7 +571,8 @@ export default function PlannerPage() {
             ...prev,
             items: prev.items.map((it: any) => it.id === itemId ? { ...it, week: toBucket } : it),
         }));
-    }, []);
+        updatePlannerItemStatus(siteId!, itemId, toBucket);
+    }, [siteId]);
 
     const handleDropToUnscheduled = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -581,8 +582,9 @@ export default function PlannerPage() {
                 ...prev,
                 items: prev.items.map((it: any) => it.id === id ? { ...it, week: null } : it),
             }));
+            updatePlannerItemStatus(siteId!, id, "");
         }
-    }, []);
+    }, [siteId]);
 
     const toggleSelect = useCallback((id: string) => {
         setSelectedItems(prev => { const n = new Set(prev); if (n.has(id)) { n.delete(id); } else { n.add(id); } return n; });
@@ -701,28 +703,6 @@ export default function PlannerPage() {
                 )}
             </div>
 
-                {/* Stats strip */}
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {[
-                        { label: "Total", value: totalItems, color: "rgba(255,255,255,.3)" },
-                        { label: "In progress", value: inProgItems, color: "#fbbf24" },
-                        { label: "Completed", value: doneItems, color: "#34d399" },
-                    ].map(s => (
-                        <div key={s.label} style={{
-                            display: "inline-flex", alignItems: "center", gap: 8,
-                            padding: "6px 12px", borderRadius: 9,
-                            background: "rgba(255,255,255,.03)",
-                            border: "1px solid rgba(255,255,255,.06)",
-                        }}>
-                            <span style={{ fontSize: 15, fontWeight: 700, color: s.color, fontVariantNumeric: "tabular-nums" }}>
-                                {s.value}
-                            </span>
-                            <span style={{ fontSize: 11, color: "rgba(255,255,255,.25)", fontWeight: 500 }}>
-                                {s.label}
-                            </span>
-                        </div>
-                    ))}
-                </div>
 
             {/* ── GSC Opportunity suggestions ── */}
             <GscSuggestionsPanel

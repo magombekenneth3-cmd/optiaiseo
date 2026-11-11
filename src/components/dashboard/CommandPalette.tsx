@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Search, LayoutDashboard, Globe, ClipboardList, TrendingUp,
   MonitorSmartphone, Zap, Mic, FileText, Calendar, TrendingDown,
@@ -58,6 +58,8 @@ export function CommandPalette() {
   const inputRef  = useRef<HTMLInputElement>(null);
   const listRef   = useRef<HTMLDivElement>(null);
   const router    = useRouter();
+  const searchParams = useSearchParams();
+  const currentSiteId = searchParams?.get?.("siteId") ?? null;
 
   const filtered = query.trim()
     ? COMMANDS
@@ -70,9 +72,12 @@ export function CommandPalette() {
   const close = useCallback(() => { setOpen(false); setQuery(""); setSelected(0); }, []);
 
   const navigate = useCallback((cmd: Command) => {
-    router.push(cmd.href);
+    const href = currentSiteId && !cmd.href.includes("siteId")
+      ? `${cmd.href}${cmd.href.includes("?") ? "&" : "?"}siteId=${currentSiteId}`
+      : cmd.href;
+    router.push(href);
     close();
-  }, [router, close]);
+  }, [router, close, currentSiteId]);
 
   // Global shortcut: ⌘K / Ctrl+K
   useEffect(() => {

@@ -90,15 +90,21 @@ export function TeamManagementClient({ members: initialMembers, invitations: ini
     }
 
     async function handleRemoveMember(memberId: string) {
-        if (!confirm("Remove this team member?")) return;
-        try {
-            const res = await fetch(`/api/team/${memberId}`, { method: "DELETE", credentials: "include" });
-            if (!res.ok) throw new Error("Failed to remove member");
-            setMembers(prev => prev.filter(m => m.id !== memberId));
-            toast.success("Team member removed");
-        } catch {
-            toast.error("Failed to remove team member");
-        }
+        toast("Remove this team member?", {
+            action: {
+                label: "Remove",
+                onClick: async () => {
+                    try {
+                        const res = await fetch(`/api/team/${memberId}`, { method: "DELETE", credentials: "include" });
+                        if (!res.ok) throw new Error("Failed to remove member");
+                        setMembers(prev => prev.filter(m => m.id !== memberId));
+                        toast.success("Team member removed");
+                    } catch {
+                        toast.error("Failed to remove team member");
+                    }
+                },
+            },
+        });
     }
 
     return (

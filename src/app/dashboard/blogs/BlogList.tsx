@@ -1528,6 +1528,39 @@ export function BlogList({
                         </div>
                     </div>
 
+                    {selected.size > 0 && (
+                        <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-brand/10 border border-brand/20 mb-3">
+                            <span className="text-sm font-medium text-brand">{selected.size} selected</span>
+                            <button
+                                type="button"
+                                className="ml-auto text-xs font-medium text-destructive hover:text-destructive/80 transition-colors"
+                                onClick={() => {
+                                    toast(`Delete ${selected.size} article${selected.size > 1 ? "s" : ""}?`, {
+                                        action: {
+                                            label: "Delete",
+                                            onClick: async () => {
+                                                const ids = Array.from(selected);
+                                                await Promise.allSettled(ids.map(id => fetch(`/api/blogs/${id}`, { method: "DELETE" })));
+                                                toast.success(`Deleted ${ids.length} article${ids.length > 1 ? "s" : ""}.`);
+                                                setSelected(new Set());
+                                                router.refresh();
+                                            },
+                                        },
+                                    });
+                                }}
+                            >
+                                Delete
+                            </button>
+                            <button
+                                type="button"
+                                className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                                onClick={() => setSelected(new Set())}
+                            >
+                                Clear
+                            </button>
+                        </div>
+                    )}
+
                     <div className="md:hidden divide-y divide-border">
                         {paginatedBlogs.length > 0 ? (
                             paginatedBlogs.map((blog) => {

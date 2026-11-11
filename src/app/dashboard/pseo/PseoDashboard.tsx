@@ -119,13 +119,19 @@ export default function PseoDashboardClient({ sites }: { sites: Site[] }) {
 
     // ── Delete ───────────────────────────────────────────────────────────────
     const handleDelete = async (templateId: string) => {
-        if (!confirm("Delete this template and all its generated pages?")) return;
-        setDeletingId(templateId);
-        try {
-            await fetch(`/api/pseo/templates/${templateId}`, { method: "DELETE" });
-            if (selectedTemplate?.id === templateId) { setSelected(null); setStep("list"); }
-            await loadTemplates();
-        } finally { setDeletingId(null); }
+        toast("Delete this template and all its generated pages?", {
+            action: {
+                label: "Delete",
+                onClick: async () => {
+                    setDeletingId(templateId);
+                    try {
+                        await fetch(`/api/pseo/templates/${templateId}`, { method: "DELETE" });
+                        if (selectedTemplate?.id === templateId) { setSelected(null); setStep("list"); }
+                        await loadTemplates();
+                    } finally { setDeletingId(null); }
+                },
+            },
+        });
     };
 
     // ── Parse preview from pattern ───────────────────────────────────────────

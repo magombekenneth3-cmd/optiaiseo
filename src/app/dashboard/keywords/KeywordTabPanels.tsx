@@ -188,7 +188,7 @@ export function KeywordTabPanels({
                         {gscAvailable ? (
                             <div className="flex flex-col gap-4 p-5">
                                 {hasRankTracking ? (
-                                    <TrackedKeywordsPanel siteId={siteId} initialData={trackedKeywordsData} tier={userTier} maxTracked={maxTracked} />
+                                    <TrackedKeywordsPanel key={siteId} siteId={siteId} initialData={trackedKeywordsData} tier={userTier} maxTracked={maxTracked} />
                                 ) : (
                                     <div className="py-12 text-center text-muted-foreground text-sm">Rank tracking is available on the Pro plan and above.</div>
                                 )}

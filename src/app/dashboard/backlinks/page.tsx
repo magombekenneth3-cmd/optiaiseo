@@ -95,6 +95,7 @@ export default async function BacklinksPage({
 
     return (
         <BacklinksClient
+            key={siteId}
             siteId={siteId}
             domain={site.domain}
             initialSummary={null}

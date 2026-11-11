@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { Key, Copy, RefreshCw, Trash2, ExternalLink, CheckCircle } from "lucide-react";
 
 export function ApiAccessCard() {
@@ -32,13 +33,19 @@ export function ApiAccessCard() {
         } finally { setGenerating(false); }
     };
 
-    const revoke = async () => {
-        if (!confirm("Revoke this API key? Any integrations using it will stop working.")) return;
-        setRevoking(true);
-        try {
-            await fetch("/api/user/api-key", { method: "DELETE" });
-            setApiKey(null); setMasked(null); setRevealed(false);
-        } finally { setRevoking(false); }
+    const revoke = () => {
+        toast("Revoke this API key? Any integrations using it will stop working.", {
+            action: {
+                label: "Revoke",
+                onClick: async () => {
+                    setRevoking(true);
+                    try {
+                        await fetch("/api/user/api-key", { method: "DELETE" });
+                        setApiKey(null); setMasked(null); setRevealed(false);
+                    } finally { setRevoking(false); }
+                },
+            },
+        });
     };
 
     const copy = async (text: string) => {
