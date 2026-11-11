@@ -77,9 +77,8 @@ export async function GET(req: NextRequest) {
  * Requires authentication — the siteId must belong to the calling user.
  */
 export async function POST(req: NextRequest) {
-    // Auth check first — POST contains richer data and must be authenticated
     const user = await getAuthUser(req);
-    if (!user!.id) {
+    if (!user?.id) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

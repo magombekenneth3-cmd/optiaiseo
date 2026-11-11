@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { checkPerplexityCitation } from "@/lib/aeo/perplexity-citation-check";
 import { checkChatGptMention } from "@/lib/aeo/openai-check";
 import { checkClaudeMention } from "@/lib/aeo/claude-check";
+import { checkGeminiMention } from "@/lib/aeo/multi-model";
 import pLimit from "p-limit";
 import { z } from "zod";
 
@@ -76,20 +77,16 @@ async function isWithinCooldown(
     return existing !== null;
 }
 
-/**
- * Run one keyword against all configured AI models in parallel.
- * Returns one row per model — each written to AiShareOfVoice with the
- * correct modelName so charts and filters reflect real data sources.
- */
 async function runMultiModelCheck(
     keyword: string,
     domain: string,
     coreServices: string | null | undefined,
 ): Promise<{ modelName: string; brandMentioned: boolean; competitors: string[] }[]> {
-    const [plx, gpt, cld] = await Promise.allSettled([
+    const [plx, gpt, cld, gem] = await Promise.allSettled([
         checkPerplexityCitation(keyword, domain),
         checkChatGptMention(domain, coreServices, keyword),
         checkClaudeMention(domain, coreServices, keyword),
+        checkGeminiMention(domain, coreServices || keyword),
     ]);
 
     const rows: { modelName: string; brandMentioned: boolean; competitors: string[] }[] = [];
@@ -118,6 +115,14 @@ async function runMultiModelCheck(
             competitors: [],
         });
     }
+    if (gem.status === "fulfilled" && gem.value.providerStatus === "SUCCESS") {
+        const r = gem.value;
+        rows.push({
+            modelName: "gemini",
+            brandMentioned: r.mentioned ?? false,
+            competitors: [],
+        });
+    }
 
     return rows;
 }
@@ -133,12 +138,13 @@ export async function runAeoShareOfVoiceCheck(
         process.env.PERPLEXITY_API_KEY && "Perplexity",
         process.env.OPENAI_API_KEY     && "ChatGPT",
         process.env.ANTHROPIC_API_KEY  && "Claude",
+        process.env.GEMINI_API_KEY     && "Gemini",
     ].filter(Boolean);
 
     if (enabledModels.length === 0) {
         return {
             success: false,
-            error: "No AI model API keys configured. Add PERPLEXITY_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY to enable real-model tracking.",
+            error: "No AI model API keys configured. Add GEMINI_API_KEY, PERPLEXITY_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY to enable real-model tracking.",
         };
     }
 
@@ -194,7 +200,7 @@ export async function runAeoShareOfVoiceCheck(
         const cooldownChecks = await Promise.all(
             seedKeywords.map(async (sk) => ({
                 sk,
-                skip: await isWithinCooldown(site.id, sk.keyword, null),
+                skip: await isWithinCooldown(site.id, sk.keyword, (sk as { priority?: number | null }).priority ?? null),
             })),
         );
         const due = cooldownChecks.filter((c) => !c.skip).map((c) => c.sk);

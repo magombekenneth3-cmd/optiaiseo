@@ -204,11 +204,17 @@ export async function createAutoFixPR(
         const { data: repoData } = await octokit.repos.get({ owner, repo });
         const defaultBranch = repoData.default_branch;
 
-        // Protect against stale generation: verify PreparedAstChange baseBlobSha against current repository file blob SHA
         for (const file of files) {
             const current = await getRepositoryFile(repoUrl, file.path, token);
             const expectedSha = expectedBaseSha ?? file.astPreparedChange?.baseBlobSha;
-            if (expectedSha) {
+            if (expectedSha === "NEW_FILE") {
+                if (current.exists && current.sha) {
+                    return {
+                        success: false,
+                        error: `AST_BASE_SHA_MISMATCH: Target file '${file.path}' did not exist when fix was generated, but now exists on GitHub (SHA ${current.sha}). Regenerate proposal.`,
+                    };
+                }
+            } else if (expectedSha) {
                 if (!current.exists || !current.sha) {
                     return {
                         success: false,

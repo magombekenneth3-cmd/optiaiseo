@@ -172,14 +172,21 @@ function applyXmlAstOperations(
   filePath: string,
   operations: AstOperation[],
 ): string {
-  if (!sourceCode.trim().startsWith("<?xml") && !sourceCode.trim().startsWith("<")) {
+  const effectiveSource = sourceCode.trim()
+    ? sourceCode
+    : `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>`;
+
+  if (!effectiveSource.trim().startsWith("<?xml") && !effectiveSource.trim().startsWith("<")) {
     throw new Error(`AST_PARSE_FAILED: File ${filePath} is not a valid XML document.`);
   }
 
-  const root = parseHtml(sourceCode, { comment: true });
+  const root = parseHtml(effectiveSource, { comment: true });
 
   for (const op of operations) {
     if (op.kind === "setXmlNode") {
+      if (op.targetTag === "urlset" && (op.value.trim().startsWith("<?xml") || op.value.trim().startsWith("<urlset"))) {
+        return op.value;
+      }
       const nodes = root.querySelectorAll(op.targetTag);
       if (nodes.length === 0) {
         throw new Error(`AST_TARGET_NOT_FOUND: XML tag '${op.targetTag}' not found in ${filePath}`);
@@ -210,7 +217,6 @@ function applyXmlAstOperations(
   return root.toString();
 }
 
-/** Compute strict AST structural fingerprint without string fallbacks */
 function computeAstFingerprint(code: string, language: string): string {
   try {
     if (language === "typescript" || language === "tsx" || language === "javascript" || language === "jsx") {
@@ -229,6 +235,7 @@ function computeAstFingerprint(code: string, language: string): string {
       });
       return createHash("sha256").update(tokens.join(";")).digest("hex");
     } else if (language === "html" || language === "xml") {
+      if (!code.trim()) return createHash("sha256").update("").digest("hex");
       const root = parseHtml(code);
       const tokens: string[] = [];
       root.querySelectorAll("*").forEach((el) => {
@@ -237,6 +244,7 @@ function computeAstFingerprint(code: string, language: string): string {
       });
       return createHash("sha256").update(tokens.join(";")).digest("hex");
     } else if (language === "json") {
+      if (!code.trim()) return createHash("sha256").update("").digest("hex");
       const obj = JSON.parse(code);
       const keys = Object.keys(obj).sort().join(";");
       return createHash("sha256").update(keys).digest("hex");
@@ -537,6 +545,44 @@ function applyTsxAstOperations(
 
         if (!snippet) throw new Error("AST_MUTATION_FAILED: insertJsxElement requires jsxSnippet or tagName");
 
+        const trimmedSnippet = snippet.trim();
+
+        if (!sourceCode.trim()) {
+          sourceFile.insertText(0, trimmedSnippet + "\n");
+          break;
+        }
+
+        if (/^export\s+const\s+metadata\b/.test(trimmedSnippet)) {
+          const metadataVar = sourceFile.getVariableDeclaration("metadata");
+          if (metadataVar) {
+            const stmt = metadataVar.getFirstAncestorByKind(SyntaxKind.VariableStatement);
+            if (stmt) {
+              stmt.replaceWithText(trimmedSnippet);
+              break;
+            }
+          }
+          const declarations = sourceFile.getImportDeclarations();
+          if (declarations.length > 0) {
+            const lastImportEnd = declarations[declarations.length - 1].getEnd();
+            sourceFile.insertText(lastImportEnd, "\n\n" + trimmedSnippet + "\n");
+          } else {
+            sourceFile.insertText(0, trimmedSnippet + "\n\n");
+          }
+          break;
+        }
+
+        const fnMatch = /^export\s+(?:default\s+)?function\s+([A-Za-z0-9_]+)/.exec(trimmedSnippet);
+        if (fnMatch) {
+          const fnName = fnMatch[1];
+          const existingFn = sourceFile.getFunction(fnName);
+          if (existingFn) {
+            existingFn.replaceWithText(trimmedSnippet);
+          } else {
+            sourceFile.insertText(sourceFile.getEnd(), "\n\n" + trimmedSnippet + "\n");
+          }
+          break;
+        }
+
         const targetTag = op.parentTag || op.targetSelector;
         const matchingParents: import("ts-morph").JsxElement[] = [];
 
@@ -549,8 +595,22 @@ function applyTsxAstOperations(
           }
         });
 
+        if (matchingParents.length === 0 && targetTag === "head") {
+          for (const fallbackTag of ["body", "html"]) {
+            sourceFile.forEachDescendant((node) => {
+              if (Node.isJsxElement(node)) {
+                const tag = node.getOpeningElement().getTagNameNode().getText();
+                if (tag === fallbackTag) {
+                  matchingParents.push(node);
+                }
+              }
+            });
+            if (matchingParents.length > 0) break;
+          }
+        }
+
         if (matchingParents.length === 0) {
-          if (targetTag) {
+          if (targetTag && targetTag !== "head") {
             throw new Error(`AST_TARGET_NOT_FOUND: Could not find parent JSX tag '${targetTag}' in ${filePath}`);
           }
           let inserted = false;
@@ -572,7 +632,7 @@ function applyTsxAstOperations(
               }
             }
           });
-          if (!inserted) throw new Error(`AST_TARGET_NOT_FOUND: Could not find return statement JSX element in ${filePath}`);
+          if (!inserted) throw new Error(`AST_TARGET_NOT_FOUND: Could not find parent JSX tag '${targetTag || "return"}' in ${filePath}`);
           break;
         }
 
@@ -652,10 +712,11 @@ function applyTsxAstOperations(
     }
   }
 
-  // Untouched imports check: verify that initial import declarations were not modified
-  const postImports = sourceFile.getImportDeclarations().map(i => i.getText());
-  if (initialImports.length !== postImports.length || !initialImports.every((imp, i) => imp === postImports[i])) {
-    throw new Error("AST_MUTATION_FAILED: Untouched import declarations were modified.");
+  if (initialImports.length > 0) {
+    const postImports = sourceFile.getImportDeclarations().map(i => i.getText());
+    if (initialImports.length !== postImports.length || !initialImports.every((imp, i) => imp === postImports[i])) {
+      throw new Error("AST_MUTATION_FAILED: Untouched import declarations were modified.");
+    }
   }
 
   return sourceFile.getFullText();
@@ -733,11 +794,6 @@ function applyHtmlAstOperations(
       }
 
       case "insertHtmlElement": {
-        const parents = root.querySelectorAll(op.parentSelector);
-        if (parents.length === 0) {
-          throw new Error(`AST_TARGET_NOT_FOUND: Parent selector '${op.parentSelector}' not found in HTML ${filePath}`);
-        }
-
         let snippet = op.htmlSnippet;
         if (!snippet && op.tagName) {
           const attrsStr = op.attributes
@@ -751,6 +807,20 @@ function applyHtmlAstOperations(
         }
 
         if (!snippet) throw new Error("AST_MUTATION_FAILED: insertHtmlElement requires htmlSnippet or tagName");
+
+        const parents = root.querySelectorAll(op.parentSelector);
+        if (parents.length === 0) {
+          if (!sourceCode.trim() || op.parentSelector === "head" || op.parentSelector === "body") {
+            const fallbackBody = root.querySelector("body") ?? root.querySelector("html") ?? root;
+            if (op.position === "prepend") {
+              fallbackBody.insertAdjacentHTML("afterbegin", snippet);
+            } else {
+              fallbackBody.insertAdjacentHTML("beforeend", snippet);
+            }
+            break;
+          }
+          throw new Error(`AST_TARGET_NOT_FOUND: Parent selector '${op.parentSelector}' not found in HTML ${filePath}`);
+        }
 
         let targetParents: HTMLElement[] = [];
         if (parents.length > 1) {
@@ -817,7 +887,7 @@ export function applyAstFixPlan(
     modifiedCode = applyXmlAstOperations(sourceCode, plan.filePath, plan.operations);
   } else if (plan.language === "json") {
     try {
-      const obj = JSON.parse(sourceCode);
+      const obj = sourceCode.trim() ? JSON.parse(sourceCode) : {};
       for (const op of plan.operations) {
         if (op.kind === "setObjectProperty" || op.kind === "insertObjectProperty") {
           obj[op.property] = op.value;

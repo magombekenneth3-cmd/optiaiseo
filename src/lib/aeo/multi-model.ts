@@ -115,6 +115,7 @@ export async function checkGeminiMention(
     domain: string,
     coreServices?: string | null,
     brandNameOverride?: string | null,
+    siteId?: string,
 ): Promise<MentionResult> {
     if (!process.env.GEMINI_API_KEY) {
         return { model: "Gemini", mentioned: null, confidence: null, details: "Gemini API key missing", providerStatus: "NO_API_KEY" };
@@ -175,8 +176,12 @@ export async function checkGeminiMention(
         const confidenceTier = classifyMentionConfidence(prominenceScore);
         const lowConfidence = confidenceTier === "low_confidence";
 
-        if (lowConfidence && domain) {
-            prisma.site.findFirst({ where: { domain }, select: { id: true } })
+        if (lowConfidence && (siteId || domain)) {
+            const cleanDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+            prisma.site.findFirst({
+                where: siteId ? { id: siteId } : { domain: { in: [domain, cleanDomain, `https://${cleanDomain}`] } },
+                select: { id: true },
+            })
                 .then(site => {
                     if (!site) return;
                     return prisma.aeoEvent.create({
@@ -275,9 +280,7 @@ export async function checkPerplexityMention(
     });
 }
 
-export async function auditMultiModelMentions(domain: string, coreServices?: string | null, brandNameOverride?: string | null) {
-    // v2 excludes unavailable providers from the score. Version the key so
-    // cached legacy responses without providerStatus cannot affect new audits.
+export async function auditMultiModelMentions(domain: string, coreServices?: string | null, brandNameOverride?: string | null, siteId?: string) {
     const multiCacheKey = `aeo:multi:v2:${domain}:${coreServices ?? ""}`;
 
     const cached = await redis.get(multiCacheKey).catch(() => null);
@@ -289,7 +292,7 @@ export async function auditMultiModelMentions(domain: string, coreServices?: str
 
     const [mentionResults, kgEntity] = await Promise.all([
         Promise.allSettled([
-            cachedMentionCheck("Gemini", domain, coreServices, (d, s) => checkGeminiMention(d, s, brandNameOverride)),
+            cachedMentionCheck("Gemini", domain, coreServices, (d, s) => checkGeminiMention(d, s, brandNameOverride, siteId)),
             cachedMentionCheck("Perplexity", domain, coreServices, (d, s) => checkPerplexityMention(d, s, brandNameOverride)),
             cachedMentionCheck("ChatGPT", domain, coreServices, checkChatGptMention),
             cachedMentionCheck("Claude", domain, coreServices, checkClaudeMention),

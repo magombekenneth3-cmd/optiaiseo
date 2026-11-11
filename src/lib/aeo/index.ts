@@ -517,10 +517,10 @@ const predictCitationLikelihood = predictCitationFromEngine;
 // MAIN AEO AUDIT
 // =============================================================================
 
-export const runAeoAudit = async (domain: string, coreServices?: string | null, lite = false, brandNameOverride?: string | null, reportId?: string): Promise<AeoResult> => {
+export const runAeoAudit = async (domain: string, coreServices?: string | null, lite = false, brandNameOverride?: string | null, reportId?: string, siteId?: string): Promise<AeoResult> => {
     const url = domain.startsWith("http") ? domain : `https://${domain}`
-    // P0: Use a looser internal type during construction — `status` is auto-filled
-    // by the normalization pass before scoring. This avoids touching 30+ push sites.
+    const cleanDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "")
+    const domainWhere = siteId ? { id: siteId } : { domain: { in: [domain, cleanDomain, `https://${cleanDomain}`, `https://www.${cleanDomain}`] } }
     const checks = [] as (Omit<AeoCheck, 'status'> & { status?: CheckStatus })[]
     const schemaTypes: string[] = []
 
@@ -946,8 +946,7 @@ ${cleanText}
     // Check 2: Location Entity Signal
     // If the business serves a specific location, it must appear on the page for
     // local AI answers and map-pack inclusion.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const siteRecord = await prisma.site.findFirst({ where: { domain } }).catch(() => null) as any;
+    const siteRecord = await prisma.site.findFirst({ where: domainWhere }).catch(() => null) as { id?: string; location?: string | null } | null;
     const siteLocation: string | null = siteRecord?.location ?? null;
 
     if (siteLocation) {
@@ -1394,7 +1393,7 @@ ${cleanText}
                 data: { checks: { status: "Checking Gemini citations", currentStep: 3 } }
             }).catch(() => { });
         }
-        multiModelResults = await auditMultiModelMentions(domain, coreServices, brandNameOverride);
+        multiModelResults = await auditMultiModelMentions(domain, coreServices, brandNameOverride, siteId);
 
         if (reportId) {
             await prisma.aeoReport.update({
@@ -1492,7 +1491,7 @@ ${cleanText}
     let diagnosis: AeoDiagnosis | null = null;
     try {
         const diagnosisSite = await prisma.site.findFirst({
-            where: { domain },
+            where: domainWhere,
             select: { id: true },
         });
 
@@ -1632,7 +1631,7 @@ ${cleanText}
         ].filter(Boolean),
     }
 
-    const site = await prisma.site.findFirst({ where: { domain } })
+    const site = await prisma.site.findFirst({ where: domainWhere })
     if (site) {
         await saveAeoSnapshot(site.id, result).catch(err =>
             logger.error("[AEO Audit] Snapshot save failed:", { error: (err as Error)?.message || String(err) })
@@ -1642,6 +1641,6 @@ ${cleanText}
     return result
 }
 
-export const runAeoAuditLite = async (domain: string, coreServices?: string | null, brandNameOverride?: string | null): Promise<AeoResult> => {
-    return runAeoAudit(domain, coreServices, true, brandNameOverride);
+export const runAeoAuditLite = async (domain: string, coreServices?: string | null, brandNameOverride?: string | null, siteId?: string): Promise<AeoResult> => {
+    return runAeoAudit(domain, coreServices, true, brandNameOverride, undefined, siteId);
 };

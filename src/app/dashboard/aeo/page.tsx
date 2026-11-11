@@ -11,7 +11,7 @@ import { GsiMetrics } from "@/components/dashboard/GsiMetrics";
 import { PromptSimulator } from "@/components/aeo/PromptSimulator";
 import type { AeoResult } from "@/lib/aeo";
 import { runAeoReport, getAeoReportStatus } from "@/app/actions/aeo";
-import { generateAeoRecommendationFix, type AeoRecommendationFix } from "@/app/actions/aeoFix";
+import { generateAeoRecommendationFix, generateAeoFix, type AeoRecommendationFix } from "@/app/actions/aeoFix";
 import Link from "next/link";
 import {
     Bot, Zap, ChevronDown, ChevronUp, Lightbulb, Globe,
@@ -49,6 +49,71 @@ import { PageHeader } from "@/components/ui/design-system/PageHeader";
 
 function scoreColor(score: number) {
     return score >= 65 ? "text-emerald-400" : score >= 40 ? "text-amber-400" : "text-rose-400";
+}
+
+function EvidenceCheckFixAction({ check, domain }: { check: any; domain: string }) {
+    const [loading, setLoading] = useState(false);
+    const [fixCode, setFixCode] = useState<string | null>(null);
+    const [filePath, setFilePath] = useState<string | undefined>();
+    const [open, setOpen] = useState(false);
+    const [copied, setCopied] = useState(false);
+    const [err, setErr] = useState("");
+
+    const handleClick = async () => {
+        if (fixCode) {
+            setOpen(!open);
+            return;
+        }
+        setLoading(true);
+        setErr("");
+        const res = await generateAeoFix(check, domain);
+        setLoading(false);
+        if (res.success) {
+            setFixCode(res.fix);
+            setFilePath(res.filePath);
+            setOpen(true);
+        } else {
+            setErr(res.error ?? "Failed to generate fix");
+        }
+    };
+
+    const handleCopy = () => {
+        if (!fixCode) return;
+        navigator.clipboard.writeText(fixCode);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <div className="mt-2">
+            <button
+                onClick={handleClick}
+                disabled={loading}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 text-[11px] font-semibold transition-all disabled:opacity-50"
+            >
+                {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wrench className="w-3 h-3" />}
+                {loading ? "Generating…" : fixCode ? (open ? "Hide Code Fix" : "Show Code Fix") : "Generate Code Fix"}
+            </button>
+            {err && <p className="text-[11px] text-rose-400 mt-1">{err}</p>}
+            {open && fixCode && (
+                <div className="mt-2 rounded-lg border border-border bg-black/40 p-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-mono text-muted-foreground">{filePath ?? "snippet"}</span>
+                        <button
+                            onClick={handleCopy}
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 hover:text-emerald-300"
+                        >
+                            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                            {copied ? "Copied" : "Copy"}
+                        </button>
+                    </div>
+                    <pre className="text-[11px] text-zinc-300 overflow-x-auto max-h-60 overflow-y-auto">
+                        <code>{fixCode}</code>
+                    </pre>
+                </div>
+            )}
+        </div>
+    );
 }
 function scoreBg(score: number) {
     return score >= 65 ? "bg-emerald-500" : score >= 40 ? "bg-amber-500" : "bg-rose-500";
@@ -664,6 +729,7 @@ function TabContent({
                                                                 <Lightbulb className="w-3 h-3 text-amber-400" /> How to fix
                                                             </p>
                                                             <p className="text-xs text-muted-foreground leading-relaxed">{c.recommendation}</p>
+                                                            <EvidenceCheckFixAction check={c} domain={domain} />
                                                         </div>
                                                     )}
                                                 </div>

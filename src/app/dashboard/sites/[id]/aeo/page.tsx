@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { runAeoReport, getAeoHistory, getAeoConversionMetrics } from "@/app/actions/aeo";
+import { runAeoReport, getAeoHistory, getAeoConversionMetrics, getAeoReportStatus } from "@/app/actions/aeo";
 import { generateAeoFix, generateAllFixes, pushFixToGitHub } from "@/app/actions/aeoFix";
 import { PrReviewModal, type PrReviewPayload } from "@/components/PrReviewModal";
 import { VisibilityForecastCard } from "@/components/aeo/VisibilityForecastCard";
@@ -29,8 +29,22 @@ const categoryMeta: Record<string, { label: string; icon: string }> = {
     eeat: { label: "E-E-A-T Signals", icon: "🎓" },
     content: { label: "Content Format", icon: "📝" },
     technical: { label: "Technical SEO", icon: "⚙️" },
+    geo: { label: "GEO Signals", icon: "🎯" },
+    aio: { label: "Brand Entity (AIO)", icon: "🧠" },
     citation: { label: "AI Citations", icon: "🤖" },
 };
+
+function normalizeMultiModelResults(raw: any): any[] {
+    const list = Array.isArray(raw) ? raw : Array.isArray(raw?.models) ? raw.models : [];
+    return list.map((m: any) => ({
+        ...m,
+        model: m.model ?? m.modelName ?? "AI Engine",
+        mentioned: typeof m.mentioned === "boolean"
+            ? m.mentioned
+            : (m.citationCount ?? 0) > 0 || (m.citationRate ?? 0) > 0,
+        details: m.details ?? (typeof m.citationRate === "number" ? `Citation rate: ${m.citationRate}%` : "No citation data available."),
+    }));
+}
 
 const impactBadge: Record<AeoCheck["impact"], string> = {
     high: "bg-red-500/10 text-red-400 border-red-500/30",
@@ -89,7 +103,7 @@ function CheckCard({ check, domain, githubRepoUrl, preloadedFix, siteId }: {
         if (fixCode) { setShowFix(!showFix); return; }
         setFixing(true);
         setFixError("");
-        const res = await generateAeoFix(check, domain);
+        const res = await generateAeoFix(check, domain, githubRepoUrl || undefined);
         setFixing(false);
         if (res.success) {
             setFixCode(res.fix);
@@ -313,7 +327,7 @@ export default function AeoPage() {
                             citationLikelihood: latest.citationLikelihood,
                             predictedCitationProbability: latest.citationLikelihood,
                             multiEngineScore: (latest as any).multiEngineScore,
-                            multiModelResults: (latest as any).multiModelResults,
+                            multiModelResults: normalizeMultiModelResults((latest as any).multiModelResults),
                             factCheckResults: (latest as any).factCheckResults,
                             topRecommendations: latest.topRecommendations,
                             scannedAt: new Date(latest.createdAt),
@@ -336,9 +350,7 @@ export default function AeoPage() {
         setLoading(true);
         setError("");
         const res = await runAeoReport(siteId);
-        setLoading(false);
         if (res.success && res.reportId) {
-            // Since it's now queued, we'll just show a pending state locally
             setResult({
                 url: siteDomain,
                 score: 0,
@@ -346,18 +358,65 @@ export default function AeoPage() {
                 checks: [],
                 schemaTypes: [],
                 citationScore: 0,
-
                 generativeShareOfVoice: 0,
                 citationLikelihood: 0,
                 multiEngineScore: { perplexity: 0, chatgpt: 0, googleAio: 0 },
                 multiModelResults: [],
                 factCheckResults: [],
-                topRecommendations: ["Audit in progress, please refresh in a minute."],
+                topRecommendations: ["Audit in progress..."],
                 scannedAt: new Date()
             } as any);
 
-            router.refresh();
+            const targetReportId = res.reportId;
+            let attempts = 0;
+            const poll = async () => {
+                attempts += 1;
+                const statusRes = await getAeoReportStatus(targetReportId);
+                if (statusRes.done) {
+                    setLoading(false);
+                    if (statusRes.failed) {
+                        setError("AEO audit failed. Please try again.");
+                        return;
+                    }
+                    const rep = statusRes.report as any;
+                    setResult({
+                        url: siteDomain,
+                        score: rep.score,
+                        grade: rep.grade as "A" | "B" | "C" | "D" | "F",
+                        checks: Array.isArray(rep.checks) ? rep.checks : [],
+                        schemaTypes: rep.schemaTypes ?? [],
+                        citationScore: rep.citationScore ?? 0,
+                        generativeShareOfVoice: rep.generativeShareOfVoice ?? 0,
+                        citationLikelihood: rep.citationLikelihood ?? 0,
+                        predictedCitationProbability: rep.citationLikelihood ?? 0,
+                        multiEngineScore: rep.multiEngineScore,
+                        multiModelResults: normalizeMultiModelResults(rep.multiModelResults),
+                        factCheckResults: rep.factCheckResults ?? [],
+                        topRecommendations: rep.topRecommendations ?? [],
+                        scannedAt: new Date(rep.createdAt),
+                        diagnosis: rep.diagnosis ?? null,
+                        dimensions: rep.dimensions ?? undefined,
+                        auditConfidence: rep.auditConfidence ?? undefined,
+                        layerScores: rep.layerScores ?? undefined,
+                    });
+                    router.refresh();
+                    return;
+                }
+                if (statusRes.currentStep) {
+                    setResult((prev: any) => prev ? {
+                        ...prev,
+                        topRecommendations: [`Audit in progress (Step ${statusRes.currentStep}/7)...`],
+                    } : prev);
+                }
+                if (attempts < 40) {
+                    setTimeout(poll, 3000);
+                } else {
+                    setLoading(false);
+                }
+            };
+            setTimeout(poll, 3000);
         } else {
+            setLoading(false);
             setError(!res.success ? (res.error ?? "Failed to queue AEO audit") : "");
         }
     };
@@ -368,7 +427,7 @@ export default function AeoPage() {
         if (failed.length === 0) return;
         setGeneratingAll(true);
         setAllFixesProgress(0);
-        const res = await generateAllFixes(checks, siteDomain);
+        const res = await generateAllFixes(checks, siteDomain, githubRepoUrl || undefined);
         setGeneratingAll(false);
         if (res.success) {
             setAllFixes(res.fixes);
@@ -376,12 +435,34 @@ export default function AeoPage() {
         }
     };
 
+    const handleExportAttributionCsv = () => {
+        if (!metrics) return;
+        const rows: string[][] = [
+            ["Section", "Key", "Conversions", "Revenue (USD)"],
+            ["Summary", "Total Conversions", String(metrics.totalConversions ?? 0), String(metrics.totalRevenue ?? 0)],
+        ];
+        Object.entries(metrics.byIntent ?? {}).forEach(([intent, count]) => {
+            rows.push(["Intent", intent, String(count), ""]);
+        });
+        (metrics.topBlogs ?? []).forEach((blog: any) => {
+            rows.push(["Blog", String(blog.title ?? "").replace(/"/g, '""'), String(blog.conversions ?? 0), String(blog.revenue ?? 0)]);
+        });
+        const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `aeo-attribution-${siteDomain || siteId}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
     const checks = Array.isArray(result?.checks) ? result.checks : [];
     const filteredChecks = checks.filter(
         (c: AeoCheck) => activeCategory === "all" || c.category === activeCategory
     );
 
-    const categories = ["all", "schema", "eeat", "technical", "citation"];
+    const categories = ["all", "schema", "eeat", "technical", "geo", "aio", "citation"];
 
     return (
         <div className="flex flex-col gap-6 max-w-5xl mx-auto pb-12">
@@ -623,7 +704,7 @@ export default function AeoPage() {
                             </span>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {result.multiModelResults?.map((m: any, i: number) => (
+                            {normalizeMultiModelResults(result.multiModelResults).map((m: any, i: number) => (
                                 <div key={i} className="p-3 rounded-lg bg-muted border border-border">
                                     <div className="flex items-center justify-between mb-2">
                                         <span className="text-xs font-bold text-muted-foreground">{m.model}</span>
@@ -781,7 +862,11 @@ export default function AeoPage() {
                                     <span className="text-[9px] font-bold text-muted-foreground uppercase">Intent Anchors Verified</span>
                                 </div>
                             </div>
-                            <button className="text-[9px] font-bold text-emerald-400/60 uppercase hover:text-emerald-400 transition-colors">
+                            <button
+                                onClick={handleExportAttributionCsv}
+                                disabled={!metrics}
+                                className="text-[9px] font-bold text-emerald-400/60 uppercase hover:text-emerald-400 transition-colors disabled:opacity-40"
+                            >
                                 Export Attribution Report (CSV)
                             </button>
                         </div>

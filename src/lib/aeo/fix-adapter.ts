@@ -43,9 +43,30 @@ import { createHash } from "crypto";
  *   - remediationType defaults to "AI_PATCH" (not deterministic)
  *   - evidence is marked INFERRED since AEO checks don't carry direct observations
  */
+const DIRECTLY_OBSERVED_AEO_PREFIXES = [
+  "schema_",
+  "schema-",
+  "tech_",
+  "service-schema",
+  "aio_llms_txt",
+  "geo_ai_bot_access",
+  "aio_brand_same_as",
+  "canonical-tag",
+  "xml-sitemap",
+  "robots-txt",
+  "title-tag",
+  "meta-description",
+];
+
+export function isDirectlyObservedAeoCheck(checkId: string): boolean {
+  const id = checkId.toLowerCase();
+  return DIRECTLY_OBSERVED_AEO_PREFIXES.some((prefix) => id === prefix || id.startsWith(prefix));
+}
+
 export function aeoCheckToFinding(
   check: AeoCheck,
   domain: string,
+  options?: { directlyObserved?: boolean },
 ): DiagnosticFinding {
   const fingerprint = createHash("sha256")
     .update(`aeo:${check.id}:${domain}`)
@@ -58,14 +79,16 @@ export function aeoCheckToFinding(
     .digest("hex")
     .slice(0, 12);
 
+  const isDirect = options?.directlyObserved === true;
+
   const evidence: SEOEvidence[] = [
     {
       source: "HTML" as const,
       url: `https://${domain}`,
       observedAt: now,
       observedValue: check.detail ?? check.label,
-      confidence: 0.5,
-      confidenceKind: "INFERRED" as const,
+      confidence: isDirect ? 0.95 : 0.5,
+      confidenceKind: (isDirect ? "DIRECTLY_OBSERVED" : "INFERRED") as SEOEvidence["confidenceKind"],
       evidenceHash,
     },
   ];
@@ -113,32 +136,106 @@ export function constrainAeoPatch(
     .digest("hex")
     .slice(0, 16);
 
-  // Risk classification for AEO patches:
-  //   - Schema additions (JSON-LD insertion) → LOW risk
-  //   - Content rewrites → MEDIUM risk
-  //   - Structural changes → HIGH risk
   const risk = classifyAeoPatchRisk(check);
 
-  const isHtml = filePath.endsWith(".html") || filePath.endsWith(".htm");
+  const isHtml = filePath.endsWith(".html") || filePath.endsWith(".htm") || filePath.endsWith(".md");
+  const isJson = filePath.endsWith(".json");
+  const isXml = filePath.endsWith(".xml");
+  const isRobots = filePath.endsWith("robots.txt");
   const isTsx = filePath.endsWith(".tsx") || filePath.endsWith(".jsx") || filePath.endsWith(".ts") || filePath.endsWith(".js");
 
-  const astLanguage: AstLanguage = isTsx ? "tsx" : isHtml ? "html" : "typescript";
-  const operations: AstOperation[] = isHtml
-    ? [
+  const astLanguage: AstLanguage = isJson
+    ? "json"
+    : isXml
+      ? "xml"
+      : isRobots
+        ? "robots"
+        : isHtml
+          ? "html"
+          : isTsx
+            ? "tsx"
+            : "typescript";
+
+  let operations: AstOperation[];
+
+  if (isJson) {
+    let parsedObj: Record<string, unknown> | null = null;
+    try {
+      const cleaned = rawFix
+        .replace(/<script[^>]*>/gi, "")
+        .replace(/<\/script>/gi, "")
+        .trim();
+      const candidate = JSON.parse(cleaned);
+      if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+        parsedObj = candidate as Record<string, unknown>;
+      }
+    } catch {
+      parsedObj = null;
+    }
+
+    if (parsedObj && Object.keys(parsedObj).length > 0) {
+      operations = Object.entries(parsedObj).map(([key, value]) => ({
+        kind: "setObjectProperty" as const,
+        target: "schema",
+        property: key,
+        value,
+      }));
+    } else {
+      operations = [
         {
-          kind: "insertHtmlElement",
-          parentSelector: "head",
-          position: "append",
-          htmlSnippet: rawFix,
-        },
-      ]
-    : [
-        {
-          kind: "insertJsxElement",
-          parentTag: "head",
-          jsxSnippet: rawFix,
+          kind: "setObjectProperty",
+          target: "schema",
+          property: "@context",
+          value: "https://schema.org",
         },
       ];
+    }
+  } else if (isXml) {
+    operations = [
+      {
+        kind: "setXmlNode",
+        targetTag: "urlset",
+        value: rawFix,
+        allMatches: true,
+      },
+    ];
+  } else if (isRobots) {
+    operations = [
+      {
+        kind: "setRobotsDirective",
+        userAgent: "GPTBot",
+        directive: "Allow",
+        path: "/",
+      },
+      {
+        kind: "setRobotsDirective",
+        userAgent: "PerplexityBot",
+        directive: "Allow",
+        path: "/",
+      },
+    ];
+  } else if (isHtml) {
+    const parentSelector =
+      filePath.includes("head") || check.id.includes("schema") || check.id.includes("canonical")
+        ? "head"
+        : "body";
+    operations = [
+      {
+        kind: "insertHtmlElement",
+        parentSelector,
+        position: "append",
+        htmlSnippet: rawFix,
+      },
+    ];
+  } else {
+    operations = [
+      {
+        kind: "insertJsxElement",
+        parentTag: "head",
+        jsxSnippet: rawFix,
+      },
+    ];
+  }
 
   const astPlan: AstFixPlan = {
     version: 1,

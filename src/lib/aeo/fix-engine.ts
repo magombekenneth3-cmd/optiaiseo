@@ -101,17 +101,16 @@ async function generateSpeakableFix(
     siteContent: SiteContent,
     framework: Framework,
 ): Promise<
-    | { success: true; fix: string; language: string; filePath: string; framework: Framework }
+    | { success: true; fix: string; astPlan: AstFixPlan; language: string; filePath: string; framework: Framework }
     | { success: false; error: string; fallbackGuide?: ReturnType<typeof getFallbackGuide> }
 > {
     const selectors = deriveSpeakableSelectors(siteContent);
     const selectorsJson = JSON.stringify(selectors, null, 6);
 
-    // JSON-LD for WebPage Speakable — compatible with Google Assistant & AI voice
     const jsonLd = `<script type="application/ld+json">
 {\n  "@context": "https://schema.org/",
   "@type": "WebPage",
-  "name": "{{PAGE_TITLE}}",
+  "name": ${JSON.stringify(siteContent.title || domain)},
   "url": "https://${domain}",
   "speakable": {
     "@type": "SpeakableSpecification",
@@ -119,11 +118,7 @@ async function generateSpeakableFix(
   }
 }\n</script>`;
 
-    // For Next.js / React: also emit a reusable component
-    const nextComponent = `// src/app/components/SchemaSpeakable.tsx
-// Drop this inside your <head> (via next/head or Next.js 13+ Metadata API)
-
-export function SchemaSpeakable({ pageTitle, pageUrl }: { pageTitle: string; pageUrl: string }) {
+    const nextComponent = `export function SchemaSpeakable({ pageTitle, pageUrl }: { pageTitle: string; pageUrl: string }) {
   const schema = {
     "@context": "https://schema.org/",
     "@type": "WebPage",
@@ -142,8 +137,6 @@ export function SchemaSpeakable({ pageTitle, pageUrl }: { pageTitle: string; pag
   );
 }\n`;
 
-    // Use the actual Framework union values — "nextjs-app" and "nextjs-pages"
-    // are the correct literals, not the shorthand "nextjs"/"react"/"gatsby".
     const isReact = (
         framework === "nextjs-app" ||
         framework === "nextjs-pages" ||
@@ -152,6 +145,7 @@ export function SchemaSpeakable({ pageTitle, pageUrl }: { pageTitle: string; pag
     const fix      = isReact ? nextComponent : jsonLd;
     const language = isReact ? "tsx" : "html";
     const filePath = resolveFilePath("schema-speakable", framework);
+    const patchResult = constrainAeoPatch(check, fix, filePath, domain, "deterministic");
 
     logFix({
         issueId:    check.id,
@@ -161,7 +155,7 @@ export function SchemaSpeakable({ pageTitle, pageUrl }: { pageTitle: string; pag
         status:     "success",
     });
 
-    return { success: true, fix, language, filePath, framework };
+    return { success: true, fix, astPlan: patchResult.astPlan, language, filePath, framework };
 }
 
 export async function generateAeoFixInternal(
@@ -200,7 +194,7 @@ export async function generateAeoFixInternal(
         // Gap 2: Speakable requires real cssSelector paths — short-circuit the generic
         // Gemini path which guesses selectors. We derive them deterministically from
         // the scanned HTML and emit a valid JSON-LD block (no extra AI call).
-        if (check.id === "schema-speakable" || check.label.toLowerCase().includes("speakable")) {
+        if (check.id === "schema-speakable" || check.id === "schema_speakable" || check.label.toLowerCase().includes("speakable")) {
             return generateSpeakableFix(check, domain, content, framework);
         }
 
@@ -324,7 +318,7 @@ export async function generateAllFixesInternal(
                     // Keep batch generation consistent with the single-fix path:
                     // speakable selectors must be derived from the scanned DOM,
                     // never guessed by a language model.
-                    if (check.id === "schema-speakable" || check.label.toLowerCase().includes("speakable")) {
+                    if (check.id === "schema-speakable" || check.id === "schema_speakable" || check.label.toLowerCase().includes("speakable")) {
                         const speakable = await generateSpeakableFix(check, domain, content, framework);
                         return speakable.success
                             ? { id: check.id, fix: speakable.fix, language: speakable.language, filePath: speakable.filePath }

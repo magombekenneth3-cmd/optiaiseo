@@ -2,8 +2,11 @@ import { logger } from "@/lib/logger";
 import { inngest } from "../client";
 import { NonRetriableError } from "inngest";
 import { prisma } from "@/lib/prisma";
-import { createAutoFixPR, type AutoFixFile } from "@/lib/github";
+import { createAutoFixPR, getRepositoryFile, type AutoFixFile } from "@/lib/github";
 import { callGemini } from "@/lib/gemini/client";
+import { generateAeoFixInternal } from "@/lib/aeo/fix-engine";
+import { constrainAeoPatch } from "@/lib/aeo/fix-adapter";
+import { applyAstFixPlan } from "@/lib/ast/executor";
 
 const CHECK_TO_FILE: Record<string, { path: string; label: string }> = {
     schema_faq:              { path: "public/schema/faq.json",                   label: "FAQPage schema markup" },
@@ -85,7 +88,7 @@ export const githubAutofixSiteJob = inngest.createFunction(
 
         const failingChecks = await step.run("load-cached-aeo-report", async () => {
             const report = await prisma.aeoReport.findFirst({
-                where: { siteId },
+                where: { siteId, status: "COMPLETED" },
                 orderBy: { createdAt: "desc" },
                 select: { checks: true, createdAt: true },
             });
@@ -96,8 +99,8 @@ export const githubAutofixSiteJob = inngest.createFunction(
                 return null;
             }
 
-            type AeoCheck = { id: string; passed: boolean; impact: string };
-            const checks = report.checks as unknown as AeoCheck[];
+            type AeoCheckItem = { id: string; label?: string; detail?: string; recommendation?: string; passed: boolean; impact: string };
+            const checks = Array.isArray(report.checks) ? (report.checks as unknown as AeoCheckItem[]) : [];
             return checks.filter((c) => !c.passed && c.impact === "high");
         });
 
@@ -109,17 +112,63 @@ export const githubAutofixSiteJob = inngest.createFunction(
             const files: AutoFixFile[] = [];
             for (const check of failingChecks) {
                 const fileMeta = CHECK_TO_FILE[check.id];
-                if (!fileMeta) continue;
-                const content = await callGemini(buildFixPrompt(check.id, domain), { maxOutputTokens: 4096, temperature: 0.3 })
-                    .catch((err: unknown) => {
-                        logger.warn("[Inngest/GithubAutofix] Gemini call failed for check", {
-                            checkId: check.id,
-                            domain,
-                            error: (err as Error)?.message ?? String(err),
+                const checkInput = {
+                    id: check.id,
+                    label: check.label ?? fileMeta?.label ?? check.id,
+                    detail: check.detail,
+                    recommendation: check.recommendation,
+                    passed: false,
+                };
+
+                let targetPath = fileMeta?.path;
+                let description = fileMeta?.label ?? checkInput.label;
+                let astPlan = undefined;
+
+                const engineRes = await generateAeoFixInternal(checkInput, domain, site.githubRepoUrl ?? undefined).catch(() => null);
+                if (engineRes && engineRes.success && engineRes.astPlan) {
+                    targetPath = engineRes.filePath;
+                    astPlan = engineRes.astPlan;
+                } else if (fileMeta) {
+                    const content = await callGemini(buildFixPrompt(check.id, domain), { maxOutputTokens: 4096, temperature: 0.3 })
+                        .catch((err: unknown) => {
+                            logger.warn("[Inngest/GithubAutofix] Gemini call failed for check", {
+                                checkId: check.id,
+                                domain,
+                                error: (err as Error)?.message ?? String(err),
+                            });
+                            return null;
                         });
-                        return null;
+                    if (content) {
+                        const patch = constrainAeoPatch(checkInput, content.trim(), fileMeta.path, domain);
+                        targetPath = fileMeta.path;
+                        astPlan = patch.astPlan;
+                    }
+                }
+
+                if (!targetPath || !astPlan) continue;
+
+                try {
+                    const repoFile = await getRepositoryFile(site.githubRepoUrl!, targetPath, token);
+                    const existingContent = repoFile.exists && repoFile.content ? repoFile.content : "";
+                    const planWithSha = {
+                        ...astPlan,
+                        baseBlobSha: repoFile.exists && repoFile.sha ? repoFile.sha : "NEW_FILE",
+                    };
+                    const prepared = applyAstFixPlan(existingContent, planWithSha);
+                    files.push({
+                        path: targetPath,
+                        content: prepared.serializedContent,
+                        description,
+                        astPreparedChange: prepared,
                     });
-                if (content) files.push({ path: fileMeta.path, content: content.trim(), description: fileMeta.label });
+                } catch (astErr) {
+                    logger.warn("[Inngest/GithubAutofix] AST preparation failed for check", {
+                        checkId: check.id,
+                        domain,
+                        path: targetPath,
+                        error: (astErr as Error)?.message ?? String(astErr),
+                    });
+                }
             }
             return files;
         });

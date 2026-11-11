@@ -32,13 +32,13 @@ export async function getAutopilotConfig(siteId: string): Promise<AutopilotConfi
 
     const site = await prisma.site.findFirst({
       where: { id: siteId, userId: user.id },
-      select: { aeoAutopilotEnabled: true, aeoAutopilotSchedule: true, aeoDigestEnabled: true },
+      select: { aeoAutopilotEnabled: true, operatingMode: true, aeoAutopilotSchedule: true, aeoDigestEnabled: true },
     });
     if (!site) return { success: false, error: "Site not found" };
 
     return {
       success: true,
-      enabled: site.aeoAutopilotEnabled,
+      enabled: site.aeoAutopilotEnabled || site.operatingMode === "AUTOPILOT",
       schedule: site.aeoAutopilotSchedule,
       digestEnabled: site.aeoDigestEnabled,
     };
@@ -62,7 +62,12 @@ export async function updateAutopilotConfig(
 
     await prisma.site.updateMany({
       where: { id: siteId, userId: user.id },
-      data: { aeoAutopilotEnabled: enabled, aeoAutopilotSchedule: schedule, aeoDigestEnabled: digestEnabled },
+      data: {
+        aeoAutopilotEnabled: enabled,
+        operatingMode: enabled ? "AUTOPILOT" : "REPORT_ONLY",
+        aeoAutopilotSchedule: schedule,
+        aeoDigestEnabled: digestEnabled,
+      },
     });
     return { success: true };
   } catch (err: unknown) {

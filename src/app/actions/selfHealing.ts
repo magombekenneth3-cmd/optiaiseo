@@ -46,7 +46,10 @@ export async function toggleAutopilot(siteId: string, enabled: boolean) {
 
         await prisma.site.update({
             where: { id: site.id },
-            data: { operatingMode: enabled ? "AUTOPILOT" : "REPORT_ONLY" },
+            data: {
+                operatingMode: enabled ? "AUTOPILOT" : "REPORT_ONLY",
+                aeoAutopilotEnabled: enabled,
+            },
         });
 
         await prisma.selfHealingLog.create({

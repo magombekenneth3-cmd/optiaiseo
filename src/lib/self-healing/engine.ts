@@ -2,7 +2,7 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
 import { generateAeoFixInternal as generateAeoFix, validateFixInternal as validateFixWithQA } from "@/lib/aeo/fix-engine";
-import { aeoCheckToFinding, constrainAeoPatch } from "@/lib/aeo/fix-adapter";
+import { aeoCheckToFinding, constrainAeoPatch, isDirectlyObservedAeoCheck } from "@/lib/aeo/fix-adapter";
 import { applyAstFixPlan } from "@/lib/ast/executor";
 import { gateRemediationType } from "@/lib/seo-audit/contracts";
 import { z } from "zod";
@@ -17,6 +17,11 @@ const ModelResultSchema = z.object({
     score: z.number().default(0),
 }).strip();
 
+const NestedModelItemSchema = z.object({
+    modelName: z.string(),
+    citationRate: z.number().default(0),
+}).strip();
+
 const CheckResultSchema = z.object({
     id: z.string(),
     label: z.string(),
@@ -29,9 +34,16 @@ const parseChecks = (data: unknown) => {
     return res.success ? res.data : [];
 };
 
-const parseModelResults = (data: unknown) => {
-    const res = z.array(ModelResultSchema).safeParse(data);
-    return res.success ? res.data : [];
+const parseModelResults = (data: unknown): { model: string; score: number }[] => {
+    const directRes = z.array(ModelResultSchema).safeParse(data);
+    if (directRes.success) return directRes.data;
+    if (data && typeof data === "object" && "models" in data) {
+        const nestedRes = z.array(NestedModelItemSchema).safeParse((data as { models?: unknown }).models);
+        if (nestedRes.success) {
+            return nestedRes.data.map((m) => ({ model: m.modelName, score: m.citationRate }));
+        }
+    }
+    return [];
 };
 
 import type { PreparedAstChange } from "@/lib/ast/types";
@@ -161,7 +173,9 @@ export async function generateHealingPlan(siteId: string, currentGsov: number, p
                 // AEO checks carry INFERRED evidence by default (Phase 3).
                 // gateRemediationType downgrades AI_PATCH + INFERRED → EXPERIMENT.
                 // Only DETERMINISTIC or AI_PATCH after gating proceeds to fix.
-                const canonicalFinding = aeoCheckToFinding(curr, site.domain);
+                const canonicalFinding = aeoCheckToFinding(curr, site.domain, {
+                    directlyObserved: isDirectlyObservedAeoCheck(curr.id),
+                });
                 const gateResult = gateRemediationType(
                     canonicalFinding.remediationType as any,
                     canonicalFinding.evidence,
@@ -205,13 +219,16 @@ export async function generateHealingPlan(siteId: string, currentGsov: number, p
                 if (token) {
                     try {
                         const repoFile = await getRepositoryFile(site.githubRepoUrl, fixRes.filePath, token);
-                        if (repoFile.exists && repoFile.content) {
-                            const prepared = applyAstFixPlan(repoFile.content, patchResult.astPlan);
-                            candidate.preparedChange = prepared;
-                            candidate.filePath = fixRes.filePath;
-                            actions.push(candidate);
-                            continue;
-                        }
+                        const existingContent = repoFile.exists && repoFile.content ? repoFile.content : "";
+                        const planWithSha = {
+                            ...patchResult.astPlan,
+                            baseBlobSha: repoFile.exists && repoFile.sha ? repoFile.sha : "NEW_FILE",
+                        };
+                        const prepared = applyAstFixPlan(existingContent, planWithSha);
+                        candidate.preparedChange = prepared;
+                        candidate.filePath = fixRes.filePath;
+                        actions.push(candidate);
+                        continue;
                     } catch (astErr) {
                         logger.warn("[Self-Healing] AST execution failed for self-healing candidate", {
                             error: (astErr as Error)?.message,
@@ -219,7 +236,6 @@ export async function generateHealingPlan(siteId: string, currentGsov: number, p
                     }
                 }
             }
-            // If AST plan could not be prepared or executed against pinned file, degrade to ALERT
             actions.push({
                 type: "ALERT",
                 description: `AEO check regression: ${curr.label}. AST mutation plan could not be safely prepared against repository source. Manual review required.`,

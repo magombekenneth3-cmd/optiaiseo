@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getEffectiveTier, guardErrorToResult } from "@/lib/stripe/guards";
-import { consumeCredits } from "@/lib/credits";
+import { consumeCreditsIdempotent, refundCreditsIdempotent } from "@/lib/credits";
 import { redis } from "@/lib/redis";
 import { inngest } from "@/lib/inngest/client";
 // Monthly AEO count limit removed — credits are the single gate.
@@ -33,12 +33,20 @@ type AeoReportStatusResult =
         done: true;
         failed?: boolean;
         report: {
+            id: string;
             score: number;
             grade: string;
             citationScore: number;
             generativeShareOfVoice: number;
+            citationLikelihood: number;
             checks: Prisma.JsonValue;
             topRecommendations: string[];
+            multiModelResults: Prisma.JsonValue;
+            multiEngineScore: Prisma.JsonValue;
+            layerScores: Prisma.JsonValue;
+            dimensions: Prisma.JsonValue;
+            auditConfidence: Prisma.JsonValue;
+            diagnosis: Prisma.JsonValue;
             createdAt: Date;
         };
     };
@@ -117,16 +125,20 @@ export async function runAeoReport(siteId: string): Promise<RunAeoReportResult> 
         });
         if (!site) return { success: false, error: "Site not found" };
 
-        // --- Idempotency: reuse an existing pending report ---
+        const staleCutoff = new Date(Date.now() - 10 * 60 * 1000);
+        await prisma.aeoReport.updateMany({
+            where: { siteId: site.id, status: "PENDING", createdAt: { lt: staleCutoff } },
+            data: { status: "FAILED", grade: "F" },
+        }).catch(() => { });
+
         const existingPending = await prisma.aeoReport.findFirst({
-            where: { siteId: site.id, status: "PENDING" },
+            where: { siteId: site.id, status: "PENDING", createdAt: { gte: staleCutoff } },
             orderBy: { createdAt: "desc" },
         });
         if (existingPending) {
             return { success: true, reportId: existingPending.id, status: "Queued" };
         }
 
-        // --- Distributed lock (300s TTL — audit takes up to 3 min) ---
         const lockKey = `aeo-audit-lock:${user.id}:${site.id}`;
         let acquired = true;
         try {
@@ -147,7 +159,6 @@ export async function runAeoReport(siteId: string): Promise<RunAeoReportResult> 
         logger.info("[AEO] starting audit", { traceId, siteId: site.id, userId: user.id });
 
         try {
-            // --- Create the pending report row ---
             const report = await prisma.aeoReport.create({
                 data: {
                     siteId: site.id,
@@ -166,12 +177,8 @@ export async function runAeoReport(siteId: string): Promise<RunAeoReportResult> 
                 },
             });
 
-            // --- Deduct credits before dispatch ---
-            // If Inngest dispatch fails we refund below.
-            // If the job itself fails after retries, the Inngest failure handler must refund.
-            const creditResult = await consumeCredits(user.id, "aeo_check");
+            const creditResult = await consumeCreditsIdempotent(user.id, "aeo_check", `aeo:${report.id}`);
             if (!creditResult.allowed) {
-                // Clean up the pending report we just created
                 await prisma.aeoReport.delete({ where: { id: report.id } }).catch(() => { });
                 await redis.del(lockKey).catch(() => { });
                 return {
@@ -183,14 +190,12 @@ export async function runAeoReport(siteId: string): Promise<RunAeoReportResult> 
                 };
             }
 
-            // --- Dispatch background job ---
             try {
                 await inngest.send({
                     name: "aeo.audit.run",
                     data: { siteId: site.id, reportId: report.id, userId: user.id, traceId },
                 });
 
-                // Lock TTL cleans itself up after 300s — do NOT release here.
                 return { success: true, reportId: report.id, status: "Queued" };
             } catch (inngestErr: unknown) {
                 logger.warn("[AEO] Inngest unavailable — refunding credits", {
@@ -198,13 +203,12 @@ export async function runAeoReport(siteId: string): Promise<RunAeoReportResult> 
                     error: (inngestErr as Error)?.message,
                 });
 
-                // Refund credits: job never started
-                await prisma.user
-                    .update({
-                        where: { id: user.id },
-                        data: { credits: { increment: creditResult.cost } },
-                    })
-                    .catch(() => { });
+                await refundCreditsIdempotent(
+                    user.id,
+                    creditResult.cost,
+                    `refund:aeo:${report.id}`,
+                    "AEO audit dispatch failed",
+                ).catch(() => { });
 
                 await prisma.aeoReport
                     .update({
@@ -253,13 +257,21 @@ export async function getAeoReportStatus(
         const report = await prisma.aeoReport.findFirst({
             where: { id: reportId, site: { userId: user.id } },
             select: {
+                id: true,
                 score: true,
                 grade: true,
                 status: true,
                 citationScore: true,
                 generativeShareOfVoice: true,
+                citationLikelihood: true,
                 checks: true,
                 topRecommendations: true,
+                multiModelResults: true,
+                multiEngineScore: true,
+                layerScores: true,
+                dimensions: true,
+                auditConfidence: true,
+                diagnosis: true,
                 createdAt: true,
             },
         });

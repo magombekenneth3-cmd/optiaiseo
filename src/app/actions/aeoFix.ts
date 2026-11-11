@@ -16,6 +16,7 @@ import { sanitizeMetadataContent } from "@/lib/seo/ai";
 import { callGemini as geminiCall } from "@/lib/gemini/client";
 import { getFallbackGuide, type FallbackGuide } from "@/lib/seo/fallbacks";
 import { BRAND } from "@/lib/constants/brand";
+import { rateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 
 export type { Framework, AeoCheck };
@@ -122,9 +123,11 @@ function fetchWithTimeout(
   );
 }
 
-// callGemini — thin wrapper exposed as server action
-
 export async function callGemini(prompt: string): Promise<string | null> {
+  const user = await getAuthenticatedUser();
+  if (!user) return null;
+  const limited = await rateLimit("api", user.id);
+  if (limited) return null;
   try {
     return await geminiCall(prompt);
   } catch (err: unknown) {
@@ -133,12 +136,12 @@ export async function callGemini(prompt: string): Promise<string | null> {
   }
 }
 
-// validateFixWithQA
-
 export async function validateFixWithQA(
   fixContent: string,
   contextDescription: string,
 ): Promise<{ valid: boolean; feedback: string }> {
+  const user = await getAuthenticatedUser();
+  if (!user) return { valid: false, feedback: "Unauthorized" };
   return validateFixInternal(fixContent, contextDescription);
 }
 
@@ -180,11 +183,9 @@ export async function pushFixToGitHub(params: {
   siteId: string;
   astPlan: AstFixPlan;
 }): Promise<PushFixResult> {
-  // --- Auth ---
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return { success: false, error: "Unauthorized" };
 
-  // --- Input validation ---
   if (!uuidSchema.safeParse(params.siteId).success) {
     return { success: false, error: "Invalid site ID." };
   }
@@ -198,7 +199,22 @@ export async function pushFixToGitHub(params: {
     return { success: false, error: "AST_PLAN_REQUIRED: An explicit server-side AstFixPlan is required to push a fix." };
   }
 
-  // --- GitHub token ---
+  const limited = await rateLimit("githubPr", session.user.id);
+  if (limited) {
+    return { success: false, error: "Too many PR requests. Please wait before trying again." };
+  }
+
+  const site = await prisma.site.findFirst({
+    where: { id: params.siteId, userId: session.user.id },
+    select: { id: true, domain: true, githubRepoUrl: true },
+  });
+  if (!site) {
+    return { success: false, error: "Site not found or unauthorized." };
+  }
+  if (site.githubRepoUrl && site.githubRepoUrl !== params.repoUrl) {
+    return { success: false, error: "Repository URL does not match site configuration." };
+  }
+
   const account = await prisma.account.findFirst({
     where: { userId: session.user.id, provider: "github" },
     select: { access_token: true },
@@ -218,7 +234,7 @@ export async function pushFixToGitHub(params: {
 
     const planToExecute: AstFixPlan = {
       ...params.astPlan,
-      baseBlobSha: params.astPlan.baseBlobSha || targetFile.sha || "",
+      baseBlobSha: params.astPlan.baseBlobSha || (targetFile.exists && targetFile.sha ? targetFile.sha : "NEW_FILE"),
     };
 
     const prepared = applyAstFixPlan(existingContent, planToExecute);
@@ -233,7 +249,7 @@ export async function pushFixToGitHub(params: {
           astPreparedChange: prepared,
         },
       ],
-      params.repoUrl,
+      site.domain,
       token,
       session.user.email ?? undefined,
       undefined,

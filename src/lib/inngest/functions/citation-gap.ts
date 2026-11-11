@@ -90,7 +90,7 @@ export const runCitationGapWeekly = inngest.createFunction(
             const batch = await step.run(`load-sites-batch-${cursor ?? "start"}`, async () => {
                 return prisma.site.findMany({
                     where: {
-                        user: { subscriptionTier: { in: ["PRO", "AGENCY"] } },
+                        user: { subscriptionTier: { in: ["STARTER", "PRO", "AGENCY"] } },
                         competitors: { some: {} },
                     },
                     select: { id: true, domain: true },

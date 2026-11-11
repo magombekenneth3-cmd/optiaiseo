@@ -21,26 +21,28 @@ export async function GET(req: NextRequest) {
     if (!site)
         return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // Pull AEO tracking events from the last 90 days
     const since = new Date();
     since.setDate(since.getDate() - 90);
 
-    const events = await prisma.aeoEvent.findMany({
-        where: { siteId, createdAt: { gte: since } },
-        orderBy: { createdAt: "desc" },
+    const trackingRows = await prisma.aiShareOfVoice.findMany({
+        where: { siteId, recordedAt: { gte: since } },
+        orderBy: { recordedAt: "desc" },
         take: 500,
+        select: {
+            keyword: true,
+            brandMentioned: true,
+            competitorsMentioned: true,
+            recordedAt: true,
+        },
     });
 
-    const records: MentionRecord[] = events.map((e: { metadata: unknown; createdAt: Date }) => ({
-         
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        keyword:               (e.metadata as any)?.keyword      ?? "",
-         
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        mentioned:             (e.metadata as any)?.mentioned    ?? false,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        competitorsMentioned:  (e.metadata as any)?.competitors  ?? [],
-        queriedAt:             e.createdAt,
+    const records: MentionRecord[] = trackingRows.map((row) => ({
+        keyword: row.keyword,
+        mentioned: row.brandMentioned,
+        competitorsMentioned: Array.isArray(row.competitorsMentioned)
+            ? (row.competitorsMentioned as string[])
+            : [],
+        queriedAt: row.recordedAt,
     }));
 
     // Build explicit brand name hints from the stored brand name and domain slug.
