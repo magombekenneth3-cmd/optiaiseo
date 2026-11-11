@@ -33,6 +33,8 @@ export const AI_MODELS = {
     ANTHROPIC_HAIKU:   'claude-haiku-4-5-20251015',
     ANTHROPIC_SONNET:  'claude-sonnet-4-5-20250929',
     ANTHROPIC_OPUS:    'claude-opus-4-5-20251124',
+    DEEPSEEK_PRIMARY:  'deepseek-chat',
+    DEEPSEEK_REASONER: 'deepseek-reasoner',
 } as const;
 
 // Backward-compat aliases for any existing imports

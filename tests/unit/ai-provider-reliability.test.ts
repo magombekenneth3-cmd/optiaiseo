@@ -144,4 +144,35 @@ describe("AI provider reliability", () => {
             .resolves.toEqual({ answer: 42 });
         expect(fetchMock).toHaveBeenCalledTimes(2);
     });
+
+    it("falls back from Gemini to DeepSeek in callGeminiJson when Gemini is down", async () => {
+        process.env.GEMINI_API_KEY = "test-gemini-key";
+        process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+            const url = String(input);
+            if (url.includes("generativelanguage.googleapis.com")) {
+                return new Response(JSON.stringify({ error: { message: "Gemini overloaded" } }), {
+                    status: 503,
+                    headers: { "retry-after": "0.001" },
+                });
+            }
+            if (url.includes("api.deepseek.com/chat/completions")) {
+                return new Response(JSON.stringify({
+                    choices: [{ message: { content: '{"provider":"deepseek","ok":true}' } }],
+                }), {
+                    status: 200,
+                    headers: { "x-request-id": "deepseek-req-1" },
+                });
+            }
+            throw new Error(`Unexpected provider URL: ${url}`);
+        });
+
+        const { callGeminiJson } = await import("@/lib/gemini/client");
+        const work = callGeminiJson<{ provider: string; ok: boolean }>("Return status object", { maxRetries: 1 });
+        await vi.runAllTimersAsync();
+        await expect(work).resolves.toEqual({ provider: "deepseek", ok: true });
+        expect(fetchMock.mock.calls.some(([input]) => String(input).includes("api.deepseek.com"))).toBe(true);
+        delete process.env.DEEPSEEK_API_KEY;
+    });
 });

@@ -24,7 +24,8 @@ export function hasConfiguredAiProvider(): boolean {
     process.env.GEMINI_API_KEY ||
     process.env.OPENAI_API_KEY ||
     process.env.ANTHROPIC_API_KEY ||
-    process.env.OPENROUTER_API_KEY
+    process.env.OPENROUTER_API_KEY ||
+    process.env.DEEPSEEK_API_KEY
   );
 }
 
@@ -55,7 +56,7 @@ async function postChatCompletion(request: ChatRequest): Promise<ProviderTextRes
   if (!apiKey) throw missingKey(request.provider, request.modelId);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(request.provider === "openai" || request.provider === "openrouter"
+    ...(request.provider === "openai" || request.provider === "openrouter" || request.provider === "deepseek"
       ? { Authorization: `Bearer ${apiKey}` }
       : { "x-api-key": apiKey }),
     ...(request.provider === "anthropic" ? { "anthropic-version": "2023-06-01" } : {}),
@@ -165,7 +166,7 @@ type ProviderAttempt<T> = {
 
 function getPreferredProvider(value?: string): AIProviderName {
   const preferred = value || process.env.PRIMARY_AI_PROVIDER || "openai";
-  if (["gemini", "openai", "anthropic", "openrouter"].includes(preferred)) {
+  if (["gemini", "openai", "anthropic", "openrouter", "deepseek"].includes(preferred)) {
     return preferred as AIProviderName;
   }
   logger.warn("[AI] Invalid preferred provider configured; using OpenAI", {
@@ -198,6 +199,22 @@ function buildProviderAttempts(opts: GenerateOptions, json: boolean): ProviderAt
       ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
       ...(opts.systemPrompt ? { system: opts.systemPrompt } : {}),
       messages: [{ role: "user", content: jsonPrompt }],
+    },
+  });
+  const deepseekCall = () => postChatCompletion({
+    provider: "deepseek",
+    modelId: AI_MODELS.DEEPSEEK_PRIMARY,
+    url: "https://api.deepseek.com/chat/completions",
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    body: {
+      model: AI_MODELS.DEEPSEEK_PRIMARY,
+      messages: [
+        ...(opts.systemPrompt ? [{ role: "system", content: opts.systemPrompt }] : []),
+        { role: "user", content: jsonPrompt },
+      ],
+      ...(json ? { response_format: { type: "json_object" } } : {}),
+      max_tokens: Math.min(opts.maxTokens ?? 4096, 8192),
+      ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
     },
   });
   const openRouterCall = () => postChatCompletion({
@@ -242,6 +259,12 @@ function buildProviderAttempts(opts: GenerateOptions, json: boolean): ProviderAt
       modelId: AI_MODELS.ANTHROPIC_SONNET,
       call: async () => (await anthropicCall()).text,
       callDetailed: anthropicCall,
+    },
+    {
+      name: "deepseek",
+      modelId: AI_MODELS.DEEPSEEK_PRIMARY,
+      call: async () => (await deepseekCall()).text,
+      callDetailed: deepseekCall,
     },
     {
       name: "openrouter",

@@ -60,7 +60,7 @@ export async function getAiReasoningForGap(
     strengths?: string[];
   } | null,
 ): Promise<AiReasoningResult | null> {
-  if (!process.env.GEMINI_API_KEY) return null;
+  if (!process.env.GEMINI_API_KEY && !process.env.DEEPSEEK_API_KEY) return null;
 
   const key = cacheKey(siteId, competitorDomain, keyword);
 

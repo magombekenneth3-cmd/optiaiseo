@@ -1,5 +1,6 @@
 import { logger } from "@/lib/logger";
 import { AI_MODELS } from "@/lib/constants/ai-models";
+import { callGemini } from "@/lib/gemini/client";
 import { throttledGeminiCall } from "@/lib/gemini/throttle";
 import { prisma } from "@/lib/prisma";
 import { fetchCompetitorPageHtml } from "./page-fetcher";
@@ -103,7 +104,7 @@ async function clusterKeywordGaps(
     gaps: CompetitorKeywordGap[],
     hostDomain: string
 ): Promise<TopicCluster[]> {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY || process.env.DEEPSEEK_API_KEY;
     if (!apiKey || gaps.length < 3) return [];
 
     const kwList = gaps.slice(0, 50).map(g => `${g.keyword} (${g.searchVolume} vol)`).join('\n');
@@ -116,23 +117,13 @@ Respond ONLY with JSON array:
 [{ "name": "Topic Name", "keywords": ["kw1","kw2"], "totalVolume": 1234 }]`;
 
     try {
-        const res = await throttledGeminiCall(() =>
-            fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.GEMINI_FLASH}:generateContent?key=${apiKey}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: { maxOutputTokens: 2048 },
-                    }),
-                    signal: AbortSignal.timeout(15000),
-                }
-            )
+        const text = await throttledGeminiCall(() =>
+            callGemini(prompt, {
+                model: AI_MODELS.GEMINI_FLASH,
+                maxOutputTokens: 2048,
+                timeoutMs: 15000,
+            })
         );
-        if (!res.ok) return [];
-        const data = await res.json();
-        const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
         const jsonMatch = text.match(/\[[\s\S]*\]/);
         if (!jsonMatch) return [];
         const parsed = JSON.parse(jsonMatch[0]);
@@ -144,13 +135,12 @@ Respond ONLY with JSON array:
     return [];
 }
 
-// ─── Gemini domain intelligence ───────────────────────────────────────────────
 async function analyzeCompetitorWithGemini(
     competitorDomain: string,
     hostDomain: string,
     serperKeywords: CompetitorKeywordGap[]
 ): Promise<Partial<CompetitorProfile>> {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY || process.env.DEEPSEEK_API_KEY;
     if (!apiKey) return {};
 
     const topKws = serperKeywords.slice(0, 8).map(k => `- "${k.keyword}" (pos ${k.position}, ~${k.searchVolume.toLocaleString()} searches/mo, est. ${k.estimatedMonthlyVisits.toLocaleString()} visits)`).join("\n");
@@ -171,24 +161,14 @@ Respond ONLY with a valid JSON object (no markdown, no explanation) with these e
 }`;
 
     try {
-        const res = await throttledGeminiCall(() =>
-            fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.GEMINI_FLASH}:generateContent?key=${apiKey}`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: { maxOutputTokens: 1024 },
-                    }),
-                    signal: AbortSignal.timeout(20000),
-                }
-            )
+        const text = await throttledGeminiCall(() =>
+            callGemini(prompt, {
+                model: AI_MODELS.GEMINI_FLASH,
+                responseFormat: "json",
+                maxOutputTokens: 1024,
+                timeoutMs: 20000,
+            })
         );
-
-        if (!res.ok) return {};
-        const data = await res.json();
-        const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         if (!jsonMatch) return {};
         const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
@@ -599,7 +579,7 @@ export async function analyseCompetitorPage(
 
         const imageCount = (html.match(/<img /gi) ?? []).length;
 
-        const apiKey = process.env.GEMINI_API_KEY;
+        const apiKey = process.env.GEMINI_API_KEY || process.env.DEEPSEEK_API_KEY;
         if (!apiKey) {
             return {
                 url,
@@ -658,39 +638,29 @@ Rules:
 - onPageScore: be honest — a long, well-structured page with schema and good headings scores 70-90
 - beatThemWith: 4-6 specific, actionable tactics tailored to THIS page`;
 
-        const geminiRes = await throttledGeminiCall(() =>
-            fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.GEMINI_FLASH}:generateContent?key=${apiKey}`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: { maxOutputTokens: 900 },
-                    }),
-                    signal: AbortSignal.timeout(25_000),
-                },
-            ),
-        );
-
         let contentGaps: string[] = [];
         let onPageScore = 50;
         let beatThemWith: string[] = [];
 
-        if (geminiRes.ok) {
-            const geminiData = await geminiRes.json();
-            const raw = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "")
+        try {
+            const rawText = await throttledGeminiCall(() =>
+                callGemini(prompt, {
+                    model: AI_MODELS.GEMINI_FLASH,
+                    responseFormat: "json",
+                    maxOutputTokens: 900,
+                    timeoutMs: 25_000,
+                }),
+            );
+            const raw = rawText
                 .replace(/^```(?:json)?\s*/i, "")
                 .replace(/\s*```\s*$/i, "")
                 .trim();
-            try {
-                const parsed = JSON.parse(raw);
-                contentGaps = parsed.contentGaps ?? [];
-                onPageScore = parsed.onPageScore ?? 50;
-                beatThemWith = parsed.beatThemWith ?? [];
-            } catch {
-                logger.warn("[Competitor] Failed to parse Gemini page analysis JSON", { url });
-            }
+            const parsed = JSON.parse(raw);
+            contentGaps = parsed.contentGaps ?? [];
+            onPageScore = parsed.onPageScore ?? 50;
+            beatThemWith = parsed.beatThemWith ?? [];
+        } catch {
+            logger.warn("[Competitor] Failed to parse Gemini page analysis JSON", { url });
         }
 
         return {

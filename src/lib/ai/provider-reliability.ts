@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 
-export type AIProviderName = "gemini" | "openai" | "anthropic" | "openrouter";
+export type AIProviderName = "gemini" | "openai" | "anthropic" | "openrouter" | "deepseek";
 
 export type AIProviderErrorCategory =
     | "configuration"

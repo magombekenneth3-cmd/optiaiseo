@@ -1,7 +1,7 @@
 import { logger } from "@/lib/logger";
 import { parse } from 'node-html-parser';
 import { redis, redisErrorCode } from "@/lib/redis";
-
+import { callGemini } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 
 export interface Entity {
@@ -71,13 +71,10 @@ function buildFallbackBenchmark() {
     };
 }
 
-// Helper: Extract entities via Gemini
 async function extractEntitiesFromCompetitors(texts: string): Promise<Entity[]> {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY || process.env.DEEPSEEK_API_KEY;
     if (!apiKey) return [];
     try {
-        const { GoogleGenAI } = await import("@google/genai");
-        const ai = new GoogleGenAI({ apiKey });
         const prompt = `
           Extract the 20 most common and important named entities (people, organizations, products, concepts, NLP terms) from the following competitor articles. 
           Return a JSON array of up to 20 entities, ordered by frequency/importance.
@@ -86,23 +83,18 @@ async function extractEntitiesFromCompetitors(texts: string): Promise<Entity[]> 
           Texts:
           ${texts.slice(0, 30000)}
         `;
-        const response = await ai.models.generateContent({
+        const textResponse = await callGemini(prompt, {
             model: AI_MODELS.GEMINI_FLASH,
-            contents: prompt,
-            config: { responseMimeType: "application/json" }
+            responseFormat: "json",
         });
-        const textResponse = response.text || "";
-        const result = JSON.parse(textResponse.replace(/```json|```/g, "").trim() || "[]");
-         
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return result.map((r: any) => ({
-            name: r.name,
+        const parsed = JSON.parse(textResponse.replace(/```json|```/g, "").trim() || "[]");
+        const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.entities) ? parsed.entities : [];
+        return list.map((r: { name?: string; type?: string; salience?: number; mentions?: number }) => ({
+            name: r.name ?? "",
             type: r.type || 'Concept',
             salience: r.salience || 0.5,
             mentions: r.mentions || 1
-         
         }));
-     
     } catch (e: unknown) {
         logger.error("Entity extraction failed", { error: (e as Error)?.message || String(e) });
         return [];

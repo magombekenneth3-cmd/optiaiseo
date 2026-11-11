@@ -7,6 +7,8 @@
  * Keeping this in a shared module avoids the fragile server-to-self HTTP fetch pattern.
  */
 
+import { callGemini } from "@/lib/gemini/client";
+
 const PRIVATE_IP_PATTERNS = [
   /^127\./,
   /^10\./,
@@ -119,25 +121,21 @@ export async function runFreeSeoCheck(rawDomain: string): Promise<FreeSeoCheckRe
   };
 
   const fetchAeo = async (): Promise<number> => {
-    const geminiKey = process.env.GEMINI_API_KEY;
-    if (!geminiKey) return 50;
+    const hasAiKey = Boolean(process.env.GEMINI_API_KEY || process.env.DEEPSEEK_API_KEY);
+    if (!hasAiKey) return 50;
     const prompt = `You are an AEO (Answer Engine Optimisation) evaluator. On a scale of 0-100, how well would '${rawDomain}' likely appear in AI-generated answers? Just respond with a single integer, no explanation.`;
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 8 },
-        }),
-        signal: AbortSignal.timeout(6_000),
-      }
-    );
-    if (!r.ok) return 50;
-    const data = await r.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-    const raw = parseInt(data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "50", 10);
-    return Number.isNaN(raw) ? 50 : Math.max(0, Math.min(100, raw));
+    try {
+      const text = await callGemini(prompt, {
+        model: "gemini-3.8-flash",
+        maxOutputTokens: 8,
+        timeoutMs: 6_000,
+        maxRetries: 1,
+      });
+      const raw = parseInt(text.trim(), 10);
+      return Number.isNaN(raw) ? 50 : Math.max(0, Math.min(100, raw));
+    } catch {
+      return 50;
+    }
   };
 
   const [htmlResult, speedResult, aeoResult] = await Promise.allSettled([

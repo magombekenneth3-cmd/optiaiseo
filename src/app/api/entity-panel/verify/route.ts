@@ -4,7 +4,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
-import { GoogleGenAI } from "@google/genai";
+import { callGemini } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { rateLimit, checkRateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
@@ -70,13 +70,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Fact not found" }, { status: 404 });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.GEMINI_API_KEY && !process.env.DEEPSEEK_API_KEY) {
         return NextResponse.json({ error: "Gemini API not configured" }, { status: 503 });
     }
 
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
         const prompt = `You are verifying a brand fact for a Knowledge Graph.
 Domain: ${domain}
 Fact type: ${factType}
@@ -94,13 +92,12 @@ Respond ONLY with valid JSON (no markdown, no code fences):
   "explanation": "one sentence explanation"
 }`;
 
-        const result = await ai.models.generateContent({
+        const rawText = await callGemini(prompt, {
             model: AI_MODELS.GEMINI_FLASH,
-            contents: prompt,
-            config: { responseMimeType: "application/json" },
+            responseFormat: "json",
         });
 
-        const text = result.text?.trim() || "{}";
+        const text = rawText.trim() || "{}";
         const clean = text
             .replace(/^```json\s*/i, "")
             .replace(/^```\s*/i, "")

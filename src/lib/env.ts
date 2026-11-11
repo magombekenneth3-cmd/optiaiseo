@@ -18,6 +18,7 @@ const envSchema = z.object({
     OPENAI_API_KEY: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
     OPENROUTER_API_KEY: z.string().optional(),
+    DEEPSEEK_API_KEY: z.string().optional(),
     PERPLEXITY_API_KEY: z.string().optional(),
     SERPER_API_KEY: z.string().optional(),
     RESEND_API_KEY: z.string().optional(),

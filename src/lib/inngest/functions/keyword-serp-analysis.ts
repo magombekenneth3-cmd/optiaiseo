@@ -6,7 +6,7 @@ import { logger } from "@/lib/logger";
 import { getSerpContextForKeyword, scrapePageData } from "@/lib/blog/serp";
 import { getBacklinkSummary, getCompetitorBacklinkGap } from "@/lib/backlinks";
 import { getCompetitorAuthorityComparison } from "@/lib/seo/competitor-authority";
-import { GoogleGenAI } from "@google/genai";
+import { callGemini } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { hasFeature } from "@/lib/stripe/plans";
 
@@ -178,11 +178,6 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
                 Math.max(1, Math.min(3, authorityComp.competitors.length))
                 : 0;
 
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY!, httpOptions: { timeout: 90_000 } });
-
-            // FIX 1: Sample ALL 10 SERP results for headings so the ≥3/10 frequency
-            // threshold is actually computable. Previously only 5 were sampled, making
-            // it impossible to reliably reach the 3-occurrence bar.
             const allSerpH2s = serpContext.results
                 .slice(0, 10)
                 .flatMap(r => r.scrapedHeadings ?? [])
@@ -229,15 +224,14 @@ USER PAGE: url=${landingPageUrl} h2s=${JSON.stringify(userH2s.length > 0 ? userH
 AUTHORITY: clientDR=${clientDR} clientRDs=${clientRDs} pageRDs=${pageBacklinks} toxic=${toxicCount} drGap=${drGap ?? "unknown"} top3AvgDR=${Math.round(top3Avg)}
 ANCHORS: ${JSON.stringify(topAnchors.slice(0, 5))}`;
 
-            const response = await ai.models.generateContent({
+            const rawResponseText = await callGemini(prompt, {
                 model: AI_MODELS.GEMINI_PRO,
-                contents: prompt,
-                config: { responseMimeType: "application/json", maxOutputTokens: 3000 },
+                responseFormat: "json",
+                maxOutputTokens: 3000,
+                timeoutMs: 60000,
             });
 
-            // FIX 3: Log the raw response before parsing so failures are diagnosable,
-            // and strip any accidental markdown fences Gemini might still emit.
-            const rawText = (response.text ?? "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+            const rawText = rawResponseText.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
             try {
                 const parsed = JSON.parse(rawText) as {
                     fixes: unknown[];

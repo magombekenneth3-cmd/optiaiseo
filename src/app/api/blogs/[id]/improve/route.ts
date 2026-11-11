@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { prisma } from "@/lib/prisma";
-import { GoogleGenAI } from "@google/genai";
+import { callGemini } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { z } from "zod";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -33,12 +33,11 @@ export async function POST(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const apiKey = process.env.GEMINI_API_KEY;
+        const apiKey = process.env.GEMINI_API_KEY || process.env.DEEPSEEK_API_KEY;
         if (!apiKey) {
             return NextResponse.json({ error: "GEMINI_API_KEY is not configured" }, { status: 500 });
         }
 
-        const ai = new GoogleGenAI({ apiKey });
         const user = await getAuthUser(req);
         if (!user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -121,13 +120,14 @@ IMPORTANT RULES:
 CURRENT CONTENT:
 ${contentForPrompt}`;
 
-        const response = await ai.models.generateContent({
+        const rawContent = await callGemini(prompt, {
             model: AI_MODELS.GEMINI_PRO,
-            contents: prompt,
-            config: { temperature: 0.2, maxOutputTokens: 16384 },
+            temperature: 0.2,
+            maxOutputTokens: 16384,
+            timeoutMs: 60000,
         });
 
-        const improvedContent = response.text?.trim();
+        const improvedContent = rawContent.trim();
         if (!improvedContent) {
             return NextResponse.json({ error: "AI returned empty response" }, { status: 500 });
         }

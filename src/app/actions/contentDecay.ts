@@ -6,6 +6,8 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth/require-user";
 import { getAiClient, buildBlogResponseSchema, GeminiBlogResponse, buildPost, evaluateDraftForPublication } from "@/lib/blog";
+import { hasConfiguredAiProvider } from "@/lib/blog/ai-client";
+import { callGeminiJson } from "@/lib/gemini/client";
 import { buildPromptContext } from "@/lib/blog/prompt-context";
 import { fetchGSCDecayData, normaliseSiteUrl } from "@/lib/gsc";
 import { revalidatePath } from "next/cache";
@@ -300,7 +302,7 @@ export async function refreshDecayingContent(
 
 
         const ai = getAiClient();
-        if (!ai) return { success: false, error: "Gemini AI is not configured." };
+        if (!ai && !hasConfiguredAiProvider()) return { success: false, error: "Gemini AI is not configured." };
 
         const ctx = buildPromptContext({
             keyword: primaryKeyword,
@@ -360,18 +362,31 @@ STRICT STRUCTURAL REQUIREMENTS:
 Generate the fully modernised, refreshed version of this post now.`;
 
 
-        const response = await ai.models.generateContent({
-            model: AI_MODELS.GEMINI_FLASH,
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: buildBlogResponseSchema(ctx),
-            },
-        });
-
-        if (!response.text) return { success: false, error: "AI returned empty content." };
-
-        const parsedResponse = JSON.parse(response.text) as GeminiBlogResponse;
+        let parsedResponse: GeminiBlogResponse;
+        if (ai) {
+            try {
+                const response = await ai.models.generateContent({
+                    model: AI_MODELS.GEMINI_FLASH,
+                    contents: prompt,
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: buildBlogResponseSchema(ctx),
+                    },
+                });
+                if (!response.text) throw new Error("AI returned empty content.");
+                parsedResponse = JSON.parse(response.text) as GeminiBlogResponse;
+            } catch {
+                parsedResponse = await callGeminiJson<GeminiBlogResponse>(
+                    `${prompt}\n\nRespond ONLY with valid JSON containing keys: title, slug, metaDescription, content, targetKeywords, faqItems.`,
+                    { model: AI_MODELS.GEMINI_FLASH, maxOutputTokens: 8192, timeoutMs: 60000 }
+                );
+            }
+        } else {
+            parsedResponse = await callGeminiJson<GeminiBlogResponse>(
+                `${prompt}\n\nRespond ONLY with valid JSON containing keys: title, slug, metaDescription, content, targetKeywords, faqItems.`,
+                { model: AI_MODELS.GEMINI_FLASH, maxOutputTokens: 8192, timeoutMs: 60000 }
+            );
+        }
 
         // Prepend a refresh notice so editors know this is an AI-refreshed draft
         parsedResponse.content = `> **2026 Content Refresh:** This guide has been completely updated and structurally modernised for current SEO best practices.\n\n${parsedResponse.content}`;

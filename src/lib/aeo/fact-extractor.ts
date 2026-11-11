@@ -3,6 +3,7 @@ import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { prisma } from "@/lib/prisma";
 import { submitUrlForIndexing } from "@/lib/indexer";
 import { AI_MODELS } from "@/lib/constants/ai-models";
+import { callGemini } from "@/lib/gemini/client";
 
 
 const factSchema: Schema = {
@@ -32,11 +33,9 @@ const factSchema: Schema = {
  * These facts feed the Knowledge Graph to ensure LLMs have accurate data.
  */
 export async function extractFactsFromContent(siteId: string, content: string, sourceUrl?: string) {
-    if (!process.env.GEMINI_API_KEY) return [];
+    if (!process.env.GEMINI_API_KEY && !process.env.DEEPSEEK_API_KEY) return [];
 
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
         const prompt = `
             Analyze this 2026-standard blog content and extract definitive brand facts.
             Only extract facts that are stated clearly. Do not hallucinate.
@@ -48,21 +47,41 @@ export async function extractFactsFromContent(siteId: string, content: string, s
             - SERVICE_OFFERING: Core products or digital services mentioned.
             - BRAND_CLAIM: Specific unique value propositions or statistics (e.g., "500% ROI").
 
+            Respond in JSON format: { "facts": [{ "factType": "PRICING"|"LOCATION"|"FOUNDER"|"SERVICE_OFFERING"|"BRAND_CLAIM", "value": string, "verified": boolean }] }
+
             Content to Analyze:
-            ${content.substring(0, 10000)} // Limit to reasonable length
+            ${content.substring(0, 10000)}
         `;
 
-        const response = await ai.models.generateContent({
-            model: AI_MODELS.GEMINI_PRO,
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: factSchema
+        let rawText = "";
+        if (process.env.GEMINI_API_KEY) {
+            try {
+                const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+                const response = await ai.models.generateContent({
+                    model: AI_MODELS.GEMINI_PRO,
+                    contents: prompt,
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: factSchema
+                    }
+                });
+                rawText = response.text ?? "";
+            } catch {
+                rawText = await callGemini(prompt, {
+                    model: AI_MODELS.GEMINI_PRO,
+                    responseFormat: "json",
+                });
             }
-        });
+        } else {
+            rawText = await callGemini(prompt, {
+                model: AI_MODELS.GEMINI_PRO,
+                responseFormat: "json",
+            });
+        }
 
-        if (!response.text) throw new Error("Gemini returned empty text.");
-        const data = JSON.parse(response.text);
+        if (!rawText) throw new Error("Gemini returned empty text.");
+        const cleaned = rawText.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+        const data = JSON.parse(cleaned);
         const facts = data.facts || [];
 
         // Save to DB

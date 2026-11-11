@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { prisma } from "@/lib/prisma";
 import { fetchSerp } from "@/lib/serp/serp-features";
-import { GoogleGenAI } from "@google/genai";
+import { callGemini } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { consumeCredits } from "@/lib/credits";
 
@@ -92,16 +92,13 @@ export async function POST(
     const currentSnippet = answerBox?.answer ?? answerBox?.snippet ?? "";
     const format = currentSnippet ? classifySnippet(currentSnippet) : inferFormatFromKeyword(keyword);
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
     const prompt = PROMPTS[format](keyword, currentSnippet);
-
-    const response = await ai.models.generateContent({
+    const rawBlock = await callGemini(prompt, {
         model: AI_MODELS.GEMINI_FLASH,
-        contents: prompt,
-        config: { temperature: 0.3, maxOutputTokens: 500 },
+        temperature: 0.3,
+        maxOutputTokens: 500,
     });
-
-    const optimizedBlock = response.text?.trim() ?? "";
+    const optimizedBlock = rawBlock.trim();
 
     const insertionGuidance =
         format === "list"

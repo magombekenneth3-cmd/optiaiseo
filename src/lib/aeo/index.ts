@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { cachedQuestions } from "./response-cache";
 import { isSafeUrl } from "@/lib/security/safe-url";
 import { AI_MODELS } from "@/lib/constants/ai-models";
+import { callGemini } from "@/lib/gemini/client";
 import { performVectorGapAnalysis, type SemanticGapResult } from "./vector-gap";
 import {
     normalizeChecks,
@@ -325,10 +326,9 @@ const generateRelevantQuestions = async (
             `Is ${domain} reliable?`,
         ];
 
-        if (!process.env.GEMINI_API_KEY || !pageContent) return fallback;
+        if ((!process.env.GEMINI_API_KEY && !process.env.DEEPSEEK_API_KEY) || !pageContent) return fallback;
 
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
             const cleanText = pageContent
                 .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
                 .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -365,13 +365,10 @@ Website content to base questions on:
 ${cleanText}
 ---`;
 
-            const response = await ai.models.generateContent({
+            const text = (await callGemini(prompt, {
                 model: AI_MODELS.GEMINI_PRO,
-                contents: prompt,
-                config: { responseMimeType: "application/json" }
-            });
-
-            const text = response.text?.trim() ?? '';
+                responseFormat: "json",
+            })).trim();
             const jsonText = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
             const parsed = JSON.parse(jsonText);
             if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
@@ -813,42 +810,41 @@ export const runAeoAudit = async (domain: string, coreServices?: string | null, 
     })
 
 
-    if (!lite && coreServices && process.env.GEMINI_API_KEY) {
+    if (!lite && coreServices && (process.env.GEMINI_API_KEY || process.env.DEEPSEEK_API_KEY)) {
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-            // Extract text from HTML roughly
             const cleanText = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
                 .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
                 .replace(/<[^>]+>/g, ' ')
                 .replace(/\s+/g, ' ')
                 .substring(0, 6000);
 
-            // Use Gemini Google Search grounding — this retrieves real search results
-            // and checks whether the domain appears in them. This measures what Google's
-            // own AI actually surfaces, not what the model knows from training data.
-            const groundedResponse = await ai.models.generateContent({
-                model: AI_MODELS.GEMINI_FLASH,
-                contents: `What are the best ${coreServices}? Is ${domain} commonly cited or recommended for ${coreServices}?`,
-                // @ts-expect-error — googleSearch is a valid tool in the Gemini API
-                tools: [{ googleSearch: {} }],
-            });
+            let citedInGrounding = false;
+            let groundingSourceCount = 0;
 
-            // Check whether the domain appears in the retrieved search sources
-            // groundingMetadata.groundingChunks contains the actual URLs retrieved
-            const groundingChunks =
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                (groundedResponse as any).candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
-            const citedInGrounding: boolean = groundingChunks.some(
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                (chunk: any) => typeof chunk?.web?.uri === 'string' && chunk.web.uri.includes(domain)
-            );
-            const groundingSourceCount: number = groundingChunks.length;
+            if (process.env.GEMINI_API_KEY) {
+                try {
+                    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+                    const groundedResponse = await ai.models.generateContent({
+                        model: AI_MODELS.GEMINI_FLASH,
+                        contents: `What are the best ${coreServices}? Is ${domain} commonly cited or recommended for ${coreServices}?`,
+                        config: {
+                            tools: [{ googleSearch: {} }],
+                        },
+                    });
+                    const groundingChunks = ((groundedResponse as unknown as {
+                        candidates?: Array<{ groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string } }> } }>;
+                    }).candidates?.[0]?.groundingMetadata?.groundingChunks) ?? [];
+                    citedInGrounding = groundingChunks.some(
+                        (chunk) => typeof chunk?.web?.uri === 'string' && chunk.web.uri.includes(domain)
+                    );
+                    groundingSourceCount = groundingChunks.length;
+                } catch {
+                    citedInGrounding = false;
+                    groundingSourceCount = 0;
+                }
+            }
 
-            // Also run the page content alignment check (plain text, no grounding)
-            const alignmentResponse = await ai.models.generateContent({
-                model: AI_MODELS.GEMINI_FLASH,
-                contents: `
+            const alignmentPrompt = `
 You are an SEO analyzer. Evaluate if the following webpage content clearly communicates its core services.
 Core Services: "${coreServices}"
 
@@ -864,13 +860,12 @@ Webpage Content:
 ---
 ${cleanText}
 ---
-`,
-                config: {
-                    responseMimeType: "application/json",
-                }
-            });
+`;
 
-            const resultText = alignmentResponse.text;
+            const resultText = await callGemini(alignmentPrompt, {
+                model: AI_MODELS.GEMINI_FLASH,
+                responseFormat: "json",
+            });
             if (resultText) {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 let alignment: any;

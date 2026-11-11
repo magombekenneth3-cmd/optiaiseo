@@ -1,5 +1,6 @@
 import { logger, formatError } from "@/lib/logger";
 import { AI_MODELS } from "@/lib/constants/ai-models";
+import { callGemini } from "@/lib/gemini/client";
 import { getKeywordMetricsBatch, resolveLocationCode } from "./dataforseo";
 import { getKeywordIdeas } from "@/lib/ubersuggest";
 import { getAhrefsTopKeywords } from "@/lib/ahrefs";
@@ -216,11 +217,9 @@ interface IntentResponse {
 export const classifyIntentWithAI = async (
     keywords: EnrichedKeyword[]
 ): Promise<EnrichedKeyword[]> => {
-    if (!process.env.GEMINI_API_KEY || keywords.length === 0) return keywords;
+    if ((!process.env.GEMINI_API_KEY && !process.env.DEEPSEEK_API_KEY) || keywords.length === 0) return keywords;
 
     try {
-        const { GoogleGenAI } = await import("@google/genai");
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         const chunkSize = 50;
         const results = [...keywords];
 
@@ -242,13 +241,11 @@ export const classifyIntentWithAI = async (
                 }
             `;
 
-            const response = await ai.models.generateContent({
+            const text = await callGemini(prompt, {
                 model: AI_MODELS.GEMINI_FLASH,
-                contents: prompt,
-                config: { responseMimeType: "application/json" },
+                responseFormat: "json",
             });
 
-            const text = response.text;
             if (text) {
                 const mapping: IntentResponse = JSON.parse(
                     text.replace(/```json|```/g, "").trim()
@@ -282,7 +279,7 @@ export const clusterKeywords = async (
 ): Promise<KeywordCluster[]> => {
     if (keywords.length === 0) return [];
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.GEMINI_API_KEY && !process.env.DEEPSEEK_API_KEY) {
         const clusters = new Map<string, EnrichedKeyword[]>();
         keywords.forEach((kw) => {
             const firstWord = kw.keyword.split(" ")[0].toLowerCase();
@@ -317,9 +314,6 @@ export const clusterKeywords = async (
     }
 
     try {
-        const { GoogleGenAI } = await import("@google/genai");
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
         const keywordList = keywords.map((k) => k.keyword).join(", ");
         const prompt = `
             Group the following keywords into semantic clusters based on search intent and topic.
@@ -336,12 +330,10 @@ export const clusterKeywords = async (
         let responseText: string | null | undefined = null;
 
         try {
-            const result = await ai.models.generateContent({
+            responseText = await callGemini(prompt, {
                 model: AI_MODELS.GEMINI_FLASH,
-                contents: prompt,
-                config: { responseMimeType: "application/json" },
+                responseFormat: "json",
             });
-            responseText = result.text;
         } catch (geminiErr: unknown) {
             const message = (geminiErr as Error)?.message ?? "";
             const is429 =

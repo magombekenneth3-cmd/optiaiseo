@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import { GoogleGenAI } from "@google/genai";
+import { callGemini } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 
 
@@ -21,14 +21,11 @@ export interface FactVerificationResult {
  * All fact checks run in parallel via Promise.all() to minimise audit latency.
  */
 export async function verifyBrandFacts(domain: string, facts: { label: string; value: string }[]): Promise<FactVerificationResult> {
-    if (!process.env.GEMINI_API_KEY || facts.length === 0) {
+    if ((!process.env.GEMINI_API_KEY && !process.env.DEEPSEEK_API_KEY) || facts.length === 0) {
         return { score: 0, checks: [] };
     }
 
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-        // Run all fact verifications in parallel — each is an independent check
         const checkResults = await Promise.all(
             facts.map(async (fact): Promise<FactCheck> => {
                 const prompt = `
@@ -51,13 +48,12 @@ export async function verifyBrandFacts(domain: string, facts: { label: string; v
             `;
 
                 try {
-                    const result = await ai.models.generateContent({
+                    const rawText = await callGemini(prompt, {
                         model: AI_MODELS.GEMINI_FLASH,
-                        contents: prompt,
-                        config: { responseMimeType: "application/json" }
+                        responseFormat: "json",
                     });
 
-                    const text = result.text?.trim() || "{}";
+                    const text = rawText.trim() || "{}";
                     const cleanJson = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
                     const data = JSON.parse(cleanJson);
 
