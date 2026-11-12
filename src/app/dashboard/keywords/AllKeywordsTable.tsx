@@ -11,7 +11,7 @@ const CTR_BENCH: Record<number, number> = {
 };
 
 function benchCtr(pos: number) {
-    if (pos <= 10) return CTR_BENCH[pos] ?? 2.4;
+    if (pos <= 10) return CTR_BENCH[Math.max(1, Math.min(10, Math.round(pos)))] ?? 2.4;
     return 0;
 }
 
@@ -29,7 +29,8 @@ interface GscKeyword {
 
 function opportunityClicks(kw: GscKeyword) {
     if (kw.position <= 3) return 0;
-    return Math.max(0, Math.round(kw.impressions * 0.278) - kw.clicks);
+    const targetCtr = kw.position <= 10 ? 0.11 : 0.084;
+    return Math.max(0, Math.round(kw.impressions * targetCtr) - kw.clicks);
 }
 
 function opportunityLabel(kw: GscKeyword) {
@@ -56,9 +57,23 @@ type SortKey = "opportunity" | "position" | "impressions" | "clicks" | "ctr";
 type SortDir = "asc" | "desc";
 const PAGE_INCREMENT = 100;
 
-export function AllKeywordsTable({ keywords, siteId }: { keywords: GscKeyword[]; siteId: string }) {
+export function AllKeywordsTable({
+    keywords,
+    siteId,
+    initialFilter = "all",
+}: {
+    keywords: GscKeyword[];
+    siteId: string;
+    initialFilter?: FilterTab;
+}) {
     const [query, setQuery] = useState("");
-    const [tab, setTab] = useState<FilterTab>("all");
+    const [tab, setTab] = useState<FilterTab>(initialFilter);
+
+    useEffect(() => {
+        if (initialFilter && initialFilter !== "all") {
+            setTab(initialFilter);
+        }
+    }, [initialFilter]);
     const [sortKey, setSortKey] = useState<SortKey>("opportunity");
     const [sortDir, setSortDir] = useState<SortDir>("desc");
     const [drawerKw, setDrawerKw] = useState<DrawerKeyword | null>(null);

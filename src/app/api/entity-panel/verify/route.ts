@@ -125,7 +125,7 @@ Respond ONLY with valid JSON (no markdown, no code fences):
             await prisma.brandFact.update({
                 where: { id: factId },
                 data: { verified: true },
-            }).catch(() => {/* non-fatal */});
+            }).catch(() => {/* non-fatal */ });
         }
 
         return NextResponse.json({

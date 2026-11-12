@@ -3,7 +3,8 @@ import { NonRetriableError }  from "inngest";
 import { prisma } from "@/lib/prisma";
 import { logger }             from "@/lib/logger";
 import { CONCURRENCY }        from "../concurrency";
-import { getSerpData, getKeywordMetricsBatch } from "@/lib/keywords/dataforseo";
+import { getSerpData, getKeywordMetricsBatch, getKeywordDifficultyBatch } from "@/lib/keywords/dataforseo";
+import { classifyIntent }                      from "@/lib/gsc";
 import { writeVisibilitySnapshot }             from "@/lib/keywords/visibility-score";
 import { dispatchWebhooks }                    from "@/lib/alerts/webhook-dispatcher";
 
@@ -28,6 +29,11 @@ export const trackedRankCheckerSiteJob = inngest.createFunction(
             throw new NonRetriableError("DATAFORSEO_LOGIN not set — dropping job");
 
         const { siteId, domain } = event.data as { siteId: string; domain: string };
+        const cleanDomain = domain
+            .replace(/^https?:\/\//i, "")
+            .replace(/^www\./i, "")
+            .replace(/\/.*$/, "")
+            .toLowerCase();
 
         const keywords = await step.run("load-tracked-keywords", () =>
             prisma.trackedKeyword.findMany({
@@ -40,13 +46,37 @@ export const trackedRankCheckerSiteJob = inngest.createFunction(
 
         const metricsRaw = await step.run("enrich-volume-cpc", async () => {
             try {
-                const map = await getKeywordMetricsBatch(
-                    keywords.map((k) => k.keyword),
-                    keywords[0].locationCode,
-                );
-                return Object.fromEntries(map) as Record<string, { searchVolume: number; cpc: number }>;
+                const byLocation = new Map<number, string[]>();
+                for (const k of keywords) {
+                    const loc = k.locationCode || 2840;
+                    const list = byLocation.get(loc) ?? [];
+                    list.push(k.keyword);
+                    byLocation.set(loc, list);
+                }
+
+                const combined: Record<string, { searchVolume: number; cpc: number; difficulty: number | null }> = {};
+                for (const [loc, kwList] of byLocation.entries()) {
+                    const [volMap, kdMap] = await Promise.all([
+                        getKeywordMetricsBatch(kwList, loc).catch(() => new Map<string, { searchVolume: number; cpc: number }>()),
+                        getKeywordDifficultyBatch(kwList, loc).catch(() => new Map<string, number>()),
+                    ]);
+                    for (const [kw, m] of volMap.entries()) {
+                        combined[kw.toLowerCase()] = {
+                            searchVolume: m.searchVolume,
+                            cpc: m.cpc,
+                            difficulty: kdMap.get(kw.toLowerCase()) ?? null,
+                        };
+                    }
+                    for (const [kw, kd] of kdMap.entries()) {
+                        const lower = kw.toLowerCase();
+                        if (!combined[lower]) {
+                            combined[lower] = { searchVolume: 0, cpc: 0, difficulty: kd };
+                        }
+                    }
+                }
+                return combined;
             } catch {
-                return {} as Record<string, { searchVolume: number; cpc: number }>;
+                return {} as Record<string, { searchVolume: number; cpc: number; difficulty: number | null }>;
             }
         });
 
@@ -80,10 +110,17 @@ export const trackedRankCheckerSiteJob = inngest.createFunction(
                     chunk.map(async (kw) => {
                         const { urls, features } = await getSerpData(kw.keyword, kw.locationCode, 20);
 
-                        const myUrl = urls.find((u) => {
-                            try { return new URL(u).hostname.replace(/^www\./, "") === domain; }
-                            catch { return false; }
-                        });
+                        const matchesSiteDomain = (rawUrl?: string): boolean => {
+                            if (!rawUrl) return false;
+                            try {
+                                const host = new URL(rawUrl).hostname.replace(/^www\./i, "").toLowerCase();
+                                return host === cleanDomain || host.endsWith(`.${cleanDomain}`);
+                            } catch {
+                                return false;
+                            }
+                        };
+
+                        const myUrl = urls.find((u) => matchesSiteDomain(u));
                         const position = myUrl ? urls.indexOf(myUrl) + 1 : 0;
                         const metrics  = metricsRaw[kw.keyword.toLowerCase()];
 
@@ -91,13 +128,11 @@ export const trackedRankCheckerSiteJob = inngest.createFunction(
 
                         const aioItems = features.items.filter(i => i.type === "ai_overview");
                         const brandInAio = aioItems.some(item => {
-                            const refs: string[] = (item as { references?: string[] }).references ?? [];
-                            return refs.some(ref => {
-                                try {
-                                    return new URL(ref).hostname.replace(/^www\./, "") === domain;
-                                } catch {
-                                    return false;
-                                }
+                            const rawRefs = (item as { references?: Array<string | { url?: string }>; url?: string }).references ?? [];
+                            if (matchesSiteDomain(item.url)) return true;
+                            return rawRefs.some(ref => {
+                                const u = typeof ref === "string" ? ref : ref?.url;
+                                return matchesSiteDomain(u);
                             });
                         });
 
@@ -107,10 +142,10 @@ export const trackedRankCheckerSiteJob = inngest.createFunction(
                             device:       kw.device,
                             position,
                             url:          myUrl ?? null,
-                            searchVolume: metrics?.searchVolume                  ?? null,
-                            cpc:          metrics?.cpc                           ?? null,
-                            difficulty:   (metrics as { difficulty?: number })?.difficulty ?? null,
-                            intent:       (metrics as { intent?: string })?.intent         ?? null,
+                            searchVolume: metrics?.searchVolume ?? null,
+                            cpc:          metrics?.cpc          ?? null,
+                            difficulty:   metrics?.difficulty   ?? null,
+                            intent:       classifyIntent(kw.keyword),
                             serpData: {
                                 hasAiOverview: itemTypes.includes("ai_overview"),
                                 hasSnippet:    features.hasAnswerBox || itemTypes.includes("featured_snippet"),
@@ -152,8 +187,20 @@ export const trackedRankCheckerSiteJob = inngest.createFunction(
 
         const serpRows = snapshots.filter((s) => s.serpData);
         if (serpRows.length > 0) {
-            await step.run("upsert-serp-features", () =>
-                Promise.all(
+            await step.run("upsert-serp-features", async () => {
+                await prisma.serpFeatureSnapshot.createMany({
+                    data: serpRows.map((s) => ({
+                        siteId,
+                        keyword:       s.keyword,
+                        hasAiOverview: s.serpData!.hasAiOverview,
+                        hasSnippet:    s.serpData!.hasSnippet,
+                        hasPaa:        s.serpData!.hasPaa,
+                        hasLocalPack:  s.serpData!.hasLocalPack,
+                        hasVideo:      s.serpData!.hasVideo,
+                        brandInAio:    s.serpData!.brandInAio,
+                    })),
+                });
+                await Promise.all(
                     serpRows.map((s) =>
                         prisma.serpFeature.upsert({
                             where:  { siteId_keyword: { siteId, keyword: s.keyword } },
@@ -178,25 +225,25 @@ export const trackedRankCheckerSiteJob = inngest.createFunction(
                             },
                         })
                     )
-                )
-            );
+                );
+            });
         }
 
         await step.run("dispatch-rank-webhooks", async () => {
             const todayMidnight = new Date();
             todayMidnight.setHours(0, 0, 0, 0);
-            const yesterdayMidnight = new Date(todayMidnight);
-            yesterdayMidnight.setDate(yesterdayMidnight.getDate() - 1);
+            const lookbackStart = new Date(todayMidnight);
+            lookbackStart.setDate(lookbackStart.getDate() - 14);
 
             const prevSnaps = await prisma.rankSnapshot.findMany({
                 where: {
                     siteId,
                     keyword:    { in: snapshots.map((s) => s.keyword) },
-                    recordedAt: { gte: yesterdayMidnight, lt: todayMidnight },
+                    recordedAt: { gte: lookbackStart, lt: todayMidnight },
                 },
                 select:   { keyword: true, position: true, recordedAt: true },
                 orderBy:  { recordedAt: "desc" },
-                take:     snapshots.length * 2,
+                take:     snapshots.length * 4,
                 distinct: ["keyword"],
             });
             const prevMap = new Map(prevSnaps.map((p) => [p.keyword, p.position]));
@@ -208,9 +255,19 @@ export const trackedRankCheckerSiteJob = inngest.createFunction(
             if (!siteRecord) return;
 
             for (const snap of snapshots) {
-                if (snap.position === 0) continue;
                 const prev = prevMap.get(snap.keyword);
                 if (prev === undefined) continue;
+
+                if (snap.position === 0 && prev > 0) {
+                    await dispatchWebhooks(siteRecord, {
+                        event:   "rank_drop",
+                        summary: `"${snap.keyword}" dropped out of top 20 (was #${prev})`,
+                        details: { keyword: snap.keyword, previousPos: prev, newPos: "Unranked (>20)", delta: 21 - prev },
+                    });
+                    continue;
+                }
+                if (snap.position === 0 || prev === 0) continue;
+
                 const delta = prev - snap.position;
 
                 if (delta >= 5) {
@@ -230,11 +287,12 @@ export const trackedRankCheckerSiteJob = inngest.createFunction(
         });
 
         await step.run("write-visibility-snapshot", async () => {
-            const visible = snapshots
-                .filter((s) => s.position > 0)
-                .map((s) => ({ position: s.position, searchVolume: s.searchVolume }));
-            if (visible.length > 0) {
-                await writeVisibilitySnapshot(siteId, visible);
+            const allTracked = snapshots.map((s) => ({
+                position:     s.position,
+                searchVolume: s.searchVolume,
+            }));
+            if (allTracked.length > 0) {
+                await writeVisibilitySnapshot(siteId, allTracked);
             }
         });
 

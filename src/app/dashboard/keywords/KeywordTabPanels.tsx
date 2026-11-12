@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search } from "lucide-react";
 import { PanelErrorBoundary } from "@/components/PanelErrorBoundary";
 import { KeywordPlaybookPanel } from "@/components/dashboard/KeywordPlaybookPanel";
@@ -23,9 +23,9 @@ const TABS = [
     { id: "keywords",      label: "Keywords",      desc: "Full keyword rankings from Search Console", needsGsc: true },
     { id: "opportunities", label: "Opportunities", desc: "AI-ranked actions to improve rankings",      needsGsc: true },
     { id: "research",      label: "Research",      desc: "Discover new keyword opportunities",         needsGsc: false },
-    { id: "competitors",   label: "Competitors",   desc: "Benchmark against rivals",                   needsGsc: true },
-    { id: "tracked",       label: "Tracked",       desc: "Position history & rank tracking",           needsGsc: true },
-    { id: "authority",     label: "Authority Map",  desc: "Topical clusters, pillar/spoke coverage",    needsGsc: true },
+    { id: "competitors",   label: "Competitors",   desc: "Benchmark against rivals",                   needsGsc: false },
+    { id: "tracked",       label: "Tracked",       desc: "Position history & rank tracking",           needsGsc: false },
+    { id: "authority",     label: "Authority Map",  desc: "Topical clusters, pillar/spoke coverage",    needsGsc: false },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];
@@ -84,6 +84,19 @@ export function KeywordTabPanels({
 }: Props) {
     // FIX #5: Default to Research tab when GSC is unavailable
     const [activeTab, setActiveTab] = useState<TabId>(gscAvailable ? "keywords" : "research");
+    const [initialFilterTab, setInitialFilterTab] = useState<"all" | "critical">("all");
+
+    useEffect(() => {
+        const handleHash = () => {
+            if (window.location.hash === "#workspace-critical") {
+                setActiveTab("keywords");
+                setInitialFilterTab("critical");
+            }
+        };
+        handleHash();
+        window.addEventListener("hashchange", handleHash);
+        return () => window.removeEventListener("hashchange", handleHash);
+    }, []);
 
     const needAttention = keywords.filter(k => k.position > 10).length;
     const badges: Partial<Record<TabId, number>> = {};
@@ -137,7 +150,7 @@ export function KeywordTabPanels({
                     <PanelErrorBoundary fallbackTitle="Keywords table failed to load">
                         {gscAvailable ? (
                             <>
-                                <AllKeywordsTable keywords={keywords} siteId={siteId} />
+                                <AllKeywordsTable keywords={keywords} siteId={siteId} initialFilter={initialFilterTab} />
                                 {keywords.length > 0 && (
                                     <div className="flex flex-col gap-4 p-5 border-t border-border/60">
                                         <PositionDistributionChart keywords={keywords} />
@@ -174,41 +187,29 @@ export function KeywordTabPanels({
                 )}
                 {activeTab === "competitors" && (
                     <PanelErrorBoundary fallbackTitle="Competitors panel failed to load">
-                        {gscAvailable ? (
-                            <div className="p-5">
-                                <CompetitorManager siteId={siteId} initialCompetitors={competitors as never} />
-                            </div>
-                        ) : (
-                            <GscRequiredBanner tabLabel="Competitors" />
-                        )}
+                        <div className="p-5">
+                            <CompetitorManager siteId={siteId} initialCompetitors={competitors as never} />
+                        </div>
                     </PanelErrorBoundary>
                 )}
                 {activeTab === "tracked" && (
                     <PanelErrorBoundary fallbackTitle="Tracked Keywords panel failed to load">
-                        {gscAvailable ? (
-                            <div className="flex flex-col gap-4 p-5">
-                                {hasRankTracking ? (
-                                    <TrackedKeywordsPanel key={siteId} siteId={siteId} initialData={trackedKeywordsData} tier={userTier} maxTracked={maxTracked} />
-                                ) : (
-                                    <div className="py-12 text-center text-muted-foreground text-sm">Rank tracking is available on the Pro plan and above.</div>
-                                )}
-                                {hasShareOfVoice && <ShareOfVoiceChart siteId={siteId} />}
-                                <SerpFeatureHistoryPanel siteId={siteId} />
-                            </div>
-                        ) : (
-                            <GscRequiredBanner tabLabel="Tracked Keywords" />
-                        )}
+                        <div className="flex flex-col gap-4 p-5">
+                            {hasRankTracking ? (
+                                <TrackedKeywordsPanel key={siteId} siteId={siteId} initialData={trackedKeywordsData} tier={userTier} maxTracked={maxTracked} />
+                            ) : (
+                                <div className="py-12 text-center text-muted-foreground text-sm">Rank tracking is available on the Starter plan and above.</div>
+                            )}
+                            {hasShareOfVoice && <ShareOfVoiceChart siteId={siteId} />}
+                            <SerpFeatureHistoryPanel siteId={siteId} />
+                        </div>
                     </PanelErrorBoundary>
                 )}
                 {activeTab === "authority" && (
                     <PanelErrorBoundary fallbackTitle="Authority Map failed to load">
-                        {gscAvailable ? (
-                            <div className="p-5">
-                                <TopicalAuthorityPanel siteId={siteId} />
-                            </div>
-                        ) : (
-                            <GscRequiredBanner tabLabel="Authority Map" />
-                        )}
+                        <div className="p-5">
+                            <TopicalAuthorityPanel siteId={siteId} />
+                        </div>
                     </PanelErrorBoundary>
                 )}
             </div>

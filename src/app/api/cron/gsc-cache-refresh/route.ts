@@ -80,16 +80,21 @@ export async function GET(req: NextRequest) {
                 const toQueue = page2Keywords.filter(k => !existingSet.has(k.keyword));
                 if (toQueue.length === 0) continue;
 
-                // Check credit balance — require at least 5 credits
+                // Check credit balance — require at least 5 credits per queued job
                 const user = await prisma.user.findUnique({
                     where: { id: site.userId },
-                    select: { credits: true },
+                    select: { credits: true, subscriptionTier: true },
                 });
-                if (!user || user.credits < 5) continue;
+                if (!user || user.credits < 5 || user.subscriptionTier === "FREE") continue;
+
+                // Cap auto-queued background analyses to at most 1 per site per weekly run
+                // and never exceed what the user's current credit balance can cover
+                const maxAffordable = Math.min(1, Math.floor(user.credits / 5));
+                if (maxAffordable <= 0) continue;
 
                 const { inngest } = await import("@/lib/inngest");
 
-                for (const kw of toQueue.slice(0, 5)) {
+                for (const kw of toQueue.slice(0, maxAffordable)) {
                     const analysis = await prisma.serpGapAnalysis.create({
                         data: {
                             siteId: site.id,

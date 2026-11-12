@@ -63,17 +63,24 @@ export async function POST(
     });
 
     const tier = (user?.subscriptionTier ?? "FREE").toUpperCase();
-    if (tier === "FREE") {
-        const existing = await prisma.serpGapAnalysis.count({ where: { userId } });
-        if (existing >= 1) {
-            return NextResponse.json(
-                { error: "Free plan includes 1 gap analysis. Upgrade to Pro for unlimited access." },
-                { status: 402 }
-            );
-        }
+    const [existingTotal, inFlightCount] = await Promise.all([
+        tier === "FREE"
+            ? prisma.serpGapAnalysis.count({ where: { userId, status: { not: "FAILED" } } })
+            : Promise.resolve(0),
+        prisma.serpGapAnalysis.count({
+            where: { userId, status: { in: ["PENDING", "SCRAPING", "PLANNING"] } },
+        }),
+    ]);
+
+    if (tier === "FREE" && existingTotal >= 1) {
+        return NextResponse.json(
+            { error: "Free plan includes 1 gap analysis. Upgrade to Pro for unlimited access." },
+            { status: 402 }
+        );
     }
 
-    if ((user?.credits ?? 0) < 5) {
+    const availableCredits = (user?.credits ?? 0) - inFlightCount * 5;
+    if (availableCredits < 5) {
         return NextResponse.json(
             { error: "Insufficient credits. Gap analysis costs 5 credits." },
             { status: 402 }

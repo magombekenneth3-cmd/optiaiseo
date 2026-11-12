@@ -84,8 +84,8 @@ export async function verifyBrandFacts(domain: string, facts: { label: string; v
         const score = Math.round((verifiedCount / facts.length) * 100);
 
         return { score, checks: checkResults };
-     
-     
+
+
     } catch (error: unknown) {
         logger.error("[Fact-Verification] Failed:", { error: (error as Error)?.message || String(error) });
         return { score: 0, checks: [] };

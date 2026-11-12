@@ -26,7 +26,7 @@ export type SerpFeatureSummary = {
     capturedAt: Date;
 };
 
-export async function fetchSerp(keyword: string): Promise<SerperResult | null> {
+export async function fetchSerp(keyword: string, gl = "us"): Promise<SerperResult | null> {
     const apiKey = process.env.SERPER_API_KEY;
     if (!apiKey) return null;
 
@@ -34,7 +34,7 @@ export async function fetchSerp(keyword: string): Promise<SerperResult | null> {
         const res = await fetch("https://google.serper.dev/search", {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-API-KEY": apiKey },
-            body: JSON.stringify({ q: keyword, gl: "us", hl: "en", num: 10 }),
+            body: JSON.stringify({ q: keyword, gl: gl.toLowerCase(), hl: "en", num: 10 }),
             signal: AbortSignal.timeout(SERP_TIMEOUT_MS),
         });
 
@@ -45,7 +45,21 @@ export async function fetchSerp(keyword: string): Promise<SerperResult | null> {
 }
 
 function stripDomain(domain: string): string {
-    return domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    return domain
+        .replace(/^https?:\/\//i, "")
+        .replace(/^www\./i, "")
+        .replace(/\/.*$/, "")
+        .toLowerCase();
+}
+
+function matchesDomain(rawUrl: string | undefined, cleanDomain: string): boolean {
+    if (!rawUrl || !cleanDomain) return false;
+    try {
+        const host = new URL(rawUrl).hostname.replace(/^www\./i, "").toLowerCase();
+        return host === cleanDomain || host.endsWith(`.${cleanDomain}`);
+    } catch {
+        return false;
+    }
 }
 
 function delay(ms: number): Promise<void> {
@@ -67,22 +81,30 @@ export async function captureSerpFeatures(
 
     const site = await prisma.site.findUnique({
         where: { id: siteId },
-        select: { userId: true },
+        select: { userId: true, location: true },
     });
     const userId = site?.userId;
+    const gl = site?.location && /^[a-z]{2}$/i.test(site.location.trim())
+        ? site.location.trim().toLowerCase()
+        : "us";
 
     for (const keyword of keywords.slice(0, cap)) {
-        const serp = await fetchSerp(keyword);
+        const serp = await fetchSerp(keyword, gl);
         if (!serp) continue;
 
         const hasAiOverview = !!serp.aiOverview;
         const brandInAio = hasAiOverview
-            ? (serp.aiOverview?.snippets ?? []).some((s) => s.link?.includes(domainStripped))
+            ? (serp.aiOverview?.snippets ?? []).some((s) => matchesDomain(s.link, domainStripped))
             : false;
 
         const answerBox = serp.answerBox as Record<string, string> | undefined;
-        const snippetText = answerBox?.answer ?? answerBox?.snippet ?? null;
+        const rawSnippet = answerBox?.answer ?? answerBox?.snippet ?? null;
         const hasSnippet = !!serp.answerBox;
+        const brandOwnsSnippet = hasSnippet && matchesDomain(answerBox?.link, domainStripped);
+        const ownerTag = `[owner:${domainStripped}]`;
+        const snippetText = brandOwnsSnippet
+            ? `${rawSnippet ?? ""} ${ownerTag}`.trim()
+            : rawSnippet;
         const hasPaa = (serp.peopleAlsoAsk?.length ?? 0) > 0;
         const hasLocalPack = !!serp.localResults;
         const hasVideo = (serp.videos?.length ?? 0) > 0;
@@ -91,6 +113,7 @@ export async function captureSerpFeatures(
         const oldFeature = await prisma.serpFeature.findUnique({
             where: { siteId_keyword: { siteId, keyword } },
         });
+        const oldBrandOwnedSnippet = Boolean(oldFeature?.snippetText?.includes(ownerTag));
 
         // Historical snapshot
         await prisma.serpFeatureSnapshot.create({
@@ -134,9 +157,9 @@ export async function captureSerpFeatures(
         });
 
         if (userId) {
-            // ── LOST features (existing logic, unchanged) ──────────────────
+            // ── LOST features ──────────────────────────────────────────────
             const lostFeatures: string[] = [];
-            if (oldFeature?.hasSnippet && !hasSnippet) {
+            if (oldBrandOwnedSnippet && !brandOwnsSnippet) {
                 lostFeatures.push("Featured Snippet");
             }
             if (oldFeature?.brandInAio && !brandInAio) {
@@ -151,7 +174,7 @@ export async function captureSerpFeatures(
                             type: "serp_feature_lost",
                             title: `Lost SERP Feature: ${keyword}`,
                             body: `Your site ${domain} lost the following feature(s) for "${keyword}": ${lostFeatures.join(", ")}.`,
-                            href: `/dashboard/sites/${siteId}/seo`,
+                            href: `/dashboard/keywords?siteId=${siteId}`,
                             metadata: { keyword, lostFeatures },
                         },
                     });
@@ -162,16 +185,13 @@ export async function captureSerpFeatures(
                 }
             }
 
-            // ── GAINED features (new) ──────────────────────────────────────
-            // Only fire when a feature is newly present (wasn't there before or
-            // this is the first capture for this keyword).
+            // ── GAINED features ────────────────────────────────────────────
+            // Only alert when our domain actually holds the Featured Snippet or AI Overview mention.
             const gainedFeatures: string[] = [];
-            if (!oldFeature?.hasSnippet && hasSnippet) {
+            if (oldFeature && !oldBrandOwnedSnippet && brandOwnsSnippet) {
                 gainedFeatures.push("Featured Snippet");
             }
             if (oldFeature && !oldFeature.brandInAio && brandInAio) {
-                // Only alert on gain when we have a previous record to compare —
-                // avoids noisy "gained" alerts on the very first capture.
                 gainedFeatures.push("Brand mention in AI Overview");
             }
 
@@ -183,7 +203,7 @@ export async function captureSerpFeatures(
                             type: "serp_feature_gained",
                             title: `🎉 New SERP Feature: ${keyword}`,
                             body: `Your site ${domain} gained the following feature(s) for "${keyword}": ${gainedFeatures.join(", ")}.`,
-                            href: `/dashboard/sites/${siteId}/seo`,
+                            href: `/dashboard/keywords?siteId=${siteId}`,
                             metadata: { keyword, gainedFeatures },
                         },
                     });

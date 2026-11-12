@@ -16,12 +16,12 @@ const SAFE_PROMPT_LIMIT = 60000;
 // ─── Deprecated model sanitization ───────────────────────────────────────────
 // Any hardcoded string that somehow slips past code review is remapped here.
 const DEPRECATED_MODEL_MAP: Record<string, string> = {
-    "gemini-2.5-pro":       GEMINI_PRODUCTION_CHAIN[0],
-    "gemini-2.5-flash":     GEMINI_PRODUCTION_CHAIN[0],
-    "gemini-1.5-flash":     GEMINI_PRODUCTION_CHAIN[0],
-    "gemini-2.0-pro-exp":   GEMINI_PRODUCTION_CHAIN[0],
-    "gemini-2.0-flash":     GEMINI_PRODUCTION_CHAIN[0],
-    "gemini-2.0-flash-lite": GEMINI_PRODUCTION_CHAIN[3], // lite → lite
+  "gemini-2.5-pro": GEMINI_PRODUCTION_CHAIN[0],
+  "gemini-2.5-flash": GEMINI_PRODUCTION_CHAIN[0],
+  "gemini-1.5-flash": GEMINI_PRODUCTION_CHAIN[0],
+  "gemini-2.0-pro-exp": GEMINI_PRODUCTION_CHAIN[0],
+  "gemini-2.0-flash": GEMINI_PRODUCTION_CHAIN[0],
+  "gemini-2.0-flash-lite": GEMINI_PRODUCTION_CHAIN[3], // lite → lite
 };
 
 /**
@@ -29,8 +29,8 @@ const DEPRECATED_MODEL_MAP: Record<string, string> = {
  * production equivalent. If the model is already current, returns it unchanged.
  */
 export function sanitizeGeminiModel(model?: string): string {
-    if (!model) return GEMINI_PRODUCTION_CHAIN[0];
-    return DEPRECATED_MODEL_MAP[model] ?? model;
+  if (!model) return GEMINI_PRODUCTION_CHAIN[0];
+  return DEPRECATED_MODEL_MAP[model] ?? model;
 }
 
 // ─── Process-wide unavailable model cache ────────────────────────────────────

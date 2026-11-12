@@ -14,6 +14,7 @@
 
 import * as cheerio from "cheerio";
 import { logger } from "@/lib/logger";
+import { isValidPublicDomain } from "@/lib/security";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -151,6 +152,11 @@ async function scrapePage(url: string, position: number): Promise<PageSignals> {
     };
 
     try {
+        const parsedTarget = new URL(url);
+        if (!["http:", "https:"].includes(parsedTarget.protocol) || !isValidPublicDomain(parsedTarget.hostname)) {
+            base.fetchError = "Invalid or non-public URL";
+            return base;
+        }
         const res = await fetch(url, {
             headers: { "User-Agent": "Mozilla/5.0 (compatible; OptiAISEO-GapBot/1.0; +https://optiaiseo.online)" },
             signal: AbortSignal.timeout(12_000),
@@ -412,20 +418,18 @@ function computeGaps(client: PageSignals, competitors: PageSignals[]): ContentGa
         });
     }
 
-    // Domain authority / referring domains gap
-    // Uses external link count as a scrape-accessible proxy for site authority.
-    // Pages ranking top-5 for competitive terms typically have far more inbound/outbound citation signals.
+    // Outbound source citations / external links gap
     const avgExtLinks = avg((p) => p.externalLinkCount);
     const extLinkGap = avgExtLinks - client.externalLinkCount;
     if (extLinkGap > 5) {
         const authGapLevel: ContentGap["gap"] = extLinkGap > 30 ? "critical" : extLinkGap > 15 ? "high" : "medium";
         gaps.push({
-            dimension: "Domain authority (referring domains)",
+            dimension: "Outbound source citations (external links)",
             clientValue: client.externalLinkCount,
             topCompetitorAvg: avgExtLinks,
             gap: authGapLevel,
-            impact: `Top-ranking competitors have ~${avgExtLinks} external links on their pages vs. your ${client.externalLinkCount}. This reflects a significant authority gap that content alone cannot close. Pages at position ${client.position}+ for competitive keywords typically need sustained link-building to break into the top 30.`,
-            recommendation: `1. Run an Ahrefs/Moz Link Intersect audit to find domains linking to 2+ competitors but not you.\n2. Launch broken-link outreach to 20+ intersect domains.\n3. Create one original data asset (survey, benchmark report) and pitch to 10-15 niche publications.\n4. Add 3-5 outbound citations to authoritative sources to improve E-E-A-T signals.\n5. Boost internal PageRank by linking from your 3 highest-authority pages using partial-match anchors.`,
+            impact: `Top-ranking competitors cite ~${avgExtLinks} external sources on their pages vs. your ${client.externalLinkCount}. Outbound citations to authoritative primary sources strengthen E-E-A-T and topical credibility signals.`,
+            recommendation: `1. Add 3-5 outbound citations to authoritative primary sources (studies, standards, official documentation) to improve E-E-A-T signals.\n2. Replace generic claims with cited statistics or industry benchmarks.\n3. Run a Link Intersect audit to identify authoritative domains linking to multiple top-ranking competitors.\n4. Boost internal PageRank by linking from your 3 highest-authority pages using descriptive partial-match anchors.`,
         });
     }
 
@@ -497,11 +501,17 @@ export async function analyseSerpGap(
     }
 
     // Step 2: Get top-5 competitor URLs (exclude client domain)
-    const clientDomain = new URL(clientUrl).hostname;
+    const clientDomain = new URL(clientUrl).hostname.replace(/^www\./, "").toLowerCase();
     const topUrls = (serpData.organic ?? [])
-        .filter((r): r is SerperOrganicResult & { link: string } =>
-            !!r.link && !r.link.includes(clientDomain)
-        )
+        .filter((r): r is SerperOrganicResult & { link: string } => {
+            if (!r.link) return false;
+            try {
+                const host = new URL(r.link).hostname.replace(/^www\./, "").toLowerCase();
+                return host !== clientDomain && !host.endsWith(`.${clientDomain}`);
+            } catch {
+                return false;
+            }
+        })
         .slice(0, 5)
         .map((r, i) => ({ url: r.link, position: i + 1 }));
 

@@ -236,7 +236,7 @@ export const processAeoSiteJob = inngest.createFunction(
         name: "Process Weekly AEO Site",
         concurrency: { limit: 5 },
         retries: 2,
-        idempotency: "event.data.siteId + '-' + (event.data.weekKey || '')",
+        idempotency: 'event.data.siteId + "-" + (has(event.data.weekKey) ? event.data.weekKey : "")',
         triggers: [{ event: "aeo.tracker.check.site" }],
     },
     async ({ event, step }) => {

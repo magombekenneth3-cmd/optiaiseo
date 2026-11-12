@@ -263,7 +263,7 @@ export function useResearchHub(siteId: string) {
 
 // ─── useAIDiscovery ───────────────────────────────────────────────────────────
 export function useAIDiscovery(siteId: string) {
-    const { loading, error, run } = useAsyncAction();
+    const { loading, error, setError, run } = useAsyncAction();
     const { addedSet, markAdded, isAdded } = useAddedSet();
 
     const [keywords, setKeywords] = useState<DiscoveredKeyword[]>([]);
@@ -273,7 +273,11 @@ export function useAIDiscovery(siteId: string) {
 
     const handleDiscover = async () => {
         const res = await run(() => discoverKeywordsWithAI(siteId));
-        if (res?.success) setKeywords(res.keywords);
+        if (res?.success) {
+            setKeywords(res.keywords);
+        } else if (res && !res.success) {
+            setError(res.error);
+        }
     };
 
     // Bug 1 fix: check server response before marking added
@@ -285,6 +289,8 @@ export function useAIDiscovery(siteId: string) {
                 { keyword: kw.keyword, intent: kw.intent, difficulty: kw.difficulty, reason: kw.reason },
             ]);
             markAdded(kw.keyword);
+        } else {
+            setError(res.error);
         }
         setAdding(null);
     };
@@ -396,14 +402,18 @@ export function useSeedKeywords(siteId: string) {
 
 // ─── useSitemapImport ─────────────────────────────────────────────────────────
 export function useSitemapImport(siteId: string) {
-    const { loading, error, run } = useAsyncAction();
+    const { loading, error, setError, run } = useAsyncAction();
     const { addedSet, markAdded } = useAddedSet();
     const [pages, setPages] = useState<{ url: string; keywords: DiscoveredKeyword[] }[]>([]);
     const [adding, setAdding] = useState<string | null>(null);
 
     const handleImport = async () => {
         const res = await run(() => importKeywordsFromSitemap(siteId));
-        if (res?.success) setPages(res.pages);
+        if (res?.success) {
+            setPages(res.pages);
+        } else if (res && !res.success) {
+            setError(res.error);
+        }
     };
 
     const handleAdd = async (kw: DiscoveredKeyword, pageUrl: string) => {
@@ -415,6 +425,8 @@ export function useSitemapImport(siteId: string) {
                 { keyword: kw.keyword, intent: kw.intent, difficulty: kw.difficulty, reason: `Target page: ${pageUrl}` },
             ]);
             markAdded(key);
+        } else {
+            setError(res.error);
         }
         setAdding(null);
     };
@@ -424,7 +436,7 @@ export function useSitemapImport(siteId: string) {
 
 // ─── useFreeIdeas ─────────────────────────────────────────────────────────────
 export function useFreeIdeas(siteId: string) {
-    const { loading, error, run } = useAsyncAction();
+    const { loading, error, setError, run } = useAsyncAction();
     const { addedSet, markAdded } = useAddedSet();
     const [seed, setSeed] = useState("");
     const [keywords, setKeywords] = useState<{ keyword: string }[]>([]);
@@ -433,13 +445,21 @@ export function useFreeIdeas(siteId: string) {
     const handleDiscover = async () => {
         if (!seed.trim()) return;
         const res = await run(() => getKeywordIdeas(seed.trim()));
-        if (res?.success) setKeywords(res.keywords);
+        if (res?.success) {
+            setKeywords(res.keywords);
+        } else if (res && !res.success) {
+            setError(res.error);
+        }
     };
 
     const handleAdd = async (keyword: string) => {
         setAdding(keyword);
         const res = await addSeedKeyword(siteId, keyword, undefined, 1, "From Autocomplete Ideas");
-        if (res.success) markAdded(keyword);
+        if (res.success) {
+            markAdded(keyword);
+        } else {
+            setError(res.error);
+        }
         setAdding(null);
     };
 
@@ -448,7 +468,7 @@ export function useFreeIdeas(siteId: string) {
 
 // ─── useGscPatterns ───────────────────────────────────────────────────────────
 export function useGscPatterns(siteId: string) {
-    const { loading, error, run } = useAsyncAction();
+    const { loading, error, setError, run } = useAsyncAction();
     const [data, setData] = useState<{
         brandedPattern: string;
         questionPattern: string;
@@ -458,7 +478,11 @@ export function useGscPatterns(siteId: string) {
 
     const handleGenerate = async () => {
         const res = await run(() => generateGscQuestionPatterns(siteId));
-        if (res?.success && res.result) setData(res.result);
+        if (res?.success && res.result) {
+            setData(res.result);
+        } else if (res && !res.success) {
+            setError(res.error);
+        }
     };
 
     const copyLine = (text: string) => {
@@ -472,14 +496,18 @@ export function useGscPatterns(siteId: string) {
 
 // ─── useCommunity ─────────────────────────────────────────────────────────────
 export function useCommunity(siteId: string) {
-    const { loading, error, run } = useAsyncAction();
+    const { loading, error, setError, run } = useAsyncAction();
     const { addedSet, markAdded } = useAddedSet();
     const [keywords, setKeywords] = useState<CommunityKeyword[]>([]);
     const [adding, setAdding] = useState<string | null>(null);
 
     const handleMine = async () => {
         const res = await run(() => getCommunityKeywords(siteId));
-        if (res?.success && res.keywords) setKeywords(res.keywords);
+        if (res?.success && res.keywords) {
+            setKeywords(res.keywords);
+        } else if (res && !res.success) {
+            setError(res.error ?? "Failed to fetch community keywords");
+        }
     };
 
     const handleAdd = async (kw: CommunityKeyword) => {
@@ -491,7 +519,11 @@ export function useCommunity(siteId: string) {
             1,
             `Mined from ${kw.source}: ${kw.questionPattern}`
         );
-        if (res.success) markAdded(kw.keyword);
+        if (res.success) {
+            markAdded(kw.keyword);
+        } else {
+            setError(res.error);
+        }
         setAdding(null);
     };
 

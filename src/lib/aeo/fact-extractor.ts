@@ -86,7 +86,7 @@ export async function extractFactsFromContent(siteId: string, content: string, s
 
         // Save to DB
         if (facts.length > 0) {
-             
+
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await Promise.all(facts.map((fact: any) =>
                 prisma.brandFact.create({
@@ -109,9 +109,9 @@ export async function extractFactsFromContent(siteId: string, content: string, s
             }
         }
 
-         
+
         return facts;
-     
+
     } catch (error: unknown) {
         logger.error("[FactExtractor] Error extracting facts:", { error: (error as Error)?.message || String(error) });
         return [];

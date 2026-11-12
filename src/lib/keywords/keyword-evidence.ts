@@ -275,11 +275,15 @@ export function classifyCompetitorGap(
         return "NEW_OPPORTUNITY";
     }
 
+    if (yourPosition <= 3 && yourPosition < topCompetitorPos) {
+        return "DOMINATED";
+    }
+
     if (yourPosition <= 10 && topCompetitorPos <= 10) {
         return "WEAKLY_DEFENDED";
     }
 
-    if (yourPosition > 20 && topCompetitorPos <= 10) {
+    if (yourPosition > 10 && topCompetitorPos <= 10) {
         return "UNDERPERFORMING";
     }
 
@@ -296,7 +300,7 @@ export function mergeMetricsIntoEvidence(
 ): KeywordEvidence {
     return {
         ...evidence,
-        searchVolume: metrics.searchVolume > 0 ? metrics.searchVolume : evidence.searchVolume,
+        searchVolume: metrics.searchVolume !== null && metrics.searchVolume !== undefined ? metrics.searchVolume : evidence.searchVolume,
         keywordDifficulty: keywordDifficulty ?? evidence.keywordDifficulty,
         competitionIndex: metrics.competitionIndex,
         cpc: metrics.cpc > 0 ? metrics.cpc : evidence.cpc,

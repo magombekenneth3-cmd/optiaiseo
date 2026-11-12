@@ -96,7 +96,8 @@ function inferSubreddits(niche: string): string[] {
   if (n.includes("ecommerce") || n.includes("shop")) return ["ecommerce", "Entrepreneur", "smallbusiness"];
   if (n.includes("health") || n.includes("fitness")) return ["fitness", "loseit", "nutrition"];
   if (n.includes("finance") || n.includes("invest")) return ["personalfinance", "investing", "financialindependence"];
-  return [niche.replace(/\s+/g, ""), "entrepreneur", "smallbusiness"];
+  const sanitized = niche.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 21);
+  return [sanitized || "smallbusiness", "entrepreneur", "smallbusiness"];
 }
 
 function isQuestionOrSearch(title: string): boolean {
@@ -115,10 +116,12 @@ function isQuestionOrSearch(title: string): boolean {
 }
 
 function extractKeyword(title: string): string {
-  return title
+  const cleaned = title
+    .replace(/^\[[^\]]+\]\s*/g, "")
     .replace(/[^\w\s'-]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
-    .toLowerCase()
-    .slice(0, 80);
+    .toLowerCase();
+  const words = cleaned.split(" ").filter(Boolean).slice(0, 8);
+  return words.join(" ").slice(0, 60);
 }

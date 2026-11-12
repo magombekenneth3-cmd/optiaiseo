@@ -7,11 +7,12 @@ import { prisma } from "@/lib/prisma";
 import { callGemini } from "@/lib/gemini/client";
 import { fetchKeywordIdeas } from "@/lib/keywords/autocomplete";
 import { limiters } from "@/lib/rate-limit";
+import { hasFeature } from "@/lib/stripe/plans";
 import dns from "dns/promises";
 import type { CommunityKeyword } from "@/lib/keywords/community";
 import type { SeoResearchReport, TrendRow } from "@/lib/keywords/seoResearch";
 
-const GEMINI_TIMEOUT_MS = 15000;
+const GEMINI_TIMEOUT_MS = 45000;
 const FETCH_TIMEOUT_MS = 6000;
 
 const PRIVATE_IP_PREFIXES = ["10.", "192.168.", "127.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31."];
@@ -349,13 +350,43 @@ export async function importKeywordsFromSitemap(siteId: string): Promise<{
 
         const pagesToProcess = urls.slice(0, 8);
 
-        const prompt = `You are an SEO expert. For each of these pages from ${site.domain}, suggest 3-4 target keywords.
+        const pageSummaries = await Promise.all(
+            pagesToProcess.map(async (u, i) => {
+                try {
+                    const res = await safeFetchPublicUrl(u, {
+                        timeoutMs: FETCH_TIMEOUT_MS,
+                        allowedDomain: site.domain,
+                        fetchInit: { headers: { "User-Agent": "Mozilla/5.0 (compatible; SEOBot/1.0)" } },
+                    });
+                    if (!res.ok || !res.response.ok) return `${i + 1}. ${u}`;
+                    const html = res.body;
+                    const title = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? "";
+                    const desc = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)?.[1]?.trim() ?? "";
+                    const headings = [...html.matchAll(/<h[1-2][^>]*>(.*?)<\/h[1-2]>/gi)]
+                        .map((m) => m[1].replace(/<[^>]+>/g, "").trim())
+                        .filter((h) => h.length > 2 && h.length < 90)
+                        .slice(0, 4);
+                    const metaParts = [
+                        title ? `Title: ${title}` : "",
+                        desc ? `Desc: ${desc}` : "",
+                        headings.length ? `Headings: ${headings.join(" | ")}` : "",
+                    ].filter(Boolean);
+                    return metaParts.length > 0
+                        ? `${i + 1}. ${u} (${metaParts.join(" — ")})`
+                        : `${i + 1}. ${u}`;
+                } catch {
+                    return `${i + 1}. ${u}`;
+                }
+            })
+        );
+
+        const prompt = `You are an SEO expert. For each of these pages from ${site.domain}, suggest 3-4 target keywords based on its URL and page metadata.
 
 Pages:
-${pagesToProcess.map((u, i) => `${i + 1}. ${u}`).join("\n")}
+${pageSummaries.join("\n")}
 
 Return a JSON array where each item has:
-- "url": the page URL
+- "url": the exact page URL (without metadata in parentheses)
 - "keywords": array of 3-4 keyword objects, each with "keyword" (2-5 words), "intent" (informational/commercial/transactional/navigational), "difficulty" (low/medium/high), "reason" (1 sentence)
 
 Return ONLY the JSON array.`;
@@ -452,6 +483,9 @@ export async function getKeywordIdeas(seed: string): Promise<{
     try {
         const session = await getServerSession(authOptions);
         if (!session?.user?.email) return { success: false, error: "Unauthorized" };
+
+        const { success: rlSuccess } = await limiters.competitorFetch.limit(`ideas:${session.user.email}`);
+        if (!rlSuccess) return { success: false, error: "Too many requests. Please wait before fetching more ideas." };
 
         const ideas = await fetchKeywordIdeas(seed);
         return { success: true, keywords: ideas };
@@ -575,6 +609,9 @@ export async function runSeoResearch(siteId: string): Promise<
         const ctx = await requireSiteAccess(siteId);
         if (!ctx) return { success: false, error: "Unauthorized" };
 
+        const { success: rlSuccess } = await limiters.competitorFetch.limit(`seo-research:${ctx.user.id}`);
+        if (!rlSuccess) return { success: false, error: "Too many requests. Please wait before running more research." };
+
         const { runFullSeoResearch } = await import("@/lib/keywords/seoResearch");
         const report = await runFullSeoResearch(siteId);
         return { success: true, report };
@@ -598,6 +635,13 @@ export async function enrichSeoResearch(siteId: string, report: SeoResearchRepor
         if (!ctx) return { success: false, error: "Unauthorized" };
         if (!report || !Array.isArray(report.masterList)) {
             return { success: false, error: "Invalid report." };
+        }
+
+        if (!hasFeature(ctx.user.subscriptionTier, "measuredKeywordMetrics")) {
+            return {
+                success: false,
+                error: "Live keyword volume, KD, and SERP measurement requires a Pro or Agency plan.",
+            };
         }
 
         const { success: rlSuccess } = await limiters.citationGap.limit(`research-enrich:${ctx.user.id}`);
@@ -626,6 +670,16 @@ export async function runTrendRefresh(siteId: string): Promise<
     try {
         const ctx = await requireSiteAccess(siteId);
         if (!ctx) return { success: false, error: "Unauthorized" };
+
+        if (!hasFeature(ctx.user.subscriptionTier, "measuredKeywordMetrics")) {
+            return {
+                success: false,
+                error: "Trend measurement requires a Pro or Agency plan.",
+            };
+        }
+
+        const { success: rlSuccess } = await limiters.competitorFetch.limit(`trend-refresh:${ctx.user.id}`);
+        if (!rlSuccess) return { success: false, error: "Too many requests. Please wait before refreshing trends." };
 
         const { runTrendRefresh: refreshTrends } = await import("@/lib/keywords/seoResearch");
         const trends = await refreshTrends(siteId);
@@ -687,7 +741,7 @@ export async function generateContentCalendarPages(
 
         const prompt = `You are a Senior SEO Content Strategist.
 I am giving you a list of topic clusters and keywords for the domain: ${site.domain}.
-For EACH cluster, pick the top 2-3 most valuable keywords and generate a direct, actionable "Minimum Viable Page" plan.
+For EACH cluster, pick the top 2-3 most valuable keywords and generate a direct, actionable content brief plan.
 
 Clusters:
 ${JSON.stringify(clusters, null, 2)}
@@ -699,9 +753,9 @@ Return exactly this JSON format:
             "clusterTopic": "parent topic name",
             "keyword": "target keyword",
             "slug": "url-friendly-slug",
-            "estimatedWordCount": 150,
+            "estimatedWordCount": 1500,
             "title": "A clickable, high-CTR title",
-            "outline": "3 bullet points of exactly what to cover in the 150 words"
+            "outline": "3-5 bullet points of key sections and subtopics to cover in the article"
         }
     ]
 }`;
@@ -729,6 +783,9 @@ export async function getCommunityKeywords(siteId: string): Promise<{
         if (!ctx) return { success: false, error: "Unauthorized" };
         const { site } = ctx;
 
+        const { success: rlSuccess } = await limiters.redditOpportunities.limit(`community:${ctx.user.id}`);
+        if (!rlSuccess) return { success: false, error: "Too many requests. Please wait before fetching community keywords." };
+
         const { mineRedditKeywords } = await import("@/lib/keywords/community");
         const keywords = await Promise.race([
             mineRedditKeywords(site.coreServices ?? site.domain, site.domain),
@@ -741,5 +798,67 @@ export async function getCommunityKeywords(siteId: string): Promise<{
     } catch (error: unknown) {
         logger.error("[KeywordDiscovery] getCommunityKeywords error:", { error });
         return { success: false, error: "Failed to fetch community keywords" };
+    }
+}
+
+export async function getLatestSeoResearchSnapshots(siteId: string): Promise<{
+    success: true;
+    runId: string;
+    completedAt: string | null;
+    dataSources: string[];
+    locationCode: number;
+    metrics: Record<string, {
+        searchVolume: number | null;
+        keywordDifficulty: number | null;
+        competitionIndex: number | null;
+        cpc: number | null;
+        serpFeasibility: number | null;
+    }>;
+} | { success: false; error?: string }> {
+    try {
+        const ctx = await requireSiteAccess(siteId);
+        if (!ctx) return { success: false, error: "Unauthorized" };
+
+        const run = await prisma.keywordResearchRun.findFirst({
+            where: { siteId, status: { in: ["COMPLETED", "PARTIAL"] } },
+            orderBy: { startedAt: "desc" },
+            include: {
+                metrics: true,
+                serps: { select: { keyword: true, feasibility: true } },
+            },
+        });
+        if (!run) return { success: false };
+
+        const serpMap = new Map(run.serps.map((s) => [s.keyword.toLowerCase().trim(), s.feasibility]));
+        const metrics: Record<string, {
+            searchVolume: number | null;
+            keywordDifficulty: number | null;
+            competitionIndex: number | null;
+            cpc: number | null;
+            serpFeasibility: number | null;
+        }> = {};
+
+        for (const m of run.metrics) {
+            const kw = m.keyword.toLowerCase().trim();
+            metrics[kw] = {
+                searchVolume: m.searchVolume,
+                keywordDifficulty: m.keywordDifficulty,
+                competitionIndex: m.competitionIndex,
+                cpc: m.cpc,
+                serpFeasibility: serpMap.get(kw) ?? null,
+            };
+        }
+
+        return {
+            success: true,
+            runId: run.id,
+            completedAt: run.completedAt ? run.completedAt.toISOString() : null,
+            dataSources: run.dataSources,
+            locationCode: run.locationCode,
+            metrics,
+        };
+    } catch (err: unknown) {
+        logger.warn("[SeoResearch] Failed to load latest research snapshots", { siteId, error: err });
+        return { success: false };
     }
 }

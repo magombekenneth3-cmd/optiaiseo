@@ -154,7 +154,9 @@ export async function refreshCompetitorKeywords(siteId: string, competitorId: st
         if (!rl.allowed) return { success: false, error: 'Competitor refresh limit reached (10/day). Resets tomorrow.' };
 
         const comp = await prisma.competitor.findUnique({ where: { id: competitorId } });
-        if (!comp || comp.siteId !== siteId) return { success: false, error: "Competitor not found" };
+        if (!comp || comp.siteId !== siteId || comp.deletedAt !== null) {
+            return { success: false, error: "Competitor not found" };
+        }
 
         // Try the full intelligence engine first; fall back to basic gap fetch on error
         let gaps: Awaited<ReturnType<typeof fetchCompetitorKeywordGaps>> = [];
@@ -171,74 +173,59 @@ export async function refreshCompetitorKeywords(siteId: string, competitorId: st
             gaps = await fetchCompetitorKeywordGaps(site.domain, comp.domain);
         }
 
-        type GscEntry = { position: number; clicks: number; impressions: number; ctr: number };
-        const gscKeywords = new Map<string, GscEntry>();
+        // Atomically replace keywords so existing rows get fresh position, volume, difficulty, and CTR
+        let refreshedKeywords: Array<{
+            id: string;
+            keyword: string;
+            position: number | null;
+            searchVolume: number | null;
+            difficulty: number | null;
+            url: string | null;
+            clicks: number | null;
+            impressions: number | null;
+            ctr: number | null;
+            dataSource: string | null;
+        }> = [];
 
-        try {
-            const user = await prisma.user.findUnique({ where: { id: site.userId } });
-            if (user?.gscConnected) {
-                const accessToken = await getUserGscToken(site.userId);
-                const siteUrl = normaliseSiteUrl(site.domain);
-                const gscRows = await fetchGSCKeywords(accessToken, siteUrl, 90, 1000);
-
-                // Build a case-insensitive lookup map
-                for (const row of gscRows) {
-                    gscKeywords.set(row.keyword.toLowerCase(), {
-                        position: row.position,
-                        clicks: row.clicks,
-                        impressions: row.impressions,
-                        ctr: row.ctr,
-                    });
-                }
-            }
-        } catch (gscErr) {
-            // GSC enrichment failure must never block the competitor sync
-            logger.warn("[Competitor] GSC enrichment failed, falling back to estimates", {
-                error: (gscErr as Error)?.message,
-            });
-        }
-
-        // Atomically refresh keywords: insert new, then prune old in one transaction
         if (gaps.length > 0) {
-            await prisma.$transaction(async (tx) => {
-                const created = await tx.competitorKeyword.createMany({
-                    data: gaps.map(gap => {
-                        const gsc = gscKeywords.get(gap.keyword.toLowerCase());
+            refreshedKeywords = await prisma.$transaction(async (tx) => {
+                await tx.competitorKeyword.deleteMany({
+                    where: { competitorId },
+                });
 
+                await tx.competitorKeyword.createMany({
+                    data: gaps.map((gap) => {
+                        const pos = Math.round(gap.position);
+                        const fallbackCtr =
+                            pos <= 0 ? 0
+                            : pos <= 10 ? (CTR_CURVE[pos] ?? 0.022)
+                            : pos <= 20 ? 0.008
+                            : 0.002;
                         const estimatedCtr = gap.serpFeatures
                             ? getDynamicCtr(gap.position, gap.serpFeatures)
-                            : (CTR_CURVE[Math.min(gap.position, 10)] ?? 0.01);
+                            : fallbackCtr;
                         const estimatedImpressions = gap.searchVolume;
                         const estimatedClicks = Math.round(estimatedImpressions * estimatedCtr);
 
                         return {
                             competitorId,
                             keyword: gap.keyword,
-                            position: gsc?.position ?? gap.position,
-                            searchVolume: gsc
-                                ? Math.round((gsc.impressions / 90) * 30)
-                                : gap.searchVolume,
+                            position: gap.position,
+                            searchVolume: gap.searchVolume,
                             difficulty: gap.difficulty,
                             url: gap.url,
-                            clicks: gsc?.clicks ?? estimatedClicks,
-                            impressions: gsc?.impressions ?? estimatedImpressions,
-                            ctr: gsc?.ctr ?? estimatedCtr,
-                            dataSource: gsc ? "gsc" : "serp-estimate",
+                            clicks: estimatedClicks,
+                            impressions: estimatedImpressions,
+                            ctr: estimatedCtr,
+                            dataSource: "serp-estimate",
                         };
                     }),
-                    skipDuplicates: true,
                 });
 
-                // Prune stale keywords that aren't in the new batch
-                const newKeywords = gaps.map(g => g.keyword);
-                await tx.competitorKeyword.deleteMany({
-                    where: {
-                        competitorId,
-                        keyword: { notIn: newKeywords },
-                    },
+                return tx.competitorKeyword.findMany({
+                    where: { competitorId },
+                    orderBy: { searchVolume: "desc" },
                 });
-
-                return created;
             });
         } else {
             // No gaps found — clear old keywords
@@ -284,7 +271,7 @@ export async function refreshCompetitorKeywords(siteId: string, competitorId: st
         );
 
         revalidatePath('/dashboard/keywords');
-        return { success: true, count: gaps.length, profile };
+        return { success: true, count: gaps.length, keywords: refreshedKeywords, profile };
     } catch (e: unknown) {
         logger.error("Failed to refresh competitor gaps:", { error: (e as Error)?.message || String(e) });
         return { success: false, error: "Failed to refresh keyword gaps" };

@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 // Monthly SERP analysis count limit removed — credits are the single gate.
-import { consumeCredits } from "@/lib/credits";
+import { consumeCredits, refundCredits } from "@/lib/credits";
 import { inngest } from "@/lib/inngest/client";
 
 export interface SerpFix {
@@ -76,7 +76,7 @@ function toResult(row: NonNullable<Awaited<ReturnType<typeof prisma.keywordSerpA
             yourPageH2s:      (row.yourPageH2s ?? []) as unknown as string[],
             drGap:            row.drGap,
             rdGapRoot:        row.rdGapRoot,
-            rdGapPage:        row.rdGapPage,
+            rdGapPage:        row.rdGapRoot !== null ? Math.max(0, row.rdGapRoot - (row.rdGapPage ?? 0)) : null,
             clientDR:         row.clientDR ?? 0,
             clientRDs:        row.clientRDs ?? 0,
             pageRDs:          row.rdGapPage ?? 0,
@@ -145,17 +145,27 @@ export async function analyseKeywordVsSerp(
         update: { status: "PENDING", errorMessage: null, expiresAt: new Date() },
     });
 
-    await inngest.send({
-        name: "serp-analysis/requested",
-        data: {
-            analysisId:     record.id,
-            siteId,
-            userId:         user.id,
-            keyword,
-            landingPageUrl,
-            domain:         site.domain,
-        },
-    });
+    try {
+        await inngest.send({
+            name: "serp-analysis/requested",
+            data: {
+                analysisId:     record.id,
+                siteId,
+                userId:         user.id,
+                keyword,
+                landingPageUrl,
+                domain:         site.domain,
+            },
+        });
+    } catch (sendErr) {
+        await refundCredits(user.id, "serp_analysis").catch(() => {});
+        await prisma.keywordSerpAnalysis.update({
+            where: { id: record.id },
+            data: { status: "FAILED", errorMessage: "Failed to queue SERP analysis job" },
+        }).catch(() => {});
+        logger.error("[SerpAnalysis] Failed to enqueue job — refunded credit", { analysisId: record.id, sendErr });
+        return { data: null, error: "Could not start SERP analysis. Your credits have been refunded." };
+    }
 
     logger.info("[SerpAnalysis] Job queued", { analysisId: record.id, keyword, siteId });
     return { pending: true, analysisId: record.id, error: null };
@@ -166,6 +176,15 @@ export async function forceRefreshSerpAnalysis(
     keyword: string,
     landingPageUrl: string,
 ): Promise<ActionResult> {
-    await prisma.keywordSerpAnalysis.deleteMany({ where: { siteId, keyword } });
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return { data: null, error: "Unauthorised" };
+
+    const site = await prisma.site.findFirst({
+        where: { id: siteId, userId: session.user.id },
+        select: { id: true },
+    });
+    if (!site) return { data: null, error: "Site not found" };
+
+    await prisma.keywordSerpAnalysis.deleteMany({ where: { siteId: site.id, keyword } });
     return analyseKeywordVsSerp(siteId, keyword, landingPageUrl);
 }

@@ -666,7 +666,7 @@ export async function enrichSeoResearchReport(
 
   const result = await researchKeywords(siteId, candidates, {
     locationCode,
-    maxSerpKeywords: 6,
+    maxSerpKeywords: 10,
     trendSignals,
     budgetMs: 45_000,
   });
@@ -674,8 +674,32 @@ export async function enrichSeoResearchReport(
   const byKeyword = new Map(result.keywords.map((r) => [r.evidence.keyword, r]));
   const lookup = (kw: string) => byKeyword.get(kw.toLowerCase().trim().replace(/\s+/g, " "));
 
+  const masterSeen = new Set(
+    report.masterList.map((r) => r.keyword.toLowerCase().trim().replace(/\s+/g, " "))
+  );
+  const extraSeedRows: MasterListRow[] = [];
+  for (const extraKw of [...(report.competitorKeywordIdeas ?? []), ...gapSeeds]) {
+    const norm = extraKw.toLowerCase().trim().replace(/\s+/g, " ");
+    if (!norm || masterSeen.has(norm)) continue;
+    const ev = lookup(norm);
+    if (!ev) continue;
+    masterSeen.add(norm);
+    extraSeedRows.push(
+      blankKeywordRow(
+        {
+          keyword: extraKw,
+          type: norm.split(" ").length >= 3 ? "Long-tail" : "Short-tail",
+          intent: ev.evidence.intent ?? "informational",
+          relevance: 7,
+          contentType: ev.evidence.contentType ?? "Blog Post",
+        },
+        report.masterList.length + extraSeedRows.length + 1
+      )
+    );
+  }
+
   // Keywords + master list
-  const masterList = report.masterList
+  const masterList = [...report.masterList, ...extraSeedRows]
     .map((row) => {
       const merged = applyEvidence(row, lookup(row.keyword));
       return { ...merged, roadmap: roadmapFromEvidence(merged, row.roadmap) };
@@ -683,12 +707,12 @@ export async function enrichSeoResearchReport(
     .sort(compareRows)
     .map((row, i) => ({ ...row, rank: i + 1 }));
 
-  const keywords: KeywordRow[] = masterList.slice(0, 12).map(({ roadmap: _roadmap, ...row }) => row);
+  const keywords: KeywordRow[] = masterList.slice(0, 20).map(({ roadmap: _roadmap, ...row }) => row);
 
   // Competitor gap — only rows backed by real competitor rankings
   const competitorGap: CompetitorGapRow[] = result.keywords
     .filter((r) => r.evidence.competitorPositions.length > 0 && r.evidence.gapType && r.evidence.gapType !== "DOMINATED")
-    .slice(0, 8)
+    .slice(0, 15)
     .map((r) => {
       const top = r.evidence.competitorPositions[0];
       const hasDemand = !r.opportunityScore.missingInputs.includes("searchVolume");

@@ -17,6 +17,7 @@ import {
 } from "./claim-verification";
 import type { ResearchEvidenceLedger } from "./evidence-ledger";
 import type { ClaimPlan } from "./claim-plan";
+import { assessResearchCompleteness } from "./research-completeness";
 
 /**
  * PASS       — gate fully passed.
@@ -89,16 +90,18 @@ function evaluateResearchGate(input: PublicationGateInput): IndependentGateResul
     }
 
     const competitiveBrief = input.researchPacket.serpCompetitiveBrief;
-    if (!competitiveBrief) {
-        warnings.push("Validated SERP competitive brief is missing. Confirm search intent, competing result formats, coverage, and differentiation manually before publication.");
-    } else {
-        if (competitiveBrief.retrieval.confidence === "low" || competitiveBrief.retrieval.status !== "AVAILABLE") {
-            warnings.push(
-                "SERP retrieval confidence is " + competitiveBrief.retrieval.confidence +
-                " (" + competitiveBrief.retrieval.analyzedPages + "/" + competitiveBrief.retrieval.uniqueResults +
-                " readable results). Competitive gaps are not sufficiently established for automatic publication.",
-            );
-        }
+    const completeness = assessResearchCompleteness(competitiveBrief);
+    if (completeness.status === "INCOMPLETE") {
+        // Hard failure: an article written without completed SERP research must
+        // never be presented as research-backed or published automatically.
+        issues.push(
+            "RESEARCH_INCOMPLETE: Required SERP research did not complete. " + completeness.reasons.join(" ") +
+            " Re-run research or verify intent, competing pages, and differentiation manually before publication.",
+        );
+    } else if (completeness.status === "PARTIAL") {
+        warnings.push(...completeness.reasons.map(reason => "Research is partial: " + reason));
+    }
+    if (competitiveBrief) {
         if (competitiveBrief.siteFit?.humanReviewRequired) {
             warnings.push("Competitive brief requires human review: " + competitiveBrief.siteFit.rationale);
         }

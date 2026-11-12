@@ -35,12 +35,12 @@ export interface SerpSignal {
 }
 
 // Domains considered "mega-authority" that are nearly impossible to displace
+// Note: forum/community domains (reddit.com, quora.com) are intentionally excluded
+// here so they are evaluated solely via FORUM_DOMAINS (+1/+2 rankability signal).
 const MEGA_AUTHORITY_DOMAINS = new Set([
     "wikipedia.org",
-    "reddit.com",
     "youtube.com",
     "amazon.com",
-    "quora.com",
     "medium.com",
     "linkedin.com",
     "facebook.com",

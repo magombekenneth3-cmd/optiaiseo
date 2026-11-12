@@ -42,16 +42,23 @@ export function computeVisibilityScore(snapshots: ReadonlyArray<{
     let top3  = 0;
     let top10 = 0;
 
+    const hasMeasuredVolume = snapshots.some((s) => (s.searchVolume ?? 0) > 0);
+
     for (const s of snapshots) {
-        const vol    = Math.max(s.searchVolume ?? 0, 100);
-        const weight = s.position > 20
-            ? UNRANKED_WEIGHT
-            : (CTR_WEIGHT[s.position] ?? CTR_WEIGHT[10]);
+        const vol = hasMeasuredVolume ? Math.max(s.searchVolume ?? 0, 0) : 1;
+        const pos = Math.round(s.position);
+        const weight = pos <= 0
+            ? 0
+            : pos > 20
+                ? UNRANKED_WEIGHT
+                : pos > 10
+                    ? 0.02
+                    : (CTR_WEIGHT[pos] ?? CTR_WEIGHT[10]);
 
         actualTraffic += weight * vol;
         maxTraffic    += CTR_WEIGHT[1] * vol;
-        if (s.position <= 3)  top3++;
-        if (s.position <= 10) top10++;
+        if (s.position > 0 && s.position <= 3)  top3++;
+        if (s.position > 0 && s.position <= 10) top10++;
     }
 
     const n = snapshots.length;

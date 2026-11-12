@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
             yourPageH2s:       (record.yourPageH2s ?? []) as string[],
             drGap:             record.drGap,
             rdGapRoot:         record.rdGapRoot,
-            rdGapPage:         record.rdGapPage,
+            rdGapPage:         record.rdGapRoot !== null ? Math.max(0, record.rdGapRoot - (record.rdGapPage ?? 0)) : null,
             clientDR:          record.clientDR   ?? 0,
             clientRDs:         record.clientRDs  ?? 0,
             pageRDs:           record.rdGapPage  ?? 0,

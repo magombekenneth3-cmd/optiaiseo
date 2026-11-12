@@ -26,6 +26,12 @@ export async function getAiOverviewStats(siteId: string): Promise<AiOverviewStat
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return null;
 
+    const site = await prisma.site.findFirst({
+        where: { id: siteId, userId: session.user.id },
+        select: { id: true },
+    });
+    if (!site) return null;
+
     const features = await prisma.serpFeature.findMany({
         where: { siteId },
         orderBy: { capturedAt: "desc" },
@@ -96,6 +102,12 @@ export async function getSerpFeatureHistory(
 ): Promise<SerpFeatureHistory[]> {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return [];
+
+    const site = await prisma.site.findFirst({
+        where: { id: siteId, userId: session.user.id },
+        select: { id: true },
+    });
+    if (!site) return [];
 
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 

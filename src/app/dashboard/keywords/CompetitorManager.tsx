@@ -249,9 +249,15 @@ export function CompetitorManager({
     const [suggestions, setSuggestions] = useState<string[]>([]);
     const [isDetecting, setIsDetecting] = useState(false);
     const [addingSuggestion, setAddingSuggestion] = useState<string | null>(null);
-    // Ref to hold active polling interval so we can clean it up on unmount
-    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+    // Map of kwId → active polling interval so concurrent analyses clean up independently
+    const pollRefs = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+    useEffect(() => {
+        const timers = pollRefs.current;
+        return () => {
+            for (const t of timers.values()) clearInterval(t);
+            timers.clear();
+        };
+    }, []);
 
     useEffect(() => {
         setCompetitors(initialCompetitors);
@@ -312,10 +318,15 @@ export function CompetitorManager({
         const res = await refreshCompetitorKeywords(siteId, compId);
         if (res.success) {
             toast.success(`Found ${res.count} keyword gaps!`);
-            // Patch _count AND reset the keywords array length display
             setCompetitors(prev => prev.map(c =>
                 c.id === compId
-                    ? { ...c, _count: { keywords: res.count ?? 0 }, keywords: c.keywords }
+                    ? {
+                          ...c,
+                          _count: { keywords: res.count ?? 0 },
+                          keywords: Array.isArray((res as { keywords?: unknown[] }).keywords)
+                              ? (res as { keywords: unknown[] }).keywords
+                              : c.keywords,
+                      }
                     : c
             ));
         } else {
@@ -377,33 +388,44 @@ export function CompetitorManager({
             // Step 2: Poll every 3 seconds until done or failed (max 90 seconds)
             let attempts = 0;
             const MAX_ATTEMPTS = 30;
-            // Store in ref so cleanup effect can clear it on unmount
-            pollRef.current = setInterval(async () => {
+            const prevInterval = pollRefs.current.get(kwId);
+            if (prevInterval) clearInterval(prevInterval);
+
+            const stopPollingKey = () => {
+                const t = pollRefs.current.get(kwId);
+                if (t) {
+                    clearInterval(t);
+                    pollRefs.current.delete(kwId);
+                }
+            };
+
+            const interval = setInterval(async () => {
                 attempts++;
                 try {
                     const check = await fetch(`/api/competitors/analyse-page/${analysisId}`);
                     const result = await check.json();
 
                     if (result.status === "done") {
-                        if (pollRef.current) clearInterval(pollRef.current);
+                        stopPollingKey();
                         setAnalyses(prev => ({ ...prev, [kwId]: result.result as PageAnalysis }));
                         setAnalysingKey(null);
                         toast.success("Page analysis complete!");
                     } else if (result.status === "failed") {
-                        if (pollRef.current) clearInterval(pollRef.current);
+                        stopPollingKey();
                         setAnalysingKey(null);
                         toast.error(result.error || "Analysis failed \u2014 please try again.");
                     } else if (attempts >= MAX_ATTEMPTS) {
-                        if (pollRef.current) clearInterval(pollRef.current);
+                        stopPollingKey();
                         setAnalysingKey(null);
                         toast.error("Analysis timed out after 90 seconds \u2014 please retry.");
                     }
                 } catch {
-                    if (pollRef.current) clearInterval(pollRef.current);
+                    stopPollingKey();
                     setAnalysingKey(null);
                     toast.error("Network error while checking analysis status");
                 }
             }, 3000);
+            pollRefs.current.set(kwId, interval);
         } catch {
             toast.error("Network error during page analysis");
             setAnalysingKey(null);
@@ -543,7 +565,7 @@ export function CompetitorManager({
                                                             </span>
                                                         ) : (
                                                             <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0">
-                                                                Vol: {kw.searchVolume || '>1K'}
+                                                                Vol: {kw.searchVolume != null && kw.searchVolume > 0 ? kw.searchVolume.toLocaleString() : '—'}
                                                             </span>
                                                         )}
                                                     </div>
@@ -554,7 +576,7 @@ export function CompetitorManager({
                                                                 {Math.round(kw.impressions / 3).toLocaleString()} imp/mo
                                                             </span>
                                                             <span>{kw.clicks ?? 0} clicks</span>
-                                                            <span>CTR: {kw.ctr ?? 0}%</span>
+                                                            <span>CTR: {kw.ctr != null ? `${(kw.ctr <= 1 ? kw.ctr * 100 : kw.ctr).toFixed(1)}%` : '0%'}</span>
                                                             <span>Pos: #{kw.position ?? '—'}</span>
                                                             {kw.intent && (
                                                                 <span className="capitalize px-1.5 py-0.5 rounded bg-muted border border-border">{kw.intent}</span>
@@ -571,9 +593,9 @@ export function CompetitorManager({
                                                                 </span>
                                                             )}
                                                             {kw.ctr != null && (
-                                                                <span>CTR: {(kw.ctr * 100).toFixed(1)}%</span>
+                                                                <span>CTR: {(kw.ctr <= 1 ? kw.ctr * 100 : kw.ctr).toFixed(1)}%</span>
                                                             )}
-                                                            <span>Diff: {kw.difficulty || 45}/100</span>
+                                                            <span>Diff: {kw.difficulty != null && kw.difficulty > 0 ? `${kw.difficulty}/100` : '—'}</span>
                                                             {kw.intent && (
                                                                 <span className="capitalize px-1.5 py-0.5 rounded bg-muted border border-border">{kw.intent}</span>
                                                             )}
@@ -601,7 +623,7 @@ export function CompetitorManager({
 
                                                 <CreditGate action="blog_generation">
                                                     <button
-                                                        onClick={() => handleGenerate(comp.id, comp.domain, kw.keyword, kw.searchVolume || 1000, kw.difficulty || 45, kw.intent)}
+                                                        onClick={() => handleGenerate(comp.id, comp.domain, kw.keyword, kw.searchVolume ?? 0, kw.difficulty ?? 0, kw.intent)}
                                                         disabled={generatingId === `${comp.id}::${kw.keyword}`}
                                                         className="w-full py-1.5 bg-muted hover:bg-indigo-500/20 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors text-white hover:text-indigo-300 disabled:opacity-50"
                                                     >
