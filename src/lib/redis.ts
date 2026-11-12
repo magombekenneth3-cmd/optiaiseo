@@ -32,6 +32,33 @@ export const redis = new Redis({
 
 export const isRedisConfigured = !!(url && token);
 
+// ── Circuit breaker ─────────────────────────────────────────────────────────
+// When Upstash is unreachable every request still paid for a failed round trip
+// plus the retry back-off before falling through to the database. After a
+// failure, skip Redis for a short cooldown instead.
+const REDIS_COOLDOWN_MS = 60_000;
+let redisDownUntil = 0;
+
+/** True when Redis is configured and not in a failure cooldown. */
+export function isRedisAvailable(): boolean {
+    return isRedisConfigured && Date.now() >= redisDownUntil;
+}
+
+/** Record a Redis failure, open the breaker, and return a loggable summary. */
+export function markRedisFailure(error: unknown): { errorCode: string; error: string; cooldownMs: number } {
+    redisDownUntil = Date.now() + REDIS_COOLDOWN_MS;
+    return { errorCode: redisErrorCode(error), error: redisErrorMessage(error), cooldownMs: REDIS_COOLDOWN_MS };
+}
+
+/** Short error text with any URL or token-looking fragment removed. */
+export function redisErrorMessage(error: unknown): string {
+    const raw = error instanceof Error ? error.message : String(error);
+    return raw
+        .replace(/https?:\/\/\S+/g, "<url>")
+        .replace(/[A-Za-z0-9_-]{32,}/g, "<redacted>")
+        .slice(0, 200);
+}
+
 export function getRedis(): Redis | null {
     if (!url || !token) return null;
     return redis;

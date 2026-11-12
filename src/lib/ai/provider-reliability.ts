@@ -143,7 +143,7 @@ export async function withProviderRetries<T>(params: {
             const classified = classifyProviderError(error, params.provider, params.modelId, params.requestId);
             lastError = classified;
             const shouldRetry = classified.retryable && attempt < maxAttempts;
-            logger.warn("[AI] Provider attempt failed", {
+            logger.warn(`[AI] Provider attempt failed: ${classified.message}`, {
                 provider: params.provider,
                 modelId: params.modelId,
                 category: classified.category,
@@ -177,7 +177,7 @@ export function logProviderFallback(
     failed: AIProviderError,
     nextProvider: AIProviderName,
 ): void {
-    logger.warn("[AI] Switching provider after failed attempt", {
+    logger.warn(`[AI] Switching provider after failed attempt: ${failed.message} → ${nextProvider}`, {
         provider: failed.provider,
         nextProvider,
         modelId: failed.modelId,

@@ -19,9 +19,9 @@ const SITE_URL = (
         : CANONICAL_SITE_URL
 ).replace(/\/$/, "");
 
-export function generateStaticParams() {
-    return NICHES.map((niche) => ({ niche }));
-}
+// Not prerendered: the database is unreachable during `next build`, so static
+// generation produced empty, noindexed pages. Results are cached in Redis for 1h.
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ niche: string }> }): Promise<Metadata> {
     const { niche } = await params;
