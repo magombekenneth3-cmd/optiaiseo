@@ -302,7 +302,7 @@ export const generateBlogJob = inngest.createFunction(
         idempotency: "event.data.attemptId",
         concurrency: [
             { limit: 2, key: "event.data.userId" },
-            { limit: 8 },
+            { limit: 5 },
         ],
         rateLimit: {
             limit: 10,
