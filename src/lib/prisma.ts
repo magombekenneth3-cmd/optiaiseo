@@ -16,6 +16,11 @@ if (!databaseUrl.includes("connection_limit")) {
     const separator = databaseUrl.includes("?") ? "&" : "?";
     urlWithPool = `${databaseUrl}${separator}connection_limit=${poolSize}&pool_timeout=20`;
 }
+// Fail fast when Postgres is down (e.g. a platform restart) instead of hanging
+// for the libpq default, so callers can retry or fall back.
+if (!urlWithPool.includes("connect_timeout")) {
+    urlWithPool = `${urlWithPool}${urlWithPool.includes("?") ? "&" : "?"}connect_timeout=10`;
+}
 
 export const prisma =
     globalForPrisma.prisma ??

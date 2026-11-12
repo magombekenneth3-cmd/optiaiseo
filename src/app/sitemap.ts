@@ -8,8 +8,10 @@ import KEYWORDS from "@/data/keywords.json";
 import AEO_PAGES from "@/data/aeo-pages.json";
 import { logger, formatError } from "@/lib/logger";
 
-// Blog posts are added within 1 hour of publish, which is fast enough for indexing.
-export const revalidate = 3600;
+// Rendered per request: the database is unreachable during `next build`, so a
+// prerendered sitemap would ship with no blog or leaderboard entries. Blog and
+// leaderboard reads are cheap (leaderboard results are cached in Redis).
+export const dynamic = "force-dynamic";
 
 // ── Real lastmod dates ──────────────────────────────────────────────────────
 // Use actual file modification times so Google trusts our lastmod signals.

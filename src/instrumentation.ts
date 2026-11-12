@@ -32,6 +32,20 @@ export async function register() {
     } catch {
       console.warn("[instrumentation] Failed to initialise OTEL telemetry.");
     }
+
+    // Redis reachability: log the real failure once at boot so a dead or
+    // misconfigured Upstash instance is visible without expanding log lines.
+    try {
+      const { redis, isRedisConfigured, redisErrorMessage } = await import("@/lib/redis");
+      if (isRedisConfigured) {
+        await redis.ping().then(
+          () => console.log("[Startup] Redis (Upstash) reachable"),
+          (err: unknown) => console.warn(`[Startup] Redis (Upstash) unreachable: ${redisErrorMessage(err)} — caches fall through to the database`),
+        );
+      }
+    } catch {
+      // never block boot on the cache
+    }
   }
 
   if (process.env.NEXT_RUNTIME === "edge") {

@@ -4,9 +4,14 @@ const fs = require("fs");
 const path = require("path");
 
 async function generateOgImage() {
+  const source = path.join(__dirname, "../public/og-image-source.svg");
+  if (!fs.existsSync(source)) {
+    // public/og-image.png is committed; the SVG source is optional.
+    return;
+  }
   try {
     const sharp = require("sharp");
-    const svgBuffer = fs.readFileSync(path.join(__dirname, "../public/og-image-source.svg"));
+    const svgBuffer = fs.readFileSync(source);
     await sharp(svgBuffer).png().toFile(path.join(__dirname, "../public/og-image.png"));
     console.log("✅ og-image.png generated at public/og-image.png");
   } catch (e) {

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { redis, isRedisConfigured, redisErrorCode } from "@/lib/redis";
+import { redis, isRedisAvailable, markRedisFailure } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 import "@/lib/server-only";
 
@@ -22,7 +22,7 @@ export async function GET() {
     const email = session!.user!.email!;
     const cacheKey = `notif:${email}`;
 
-    if (isRedisConfigured) {
+    if (isRedisAvailable()) {
         try {
             const hit = await redis.get<string>(cacheKey);
             if (hit) {
@@ -33,9 +33,7 @@ export async function GET() {
                 );
             }
         } catch (err: unknown) {
-            logger.warn("[Notifications] Redis read failed — falling through to DB", {
-                errorCode: redisErrorCode(err),
-            });
+            logger.warn("[Notifications] Redis read failed — falling through to DB", markRedisFailure(err));
         }
     }
 
@@ -149,13 +147,11 @@ export async function GET() {
 
     const payload = { notifications: result, unreadCount };
 
-    if (isRedisConfigured) {
+    if (isRedisAvailable()) {
         try {
             await redis.set(cacheKey, JSON.stringify(payload), { ex: CACHE_TTL_S });
         } catch (err: unknown) {
-            logger.warn("[Notifications] Redis write failed — response served without caching", {
-                errorCode: redisErrorCode(err),
-            });
+            logger.warn("[Notifications] Redis write failed — response served without caching", markRedisFailure(err));
         }
     }
 
@@ -177,7 +173,7 @@ export async function PATCH(req: Request) {
             where: { userId: user.id, read: false },
             data: { read: true },
         });
-        if (isRedisConfigured) {
+        if (isRedisAvailable()) {
             try { await redis.del(`notif:${user.email}`); } catch { /* non-fatal */ }
         }
         return NextResponse.json({ ok: true });
@@ -188,7 +184,7 @@ export async function PATCH(req: Request) {
             where: { id, userId: user.id },
             data: { dismissed: true },
         });
-        if (isRedisConfigured) {
+        if (isRedisAvailable()) {
             try { await redis.del(`notif:${user.email}`); } catch { /* non-fatal */ }
         }
         return NextResponse.json({ ok: true });
@@ -199,7 +195,7 @@ export async function PATCH(req: Request) {
             where: { id, userId: user.id },
             data: { read: true },
         });
-        if (isRedisConfigured) {
+        if (isRedisAvailable()) {
             try { await redis.del(`notif:${user.email}`); } catch { /* non-fatal */ }
         }
         return NextResponse.json({ ok: true });

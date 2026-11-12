@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { redis } from "@/lib/redis";
+import { redis, isRedisAvailable, markRedisFailure } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 
 export const NICHES = ["saas", "ecommerce", "local", "agency", "blog", "other"] as const;
@@ -62,17 +62,24 @@ export type NicheLeaderboardResult =
     | { status: "error"; error: string; data: null };
 
 async function cacheGet<T>(key: string): Promise<T | null> {
+    if (!isRedisAvailable()) return null;
     try {
         const raw = await redis.get<string>(key);
         if (!raw) return null;
         return (typeof raw === "string" ? JSON.parse(raw) : raw) as T;
-    } catch { return null; }
+    } catch (err) {
+        logger.warn("[Leaderboard] Redis read failed — querying database", markRedisFailure(err));
+        return null;
+    }
 }
 
 async function cacheSet<T>(key: string, value: T, ttl: number = CACHE_TTL): Promise<void> {
+    if (!isRedisAvailable()) return;
     try {
         await redis.setex(key, ttl, JSON.stringify(value));
-    } catch { /* non-fatal */ }
+    } catch (err) {
+        markRedisFailure(err); // non-fatal
+    }
 }
 
 export async function getNicheLeaderboardResult(niche: Niche): Promise<NicheLeaderboardResult> {

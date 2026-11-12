@@ -9,6 +9,9 @@ import { CANONICAL_SITE_URL } from "@/lib/canonical";
 
 const SITE_URL = CANONICAL_SITE_URL;
 
+// Not prerendered: the database is unreachable during `next build`.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
     title: `AI Visibility Leaderboard ${new Date().getFullYear()} — Most AI-Cited Websites by Industry`,
     description:
