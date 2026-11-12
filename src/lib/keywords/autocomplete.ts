@@ -84,7 +84,7 @@ export async function fetchKeywordIdeas(seed: string): Promise<AutocompleteSugge
         `${seed} help`,
     ];
 
-    const alphabetVariations = "abcdefghijklm".split("").map((letter) => `${seed} ${letter}`);
+    const alphabetVariations = "abcdefghijklmnopqrstuvwxyz".split("").map((letter) => `${seed} ${letter}`);
 
     const allVariations = [
         ...questionVariations,
@@ -106,11 +106,11 @@ export async function fetchKeywordIdeas(seed: string): Promise<AutocompleteSugge
     }
 
     const allKeywords = new Set<string>();
-    const seedParts = seed.toLowerCase().split(" ");
+    const seedParts = seed.toLowerCase().trim().split(/\s+/).filter(Boolean);
 
     [...baseResults, ...variationResults].forEach((item) => {
         const lower = item.keyword.toLowerCase().trim();
-        if (lower.length > 3 && seedParts.some((part) => part.length > 2 && lower.includes(part))) {
+        if (lower.length > 2 && seedParts.some((part) => (part.length > 2 || seedParts.length === 1) && lower.includes(part))) {
             allKeywords.add(lower);
         }
     });

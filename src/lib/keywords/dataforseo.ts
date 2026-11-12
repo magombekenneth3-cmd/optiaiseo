@@ -386,21 +386,32 @@ export async function getSerpData(
             backlinks_info?: { referring_domains?: number };
         }> = data?.tasks?.[0]?.result?.[0]?.items ?? [];
 
+        const maxCap = Math.max(1, Math.min(maxResults, 100));
         const urls = items
             .filter((i) => i.type === "organic" && i.url)
             .map((i) => i.url!)
-            .slice(0, Math.min(maxResults, 10));
+            .slice(0, maxCap);
 
         const organicItems = items.filter((i) => i.type === "organic" && i.url);
         const organicResults: SerpOrganicResult[] = organicItems
-            .slice(0, Math.min(maxResults, 10))
-            .map((i, idx) => ({
-                url: i.url!,
-                domain: i.domain ?? new URL(i.url!).hostname.replace(/^www\./, ""),
-                rank: i.rank_absolute ?? idx + 1,
-                title: i.title ?? "",
-                backlinks: i.backlinks_info?.referring_domains,
-            }));
+            .slice(0, maxCap)
+            .map((i, idx) => {
+                let parsedDomain = i.domain ?? "";
+                if (!parsedDomain && i.url) {
+                    try {
+                        parsedDomain = new URL(i.url).hostname.replace(/^www\./, "");
+                    } catch {
+                        parsedDomain = "";
+                    }
+                }
+                return {
+                    url: i.url!,
+                    domain: parsedDomain,
+                    rank: i.rank_absolute ?? idx + 1,
+                    title: i.title ?? "",
+                    backlinks: i.backlinks_info?.referring_domains,
+                };
+            });
 
         const featureTypes = [...new Set(items.map((i) => i.type))];
 
@@ -429,7 +440,10 @@ export interface DomainMetrics {
     dataSource: "semrush" | "dataforseo" | "none";
 }
 
-export async function getDomainMetrics(domain: string): Promise<DomainMetrics | null> {
+export async function getDomainMetrics(
+    domain: string,
+    locationCode: number = DATAFORSEO_LOCATION_CODES.us
+): Promise<DomainMetrics | null> {
     if (process.env.SEMRUSH_API_KEY) {
         try {
             const url =
@@ -479,7 +493,7 @@ export async function getDomainMetrics(domain: string): Promise<DomainMetrics | 
                 headers: { Authorization: auth, "Content-Type": "application/json" },
                 body: JSON.stringify([{
                     target: domain,
-                    location_code: DATAFORSEO_LOCATION_CODES.us,
+                    location_code: locationCode,
                     language_code: "en",
                 }]),
             },

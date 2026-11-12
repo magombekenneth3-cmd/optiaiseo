@@ -21,7 +21,12 @@ export function estimateKeywordRoi(params: {
 }): RoiEstimate {
     const { position, searchVolume, cpc, hasAnswerBox, hasLocalPack } = params;
 
-    let ctr = CTR_CURVE[Math.min(position, 10)] ?? 0.01;
+    const roundedPos = Math.round(position);
+    let ctr =
+        roundedPos <= 0 ? 0
+        : roundedPos <= 10 ? (CTR_CURVE[roundedPos] ?? 0.022)
+        : roundedPos <= 20 ? 0.01
+        : 0.003;
     if (hasAnswerBox) ctr *= 0.78;
     if (hasLocalPack) ctr *= 0.85;
 

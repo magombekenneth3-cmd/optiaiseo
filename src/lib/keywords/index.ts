@@ -1,7 +1,7 @@
 import { logger, formatError } from "@/lib/logger";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { callGemini } from "@/lib/gemini/client";
-import { getKeywordMetricsBatch, resolveLocationCode } from "./dataforseo";
+import { getKeywordMetricsBatch, getKeywordDifficultyBatch, resolveLocationCode } from "./dataforseo";
 import { getKeywordIdeas } from "@/lib/ubersuggest";
 import { getAhrefsTopKeywords } from "@/lib/ahrefs";
 import { getRedis, redisErrorCode } from "@/lib/redis";
@@ -50,8 +50,8 @@ export interface KeywordCluster {
     projectedMonthlyRevenue: number;
 }
 
-const ESTIMATED_CTR = 0.15;
-const ESTIMATED_CPC_FALLBACK = 5;
+const ESTIMATED_CTR = 0.05;
+const ESTIMATED_CPC_FALLBACK = 1.5;
 
 function computeTopicalAuthorityScore(keywords: EnrichedKeyword[]): number {
     const total = keywords.reduce((sum, k) => {
@@ -123,21 +123,23 @@ export const getEnrichedKeywords = async (opts: {
     if (enriched.size > 0 && process.env.DATAFORSEO_LOGIN) {
         try {
             const allKeywords = [...enriched.keys()];
-            const metrics = await getKeywordMetricsBatch(allKeywords, locationCode);
+            const [metrics, kdMap] = await Promise.all([
+                getKeywordMetricsBatch(allKeywords, locationCode),
+                getKeywordDifficultyBatch(allKeywords, locationCode),
+            ]);
             for (const [kw, data] of metrics) {
                 const existing = enriched.get(kw);
                 if (!existing) continue;
-                // keywordDifficulty is null from the Ads endpoint — only populated by Labs.
-                // We do NOT map competition_index to difficulty here.
+                const kd = kdMap.get(kw) ?? data.keywordDifficulty ?? existing.keywordDifficulty;
                 enriched.set(kw, {
                     ...existing,
                     searchVolume: data.searchVolume > 0 ? data.searchVolume : existing.searchVolume,
                     competitionIndex: data.competitionIndex,
                     // Keep legacy difficulty field pointing at keywordDifficulty for backward compat
-                    difficulty: data.keywordDifficulty ?? existing.difficulty,
-                    keywordDifficulty: data.keywordDifficulty ?? existing.keywordDifficulty,
+                    difficulty: kd ?? existing.difficulty,
+                    keywordDifficulty: kd,
                     cpc: data.cpc > 0 ? data.cpc : existing.cpc,
-                    metricsSource: data.searchVolume > 0 || data.keywordDifficulty != null ? "measured" : existing.metricsSource,
+                    metricsSource: data.searchVolume > 0 || kd != null ? "measured" : existing.metricsSource,
                 });
             }
             logger.debug("[keywords] DataForSEO enrichment complete", {
@@ -188,7 +190,7 @@ export const getEnrichedKeywords = async (opts: {
         return { ...kw, opportunityScore: score, recommendation };
     });
 
-    if (process.env.GEMINI_API_KEY && result.length > 0) {
+    if ((process.env.GEMINI_API_KEY || process.env.DEEPSEEK_API_KEY) && result.length > 0) {
         try {
             const enrichedWithIntent = await classifyIntentWithAI(result);
             return enrichedWithIntent
@@ -426,6 +428,8 @@ export function computeOpportunityScore(
             recommendation += " Informational intent — best suited for comprehensive guides.";
         }
     }
+
+    score = Math.min(100, Math.max(1, score));
 
     return { score, recommendation };
 }

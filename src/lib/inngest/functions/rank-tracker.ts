@@ -1,9 +1,9 @@
 import { inngest } from "../client";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-import { fetchGSCKeywords, normaliseSiteUrl } from "@/lib/gsc";
+import { fetchGSCKeywords, classifyIntent } from "@/lib/gsc";
 import { getUserGscToken } from "@/lib/gsc/token";
-import { getKeywordMetricsBatch, resolveLocationCode } from "@/lib/keywords/dataforseo";
+import { getKeywordMetricsBatch, getKeywordDifficultyBatch, resolveLocationCode } from "@/lib/keywords/dataforseo";
 
 export const rankTrackerSiteJob = inngest.createFunction(
     {
@@ -70,12 +70,20 @@ export const rankTrackerSiteJob = inngest.createFunction(
         const volumeMap = await step.run("enrich-volume", async () => {
             if (!process.env.DATAFORSEO_LOGIN || top50.length === 0) return {};
             const locationCode = resolveLocationCode(site.localContext ?? null);
+            const kwList = top50.map((k) => k.keyword);
             try {
-                const map = await getKeywordMetricsBatch(
-                    top50.map((k) => k.keyword),
-                    locationCode
-                );
-                return Object.fromEntries(map);
+                const [volMap, kdMap] = await Promise.all([
+                    getKeywordMetricsBatch(kwList, locationCode),
+                    getKeywordDifficultyBatch(kwList, locationCode).catch(() => new Map<string, number>()),
+                ]);
+                const combined: Record<string, { searchVolume: number; keywordDifficulty: number | null }> = {};
+                for (const [k, v] of volMap.entries()) {
+                    combined[k.toLowerCase()] = {
+                        searchVolume: v.searchVolume,
+                        keywordDifficulty: kdMap.get(k.toLowerCase()) ?? null,
+                    };
+                }
+                return combined;
             } catch (err: unknown) {
                 logger.warn("[RankTracker] DataForSEO batch failed", { error: (err as Error)?.message });
                 return {};
@@ -88,11 +96,11 @@ export const rankTrackerSiteJob = inngest.createFunction(
                 return {
                     siteId,
                     keyword: kw.keyword,
-                    intent: null,
+                    intent: classifyIntent(kw.keyword),
                     position: Math.round(kw.position),
                     url: kw.url,
                     device: "desktop",
-                    ...(metrics ? { searchVolume: metrics.searchVolume, difficulty: metrics.keywordDifficulty ?? 0 } : {}),
+                    ...(metrics ? { searchVolume: metrics.searchVolume, difficulty: metrics.keywordDifficulty ?? null } : {}),
                 };
             });
             await prisma.rankSnapshot.createMany({ data: snapshots });

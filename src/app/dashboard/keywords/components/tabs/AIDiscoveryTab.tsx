@@ -32,7 +32,7 @@ const KeywordRow = memo(function KeywordRow({
                 added={added}
                 loading={adding}
                 onClick={onAdd}
-                title={added ? "Added" : "Add to seed keywords"}
+                title={added ? "Saved to Seed List & Planner" : "Save to Seed List & Content Planner"}
             />
         </div>
     );
@@ -84,7 +84,7 @@ export const AIDiscoveryTab = memo(function AIDiscoveryTab({ siteId }: { siteId:
                         >
                             {savingToPlanner
                                 ? "Saving…"
-                                : `📅 Save ${addedSet.size > 0 ? addedSet.size + " tracked" : "all"} to Planner`}
+                                : `📅 Save ${addedSet.size > 0 ? addedSet.size + " selected" : "all"} to Planner`}
                         </button>
                     </div>
                     {keywords.map((kw, i) => (

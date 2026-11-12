@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useState } from "react";
+import { useRouter } from "next/navigation";
 import { X, ExternalLink, ArrowRight, Sparkles } from "lucide-react";
 import { KeywordSerpPanel } from "@/components/dashboard/KeywordSerpPanel";
 
@@ -10,7 +11,7 @@ const CTR_BENCH: Record<number, number> = {
 };
 
 function benchCtr(pos: number) {
-    if (pos <= 10) return CTR_BENCH[pos] ?? 2.4;
+    if (pos <= 10) return CTR_BENCH[Math.max(1, Math.min(10, Math.round(pos)))] ?? 2.4;
     if (pos <= 20) return 1.5;
     return 0.5;
 }
@@ -40,7 +41,7 @@ function actionTag(kw: DrawerKeyword) {
 
 function estImpact(kw: DrawerKeyword) {
     if (kw.position <= 3) return 0;
-    const t = kw.position <= 10 ? benchCtr(kw.position) / 100 : 0.278;
+    const t = kw.position <= 10 ? benchCtr(kw.position) / 100 : 0.084;
     return Math.max(0, Math.round(kw.impressions * t - kw.clicks));
 }
 
@@ -113,22 +114,26 @@ function recAction(kw: DrawerKeyword) {
 
 function aiSuggestions(kw: DrawerKeyword) {
     const b = benchCtr(kw.position);
+    const est = Math.max(1, estImpact(kw));
+    const tierHigh = `+${Math.max(1, Math.round(est * 0.45))}–${Math.max(2, Math.round(est * 0.75))} clicks/mo (est.)`;
+    const tierMid = `+${Math.max(1, Math.round(est * 0.25))}–${Math.max(2, Math.round(est * 0.45))} clicks/mo (est.)`;
+    const tierLow = `+${Math.max(1, Math.round(est * 0.15))}–${Math.max(2, Math.round(est * 0.25))} clicks/mo (est.)`;
     if (kw.position <= 10 && kw.ctr < b * 0.6)
         return [
-            { text: "Improve title", impact: "+3–5 clicks/mo" },
-            { text: "Enhance meta description", impact: "+2–4 clicks/mo" },
-            { text: "Add FAQ schema", impact: "+1–3 clicks/mo" },
+            { text: "Rewrite title tag to better match search intent", impact: tierHigh },
+            { text: "Add compelling value hook to meta description", impact: tierMid },
+            { text: "Add FAQ schema for rich result eligibility", impact: tierLow },
         ];
     if (kw.position <= 20)
         return [
-            { text: "Add relevant internal links", impact: "+5–10 clicks/mo" },
-            { text: "Expand content depth", impact: "+3–8 clicks/mo" },
-            { text: "Optimize heading structure", impact: "+2–4 clicks/mo" },
+            { text: "Add contextual internal links from high-authority pages", impact: tierHigh },
+            { text: "Expand content depth to cover subtopics in top 5 SERP", impact: tierMid },
+            { text: "Optimize H1/H2 heading structure around query variations", impact: tierLow },
         ];
     return [
-        { text: "Create dedicated landing page", impact: "+10–20 clicks/mo" },
-        { text: "Build topic cluster", impact: "+5–15 clicks/mo" },
-        { text: "Target related long-tail keywords", impact: "+3–8 clicks/mo" },
+        { text: "Create dedicated landing page targeting this query", impact: tierHigh },
+        { text: "Build supporting topic cluster links", impact: tierMid },
+        { text: "Target related long-tail question variants", impact: tierLow },
     ];
 }
 
@@ -137,6 +142,7 @@ export function KeywordDetailDrawer({ keyword: kw, siteId, onClose }: {
     siteId: string;
     onClose: () => void;
 }) {
+    const router = useRouter();
     const [tab, setTab] = useState<"overview" | "serp">("overview");
     const tag = actionTag(kw);
     const b = benchCtr(kw.position);
@@ -251,7 +257,13 @@ export function KeywordDetailDrawer({ keyword: kw, siteId, onClose }: {
                                             <p className="text-xs text-muted-foreground mt-0.5">Potential: {action.potential}</p>
                                         </div>
                                         <button
-                                            onClick={() => setTab("serp")}
+                                            onClick={() => {
+                                                if (action.cta === "Create content") {
+                                                    router.push(`/dashboard/blog?siteId=${encodeURIComponent(siteId)}&keyword=${encodeURIComponent(kw.keyword)}`);
+                                                } else {
+                                                    setTab("serp");
+                                                }
+                                            }}
                                             className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-info text-white hover:bg-info/90 transition-colors"
                                         >
                                             {action.cta}
@@ -271,7 +283,7 @@ export function KeywordDetailDrawer({ keyword: kw, siteId, onClose }: {
                             <div>
                                 <div className="flex items-center gap-1.5 mb-2">
                                     <Sparkles className="w-3.5 h-3.5 text-warning" />
-                                    <h3 className="text-sm font-semibold text-foreground">AI Suggestions</h3>
+                                    <h3 className="text-sm font-semibold text-foreground">Recommended Actions <span className="text-[10px] font-normal text-muted-foreground">(CTR benchmark model)</span></h3>
                                 </div>
                                 <ul className="space-y-1.5">
                                     {suggs.map((s, i) => (
@@ -281,8 +293,11 @@ export function KeywordDetailDrawer({ keyword: kw, siteId, onClose }: {
                                         </li>
                                     ))}
                                 </ul>
-                                <button disabled title="Coming soon" className="mt-3 flex items-center gap-1 text-xs font-medium text-info hover:text-info/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                                    View full recommendations
+                                <button
+                                    onClick={() => setTab("serp")}
+                                    className="mt-3 flex items-center gap-1 text-xs font-medium text-info hover:text-info/80 transition-colors"
+                                >
+                                    Run SERP &amp; page comparison
                                     <ArrowRight className="w-3 h-3" />
                                 </button>
                             </div>

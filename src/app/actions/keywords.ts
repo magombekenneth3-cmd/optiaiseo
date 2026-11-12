@@ -94,7 +94,7 @@ function getCachedGscKeywords(userId: string, siteId: string, domain: string) {
             }
 
             logger.debug(`[Keywords] Using GSC property: ${resolution.property} (matched by ${resolution.matchedBy})`, { siteId });
-            return await fetchGSCKeywords(tokenResult.token, resolution.property, 90, 300);
+            return await fetchGSCKeywords(tokenResult.token, resolution.property, 90, 1000);
         },
         [`gsc-keywords-${siteId}`],
         { revalidate: 300, tags: [`gsc-keywords-${siteId}`] }

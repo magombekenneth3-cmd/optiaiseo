@@ -17,7 +17,8 @@ export interface GscOpportunity {
 
 export async function getGscOpportunities(
     userId: string,
-    domain: string
+    domain: string,
+    options?: { throwOnAuthError?: boolean }
 ): Promise<GscOpportunity[]> {
     let token: string;
 
@@ -28,12 +29,16 @@ export async function getGscOpportunities(
             userId,
             error: formatError(err),
         });
+        if (options?.throwOnAuthError) throw err;
         return [];
     }
 
     let keywords;
     try {
-        keywords = await fetchGSCKeywords(token, domain, 90, 500);
+        const { resolveGscProperty } = await import("@/lib/gsc/property-resolver");
+        const resolution = await resolveGscProperty(userId, token, domain).catch(() => null);
+        const targetProperty = resolution?.property ?? domain;
+        keywords = await fetchGSCKeywords(token, targetProperty, 90, 500);
     } catch (err: unknown) {
         logger.warn("[gsc-opportunities] GSC keyword fetch failed", {
             userId,
@@ -47,11 +52,10 @@ export async function getGscOpportunities(
 
     return keywords
         .filter((k) =>
-            k.position >= 8 &&
+            k.position >= 4 &&
             k.position <= 20 &&
             k.impressions >= 50 &&
-            !isLikelyBranded(k.keyword) &&
-            hasCommercialOrTransactionalIntent(k.keyword)
+            !isLikelyBranded(k.keyword, domain)
         )
         .map((k) => {
             // k.ctr is already a percentage (e.g. 3.2 means 3.2%) — it was
@@ -62,8 +66,9 @@ export async function getGscOpportunities(
  
             // Intent weighting: transactional/commercial keywords convert better
             const intent = classifyIntent(k.keyword);
+            const hasHighIntentSignal = hasCommercialOrTransactionalIntent(k.keyword);
             const intentMultiplier = intent === "transactional" ? 1.5
-                : intent === "commercial" ? 1.3
+                : (intent === "commercial" || hasHighIntentSignal) ? 1.3
                 : 1;
             const opportunityScore = Math.round(
                 k.impressions * Math.max(0, 1 - ctrDecimal) * intentMultiplier
@@ -103,15 +108,28 @@ export async function getGscOpportunities(
         .slice(0, 50);
 }
 
-function isLikelyBranded(keyword: string): boolean {
-    return keyword.split(" ").length === 1 && keyword.length < 8;
+function isLikelyBranded(keyword: string, domain?: string): boolean {
+    const kw = keyword.toLowerCase().trim();
+    if (!domain) return false;
+    const cleanDomain = domain
+        .replace(/^sc-domain:/i, "")
+        .replace(/^https?:\/\//i, "")
+        .replace(/^www\./i, "")
+        .split("/")[0]
+        .toLowerCase();
+    const brandRoot = cleanDomain.split(".")[0] ?? "";
+    if (brandRoot.length >= 3 && (kw === brandRoot || kw === cleanDomain || kw.includes(`${brandRoot} `))) {
+        return true;
+    }
+    return false;
 }
 
 function hasCommercialOrTransactionalIntent(keyword: string): boolean {
     const signals = [
-        "best", "top", "review", "vs", "compare", "near me",
-        "hire", "cost", "price", "cheap", "service", "company",
-        "agency", "how to", "what is", "near", "local",
+        "best", "top", "review", "vs", "versus", "compare", "alternative",
+        "near me", "hire", "cost", "price", "pricing", "cheap", "buy",
+        "service", "company", "agency", "software", "tool", "platform",
+        "near", "local",
     ];
     const lower = keyword.toLowerCase();
     return signals.some((t) => lower.includes(t));

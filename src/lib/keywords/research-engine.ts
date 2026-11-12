@@ -208,7 +208,7 @@ async function loadCompetitorPositions(
     const { prisma } = await import("@/lib/prisma");
     const rows = await prisma.competitorKeyword.findMany({
         where: {
-            competitor: { siteId },
+            competitor: { siteId, deletedAt: null },
             keyword: { in: keywords },
             position: { not: null },
         },

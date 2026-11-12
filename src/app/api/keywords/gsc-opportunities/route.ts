@@ -16,8 +16,7 @@ import { getAuthUser } from '@/lib/auth/get-auth-user';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import { getGscOpportunities } from '@/lib/keywords/gsc-opportunities';
 
 export const runtime = 'nodejs';
@@ -30,14 +29,40 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
-    const domain = searchParams.get('domain')?.trim();
+    const rawDomain = searchParams.get('domain')?.trim();
+    const siteId = searchParams.get('siteId')?.trim();
 
-    if (!domain) {
-        return NextResponse.json({ error: 'Missing required query param: domain' }, { status: 400 });
+    if (!rawDomain && !siteId) {
+        return NextResponse.json({ error: 'Missing required query param: domain or siteId' }, { status: 400 });
+    }
+
+    const normalizedDomain = rawDomain
+        ? rawDomain.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '').toLowerCase()
+        : undefined;
+
+    const site = await prisma.site.findFirst({
+        where: {
+            userId: user.id,
+            ...(siteId ? { id: siteId } : {}),
+            ...(normalizedDomain
+                ? {
+                      OR: [
+                          { domain: { equals: normalizedDomain, mode: 'insensitive' } },
+                          { domain: { equals: `www.${normalizedDomain}`, mode: 'insensitive' } },
+                          { domain: { equals: rawDomain, mode: 'insensitive' } },
+                      ],
+                  }
+                : {}),
+        },
+        select: { id: true, domain: true },
+    });
+
+    if (!site) {
+        return NextResponse.json({ error: 'Site not found or access denied' }, { status: 404 });
     }
 
     try {
-        const opportunities = await getGscOpportunities(user!.id, domain);
+        const opportunities = await getGscOpportunities(user.id, site.domain, { throwOnAuthError: true });
 
         return NextResponse.json({
             opportunities,

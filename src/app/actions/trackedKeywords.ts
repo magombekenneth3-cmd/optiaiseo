@@ -8,6 +8,7 @@ import { logger }           from "@/lib/logger";
 import { limiters }         from "@/lib/rate-limit";
 import { hasFeature }       from "@/lib/stripe/plans";
 import { estimateKeywordRoi, opportunityGap } from "@/lib/keywords/roi";
+import { resolveLocationCode } from "@/lib/keywords/dataforseo";
 import { requireFeature, requireWithinLimit, guardErrorToResult } from "@/lib/stripe/guards";
 
 async function requireSiteOwner(siteId: string, userEmail: string) {
@@ -18,6 +19,7 @@ async function requireSiteOwner(siteId: string, userEmail: string) {
         },
         select: {
             id: true,
+            localContext: true,
             user: {
                 select: {
                     id: true,
@@ -31,7 +33,7 @@ async function requireSiteOwner(siteId: string, userEmail: string) {
 export async function addTrackedKeyword(
     siteId: string,
     keyword: string,
-    locationCode = 2840,
+    locationCode?: number,
 ) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) return { success: false, error: "Unauthorized" };
@@ -59,9 +61,11 @@ export async function addTrackedKeyword(
         return guardErrorToResult(err);
     }
 
+    const resolvedLocation = locationCode ?? resolveLocationCode(site.localContext ?? null);
+
     try {
         const tk = await prisma.trackedKeyword.create({
-            data: { siteId, keyword: clean, locationCode, addedBy: user.id },
+            data: { siteId, keyword: clean, locationCode: resolvedLocation, addedBy: user.id },
         });
         revalidatePath("/dashboard/keywords");
         return { success: true, tracked: tk };
@@ -126,7 +130,7 @@ export async function getTrackedKeywords(siteId: string) {
             })
             : null;
 
-        const gap = latest?.searchVolume && latest.position > 3
+        const gap = latest?.searchVolume && (latest.position === 0 || latest.position > 3)
             ? opportunityGap({
                 currentPosition: latest.position,
                 searchVolume:    latest.searchVolume,

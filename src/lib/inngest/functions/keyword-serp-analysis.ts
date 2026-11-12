@@ -9,6 +9,7 @@ import { getCompetitorAuthorityComparison } from "@/lib/seo/competitor-authority
 import { callGemini } from "@/lib/gemini/client";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { hasFeature } from "@/lib/stripe/plans";
+import { CREDIT_COSTS, refundCreditsIdempotent } from "@/lib/credits";
 
 interface SerpAnalysisPayload {
     analysisId: string;
@@ -76,6 +77,7 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
             throw new NonRetriableError("Missing required fields in serp-analysis/requested payload");
         }
 
+        try {
         // SERP analysis is available on more plans than backlink monitoring.
         // Never let this background convenience call become a hidden route to
         // metered backlink data for a non-entitled user.
@@ -170,9 +172,15 @@ export const runKeywordSerpAnalysisJob = inngest.createFunction(
             const toxicCount = backlinkSummary?.toxicCount ?? 0;
             const topAnchors = backlinkSummary?.topAnchors ?? [];
             const drGap = authorityComp?.competitors[0]?.drGap ?? null;
-            const pageBacklinks = await prisma.backlinkDetail
-                .count({ where: { siteId, targetUrl: { contains: landingPageUrl } } })
+            const pageBacklinkDomains = await prisma.backlinkDetail
+                .findMany({
+                    where: { siteId, targetUrl: { contains: landingPageUrl } },
+                    distinct: ["srcDomain"],
+                    select: { srcDomain: true },
+                })
+                .then((rows) => rows.length)
                 .catch(() => 0);
+            const pageBacklinks = pageBacklinkDomains;
             const top3Avg = authorityComp
                 ? authorityComp.competitors.slice(0, 3).reduce((s, c) => s + (c.dr ?? 0), 0) /
                 Math.max(1, Math.min(3, authorityComp.competitors.length))
@@ -384,5 +392,22 @@ ANCHORS: ${JSON.stringify(topAnchors.slice(0, 5))}`;
         });
 
         return { analysisId, keyword };
+        } catch (err: unknown) {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            logger.error("[KeywordSerpAnalysis] Job failed — refunding credits", { analysisId, keyword, errorMsg });
+            if (userId) {
+                await refundCreditsIdempotent(
+                    userId,
+                    CREDIT_COSTS.serp_analysis,
+                    `serp-analysis-refund:${analysisId}`,
+                    "Keyword SERP analysis failed",
+                ).catch(() => {});
+            }
+            await prisma.keywordSerpAnalysis.update({
+                where: { id: analysisId },
+                data: { status: "FAILED", errorMessage: errorMsg },
+            }).catch(() => {});
+            throw err;
+        }
     },
 );

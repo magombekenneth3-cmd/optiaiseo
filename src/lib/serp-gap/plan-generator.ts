@@ -179,9 +179,9 @@ Rules:
 export async function generateImplementationPlan(
     report: GapReport
 ): Promise<ImplementationPlan | null> {
-    if (!process.env.GEMINI_API_KEY) {
-        logger.warn("[PlanGenerator] GEMINI_API_KEY not set");
-        return null;
+    if (!process.env.GEMINI_API_KEY && !process.env.DEEPSEEK_API_KEY) {
+        logger.warn("[PlanGenerator] Neither GEMINI_API_KEY nor DEEPSEEK_API_KEY is set — using fallback plan");
+        return buildFallbackPlan(report);
     }
 
     logger.info("[PlanGenerator] Generating plan", {

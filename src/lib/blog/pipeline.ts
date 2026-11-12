@@ -1327,6 +1327,23 @@ function addCoverageGapsToAnalysis(
 
 // ─── Convenience: Full Pipeline ───────────────────────────────────────────────
 
+export interface LedgerInputs {
+    blogId?: string | null;
+    gscOpportunities?: Array<{
+        keyword: string;
+        avgPosition: number;
+        impressions: number;
+        clicks: number;
+        ctr: number;
+        opportunityScore: number;
+        opportunityType: string;
+        reason: string;
+        urls?: Array<{ url: string }>;
+    }>;
+    siteContext?: import("./context").SiteContext | null;
+    brandFacts?: Array<{ factType: string; value: string }>;
+}
+
 export interface PipelineResult {
     title: string;
     slug: string;
@@ -1337,6 +1354,8 @@ export interface PipelineResult {
     outline: OutlinePlan;
     researchPacket: ResearchPacket;
     claimPlan: ClaimPlan | null;
+    /** Evidence ledger the claim plan was built against (null if it could not be built). */
+    ledger: ResearchEvidenceLedger | null;
     /**
      * True when the LLM outline planner failed and the generic fallback was
      * used. A degraded pipeline result MUST NOT be auto-published.
@@ -1365,11 +1384,17 @@ export async function runFullPipeline(params: {
     siteContentLibrary?: SiteContentLibrary | null;
     serpCompetitiveBrief?: SerpCompetitiveBrief;
     internalLinkOpportunities?: import("./contracts").InternalLinkSuggestion[] | null;
+    /**
+     * Inputs used to build the evidence ledger once the research packet exists,
+     * when no prebuilt ledger is supplied. The ledger feeds the claim plan.
+     */
+    ledgerInputs?: LedgerInputs | null;
 }): Promise<PipelineResult> {
     const {
         keyword, serpContext, ctx, author, tone, groundedCtx, competitorAnalysis,
-        gscEvidence, pipelineType, ledger, siteId,
+        gscEvidence, pipelineType, siteId,
     } = params;
+    let ledger: ResearchEvidenceLedger | null = params.ledger ?? null;
 
     // Resolve existing-page and site-library evidence before research planning.
     let existingSite = params.existingSite ?? null;
@@ -1473,9 +1498,40 @@ export async function runFullPipeline(params: {
     });
     const sectionResearch = await buildSectionResearchMap(outline.sections, researchPacket);
 
+    if (!ledger) {
+        try {
+            const { buildResearchEvidenceLedger } = await import("./evidence-ledger");
+            const { validateGscEvidence } = await import("@/lib/gsc/gsc-evidence");
+            const inputs = params.ledgerInputs ?? null;
+            const validatedGsc = gscEvidence ? validateGscEvidence(gscEvidence, "pipeline-ledger") : null;
+            ledger = buildResearchEvidenceLedger({
+                topic: keyword,
+                searchIntent: ctx.intent,
+                blogId: inputs?.blogId ?? null,
+                researchPacket,
+                serpContext,
+                gscEvidence: validatedGsc,
+                gscOpportunities: inputs?.gscOpportunities ?? [],
+                gscProperty: validatedGsc?.property,
+                author,
+                siteContext: inputs?.siteContext ?? null,
+                brandFacts: inputs?.brandFacts ?? groundedCtx?.data.brandFacts ?? [],
+            });
+            logger.info("[Pipeline] Evidence ledger built before claim planning", {
+                keyword,
+                evidenceItems: ledger.evidenceItems.length,
+                gscObservations: ledger.gscObservations.length,
+            });
+        } catch (e) {
+            logger.warn("[Pipeline] Evidence ledger build failed — claim plan will use research packet only", {
+                error: e instanceof Error ? e.message : String(e),
+            });
+        }
+    }
+
     let claimPlan: ClaimPlan | null = null;
     try {
-        claimPlan = buildClaimPlan(outline.sections, researchPacket, ledger ?? null, keyword);
+        claimPlan = buildClaimPlan(outline.sections, researchPacket, ledger, keyword);
         logger.info("[Pipeline] Claim plan built", {
             keyword,
             totalClaims: claimPlan.totalPlannedClaims,
@@ -1553,6 +1609,7 @@ export async function runFullPipeline(params: {
         outline,
         researchPacket,
         claimPlan,
+        ledger,
         degraded: outline.degraded === true,
     };
 }

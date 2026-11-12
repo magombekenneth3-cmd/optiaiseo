@@ -22,6 +22,14 @@ export interface SovEntry {
     isOwner:      boolean;
 }
 
+function ctrForPosition(pos: number | null | undefined): number {
+    if (!pos || pos <= 0) return 0;
+    const rounded = Math.round(pos);
+    if (rounded <= 10) return CTR[rounded] ?? 0.022;
+    if (rounded <= 20) return 0.008;
+    return 0.002;
+}
+
 export async function computeShareOfVoice(
     siteId:     string,
     userDomain: string,
@@ -31,24 +39,28 @@ export async function computeShareOfVoice(
         const mySnapshots = await prisma.$queryRaw<
             Array<{ keyword: string; position: number; searchVolume: number | null }>
         >`
-            SELECT DISTINCT ON (keyword)
+            SELECT DISTINCT ON (LOWER(keyword))
                 keyword, position, "searchVolume"
             FROM "RankSnapshot"
             WHERE "siteId" = ${siteId}
               AND "trackedId" IS NOT NULL
-            ORDER BY keyword, "recordedAt" DESC
+            ORDER BY LOWER(keyword), "recordedAt" DESC
         `;
 
         if (mySnapshots.length === 0) return [];
         const trackedKeywords = new Set(mySnapshots.map((s) => s.keyword.toLowerCase()));
+        const myVolumeByKeyword = new Map(
+            mySnapshots.map((s) => [s.keyword.toLowerCase(), s.searchVolume ?? 0])
+        );
 
-        // 2. Load competitor positions for the same keyword set
-        const compRows = await prisma.competitorKeyword.findMany({
+        // 2. Load competitor positions for active (non-deleted) competitors, matched case-insensitively
+        const allCompRows = await prisma.competitorKeyword.findMany({
             where: {
-                competitor:  { siteId },
-                keyword:     { in: [...trackedKeywords] },
+                competitor: { siteId, deletedAt: null },
             },
+            orderBy: { fetchedAt: "desc" },
             select: {
+                competitorId: true,
                 keyword:      true,
                 position:     true,
                 searchVolume: true,
@@ -56,19 +68,35 @@ export async function computeShareOfVoice(
             },
         });
 
+        const seenCompKw = new Set<string>();
+        const compRows = allCompRows.filter((row) => {
+            const kwLower = row.keyword.toLowerCase();
+            if (!trackedKeywords.has(kwLower)) return false;
+            const dedupeKey = `${row.competitorId}::${kwLower}`;
+            if (seenCompKw.has(dedupeKey)) return false;
+            seenCompKw.add(dedupeKey);
+            return true;
+        });
+
+        const hasAnyVolume =
+            mySnapshots.some((s) => (s.searchVolume ?? 0) > 0) ||
+            compRows.some((r) => (r.searchVolume ?? 0) > 0);
+
         // 3. Aggregate clicks per domain
         const clickMap = new Map<string, number>();
 
         for (const s of mySnapshots) {
-            const vol    = Math.max(s.searchVolume ?? 0, 100);
-            const weight = CTR[Math.min(s.position, 10)] ?? CTR[10];
+            const vol    = hasAnyVolume ? Math.max(s.searchVolume ?? 0, 0) : 100;
+            const weight = ctrForPosition(s.position);
             clickMap.set(userDomain, (clickMap.get(userDomain) ?? 0) + Math.round(vol * weight));
         }
 
         for (const row of compRows) {
-            const vol    = Math.max(row.searchVolume ?? 0, 100);
-            const weight = CTR[Math.min(row.position ?? 20, 10)] ?? 0.005;
-            const d      = row.competitor.domain;
+            const kwLower = row.keyword.toLowerCase();
+            const rawVol  = row.searchVolume ?? myVolumeByKeyword.get(kwLower) ?? 0;
+            const vol     = hasAnyVolume ? Math.max(rawVol, 0) : 100;
+            const weight  = ctrForPosition(row.position);
+            const d       = row.competitor.domain;
             clickMap.set(d, (clickMap.get(d) ?? 0) + Math.round(vol * weight));
         }
 

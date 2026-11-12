@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect, Fragment } from "react";
-import { runSeoResearch, enrichSeoResearch, runTrendRefresh } from "@/app/actions/keywordDiscovery";
+import { runSeoResearch, enrichSeoResearch, runTrendRefresh, getLatestSeoResearchSnapshots } from "@/app/actions/keywordDiscovery";
 import { saveKeywordsToPlanner } from "@/app/actions/planner";
 import type {
     SeoResearchReport,
@@ -940,7 +940,7 @@ export function SeoResearchPanel({ siteId }: { siteId: string }) {
     const [loadingPhase, setLoadingPhase] = useState(0);
     const STORAGE_KEY = `seo_research_report_${siteId}`;
 
-    // Restore report from localStorage on mount
+    // Restore report from localStorage on mount (and hydrate pending evidence from DB if available)
     useEffect(() => {
         try {
             const saved = localStorage.getItem(STORAGE_KEY);
@@ -948,6 +948,43 @@ export function SeoResearchPanel({ siteId }: { siteId: string }) {
             const parsed: unknown = JSON.parse(saved);
             if (isEvidenceReport(parsed)) {
                 setReport(parsed);
+                if (parsed.evidence.status === "pending") {
+                    void getLatestSeoResearchSnapshots(siteId).then((snap) => {
+                        if (!snap.success) return;
+                        const hydratedMaster = parsed.masterList.map((row) => {
+                            const m = snap.metrics[row.keyword.toLowerCase().trim()];
+                            if (!m) return row;
+                            return {
+                                ...row,
+                                searchVolume: m.searchVolume ?? row.searchVolume,
+                                keywordDifficulty: m.keywordDifficulty ?? row.keywordDifficulty,
+                                competitionIndex: m.competitionIndex ?? row.competitionIndex,
+                                cpc: m.cpc ?? row.cpc,
+                                serpFeasibility: m.serpFeasibility ?? row.serpFeasibility,
+                            };
+                        });
+                        const anyHydrated = hydratedMaster.some((r) => r.searchVolume !== null || r.keywordDifficulty !== null);
+                        if (anyHydrated) {
+                            setReport((prev) =>
+                                prev && prev.evidence.status === "pending"
+                                    ? {
+                                          ...prev,
+                                          masterList: hydratedMaster,
+                                          keywords: hydratedMaster.slice(0, 20).map(({ roadmap: _r, ...k }) => k),
+                                          evidence: {
+                                              ...prev.evidence,
+                                              status: "COMPLETED",
+                                              runId: snap.runId,
+                                              compiledAt: snap.completedAt,
+                                              dataSources: snap.dataSources,
+                                              locationCode: snap.locationCode,
+                                          },
+                                      }
+                                    : prev
+                            );
+                        }
+                    });
+                }
             } else {
                 // Legacy report with AI-generated metrics — never show it again.
                 localStorage.removeItem(STORAGE_KEY);
@@ -955,7 +992,7 @@ export function SeoResearchPanel({ siteId }: { siteId: string }) {
         } catch {
             // ignore corrupt cache
         }
-    }, [STORAGE_KEY]);
+    }, [STORAGE_KEY, siteId]);
 
     // Persist report to localStorage whenever it changes
     useEffect(() => {

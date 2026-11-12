@@ -34,11 +34,17 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
     const [error,    setError]    = useState<string | null>(null);
     const [isPending, startTransition] = useTransition();
 
-    // Undo-on-remove state
-    const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
-    const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Undo-on-remove state (keyed per row so multiple deletions never cancel one another)
+    const [pendingRemoveIds, setPendingRemoveIds] = useState<string[]>([]);
+    const undoTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-    useEffect(() => () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }, []);
+    useEffect(() => {
+        const timers = undoTimersRef.current;
+        return () => {
+            for (const t of timers.values()) clearTimeout(t);
+            timers.clear();
+        };
+    }, []);
 
     const atLimit = maxTracked !== -1 && keywords.length >= maxTracked;
 
@@ -57,28 +63,37 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
     }
 
     function handleRemove(trackedId: string) {
-        // Optimistic: hide the row immediately, start a 5-second timer
-        if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-        setPendingRemoveId(trackedId);
+        const existingTimer = undoTimersRef.current.get(trackedId);
+        if (existingTimer) clearTimeout(existingTimer);
 
-        undoTimerRef.current = setTimeout(() => {
-            // Actually delete after 5 seconds
+        setPendingRemoveIds((prev) => (prev.includes(trackedId) ? prev : [...prev, trackedId]));
+
+        const timer = setTimeout(() => {
+            undoTimersRef.current.delete(trackedId);
             startTransition(async () => {
                 const res = await removeTrackedKeyword(siteId, trackedId);
                 if (!res.success) { setError(res.error ?? "Failed to remove"); }
                 setKeywords((prev) => prev.filter((k) => k.id !== trackedId));
-                setPendingRemoveId(null);
+                setPendingRemoveIds((prev) => prev.filter((id) => id !== trackedId));
             });
         }, 5000);
+        undoTimersRef.current.set(trackedId, timer);
     }
 
-    function handleUndo() {
-        if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-        setPendingRemoveId(null);
+    function handleUndo(trackedId?: string) {
+        const targetId = trackedId ?? pendingRemoveIds[pendingRemoveIds.length - 1];
+        if (!targetId) return;
+        const timer = undoTimersRef.current.get(targetId);
+        if (timer) {
+            clearTimeout(timer);
+            undoTimersRef.current.delete(targetId);
+        }
+        setPendingRemoveIds((prev) => prev.filter((id) => id !== targetId));
     }
 
-    const pendingKw = pendingRemoveId ? keywords.find(k => k.id === pendingRemoveId) : null;
-    const visibleKeywords = keywords.filter(k => k.id !== pendingRemoveId);
+    const latestPendingId = pendingRemoveIds[pendingRemoveIds.length - 1] ?? null;
+    const pendingKw = latestPendingId ? keywords.find(k => k.id === latestPendingId) : null;
+    const visibleKeywords = keywords.filter(k => !pendingRemoveIds.includes(k.id));
 
     return (
         <div className="card-surface overflow-hidden">
@@ -139,8 +154,8 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
             {/* Undo banner */}
             {pendingKw && (
                 <div className="px-4 py-2 text-xs text-warning font-medium bg-warning/10 border-b border-border flex items-center justify-between">
-                    <span>Removed &ldquo;{pendingKw.keyword}&rdquo;</span>
-                    <button onClick={handleUndo} className="underline font-semibold hover:opacity-80">Undo</button>
+                    <span>Removed &ldquo;{pendingKw.keyword}&rdquo;{pendingRemoveIds.length > 1 ? ` (+${pendingRemoveIds.length - 1} more)` : ""}</span>
+                    <button onClick={() => handleUndo(pendingKw.id)} className="underline font-semibold hover:opacity-80">Undo</button>
                 </div>
             )}
 
@@ -159,7 +174,7 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-medium truncate">{kw.keyword}</p>
                                         <p className="text-xs text-muted-foreground mt-0.5">
-                                            {latest ? `#${latest.position}` : "Pending"}{" "}
+                                            {latest ? (latest.position > 0 ? `#${latest.position}` : "Unranked") : "Pending"}{" "}
                                             {kw.roi ? `· ~$${kw.roi.estimatedRevenueUsd}/mo` : ""}
                                         </p>
                                     </div>
@@ -197,7 +212,9 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
                                     const trend     = (() => {
                                         const h = kw.snapshots;
                                         if (h.length < 2) return "flat" as const;
-                                        const d = h[h.length - 1].position - h[0].position;
+                                        const firstPos = h[0].position <= 0 ? 100 : h[0].position;
+                                        const lastPos  = h[h.length - 1].position <= 0 ? 100 : h[h.length - 1].position;
+                                        const d = lastPos - firstPos;
                                         return d < -2 ? "up" as const : d > 2 ? "down" as const : "flat" as const;
                                     })();
                                     const TrendIcon = trend === "up"
@@ -255,7 +272,9 @@ export function TrackedKeywordsPanel({ siteId, initialData, tier, maxTracked }: 
                                             <td className="px-6 py-3.5 text-info text-xs font-medium">
                                                 {kw.opportunityGapUsd > 0
                                                     ? `+$${kw.opportunityGapUsd.toLocaleString()}`
-                                                    : <span className="text-muted-foreground">Already top 3</span>}
+                                                    : latest && latest.position > 0 && latest.position <= 3
+                                                        ? <span className="text-muted-foreground">Already top 3</span>
+                                                        : <span className="text-muted-foreground">—</span>}
                                             </td>
                                             <td className="px-6 py-3.5 text-right">
                                                 <button

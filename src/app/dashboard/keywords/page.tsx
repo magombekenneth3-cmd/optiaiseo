@@ -68,7 +68,7 @@ function HealthBar({ summary }: {
                 ))}
             </div>
             {summary.criticalCount > 0 && (
-                <a href="#workspace" className="shrink-0 text-xs font-semibold text-info hover:opacity-80 transition-colors">
+                <a href="#workspace-critical" className="shrink-0 text-xs font-semibold text-info hover:opacity-80 transition-colors">
                     View critical keywords →
                 </a>
             )}

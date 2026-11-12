@@ -107,10 +107,14 @@ export const rankAlertCheckerJob = inngest.createFunction(
             const wins:  { keyword: string; from: number; to: number; delta: number }[] = [];
 
             for (const [keyword, currentPos] of todayMap) {
-                const history = historyByKeyword.get(keyword);
-                if (!history || history.length < 3) continue;
+                const history = (historyByKeyword.get(keyword) ?? []).filter((p) => p > 0);
+                if (history.length < 3) continue;
 
                 const baseline = median(history);
+                if (currentPos <= 0) {
+                    drops.push({ keyword, from: Math.round(baseline), to: 21, delta: Math.max(alertThreshold, Math.round(21 - baseline)) });
+                    continue;
+                }
                 const delta = currentPos - baseline;
 
                 if (delta >= alertThreshold) {
@@ -185,7 +189,16 @@ export const rankAlertCheckerJob = inngest.createFunction(
                     where: { id: userId },
                     select: { preferences: true },
                 });
-                const prefs = (current?.preferences as Record<string, unknown>) ?? {};
+                const prefs = (current?.preferences as Record<string, string | number | boolean | null | object>) ?? {};
+                const rankMovementsBySite: Record<string, string | number | boolean | null | object> = {
+                    ...((prefs.rankMovementsBySite as Record<string, string | number | boolean | null | object>) ?? {}),
+                    [siteId]: {
+                        domain,
+                        rankWins:  safeWins,
+                        rankDrops: safeDrops,
+                        updatedAt: new Date().toISOString(),
+                    },
+                };
 
                 await prisma.$transaction([
                     prisma.site.update({
@@ -199,6 +212,7 @@ export const rankAlertCheckerJob = inngest.createFunction(
                                 ...prefs,
                                 rankWins:  safeWins,
                                 rankDrops: safeDrops,
+                                rankMovementsBySite,
                             },
                         },
                     }),

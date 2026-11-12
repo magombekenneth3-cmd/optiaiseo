@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { prisma } from "@/lib/prisma";
 import { getLatestSerpFeatures, captureSerpFeatures } from "@/lib/serp/serp-features";
+import { rateLimit } from "@/lib/rate-limit";
+import { hasFeature } from "@/lib/stripe/plans";
 
 export async function GET(req: NextRequest) {
     const user = await getAuthUser(req);
@@ -32,6 +34,20 @@ export async function POST(req: NextRequest) {
     const user = await getAuthUser(req);
     if (!user)
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const limited = await rateLimit("trackedRankCheck", user.id);
+    if (limited) return limited;
+
+    const dbUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { subscriptionTier: true },
+    });
+    if (!hasFeature(dbUser?.subscriptionTier ?? "FREE", "rankTracking")) {
+        return NextResponse.json(
+            { error: "SERP feature scanning requires a Starter plan or above." },
+            { status: 403 }
+        );
+    }
 
     const { siteId } = await req.json();
     if (!siteId)

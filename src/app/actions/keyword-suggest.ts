@@ -74,9 +74,12 @@ export async function getSiteKeywordSuggestions(
 
         try {
             const accessToken = await getUserGscToken(userId);
+            const { resolveGscProperty } = await import("@/lib/gsc/property-resolver");
+            const resolution = await resolveGscProperty(userId, accessToken, site.domain);
+            const propertyUrl = resolution?.property ?? normaliseSiteUrl(site.domain);
             const raw = await fetchGSCKeywords(
                 accessToken,
-                normaliseSiteUrl(site.domain),
+                propertyUrl,
                 90,
                 500
             );
@@ -94,7 +97,7 @@ export async function getSiteKeywordSuggestions(
 
         try {
             competitorKeywords = await prisma.competitorKeyword.findMany({
-                where: { competitor: { siteId: site.id } },
+                where: { competitor: { siteId: site.id, deletedAt: null } },
                 orderBy: { searchVolume: "desc" },
                 take: 20,
                 select: { keyword: true, searchVolume: true, difficulty: true },

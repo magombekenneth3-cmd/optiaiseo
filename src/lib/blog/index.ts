@@ -33,8 +33,17 @@ import {
     validateQuickAnswerUniqueness,
     runCompositeValidation,
 } from "./validators";
-import { runFullPipeline } from "./pipeline";
-import type { EvidencePacket, PublicationGateResult, ResearchPacket } from "./contracts";
+import { runFullPipeline, type LedgerInputs } from "./pipeline";
+import type {
+    EvidencePacket,
+    PageExistenceResult,
+    PublicationGateResult,
+    ResearchPacket,
+    SerpCompetitiveBrief,
+    SiteContentLibrary,
+} from "./contracts";
+import type { ResearchEvidenceLedger } from "./evidence-ledger";
+import type { ClaimPlan } from "./claim-plan";
 import { buildResearchPacket } from "./research-packet";
 import { extractEvidencePacket } from "./evidence-extractor";
 import { markdownToHtml, inlineMarkdownToHtml } from "./markdown";
@@ -67,6 +76,21 @@ export interface BlogPostDraft {
     faqs?: { question: string; answer: string }[];
     /** True when the outline planner failed and a fallback template was used. */
     degraded?: boolean;
+    /** Evidence ledger the writer's claim plan was built against. */
+    ledger?: ResearchEvidenceLedger | null;
+    /** Planned, evidence-mapped claims used by the section writer. */
+    claimPlan?: ClaimPlan | null;
+}
+
+/**
+ * Research produced before writing, supplied by the durable workflow so the
+ * writer uses exactly the snapshot that was persisted.
+ */
+export interface PrecomputedResearch {
+    serpCompetitiveBrief?: SerpCompetitiveBrief;
+    siteContentLibrary?: SiteContentLibrary | null;
+    existingSite?: PageExistenceResult | null;
+    ledgerInputs?: LedgerInputs | null;
 }
 
 export interface AuthorProfile {
@@ -630,6 +654,7 @@ export async function generateEvergreenPost(
     intentOverride?: string,
     gscEvidence?: Record<string, unknown> | null,
     pipelineType?: string,
+    precomputedResearch?: PrecomputedResearch | null,
 ): Promise<BlogPostDraft> {
     if (!hasConfiguredAiProvider()) throw new Error("No AI provider is configured.");
 
@@ -670,6 +695,10 @@ export async function generateEvergreenPost(
         gscEvidence,
         pipelineType,
         siteId,
+        serpCompetitiveBrief: precomputedResearch?.serpCompetitiveBrief,
+        siteContentLibrary: precomputedResearch?.siteContentLibrary ?? null,
+        existingSite: precomputedResearch?.existingSite ?? null,
+        ledgerInputs: precomputedResearch?.ledgerInputs ?? null,
     });
 
     // Build a synthetic GeminiBlogResponse from pipeline output so buildPost
@@ -688,7 +717,8 @@ export async function generateEvergreenPost(
         comparisonTable: [],
     };
 
-    return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket, pipeline.degraded);
+    const draft = await buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket, pipeline.degraded);
+    return { ...draft, ledger: pipeline.ledger, claimPlan: pipeline.claimPlan };
 }
 
 export async function generateBlogFromKeywordGap(
@@ -761,6 +791,7 @@ export async function generateBlogFromCompetitorGap(
     groundedCtx?: GroundedSiteContext | null,
     gscEvidence?: Record<string, unknown> | null,
     pipelineType?: string,
+    precomputedResearch?: PrecomputedResearch | null,
 ): Promise<BlogPostDraft> {
     if (!hasConfiguredAiProvider()) throw new Error("No AI provider is configured.");
 
@@ -812,6 +843,10 @@ export async function generateBlogFromCompetitorGap(
         gscEvidence,
         pipelineType: pipelineType || "COMPETITOR_GAP",
         siteId,
+        serpCompetitiveBrief: precomputedResearch?.serpCompetitiveBrief,
+        siteContentLibrary: precomputedResearch?.siteContentLibrary ?? null,
+        existingSite: precomputedResearch?.existingSite ?? null,
+        ledgerInputs: precomputedResearch?.ledgerInputs ?? null,
     });
 
     const syntheticResponse: GeminiBlogResponse = {
@@ -828,5 +863,6 @@ export async function generateBlogFromCompetitorGap(
         comparisonTable: [],
     };
 
-    return buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket, pipeline.degraded);
+    const draft = await buildPost(syntheticResponse, author, ctx, siteId, pipeline.researchPacket, pipeline.degraded);
+    return { ...draft, ledger: pipeline.ledger, claimPlan: pipeline.claimPlan };
 }
