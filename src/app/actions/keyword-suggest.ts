@@ -7,7 +7,16 @@ import { authOptions } from "@/lib/auth";
 import { fetchGSCKeywords, normaliseSiteUrl } from "@/lib/gsc";
 import { getUserGscToken } from "@/lib/gsc/token";
 import { resolvePageExistenceBatch, type PageExistenceVerdict } from "@/lib/opportunity-engine/page-existence-resolver";
-import { clusterGscQueries, inferQueryIntent, type GscTopicCluster, type RawGscKeyword } from "@/lib/gsc/topic-cluster";
+import {
+    clusterGscQueries,
+    inferQueryIntent,
+    isViableGscTopicQuery,
+    formatRecommendedActionLabel,
+    formatUrlPathForDisplay,
+    scoreKeywordOpportunity,
+    type GscTopicCluster,
+    type RawGscKeyword,
+} from "@/lib/gsc/topic-cluster";
 
 const GSC_RULES = {
     buriedPosition: 20,
@@ -83,11 +92,12 @@ export async function getSiteKeywordSuggestions(
                 90,
                 500
             );
-            // Sort by impressions descending before slicing to ensure high-value keywords are prioritized
+            // Filter out operator dorks, URLs, gibberish, and self-brand queries before clustering
             const gscKeywords: RawGscKeyword[] = [...raw]
+                .filter((k) => isViableGscTopicQuery(k.keyword, site.domain))
                 .sort((a, b) => b.impressions - a.impressions)
                 .slice(0, 300);
-            gscClusters = clusterGscQueries(gscKeywords).slice(0, 20);
+            gscClusters = clusterGscQueries(gscKeywords).slice(0, 25);
         } catch (err) {
             const msg = (err as Error)?.message ?? "";
             if (!msg.includes("GSC_NOT_CONNECTED") && !msg.includes("GSC_REFRESH_TOKEN_MISSING")) {
@@ -96,12 +106,15 @@ export async function getSiteKeywordSuggestions(
         }
 
         try {
-            competitorKeywords = await prisma.competitorKeyword.findMany({
+            const rawCompetitorKeywords = await prisma.competitorKeyword.findMany({
                 where: { competitor: { siteId: site.id, deletedAt: null } },
                 orderBy: { searchVolume: "desc" },
-                take: 20,
+                take: 30,
                 select: { keyword: true, searchVolume: true, difficulty: true },
             });
+            competitorKeywords = rawCompetitorKeywords
+                .filter((ck) => isViableGscTopicQuery(ck.keyword, site.domain))
+                .slice(0, 20);
         } catch (err) {
             logger.warn("[KeywordSuggest] Competitor fetch failed", { error: (err as Error)?.message });
         }
@@ -117,43 +130,57 @@ export async function getSiteKeywordSuggestions(
 
         // Process GSC Clusters
         for (const cluster of gscClusters) {
-            if (suggestions.length >= 12) break;
+            if (suggestions.length >= 16) break;
             const head = cluster.head;
             const key = head.keyword.toLowerCase().trim();
             const existence = existenceMap.get(key);
             if (!existence) continue;
 
+            const wordCount = head.keyword.trim().split(/\s+/).length;
+            const clusterImpressions = cluster.totalImpressions || head.impressions;
+            const roundedPos = Math.max(1, Math.round(cluster.avgPosition || head.position));
+
             if (existence.verdict === "MISSING") {
+                // Skip queries already ranking #1-#3 on tiny impressions or ambiguous 1-word micro-queries
+                if (roundedPos <= 3 && clusterImpressions < 30) continue;
+                if (wordCount === 1 && clusterImpressions < 15) continue;
+
+                const variantSuffix =
+                    cluster.variants.length > 1
+                        ? ` · Covers ${cluster.variants.length} related queries`
+                        : "";
                 addSuggestion({
                     keyword: head.keyword.slice(0, 200),
-                    impressions: head.impressions,
-                    position: Math.round(head.position),
-                    reason: `${head.impressions.toLocaleString()} GSC impressions (90d) — no page targets this topic cluster (${cluster.variants.length} query variants)`,
-                    source: head.position > GSC_RULES.buriedPosition ? "gsc_gap" : "no_content",
+                    impressions: clusterImpressions,
+                    position: roundedPos,
+                    reason: `No dedicated page targets this topic yet${variantSuffix}`,
+                    source: roundedPos > GSC_RULES.buriedPosition ? "gsc_gap" : "no_content",
                     clusterQueries: cluster.variants,
                     verdict: "MISSING",
                     recommendedAction: "CREATE_NEW_CONTENT",
                     existingPageUrl: null,
                     actionType: "CREATE_PAGE",
-                    gscImpressions90d: head.impressions,
+                    gscImpressions90d: clusterImpressions,
                     intent: cluster.intent,
                 });
             } else if (
                 existence.verdict === "EXISTING_NEEDS_FIX" ||
                 existence.verdict === "EXISTING_CANNIBALIZED"
             ) {
+                const actionLabel = formatRecommendedActionLabel(existence.recommendedAction, "UPDATE_PAGE");
+                const pathLabel = formatUrlPathForDisplay(existence.existingPage?.url) || "existing page";
                 addSuggestion({
                     keyword: head.keyword.slice(0, 200),
-                    impressions: head.impressions,
-                    position: Math.round(head.position),
-                    reason: `Existing page (${existence.existingPage?.url || "matched"}) ranks #${head.position} — recommend: ${existence.recommendedAction || "OPTIMIZE"}`,
+                    impressions: clusterImpressions,
+                    position: roundedPos,
+                    reason: `${actionLabel} on ${pathLabel}`,
                     source: "gsc_gap",
                     clusterQueries: cluster.variants,
                     verdict: existence.verdict,
                     recommendedAction: existence.recommendedAction,
                     existingPageUrl: existence.existingPage?.url || null,
                     actionType: "UPDATE_PAGE",
-                    gscImpressions90d: head.impressions,
+                    gscImpressions90d: clusterImpressions,
                     intent: cluster.intent,
                 });
             }
@@ -161,7 +188,7 @@ export async function getSiteKeywordSuggestions(
 
         // Process Competitor Keywords
         for (const ck of competitorKeywords) {
-            if (suggestions.length >= 10) break;
+            if (suggestions.length >= 20) break;
             const key = ck.keyword.toLowerCase().trim();
             const existence = existenceMap.get(key);
             if (existence?.verdict === "MISSING") {
@@ -183,12 +210,25 @@ export async function getSiteKeywordSuggestions(
             }
         }
 
-        const ordered = [
-            ...suggestions.filter((s) => s.actionType === "CREATE_PAGE" && s.source === "gsc_gap"),
-            ...suggestions.filter((s) => s.actionType === "CREATE_PAGE" && s.source === "no_content"),
-            ...suggestions.filter((s) => s.actionType === "UPDATE_PAGE"),
-            ...suggestions.filter((s) => s.source === "competitor_gap"),
-        ].slice(0, 10);
+        const ordered = [...suggestions]
+            .sort((a, b) => {
+                const scoreA = scoreKeywordOpportunity({
+                    impressions: a.gscImpressions90d ?? a.impressions,
+                    position: a.position,
+                    searchVolume: a.searchVolume,
+                    actionType: a.actionType,
+                    wordCount: a.keyword.trim().split(/\s+/).length,
+                });
+                const scoreB = scoreKeywordOpportunity({
+                    impressions: b.gscImpressions90d ?? b.impressions,
+                    position: b.position,
+                    searchVolume: b.searchVolume,
+                    actionType: b.actionType,
+                    wordCount: b.keyword.trim().split(/\s+/).length,
+                });
+                return scoreB - scoreA;
+            })
+            .slice(0, 12);
 
         return { success: true, suggestions: ordered };
     } catch (error: unknown) {

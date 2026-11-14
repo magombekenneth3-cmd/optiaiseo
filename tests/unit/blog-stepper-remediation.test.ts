@@ -1,8 +1,56 @@
 import { describe, it, expect } from "vitest";
 import type { KeywordSuggestion } from "@/app/actions/keyword-suggest";
 import type { AuthorInput } from "@/app/dashboard/blogs/BlogStepper";
+import {
+    isViableGscTopicQuery,
+    formatRecommendedActionLabel,
+    formatUrlPathForDisplay,
+    scoreKeywordOpportunity,
+} from "@/lib/gsc/topic-cluster";
 
 describe("BlogStepper & Keyword Intelligence Production-Grade Remediation", () => {
+    it("filters out search operator dorks, gibberish strings, and own-brand queries", () => {
+        expect(isViableGscTopicQuery("aoizeoizaoiea", "optiaiseo.online")).toBe(false);
+        expect(
+            isViableGscTopicQuery(
+                "site:linkedin.com/posts aeo ecommerce -for hire -agency in india -pitch pine -frevana -traffic genie -speedrun -american eagle -aerie -aeo stock -outfitters",
+                "optiaiseo.online"
+            )
+        ).toBe(false);
+        expect(isViableGscTopicQuery("optiaiseo", "optiaiseo.online")).toBe(false);
+        expect(isViableGscTopicQuery("optiaiseo.online", "optiaiseo.online")).toBe(false);
+
+        // Real actionable topics pass cleanly
+        expect(isViableGscTopicQuery("local seo tools", "optiaiseo.online")).toBe(true);
+        expect(isViableGscTopicQuery("small business seo", "optiaiseo.online")).toBe(true);
+        expect(isViableGscTopicQuery("alternative for semrush", "optiaiseo.online")).toBe(true);
+        expect(isViableGscTopicQuery("saas aeo", "optiaiseo.online")).toBe(true);
+    });
+
+    it("formats internal action enums and full URLs into clean UI labels", () => {
+        expect(formatRecommendedActionLabel("IMPROVE_SEARCH_INTENT", "UPDATE_PAGE")).toBe("Align Search Intent");
+        expect(formatRecommendedActionLabel("CREATE_NEW_CONTENT", "CREATE_PAGE")).toBe("New Article");
+        expect(formatUrlPathForDisplay("https://optiaiseo.online/tools/seo-tools-local-business")).toBe(
+            "/tools/seo-tools-local-business"
+        );
+    });
+
+    it("ranks high-impression striking-distance opportunities above low-impression micro-queries", () => {
+        const localSeoToolsScore = scoreKeywordOpportunity({
+            impressions: 65,
+            position: 32,
+            actionType: "UPDATE_PAGE",
+            wordCount: 3,
+        });
+        const lowImpressionSingleWordScore = scoreKeywordOpportunity({
+            impressions: 6,
+            position: 2,
+            actionType: "CREATE_PAGE",
+            wordCount: 1,
+        });
+        expect(localSeoToolsScore).toBeGreaterThan(lowImpressionSingleWordScore);
+    });
+
     it("distinguishes GSC 90-day impressions from real monthly search volume", () => {
         const gscSuggestion: KeywordSuggestion = {
             keyword: "gsc search query",

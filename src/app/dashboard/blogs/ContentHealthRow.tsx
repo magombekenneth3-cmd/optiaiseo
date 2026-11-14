@@ -108,7 +108,7 @@ function findNextAction(blogs: BlogData[]): NextAction | null {
         const withAvg = drafts.map(b => {
             const parts: number[] = [];
             if (b.validationScore != null) parts.push(Number(b.validationScore));
-            if (b.evidenceCoverage != null) parts.push(Number(b.evidenceCoverage));
+            parts.push(b.evidenceCoverage != null ? Number(b.evidenceCoverage) : 0);
             if (b.citationScore != null) parts.push(Number(b.citationScore));
             return { blog: b, avg: parts.length > 0 ? parts.reduce((a, c) => a + c, 0) / parts.length : 100 };
         });
@@ -117,7 +117,7 @@ function findNextAction(blogs: BlogData[]): NextAction | null {
         if (worst && worst.avg < 80) {
             const b = worst.blog;
             const seo = b.validationScore != null ? Math.round(Number(b.validationScore)) : null;
-            const ev = b.evidenceCoverage != null ? Math.round(Number(b.evidenceCoverage)) : null;
+            const ev = b.evidenceCoverage != null ? Math.round(Number(b.evidenceCoverage)) : 0;
             const ci = b.citationScore != null ? Math.round(Number(b.citationScore)) : null;
 
             let weakLabel = "SEO";
@@ -154,7 +154,7 @@ export function ContentHealthRow({ blogs }: { blogs: BlogData[] }) {
     };
 
     const seoAvg = avg(b => b.validationScore);
-    const evidenceAvg = avg(b => b.evidenceCoverage);
+    const evidenceAvg = avg(b => b.evidenceCoverage ?? 0);
     const aiCitation = avg(b => b.citationScore);
 
     const parts: { value: number; weight: number }[] = [];

@@ -25,6 +25,11 @@ import {
 } from "lucide-react";
 import { getSiteAuthorDetails } from "@/app/actions/blog";
 import { getSiteKeywordSuggestions, type KeywordSuggestion } from "@/app/actions/keyword-suggest";
+import {
+    formatRecommendedActionLabel,
+    formatUrlPathForDisplay,
+    isViableGscTopicQuery,
+} from "@/lib/gsc/topic-cluster";
 
 export interface AuthorInput {
     authorName: string;
@@ -85,7 +90,7 @@ function Field({
 
 function StepIndicator({ current }: { current: number }) {
     return (
-        <div className="mb-6 flex items-center gap-0 px-2">
+        <div className="mb-5 grid grid-cols-3 gap-2">
             {STEPS.map((step, i) => {
                 const done = i < current;
                 const active = i === current;
@@ -93,43 +98,56 @@ function StepIndicator({ current }: { current: number }) {
                 return (
                     <div
                         key={step.id}
-                        className="flex items-center"
-                        style={{ flex: i < STEPS.length - 1 ? "1 1 0" : "none" }}
+                        className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 transition-all ${
+                            done
+                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                                : active
+                                    ? "border-purple-500/40 bg-purple-500/15 text-white shadow-sm shadow-purple-500/10"
+                                    : "border-white/5 bg-zinc-900/40 text-zinc-500"
+                        }`}
                     >
-                        <div className="flex flex-col items-center gap-1">
-                            <div
-                                className={`flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ${
-                                    done
-                                        ? "border-emerald-500 bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
-                                        : active
-                                            ? "border-purple-500/60 bg-purple-500/20 text-purple-300 shadow-md shadow-purple-500/20"
-                                            : "border-white/10 bg-zinc-900 text-zinc-500"
-                                }`}
-                            >
-                                {done ? (
-                                    <Check className="h-4 w-4 stroke-[3]" />
-                                ) : (
-                                    <Icon className="h-4 w-4" />
-                                )}
-                            </div>
-                            <span
-                                className={`hidden text-center text-[11px] font-bold sm:block ${
-                                    active ? "text-white" : done ? "text-emerald-400" : "text-zinc-500"
-                                }`}
-                            >
-                                {step.label}
-                            </span>
+                        <div
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                                done
+                                    ? "bg-emerald-500 text-black"
+                                    : active
+                                        ? "bg-purple-500/30 text-purple-200 ring-1 ring-purple-400/50"
+                                        : "bg-zinc-800 text-zinc-500"
+                            }`}
+                        >
+                            {done ? <Check className="h-3.5 w-3.5 stroke-[3]" /> : <Icon className="h-3.5 w-3.5" />}
                         </div>
-                        {i < STEPS.length - 1 && (
-                            <div
-                                className={`mb-4 mx-2 h-0.5 flex-1 transition-all duration-500 ${i < current ? "bg-emerald-500" : "bg-white/10"}`}
-                            />
-                        )}
+                        <div className="min-w-0">
+                            <div className="text-[9px] font-semibold uppercase tracking-wider opacity-70">
+                                Step {i + 1}
+                            </div>
+                            <div className="truncate text-xs font-bold">{step.label}</div>
+                        </div>
                     </div>
                 );
             })}
         </div>
     );
+}
+
+const INTENT_MODIFIERS = [
+    { label: "AI Overview Answer", prefix: "what is ", suffix: "" },
+    { label: "Definitive Guide", prefix: "", suffix: " complete guide" },
+    { label: "Comparison / Vs", prefix: "", suffix: " vs alternatives" },
+    { label: "Best Tools / Ranking", prefix: "best ", suffix: "" },
+] as const;
+
+function stripIntentModifiers(text: string): string {
+    let base = text.trim();
+    for (const mod of INTENT_MODIFIERS) {
+        if (mod.prefix && base.toLowerCase().startsWith(mod.prefix)) {
+            base = base.slice(mod.prefix.length).trim();
+        }
+        if (mod.suffix && base.toLowerCase().endsWith(mod.suffix)) {
+            base = base.slice(0, -mod.suffix.length).trim();
+        }
+    }
+    return base;
 }
 
 function KeywordStep({
@@ -158,7 +176,9 @@ function KeywordStep({
         getSiteKeywordSuggestions(siteId)
             .then((res) => {
                 if (cancelled) return;
-                if (res.success) setSuggestions(res.suggestions);
+                if (res.success) {
+                    setSuggestions(res.suggestions.filter((s) => isViableGscTopicQuery(s.keyword)));
+                }
             })
             .catch(() => {
                 if (!cancelled) setFetchError("Couldn't load keyword suggestions.");
@@ -171,33 +191,47 @@ function KeywordStep({
         };
     }, [siteId]);
 
+    const sourceCounts = useMemo(() => {
+        return {
+            all: suggestions.length,
+            gsc_gap: suggestions.filter((s) => s.source === "gsc_gap").length,
+            no_content: suggestions.filter((s) => s.source === "no_content").length,
+            competitor_gap: suggestions.filter((s) => s.source === "competitor_gap").length,
+        };
+    }, [suggestions]);
+
     const filteredSuggestions = useMemo(() => {
-        if (filterSource === "all") return suggestions;
-        return suggestions.filter((s) => s.source === filterSource);
-    }, [suggestions, filterSource]);
+        const bySource =
+            filterSource === "all" ? suggestions : suggestions.filter((s) => s.source === filterSource);
+        const query = custom.trim().toLowerCase();
+        if (!query) return bySource;
+        // If the input exactly matches a suggestion, show the full list so the user can compare/switch easily
+        if (bySource.some((s) => s.keyword.toLowerCase() === query)) {
+            return bySource;
+        }
+        const matched = bySource.filter((s) => s.keyword.toLowerCase().includes(query));
+        return matched.length > 0 ? matched : bySource;
+    }, [suggestions, filterSource, custom]);
 
-    const sourceVariant = (source: KeywordSuggestion["source"]) =>
-        source === "gsc_gap"
-            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-            : source === "no_content"
-                ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
-                : "border-amber-500/30 bg-amber-500/10 text-amber-400";
+    const activeTopic = (custom.trim() || keyword.trim());
+    const matchedSuggestion = useMemo(
+        () => suggestions.find((s) => s.keyword.toLowerCase() === activeTopic.toLowerCase()),
+        [suggestions, activeTopic]
+    );
 
-    const sourceLabel = (source: KeywordSuggestion["source"]) =>
-        source === "gsc_gap" ? "GSC Gap" : source === "no_content" ? "No Content" : "Competitor Gap";
-
-    const canContinue = !!(keyword || custom.trim());
+    const canContinue = activeTopic.length >= 2;
 
     return (
         <div>
-            <div className="mb-4">
+            <div className="mb-3">
                 <h3 className="text-sm font-bold text-white">What target topic should this post rank for?</h3>
-                <p className="mt-1 text-xs text-zinc-400">
-                    Pick a GSC search intent gap or type a custom keyword. Pulled live from your Google Search Console analytics.
+                <p className="mt-0.5 text-xs text-zinc-400">
+                    Select a verified search opportunity from Google Search Console below, or enter a custom keyword.
                 </p>
             </div>
 
-            <div className="relative mb-3">
+            {/* Target Topic Input */}
+            <div className="relative mb-2.5">
                 <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                 <input
                     id="target-keyword"
@@ -214,190 +248,267 @@ function KeywordStep({
                             onNext();
                         }
                     }}
-                    placeholder="Type or search target keyword… (Press Enter to continue)"
-                    className={`${inputCls} pl-10`}
+                    placeholder="Enter a custom topic or pick an opportunity below…"
+                    className={`${inputCls} pl-10 pr-9`}
                     autoFocus={!initialKeyword}
                 />
-            </div>
-
-            {/* Quick Intent Inspiration Chips */}
-            <div className="mb-4 flex flex-wrap items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mr-1 flex items-center gap-1">
-                    <Sparkles className="h-3 w-3 text-purple-400" /> Intent Style:
-                </span>
-                {[
-                    { label: "AI Overview Answer", prefix: "what is " },
-                    { label: "Definitive Guide", suffix: " complete guide" },
-                    { label: "Comparison / Vs", suffix: " vs alternatives" },
-                    { label: "Best Tools / Ranking", prefix: "best " },
-                ].map((chip) => (
+                {custom && (
                     <button
-                        key={chip.label}
                         type="button"
+                        aria-label="Clear target keyword"
                         onClick={() => {
-                            let updated = custom.trim();
-                            if (!updated) {
-                                updated = chip.prefix ? `${chip.prefix}topic` : `topic${chip.suffix}`;
-                            } else {
-                                if (chip.prefix && !updated.toLowerCase().startsWith(chip.prefix)) {
-                                    updated = `${chip.prefix}${updated}`;
-                                } else if (chip.suffix && !updated.toLowerCase().includes(chip.suffix.trim())) {
-                                    updated = `${updated}${chip.suffix}`;
-                                }
-                            }
-                            setCustom(updated);
-                            onSelect(updated);
+                            setCustom("");
+                            onSelect("");
                         }}
-                        className="rounded-md border border-white/5 bg-zinc-900/60 px-2 py-0.5 text-[10px] font-medium text-zinc-400 transition-colors hover:border-purple-500/40 hover:bg-purple-500/10 hover:text-purple-300"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-300"
                     >
-                        + {chip.label}
+                        <X className="h-3.5 w-3.5" />
                     </button>
-                ))}
+                )}
             </div>
 
-            {/* Filter Tabs */}
-            <div className="mb-3 flex items-center gap-1.5 overflow-x-auto pb-1">
-                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500 mr-1">
-                    <Filter className="h-3 w-3" /> Filter:
+            {/* Intent Framing Modifiers */}
+            <div className="mb-4 flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                    <Sparkles className="h-3 w-3 text-purple-400" /> Angle framing:
                 </span>
-                {(
-                    [
-                        { id: "all", label: "All Gaps" },
-                        { id: "gsc_gap", label: "GSC Gaps" },
-                        { id: "no_content", label: "No Content" },
-                        { id: "competitor_gap", label: "Competitor Gap" },
-                    ] as const
-                ).map((tab) => (
-                    <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setFilterSource(tab.id)}
-                        className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                            filterSource === tab.id
-                                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
-                                : "border-white/5 bg-zinc-900/60 text-zinc-400 hover:text-white"
-                        }`}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
-            </div>
+                {INTENT_MODIFIERS.map((chip) => {
+                    const baseTopic = stripIntentModifiers(custom || suggestions[0]?.keyword || "");
+                    const isApplied =
+                        !!custom.trim() &&
+                        ((chip.prefix && custom.toLowerCase().startsWith(chip.prefix)) ||
+                            (chip.suffix && custom.toLowerCase().endsWith(chip.suffix)));
 
-            {loading ? (
-                <div className="flex items-center justify-center gap-2 py-8 text-xs text-zinc-400">
-                    <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
-                    Fetching live GSC keyword gap metrics…
-                </div>
-            ) : fetchError ? (
-                <p className="py-4 text-xs text-rose-400">{fetchError}</p>
-            ) : filteredSuggestions.length > 0 ? (
-                <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                    {filteredSuggestions.map((s) => (
+                    return (
                         <button
-                            key={s.keyword}
+                            key={chip.label}
                             type="button"
+                            disabled={!baseTopic}
                             onClick={() => {
-                                onSelect(s.keyword);
-                                setCustom(s.keyword);
+                                if (!baseTopic) return;
+                                const nextValue = isApplied
+                                    ? baseTopic
+                                    : `${chip.prefix}${baseTopic}${chip.suffix}`;
+                                setCustom(nextValue);
+                                onSelect(nextValue);
                             }}
-                            className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all ${
-                                keyword === s.keyword
-                                    ? "border-emerald-500/60 bg-emerald-500/15 text-white shadow-md shadow-emerald-500/10"
-                                    : "border-white/5 bg-zinc-900/50 hover:border-white/15"
+                            className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                                isApplied
+                                    ? "border-purple-500/50 bg-purple-500/20 text-purple-200"
+                                    : "border-white/5 bg-zinc-900/60 text-zinc-400 hover:border-purple-500/40 hover:bg-purple-500/10 hover:text-purple-300"
                             }`}
                         >
-                            <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                    <p className="truncate text-xs font-bold text-white mr-1">{s.keyword}</p>
-                                    <span
-                                        className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sourceVariant(
-                                            s.source
-                                        )}`}
-                                    >
-                                        {sourceLabel(s.source)}
-                                    </span>
-                                    {s.intent && (
-                                        <span
-                                            className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                                                s.intent === "Commercial"
-                                                    ? "border-purple-500/40 bg-purple-500/15 text-purple-300"
-                                                    : s.intent === "Transactional"
-                                                        ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-                                                        : s.intent === "Navigational"
-                                                            ? "border-cyan-500/40 bg-cyan-500/15 text-cyan-300"
-                                                            : "border-zinc-500/40 bg-zinc-500/15 text-zinc-300"
-                                            }`}
-                                        >
-                                            {s.intent}
-                                        </span>
-                                    )}
-                                    {s.source === "competitor_gap" && s.difficulty != null && (
-                                        <span
-                                            className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                                                s.difficulty <= 40
-                                                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                                                    : s.difficulty <= 70
-                                                        ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                                                        : "border-rose-500/30 bg-rose-500/10 text-rose-400"
-                                            }`}
-                                        >
-                                            Diff {s.difficulty}
-                                        </span>
-                                    )}
-                                    {s.actionType === "UPDATE_PAGE" ? (
-                                        <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">
-                                            Update Page ({s.recommendedAction || "REFRESH"})
-                                        </span>
-                                    ) : (
-                                        <span className="shrink-0 rounded border border-emerald-500/40 bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-400">
-                                            Create Page
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
-                                    {s.source === "competitor_gap" && s.searchVolume != null ? (
-                                        <span className="font-semibold text-zinc-300">
-                                            {s.searchVolume.toLocaleString()} searches/mo
-                                        </span>
-                                    ) : (s.gscImpressions90d != null || s.impressions > 0) ? (
-                                        <span className="font-semibold text-zinc-300">
-                                            {(s.gscImpressions90d ?? s.impressions).toLocaleString()} GSC impressions (90d)
-                                        </span>
-                                    ) : null}
-                                    {s.position > 0 && (
-                                        <span className="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
-                                            GSC Rank #{s.position}
-                                        </span>
-                                    )}
-                                    <span className="truncate">{s.reason}</span>
-                                </div>
-                                {s.existingPageUrl && (
-                                    <p className="mt-0.5 truncate font-mono text-[10px] text-amber-400/90">
-                                        Existing Page Target: {s.existingPageUrl}
-                                    </p>
-                                )}
-                            </div>
+                            {isApplied ? `✓ ${chip.label}` : `+ ${chip.label}`}
+                        </button>
+                    );
+                })}
+            </div>
 
-                            {keyword === s.keyword && (
-                                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-black">
-                                    <Check className="h-3.5 w-3.5 stroke-[3]" />
-                                </div>
-                            )}
+            {/* Opportunities Header + Filter Tabs */}
+            <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                    <Filter className="h-3 w-3 text-emerald-400" /> Recommended Search Opportunities
+                </span>
+                <div className="flex items-center gap-1 overflow-x-auto">
+                    {(
+                        [
+                            { id: "all", label: "All", count: sourceCounts.all },
+                            { id: "gsc_gap", label: "GSC Gaps", count: sourceCounts.gsc_gap },
+                            { id: "no_content", label: "Missing Pages", count: sourceCounts.no_content },
+                            { id: "competitor_gap", label: "Competitor", count: sourceCounts.competitor_gap },
+                        ] as const
+                    ).map((tab) => (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setFilterSource(tab.id)}
+                            className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                                filterSource === tab.id
+                                    ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                                    : tab.count === 0
+                                        ? "border-white/5 bg-zinc-900/30 text-zinc-600 hover:text-zinc-400"
+                                        : "border-white/5 bg-zinc-900/60 text-zinc-400 hover:text-white"
+                            }`}
+                        >
+                            <span>{tab.label}</span>
+                            <span className="rounded bg-black/30 px-1 py-0.2 font-mono text-[10px] opacity-80">
+                                {tab.count}
+                            </span>
                         </button>
                     ))}
                 </div>
-            ) : (
-                <p className="py-4 text-xs italic text-zinc-500">
-                    No keyword gap suggestions found for this filter. You can type any target keyword above.
+            </div>
+
+            {loading ? (
+                <div className="flex items-center justify-center gap-2 rounded-xl border border-white/5 bg-zinc-900/30 py-10 text-xs text-zinc-400">
+                    <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                    Analyzing live Google Search Console opportunities…
+                </div>
+            ) : fetchError ? (
+                <p className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-xs text-rose-400">
+                    {fetchError}
                 </p>
+            ) : filteredSuggestions.length > 0 ? (
+                <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                    {filteredSuggestions.map((s) => {
+                        const isSelected = activeTopic.toLowerCase() === s.keyword.toLowerCase();
+                        const impressions = s.gscImpressions90d ?? s.impressions;
+                        const pathDisplay = formatUrlPathForDisplay(s.existingPageUrl);
+                        const actionLabel =
+                            s.actionType === "UPDATE_PAGE"
+                                ? `Refresh · ${formatRecommendedActionLabel(s.recommendedAction, "UPDATE_PAGE")}`
+                                : "New Article";
+
+                        return (
+                            <button
+                                key={s.keyword}
+                                type="button"
+                                onClick={() => {
+                                    onSelect(s.keyword);
+                                    setCustom(s.keyword);
+                                }}
+                                className={`group flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all ${
+                                    isSelected
+                                        ? "border-emerald-500/60 bg-emerald-500/10 text-white shadow-md shadow-emerald-500/5"
+                                        : "border-white/5 bg-zinc-900/50 hover:border-white/15 hover:bg-zinc-900/80"
+                                }`}
+                            >
+                                {/* Left: Selection Radio + Topic + Clean Context */}
+                                <div className="flex min-w-0 flex-1 items-start gap-2.5">
+                                    <div
+                                        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                                            isSelected
+                                                ? "border-emerald-500 bg-emerald-500 text-black"
+                                                : "border-zinc-600 bg-zinc-900 group-hover:border-zinc-400"
+                                        }`}
+                                    >
+                                        {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                                    </div>
+
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            <span className="break-words text-xs font-bold text-white">
+                                                {s.keyword}
+                                            </span>
+                                            {s.intent && (
+                                                <span
+                                                    className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                                                        s.intent === "Commercial"
+                                                            ? "border-purple-500/30 bg-purple-500/15 text-purple-300"
+                                                            : s.intent === "Transactional"
+                                                                ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+                                                                : s.intent === "Navigational"
+                                                                    ? "border-cyan-500/30 bg-cyan-500/15 text-cyan-300"
+                                                                    : "border-white/10 bg-white/5 text-zinc-300"
+                                                    }`}
+                                                >
+                                                    {s.intent}
+                                                </span>
+                                            )}
+                                            <span
+                                                className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                                                    s.actionType === "UPDATE_PAGE"
+                                                        ? "border-amber-500/30 bg-amber-500/15 text-amber-300"
+                                                        : "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+                                                }`}
+                                            >
+                                                {actionLabel}
+                                            </span>
+                                        </div>
+
+                                        <p
+                                            className="mt-1 break-words text-[11px] text-zinc-400"
+                                            title={s.existingPageUrl || s.reason}
+                                        >
+                                            {pathDisplay ? (
+                                                <>
+                                                    Target page:{" "}
+                                                    <span className="font-mono text-zinc-300">{pathDisplay}</span>
+                                                </>
+                                            ) : (
+                                                s.reason
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Right: Metric Pills */}
+                                <div className="flex shrink-0 flex-col items-end gap-1">
+                                    {s.source === "competitor_gap" && s.searchVolume != null ? (
+                                        <span className="font-mono text-[11px] font-bold text-zinc-200">
+                                            {s.searchVolume.toLocaleString()} vol/mo
+                                        </span>
+                                    ) : impressions > 0 ? (
+                                        <span className="font-mono text-[11px] font-bold text-zinc-200">
+                                            {impressions.toLocaleString()}{" "}
+                                            <span className="font-sans text-[10px] font-normal text-zinc-400">
+                                                impr (90d)
+                                            </span>
+                                        </span>
+                                    ) : null}
+
+                                    <div className="flex items-center gap-1">
+                                        {s.position > 0 && (
+                                            <span
+                                                className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold ${
+                                                    s.position <= 10
+                                                        ? "bg-emerald-500/15 text-emerald-300"
+                                                        : s.position <= 35
+                                                            ? "bg-amber-500/15 text-amber-300"
+                                                            : "bg-zinc-800 text-zinc-400"
+                                                }`}
+                                            >
+                                                Rank #{Math.round(s.position)}
+                                            </span>
+                                        )}
+                                        {s.source === "competitor_gap" && s.difficulty != null && (
+                                            <span className="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
+                                                KD {s.difficulty}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </button>
+                        );
+                    })}
+                </div>
+            ) : (
+                <div className="rounded-xl border border-white/5 bg-zinc-900/30 py-6 text-center text-xs text-zinc-400">
+                    No opportunities in this filter. Type any target keyword above or switch to{" "}
+                    <button
+                        type="button"
+                        onClick={() => setFilterSource("all")}
+                        className="font-semibold text-emerald-400 underline hover:text-emerald-300"
+                    >
+                        All ({sourceCounts.all})
+                    </button>
+                    .
+                </div>
             )}
 
-            <div className="mt-6 flex justify-end">
+            {/* Footer with Selected Topic Summary + CTA */}
+            <div className="sticky -bottom-4 z-10 -mx-6 mt-4 flex items-center justify-between gap-3 border-t border-white/10 bg-zinc-950/95 px-6 py-3.5 backdrop-blur-md">
+                <div className="min-w-0 flex-1">
+                    {activeTopic ? (
+                        <div className="truncate text-xs text-zinc-300">
+                            <span className="text-zinc-500">Target: </span>
+                            <span className="font-bold text-white">{activeTopic}</span>
+                            {matchedSuggestion?.existingPageUrl && (
+                                <span className="ml-1.5 font-mono text-[10px] text-amber-300">
+                                    ({formatUrlPathForDisplay(matchedSuggestion.existingPageUrl)})
+                                </span>
+                            )}
+                        </div>
+                    ) : (
+                        <span className="text-xs text-zinc-500">Select or type a target keyword to continue</span>
+                    )}
+                </div>
+
                 <button
                     type="button"
                     onClick={onNext}
                     disabled={!canContinue}
-                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-2.5 text-xs font-bold text-black transition-all hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-xs font-bold text-black transition-all hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                     Continue to E-E-A-T Evidence <ChevronRight className="h-4 w-4" />
                 </button>
@@ -559,7 +670,7 @@ function AuthorStep({
                 </div>
             </div>
 
-            <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
+            <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <Field id="author-name" icon={<User className="h-3.5 w-3.5" />} label="Author Name" required>
                         <input
@@ -596,7 +707,7 @@ function AuthorStep({
                 >
                     <textarea
                         id="author-bio"
-                            name="authorBio"
+                        name="authorBio"
                         value={form.authorBio}
                         onChange={handleChange}
                         placeholder="e.g. 8 years leading SEO engineering & AI Search visibility strategy for growth companies."
@@ -638,7 +749,7 @@ function AuthorStep({
                             <input
                                 type="text"
                                 id="real-numbers"
-                            name="realNumbers"
+                                name="realNumbers"
                                 value={form.realNumbers}
                                 onChange={handleChange}
                                 placeholder="e.g. $450/mo saved, 85% CTR, 4.2s LCP"
@@ -655,7 +766,7 @@ function AuthorStep({
                             <input
                                 type="text"
                                 id="local-context"
-                            name="localContext"
+                                name="localContext"
                                 value={form.localContext}
                                 onChange={handleChange}
                                 placeholder="e.g. Kampala, East Africa region"
@@ -666,14 +777,22 @@ function AuthorStep({
                 </div>
             </div>
 
-            <div className="mt-6 flex items-center justify-between border-t border-white/10 pt-4">
-                <button
-                    type="button"
-                    onClick={onBack}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-zinc-400 transition-colors hover:text-white"
-                >
-                    <ChevronLeft className="h-4 w-4" /> Back
-                </button>
+            <div className="sticky -bottom-4 z-10 -mx-6 mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-zinc-950/95 px-6 py-3.5 backdrop-blur-md">
+                <div className="flex items-center gap-4">
+                    <button
+                        type="button"
+                        onClick={onBack}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-zinc-400 transition-colors hover:text-white"
+                    >
+                        <ChevronLeft className="h-4 w-4" /> Back
+                    </button>
+                    <div className="hidden items-center gap-1.5 text-xs text-zinc-400 sm:flex">
+                        <TrendingUp className="h-3.5 w-3.5 text-amber-400" />
+                        <span>
+                            Cost: <span className="font-bold text-amber-400">10 credits</span>
+                        </span>
+                    </div>
+                </div>
                 <button
                     type="button"
                     onClick={onNext}
@@ -842,13 +961,16 @@ export function GenerateBlogModal({
 
     return (
         <Dialog open onOpenChange={(open) => { if (!open) requestClose(); }}>
-            <DialogContent className="max-h-[95dvh] w-[calc(100%-2rem)] max-w-xl overflow-hidden border-white/10 bg-zinc-950/95 p-0 text-foreground shadow-2xl backdrop-blur-2xl sm:w-full">
+            <DialogContent
+                showClose={false}
+                className="!flex max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl flex-col !gap-0 overflow-hidden border-white/10 bg-zinc-950/95 p-0 text-foreground shadow-2xl backdrop-blur-2xl sm:w-full"
+            >
                 <DialogHeader className="sr-only">
                     <DialogTitle>{isDataReport ? "Data Report Creator" : "Create Article Studio"}</DialogTitle>
                     <DialogDescription>Choose a topic, add author details, and create the article.</DialogDescription>
                 </DialogHeader>
                 {/* Header */}
-                <div className="flex items-center justify-between border-b border-white/10 bg-zinc-900/60 px-6 py-4">
+                <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-zinc-900/60 px-6 py-3.5">
                     <div>
                         <div className="flex items-center gap-2">
                             <h2 className="text-base font-bold text-white">
@@ -870,7 +992,7 @@ export function GenerateBlogModal({
                     </button>
                 </div>
 
-                <div className="p-6">
+                <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
                     <StepIndicator current={step} />
 
                     {genError && step === 1 && (
@@ -914,18 +1036,6 @@ export function GenerateBlogModal({
 
                     {step === 2 && <GeneratingStep pipelineType={pipelineType} onClose={onClose} />}
                 </div>
-
-                {step === 1 && (
-                    <div className="flex items-center justify-between border-t border-white/10 bg-zinc-900/80 px-6 py-3.5">
-                        <div className="flex items-center gap-2 text-xs text-zinc-400">
-                            <TrendingUp className="h-4 w-4 text-amber-400" />
-                            <span>
-                                Credit Cost: <span className="font-bold text-amber-400">10 credits</span>
-                            </span>
-                        </div>
-                        <span className="text-[11px] text-zinc-500 font-mono">Deducted when generation is confirmed</span>
-                    </div>
-                )}
             </DialogContent>
         </Dialog>
     );

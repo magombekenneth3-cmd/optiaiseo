@@ -40,6 +40,8 @@ interface Blog {
     content: string;
     status: string;
     targetKeywords: string[];
+    validationScore?: number | null;
+    evidenceCoverage?: number | null;
     citationScore?: number | null;
     citationCriteria?: unknown;
     serpCompetitiveBrief?: SerpCompetitiveBrief | null;
@@ -497,18 +499,16 @@ function SerpAiSimulator({
                         <button
                             type="button"
                             onClick={() => setDevice("desktop")}
-                            className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${
-                                device === "desktop" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
-                            }`}
+                            className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${device === "desktop" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+                                }`}
                         >
                             Desktop
                         </button>
                         <button
                             type="button"
                             onClick={() => setDevice("mobile")}
-                            className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${
-                                device === "mobile" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
-                            }`}
+                            className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${device === "mobile" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+                                }`}
                         >
                             Mobile
                         </button>
@@ -642,12 +642,23 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
     }, [editedContent]);
 
     const citationScore = blog.citationScore ?? null;
+    const evidenceCoverage = blog.evidenceCoverage != null ? Math.round(Number(blog.evidenceCoverage)) : 0;
+    const validationScore = blog.validationScore != null ? Math.round(Number(blog.validationScore)) : null;
     const citationCriteria: CitationCriterion[] = Array.isArray(blog.citationCriteria)
         ? (blog.citationCriteria as CitationCriterion[])
         : [];
 
-    // scoreResult.score is the correct field — ContentScoreResult has no overallScore
-    const activeScore = scoreResult?.score ?? citationScore;
+    // Do not display raw structural citationScore as the overall Content Score.
+    // Until live NLP scoring (scoreResult) completes, compute composite readiness
+    // factoring in SEO validation (40%), evidence coverage (35%), and citation structure (25%).
+    const compositeReadiness = useMemo(() => {
+        if (validationScore == null && citationScore == null && blog.evidenceCoverage == null) return null;
+        const seoVal = validationScore ?? citationScore ?? 0;
+        const ciVal = citationScore ?? validationScore ?? 0;
+        return Math.round(0.4 * seoVal + 0.35 * evidenceCoverage + 0.25 * ciVal);
+    }, [validationScore, citationScore, blog.evidenceCoverage, evidenceCoverage]);
+
+    const activeScore = scoreResult?.score ?? compositeReadiness;
 
     const hasUnsavedChanges = useMemo(
         () => editedContent !== lastSavedContent,
@@ -866,8 +877,16 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                         </div>
                     </div>
 
-                    {/* Readiness pill */}
-                    <div className="mr-4 flex items-center gap-3">
+                    {/* Readiness & Evidence pills */}
+                    <div className="mr-4 flex items-center gap-2">
+                        <div className={`hidden sm:flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 ${evidenceCoverage >= 80
+                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                            : evidenceCoverage >= 50
+                                ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                                : "bg-rose-500/10 border-rose-500/20 text-rose-400"
+                            }`}>
+                            <span className="text-[11px] font-semibold">Evidence: {evidenceCoverage}%</span>
+                        </div>
                         {activeScore !== null && (
                             <div className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 ${headerTone.bg} ${headerTone.border}`}>
                                 <span className={`h-1.5 w-1.5 rounded-full ${headerTone.bar}`} />
@@ -892,9 +911,8 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                         <button
                             type="button"
                             onClick={() => setMode("write")}
-                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                                mode === "write" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                            }`}
+                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mode === "write" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                                }`}
                         >
                             <FileText className="h-3.5 w-3.5" />
                             Write
@@ -902,9 +920,8 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                         <button
                             type="button"
                             onClick={() => setMode("review")}
-                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                                mode === "review" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                            }`}
+                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mode === "review" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                                }`}
                         >
                             <ShieldCheck className="h-3.5 w-3.5" />
                             Review
@@ -912,9 +929,8 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                         <button
                             type="button"
                             onClick={() => setMode("simulate")}
-                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                                mode === "simulate" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                            }`}
+                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mode === "simulate" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                                }`}
                         >
                             <Sparkles className="h-3.5 w-3.5 text-purple-400" />
                             SERP &amp; AI
@@ -976,15 +992,15 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                             {/* Surfer SEO Style Content Radar */}
                             <ScoreRadarGauge
                                 score={activeScore}
-                                label="Content & Citation Score"
+                                label="Content Optimization Score"
                                 size="md"
                                 subScores={scoreResult?.subScores}
                                 imageRecommendation={scoreResult?.imageRecommendation}
                                 topOpportunities={scoreResult?.topOpportunities}
                             />
 
-                            {activeScore !== null && citationCriteria.length > 0 ? (
-                                <ReadinessCard score={activeScore} criteria={citationCriteria} />
+                            {citationScore !== null && citationCriteria.length > 0 ? (
+                                <ReadinessCard score={citationScore} criteria={citationCriteria} />
                             ) : null}
 
                             {/* AI improve action */}

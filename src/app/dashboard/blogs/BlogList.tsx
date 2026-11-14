@@ -179,17 +179,19 @@ function getQualityState(blog: Blog) {
 
 function computeHealthScore(blog: Blog): number | null {
     const seo = blog.validationScore == null ? null : Number(blog.validationScore);
-    const evidence = blog.evidenceCoverage == null ? null : Number(blog.evidenceCoverage);
+    const rawEvidence = blog.evidenceCoverage == null ? null : Number(blog.evidenceCoverage);
     const citation = blog.citationScore == null ? null : Number(blog.citationScore);
+
+    if (seo == null && rawEvidence == null && citation == null) return null;
+
+    // Never hide missing evidence coverage via weight renormalization on scored articles.
+    const evidence = rawEvidence != null && !Number.isNaN(rawEvidence) ? rawEvidence : 0;
 
     const parts: { value: number; weight: number }[] = [];
     if (seo != null && !Number.isNaN(seo)) parts.push({ value: seo, weight: 0.4 });
-    if (evidence != null && !Number.isNaN(evidence)) parts.push({ value: evidence, weight: 0.35 });
+    parts.push({ value: evidence, weight: 0.35 });
     if (citation != null && !Number.isNaN(citation)) parts.push({ value: citation, weight: 0.25 });
 
-    if (parts.length === 0) return null;
-
-    // Normalize weights to sum to 1
     const totalWeight = parts.reduce((sum, p) => sum + p.weight, 0);
     const score = parts.reduce((sum, p) => sum + p.value * (p.weight / totalWeight), 0);
     return Math.max(0, Math.min(100, Math.round(score)));

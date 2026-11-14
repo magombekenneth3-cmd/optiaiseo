@@ -648,6 +648,9 @@ Be specific and concise. This will be used to write a better article.`,
         let liveBlogPost: BlogPostDraft & { ogImage?: string };
         let finalPipelineType = pipelineType;
         let serpContextForGate: SerpContext | null = null;
+        let researchSnapshot: import("@/lib/blog/research-foundation").ResearchSnapshot | null = null;
+        let resolvedGscOpportunities: import("@/lib/blog/pipeline").LedgerInputs["gscOpportunities"] = [];
+        let resolvedSiteContext: import("@/lib/blog/context").SiteContext | null = null;
 
         if (pipelineType === "COMPETITOR_ATTACK" || pipelineType === "COMPETITOR_GAP") {
             // Pre-fetch SERP once as a dedicated step — same pattern as the evergreen pipeline.
@@ -676,12 +679,50 @@ Be specific and concise. This will be used to write a better article.`,
             // Capture narrowed values — TSC doesn't narrow across async closures
             const safeKeyword = keyword;
             const safeDomain  = competitorDomain;
+
+            researchSnapshot = await step.run("prepare-research-snapshot-competitor", async () => {
+                const { prepareResearchSnapshot, persistResearchSnapshot } = await import("@/lib/blog/research-foundation");
+                const snap = await prepareResearchSnapshot({
+                    siteId,
+                    keyword: safeKeyword,
+                    serpContext: competitorSerpContext,
+                    priorIntent: detectedIntent,
+                    domain: site.domain,
+                });
+                if (event.data.blogId) {
+                    await persistResearchSnapshot({
+                        blogId: event.data.blogId,
+                        attemptId: event.data.attemptId ?? null,
+                        snapshot: snap,
+                    });
+                }
+                logger.info("[Blog/Research] Persisted competitor research snapshot before writing", {
+                    siteId,
+                    keyword: safeKeyword,
+                    blogId: event.data.blogId ?? null,
+                    status: snap.completeness.status,
+                    analyzedPages: snap.completeness.analyzedPages,
+                });
+                return snap;
+            });
+
             liveBlogPost = await step.run("generate-competitor-content", async () => {
                 const res = await Promise.race([
                     generateBlogFromCompetitorGap(
                         safeKeyword, safeDomain, searchVolume ?? 0, difficulty ?? 0,
                         author, site.domain, undefined, site.blogTone || undefined, siteId, competitorSerpContext,
-                        groundedSiteCtx, gscEvidence, finalPipelineType
+                        groundedSiteCtx, gscEvidence, finalPipelineType,
+                        {
+                            serpCompetitiveBrief: researchSnapshot?.serpCompetitiveBrief,
+                            siteContentLibrary: researchSnapshot?.siteContentLibrary ?? null,
+                            existingSite: researchSnapshot?.existingSite ?? null,
+                            ledgerInputs: {
+                                blogId: event.data.blogId ?? null,
+                                gscOpportunities: [],
+                                siteContext: null,
+                                brandFacts: groundedSiteCtx?.data.brandFacts ?? [],
+                            },
+                        }
                     ),
                     new Promise<never>((_, reject) =>
                         setTimeout(() => reject(new Error("[Blog] generate-competitor-content timed out after 4.5 min")), GENERATION_TIMEOUT_MS)
@@ -798,6 +839,36 @@ Be specific and concise. This will be used to write a better article.`,
                 }
             });
             serpContextForGate = precomputedSerpContext;
+            resolvedGscOpportunities = gscOpp;
+            resolvedSiteContext = enrichedSiteContext;
+
+            if (primaryKeywordForSerp) {
+                researchSnapshot = await step.run("prepare-research-snapshot", async () => {
+                    const { prepareResearchSnapshot, persistResearchSnapshot } = await import("@/lib/blog/research-foundation");
+                    const snap = await prepareResearchSnapshot({
+                        siteId,
+                        keyword: primaryKeywordForSerp,
+                        serpContext: precomputedSerpContext,
+                        priorIntent: detectedIntent,
+                        domain: site.domain,
+                    });
+                    if (event.data.blogId) {
+                        await persistResearchSnapshot({
+                            blogId: event.data.blogId,
+                            attemptId: event.data.attemptId ?? null,
+                            snapshot: snap,
+                        });
+                    }
+                    logger.info("[Blog/Research] Persisted research snapshot before writing", {
+                        siteId,
+                        keyword: primaryKeywordForSerp,
+                        blogId: event.data.blogId ?? null,
+                        status: snap.completeness.status,
+                        analyzedPages: snap.completeness.analyzedPages,
+                    });
+                    return snap;
+                });
+            }
 
             liveBlogPost = await step.run("generate-evergreen-post", async () => {
                 // Same 4.5-min timeout as competitor path — prevents Railway host
@@ -807,7 +878,18 @@ Be specific and concise. This will be used to write a better article.`,
                     generateEvergreenPost(
                         category, keywords, author, enrichedSiteContext,
                         site.blogTone || undefined, siteId, precomputedSerpContext,
-                        groundedSiteCtx, undefined, gscEvidence, finalPipelineType
+                        groundedSiteCtx, undefined, gscEvidence, finalPipelineType,
+                        {
+                            serpCompetitiveBrief: researchSnapshot?.serpCompetitiveBrief,
+                            siteContentLibrary: researchSnapshot?.siteContentLibrary ?? null,
+                            existingSite: researchSnapshot?.existingSite ?? null,
+                            ledgerInputs: {
+                                blogId: event.data.blogId ?? null,
+                                gscOpportunities: gscOpp,
+                                siteContext: enrichedSiteContext,
+                                brandFacts: groundedSiteCtx?.data.brandFacts ?? [],
+                            },
+                        }
                     ),
                     new Promise<never>((_, reject) =>
                         setTimeout(() => reject(new Error("[Blog] generate-evergreen-post timed out after 4.5 min")), GENERATION_TIMEOUT_MS)
@@ -923,8 +1005,18 @@ ${liveBlogPost.content.substring(0, 120000)}`,
                 const data = await res.json();
                 const edited: string = data.content?.[0]?.text ?? "";
 
-                // Only accept if edit returned substantial content (not an error message)
+                // Only accept if edit returned substantial content and passed the claim/source guard
                 if (edited && edited.length > liveBlogPost.content.length * 0.4) {
+                    const { guardEditorialRewrite } = await import("@/lib/blog/editorial-guards");
+                    const guard = guardEditorialRewrite(liveBlogPost.content, edited);
+                    if (!guard.accepted) {
+                        logger.warn("[Blog/Claude] Editorial rewrite rejected by claim/source guard — keeping evidence-checked draft", {
+                            reasons: guard.reasons,
+                            originalLength: liveBlogPost.content.length,
+                            editedLength: edited.length,
+                        });
+                        return liveBlogPost;
+                    }
                     logger.info(`[Blog/Claude] Editorial pass complete`, {
                         originalLength: liveBlogPost.content.length,
                         editedLength: edited.length,
@@ -1232,6 +1324,8 @@ ${liveBlogPost.content.substring(0, 120000)}`,
                     factCheckComplete: factCheck.complete,
                     factCheckCoverage: factCheck.coverage,
                     additionalOriginalityIssues: factCheckBlockers,
+                    ledger: liveBlogPost.ledger ?? null,
+                    claimPlan: liveBlogPost.claimPlan ?? null,
                     outlineDegraded: liveBlogPost.degraded,
                 });
                 return {
@@ -1385,7 +1479,7 @@ ${liveBlogPost.content.substring(0, 120000)}`,
                 missingEvidence: liveBlogPost.missingEvidence ?? [],
                 // Persist the exact validated SERP brief used for research, writing, and gating.
                 // This supports post-generation auditability and the Content Studio research panel.
-                serpCompetitiveBrief: liveBlogPost.researchPacket.serpCompetitiveBrief ?? undefined,
+                serpCompetitiveBrief: liveBlogPost.researchPacket?.serpCompetitiveBrief ?? researchSnapshot?.serpCompetitiveBrief ?? undefined,
                 // GSC opportunity evidence — immutable provenance snapshot
                 // Null for non-GSC pipelines (USER_KEYWORD, COMPETITOR_GAP, etc.)
                 gscEvidence: gscEvidence ? (gscEvidence as Record<string, string | number | boolean | null>) : undefined,
@@ -1416,98 +1510,62 @@ ${liveBlogPost.content.substring(0, 120000)}`,
 
         await step.run("persist-evidence-ledger", async () => {
             try {
-                const { buildResearchEvidenceLedger } = await import("@/lib/blog/evidence-ledger");
-                const { buildGroundedContext } = await import("@/lib/prompt-context/build-site-context");
-                const { validateGscEvidence } = await import("@/lib/gsc/gsc-evidence");
-
-                const groundedCtx = await buildGroundedContext(siteId);
-                const brandFacts = groundedCtx?.data.brandFacts ?? [];
-
-                const validatedGscEvidence = gscEvidence
-                    ? validateGscEvidence(gscEvidence, "persist-evidence-ledger")
-                    : null;
-
-                const gscOpportunities = (finalPipelineType === "GSC_GAP" || !keyword)
-                    ? (serpContextForGate?.results ?? []).map(r => ({
-                        keyword: liveBlogPost.targetKeywords[0] ?? "",
-                        avgPosition: 0,
-                        impressions: 0,
-                        clicks: 0,
-                        ctr: 0,
-                        opportunityScore: 0,
-                        opportunityType: "unknown",
-                        reason: "",
-                    }))
-                    : [];
-
-                const ledger = buildResearchEvidenceLedger({
-                    topic: keyword ?? liveBlogPost.targetKeywords[0] ?? liveBlogPost.title,
-                    searchIntent: liveBlogPost.intent ?? detectedIntent,
-                    blogId: resolvedBlogId,
-                    researchPacket: liveBlogPost.researchPacket,
-                    serpContext: serpContextForGate,
-                    gscEvidence: validatedGscEvidence,
-                    gscOpportunities,
-                    gscProperty: validatedGscEvidence?.property,
-                    author,
-                    siteContext: null,
-                    brandFacts,
-                });
-
                 if (!resolvedBlogId) {
                     logger.warn("[Blog/EvidenceLedger] Could not resolve blogId — skipping DB persist", { siteId });
                     return;
                 }
 
-                await prisma.$transaction(async (tx) => {
-                    const artifact = await tx.researchArtifact.create({
-                        data: {
-                            blogId: resolvedBlogId,
-                            sourceType: "EXTERNAL_SOURCE",
-                            retrievedAt: new Date(ledger.collectedAt),
-                            confidence: 1.0,
-                            metadata: {
-                                ledgerId: ledger.id,
-                                serpObservations: ledger.serpObservations.length,
-                                competitorObservations: ledger.competitorObservations.length,
-                                gscObservations: ledger.gscObservations.length,
-                                evidenceItems: ledger.evidenceItems.length,
-                                topic: ledger.topic,
-                                searchIntent: ledger.searchIntent,
-                                firstPartyContext: JSON.parse(JSON.stringify(ledger.firstPartyContext)),
-                                collectedAt: ledger.collectedAt,
-                            },
-                        },
+                const { buildResearchEvidenceLedger } = await import("@/lib/blog/evidence-ledger");
+                const { validateGscEvidence } = await import("@/lib/gsc/gsc-evidence");
+                const {
+                    assessResearchCompleteness,
+                    persistEvidenceLedgerAndClaims,
+                } = await import("@/lib/blog/research-foundation");
+
+                const brandFacts = groundedSiteCtx?.data.brandFacts ?? [];
+                const validatedGscEvidence = gscEvidence
+                    ? validateGscEvidence(gscEvidence, "persist-evidence-ledger")
+                    : null;
+
+                const ledger = liveBlogPost.ledger
+                    ? { ...liveBlogPost.ledger, blogId: resolvedBlogId }
+                    : buildResearchEvidenceLedger({
+                        topic: keyword ?? liveBlogPost.targetKeywords[0] ?? liveBlogPost.title,
+                        searchIntent: liveBlogPost.intent ?? detectedIntent,
+                        blogId: resolvedBlogId,
+                        researchPacket: liveBlogPost.researchPacket,
+                        serpContext: serpContextForGate,
+                        gscEvidence: validatedGscEvidence,
+                        gscOpportunities: resolvedGscOpportunities ?? [],
+                        gscProperty: validatedGscEvidence?.property,
+                        author,
+                        siteContext: resolvedSiteContext,
+                        brandFacts,
                     });
 
-                    if (ledger.evidenceItems.length > 0) {
-                        await tx.evidenceItem.createMany({
-                            data: ledger.evidenceItems.map(item => ({
-                                artifactId: artifact.id,
-                                sourceType: item.provenance.sourceType,
-                                content: item.content,
-                                extractedClaim: item.excerpt,
-                                confidence: item.provenance.confidence,
-                                metadata: {
-                                    category: item.category,
-                                    retrievalMethod: item.provenance.retrievalMethod,
-                                    sourceUrl: item.provenance.sourceUrl,
-                                    sourceTitle: item.provenance.sourceTitle,
-                                    sourcePublisher: item.provenance.sourcePublisher,
-                                    sourcePublishedAt: item.provenance.sourcePublishedAt,
-                                    authorityScore: item.provenance.authorityScore,
-                                    capturedAt: item.provenance.capturedAt,
-                                    ...item.metadata,
-                                },
-                            })),
-                        });
-                    }
+                const completeness = researchSnapshot?.completeness
+                    ?? assessResearchCompleteness(liveBlogPost.researchPacket?.serpCompetitiveBrief);
+
+                const persisted = await persistEvidenceLedgerAndClaims({
+                    blogId: resolvedBlogId,
+                    ledger,
+                    content: liveBlogPost.content,
+                    researchPacket: liveBlogPost.researchPacket ?? null,
+                    hasRealExperience: Boolean(author.realExperience),
+                    hasRealNumbers: Boolean(author.realNumbers),
+                    completeness,
+                    extraMetadata: {
+                        pipelineType: finalPipelineType,
+                    },
                 });
 
-                logger.info("[Blog/EvidenceLedger] Persisted evidence ledger", {
+                logger.info("[Blog/EvidenceLedger] Persisted evidence ledger and claims", {
                     blogId: resolvedBlogId,
-                    evidenceItems: ledger.evidenceItems.length,
-                    gscObservations: ledger.gscObservations.length,
+                    evidenceItems: persisted.evidenceItemCount,
+                    claims: persisted.claimCount,
+                    claimLinks: persisted.claimLinkCount,
+                    coveragePct: persisted.report.coveragePct,
+                    researchStatus: completeness.status,
                     siteId,
                 });
             } catch (ledgerErr: unknown) {

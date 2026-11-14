@@ -305,3 +305,139 @@ export function buildGscTopicIntelligence(
 
     return clusters;
 }
+
+const SEARCH_OPERATOR_RE = /\b(?:site|inurl|intitle|allintitle|allinurl|filetype|ext|cache|related|define| before|after):/i;
+const NEGATIVE_FLAG_RE = /(?:^|\s)-[a-z0-9_]{2,}/i;
+const URL_OR_DOMAIN_RE = /https?:\/\/|www\.|\b[a-z0-9-]+\.(?:com|org|net|io|co|online|ai|dev|app|uk|us|in|edu|gov)(?:\/\S*)?\b/i;
+const KEYBOARD_SMASH_RE = /qwert|asdfg|zxcvb|hjkl|yuiop/i;
+const REPEATED_CHAR_RE = /(.)\1{3,}/i;
+
+/**
+ * Validates whether a raw GSC or competitor query is a clean, human-readable
+ * article topic rather than a search operator dork, URL, keyboard smash, or gibberish string.
+ */
+export function isViableGscTopicQuery(query: string, siteDomain?: string): boolean {
+    const trimmed = query.trim();
+    if (trimmed.length < 3 || trimmed.length > 90) return false;
+
+    // Reject search operators (e.g. `site:linkedin.com/posts ... -for hire -agency`)
+    if (SEARCH_OPERATOR_RE.test(trimmed)) return false;
+    if (NEGATIVE_FLAG_RE.test(trimmed)) return false;
+    if (URL_OR_DOMAIN_RE.test(trimmed)) return false;
+    if (/[<>{}[\]\\|^~`"*()]/.test(trimmed)) return false;
+
+    const words = trimmed.split(/\s+/).filter(Boolean);
+    if (words.length === 0 || words.length > 10) return false;
+
+    // Reject self-brand navigational queries matching the site's own domain root
+    if (siteDomain) {
+        const cleanDomain = siteDomain
+            .toLowerCase()
+            .replace(/^https?:\/\//, "")
+            .replace(/^www\./, "")
+            .split("/")[0];
+        const domainRoot = cleanDomain.split(".")[0];
+        const normalizedQuery = trimmed.toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (normalizedQuery === cleanDomain.replace(/[^a-z0-9]/g, "") || (domainRoot.length >= 4 && normalizedQuery === domainRoot)) {
+            return false;
+        }
+    }
+
+    // Check individual tokens for gibberish / keyboard smashes
+    for (const rawWord of words) {
+        const word = rawWord.toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (!word) continue;
+        if (word.length > 28) return false;
+        if (KEYBOARD_SMASH_RE.test(word)) return false;
+        if (REPEATED_CHAR_RE.test(word)) return false;
+
+        const alphaOnly = word.replace(/[^a-z]/g, "");
+        if (alphaOnly.length >= 4) {
+            // 4+ consecutive vowels (e.g. "aoizeoizaoiea") or 6+ consecutive consonants
+            if (/[aeiou]{4,}/i.test(alphaOnly)) return false;
+            if (/[bcdfghjklmnpqrstvwxyz]{6,}/i.test(alphaOnly)) return false;
+        }
+
+        if (alphaOnly.length >= 8) {
+            const vowelCount = (alphaOnly.match(/[aeiou]/g) || []).length;
+            const vowelRatio = vowelCount / alphaOnly.length;
+            // Extremely vowel-heavy (e.g., "aoizeoizaoiea" = 77%) or zero-vowel consonant strings
+            if (vowelCount === 0 || vowelRatio >= 0.68 || vowelRatio <= 0.12) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+const ACTION_LABELS: Record<string, string> = {
+    IMPROVE_SEARCH_INTENT: "Align Search Intent",
+    CREATE_NEW_CONTENT: "New Article",
+    EXPAND_CONTENT_DEPTH: "Expand Content Depth",
+    IMPROVE_TITLE_META: "Improve Title & CTR",
+    OPTIMIZE_CTR: "Improve Title & CTR",
+    CONSOLIDATE_PAGES: "Consolidate Pages",
+    FIX_TECHNICAL_SEO: "Fix Technical SEO",
+    REFRESH: "Refresh Content",
+    OPTIMIZE: "Optimize Content",
+};
+
+/**
+ * Formats internal enum strings (like `IMPROVE_SEARCH_INTENT`) into clean UI labels.
+ */
+export function formatRecommendedActionLabel(
+    action?: string | null,
+    actionType?: "CREATE_PAGE" | "UPDATE_PAGE"
+): string {
+    if (!action) {
+        return actionType === "UPDATE_PAGE" ? "Refresh Content" : "New Article";
+    }
+    const upper = action.trim().toUpperCase();
+    if (ACTION_LABELS[upper]) return ACTION_LABELS[upper];
+    return upper
+        .split("_")
+        .filter(Boolean)
+        .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
+        .join(" ");
+}
+
+/**
+ * Formats a full page URL into a concise pathname for card display (e.g. `/tools/seo-tools-local-business`).
+ */
+export function formatUrlPathForDisplay(url?: string | null): string | null {
+    if (!url) return null;
+    try {
+        const parsed = new URL(url);
+        const path = parsed.pathname === "/" ? parsed.hostname : parsed.pathname.replace(/\/$/, "");
+        return path || parsed.hostname;
+    } catch {
+        return url.replace(/^https?:\/\/[^/]+/i, "") || url;
+    }
+}
+
+/**
+ * Computes an opportunity priority score so high-impression striking-distance topics
+ * sort above low-impression micro-queries.
+ */
+export function scoreKeywordOpportunity(params: {
+    impressions: number;
+    position: number;
+    searchVolume?: number | null;
+    actionType?: "CREATE_PAGE" | "UPDATE_PAGE";
+    wordCount?: number;
+}): number {
+    const demand = Math.max(params.impressions || 0, params.searchVolume || 0);
+    // Striking distance (positions 4–40) gets highest multiplier
+    const positionMultiplier =
+        params.position >= 4 && params.position <= 20
+            ? 1.5
+            : params.position >= 21 && params.position <= 45
+                ? 1.35
+                : params.position > 45
+                    ? 1.0
+                    : 0.7;
+    // Multi-word topics (2–6 words) have clearer search intent than single-word terms
+    const wordBonus = (params.wordCount ?? 2) >= 2 ? 1.2 : 0.65;
+    return demand * positionMultiplier * wordBonus;
+}
