@@ -20,6 +20,7 @@ export interface PageHeaderProps {
     onClick?: () => void;
     icon?: React.ElementType;
   };
+  actions?: React.ReactNode;
   metrics?: Array<{
     label: string;
     value: string | number;
@@ -46,6 +47,7 @@ export function PageHeader({
   category,
   primaryAction,
   secondaryAction,
+  actions,
   metrics,
   currentStep,
 }: PageHeaderProps) {
@@ -53,7 +55,7 @@ export function PageHeader({
   const SecondaryIcon = secondaryAction?.icon;
 
   return (
-    <div className="flex flex-col gap-4 border-b border-border/60 pb-6">
+    <div className="flex flex-col gap-4 border-b border-border/60 pb-5">
       {/* Category Eyebrow if specified */}
       {category && (
         <div className="flex items-center gap-2">
@@ -117,6 +119,7 @@ export function PageHeader({
               </button>
             )
           )}
+          {actions}
         </div>
       </div>
 

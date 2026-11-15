@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useId } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { isSurgicalRefreshSelection, submitTopicStepperAction } from "@/lib/blog/topic-submission";
@@ -49,14 +49,18 @@ interface GenerateBlogButtonProps {
     siteId: string;
     siteDomain: string;
     initialKeyword?: string;
+    autoOpen?: boolean;
 }
 
 export function GenerateBlogButton({
     siteId,
     siteDomain,
     initialKeyword,
+    autoOpen = false,
 }: GenerateBlogButtonProps) {
     const router = useRouter();
+    const menuId = useId();
+    const autoOpenedRef = useRef(false);
     const [isPending, setIsPending] = useState(false);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
@@ -92,7 +96,10 @@ export function GenerateBlogButton({
         };
 
         const handleEscape = (e: KeyboardEvent) => {
-            if (e.key === "Escape") closeDropdown();
+            if (e.key === "Escape") {
+                closeDropdown();
+                triggerRef.current?.focus();
+            }
         };
 
         document.addEventListener("mousedown", handleClickOutside);
@@ -111,6 +118,13 @@ export function GenerateBlogButton({
         },
         []
     );
+
+    useEffect(() => {
+        if (autoOpen && !autoOpenedRef.current) {
+            autoOpenedRef.current = true;
+            openModal(undefined);
+        }
+    }, [autoOpen, openModal]);
 
     const handleSelectPipeline = useCallback(
         (option: (typeof PIPELINE_OPTIONS)[number]) => {
@@ -226,58 +240,62 @@ export function GenerateBlogButton({
                 </div>
             )}
 
-            <div className="relative inline-flex flex-col items-center gap-2">
+            <div className="relative inline-flex flex-col items-end">
                 <CreditGate action="blog_generation">
-                    <div className="flex items-stretch">
+                    <div className="inline-flex items-stretch rounded-xl shadow-sm shadow-emerald-500/20">
                         <button
                             type="button"
-                            onClick={() => openModal(currentOption.value)}
-                            disabled={isPending}
-                            className="inline-flex items-center justify-center gap-2 rounded-l-xl border border-r-0 border-emerald-500/30 bg-emerald-500/15 px-5 py-2.5 text-sm font-bold text-emerald-300 transition-all duration-150 hover:bg-emerald-500/20 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() => {
+                                if (isPending) return;
+                                openModal(currentOption.value);
+                            }}
+                            aria-disabled={isPending}
+                            aria-busy={isPending}
+                            className="inline-flex items-center justify-center gap-2 min-h-10 rounded-l-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-zinc-950 transition-colors hover:bg-emerald-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 aria-disabled:opacity-60 aria-disabled:cursor-not-allowed"
                         >
                             {isPending ? (
                                 <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                                     Starting…
                                 </>
                             ) : (
                                 <>
-                                    <Sparkles className="h-4 w-4" />
-                                    Generate Post
+                                    <Sparkles className="h-4 w-4" aria-hidden="true" />
+                                    {currentOption.key === "DATA_REPORT" ? "Generate Report" : "Generate Post"}
                                 </>
                             )}
                         </button>
                         <button
                             ref={triggerRef}
                             type="button"
-                            onClick={() => setIsDropdownOpen((v) => !v)}
-                            disabled={isPending}
+                            onClick={() => {
+                                if (isPending) return;
+                                setIsDropdownOpen((v) => !v);
+                            }}
+                            aria-disabled={isPending}
                             aria-expanded={isDropdownOpen}
-                            aria-haspopup="true"
-                            aria-label="Select generation type"
-                            className="inline-flex items-center justify-center rounded-r-xl border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-2.5 text-emerald-300 transition-all duration-150 hover:bg-emerald-500/20 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+                            aria-haspopup="menu"
+                            aria-controls={menuId}
+                            aria-label="Choose article workflow"
+                            className="inline-flex items-center justify-center min-h-10 rounded-r-xl border-l border-zinc-950/15 bg-emerald-500 px-2.5 py-2 text-zinc-950 transition-colors hover:bg-emerald-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 aria-disabled:opacity-60 aria-disabled:cursor-not-allowed"
                         >
                             <ChevronDown
                                 className={`h-4 w-4 transition-transform duration-150 ${
                                     isDropdownOpen ? "rotate-180" : ""
                                 }`}
+                                aria-hidden="true"
                             />
                         </button>
                     </div>
                 </CreditGate>
 
-                {!isPending && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/15 bg-emerald-500/5 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-emerald-400/70">
-                        Research-backed generation
-                    </span>
-                )}
-
                 {isDropdownOpen && (
                     <div
+                        id={menuId}
                         ref={dropdownRef}
                         role="menu"
                         aria-label="Generation type"
-                        className="absolute right-0 top-full z-50 mt-2 w-72 origin-top-right animate-in fade-in zoom-in-95 rounded-xl border border-border bg-card p-1.5 shadow-lg duration-150 sm:w-80"
+                        className="absolute right-0 top-full z-50 mt-2 w-72 origin-top-right animate-in fade-in zoom-in-95 rounded-xl border border-border bg-card p-1.5 shadow-xl duration-150 sm:w-80"
                     >
                         <div className="mb-1.5 px-3 pt-2">
                             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">

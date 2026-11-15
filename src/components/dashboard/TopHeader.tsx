@@ -435,10 +435,10 @@ export function TopHeader({ mobileSidebar }: { mobileSidebar?: ReactNode }) {
                 </Link>
             );
         }
-        if (pathname.startsWith("/dashboard/blogs") || pathname.startsWith("/dashboard/editor") || pathname.startsWith("/dashboard/planner")) {
+        if (pathname.startsWith("/dashboard/editor") || pathname.startsWith("/dashboard/planner")) {
             return (
-                <Link href={`/dashboard/blogs?tab=new${siteId ? '&siteId=' + siteId : ''}`} className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
-                    <Sparkles className="w-3.5 h-3.5" /> Generate content
+                <Link href={`/dashboard/blogs?tab=new${siteId ? '&siteId=' + siteId : ''}`} className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-zinc-950 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+                    <Sparkles className="w-3.5 h-3.5" aria-hidden="true" /> Generate content
                 </Link>
             );
         }

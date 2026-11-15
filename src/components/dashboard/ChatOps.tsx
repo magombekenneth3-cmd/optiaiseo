@@ -7,16 +7,11 @@ export function ChatOpsTerminal() {
     return (
         <Link
             href="/dashboard/voice"
-            className="fixed bottom-20 md:bottom-6 right-4 md:right-6 p-3 rounded-full bg-card border border-border hover:border-brand/30 shadow-xl transition-all group z-50 md:z-40 flex items-center gap-2"
-            aria-label="Open AI Assistant"
+            title="Ask OptiAI assistant"
+            className="fixed bottom-20 md:bottom-5 right-4 md:right-5 w-10 h-10 rounded-full bg-card/90 backdrop-blur-md border border-border hover:border-brand/40 shadow-lg transition-all group z-40 flex items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            aria-label="Ask OptiAI assistant"
         >
-            <div className="relative">
-                <Terminal className="w-5 h-5 text-foreground group-hover:text-brand transition-colors relative z-10" />
-                <div className="absolute inset-0 bg-brand/15 blur-md rounded-full -z-10 animate-breathe" />
-            </div>
-            <span className="hidden md:inline text-xs font-semibold text-muted-foreground group-hover:text-foreground tracking-wide transition-colors">
-                Ask OptiAI
-            </span>
+            <Terminal className="w-4 h-4 text-muted-foreground group-hover:text-brand transition-colors" aria-hidden="true" />
         </Link>
     );
 }

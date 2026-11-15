@@ -46,16 +46,20 @@ function NavItem({ item, siteId, pathname, collapsed }: {
 }) {
   const Icon = item.icon;
   const href = item.context ? buildHref(item.href, siteId) : item.href;
-  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const active =
+    item.href === "/dashboard"
+      ? pathname === "/dashboard"
+      : pathname === item.href || pathname.startsWith(`${item.href}/`);
   const disabled = item.context && !siteId;
 
   return (
     <Link
       href={disabled ? "#" : href}
+      aria-current={active ? "page" : undefined}
       aria-disabled={disabled || undefined}
       tabIndex={disabled ? -1 : undefined}
       title={collapsed ? item.name : disabled ? `${item.name} — select a site first` : undefined}
-      className={`group relative flex items-center gap-3 rounded-xl text-[13px] transition-all duration-150 ${
+      className={`group relative flex items-center gap-3 rounded-xl text-[13px] transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
         collapsed ? "mx-auto h-10 w-10 justify-center" : "px-3 py-2"
       } ${
         active
@@ -268,8 +272,9 @@ function SidebarNavInner({
           <Link 
             key={item.name}
             href={item.href}
+            aria-current={active ? "page" : undefined}
             title={isCollapsed ? item.name : undefined}
-            className={`group relative flex items-center gap-3 rounded-xl text-[13px] transition-colors ${
+            className={`group relative flex items-center gap-3 rounded-xl text-[13px] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
               isCollapsed ? "mx-auto h-10 w-10 justify-center" : "px-3 py-2"
             } ${
               active
