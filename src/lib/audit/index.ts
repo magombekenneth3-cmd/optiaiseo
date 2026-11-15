@@ -2,6 +2,7 @@ import { logger } from "@/lib/logger";
 import { getFullAuditEngine } from '../seo-audit';
 
 export function extractAuditVitalsAndSchema(report: {
+    aeoScore?: number;
     categories?: Array<{
         id: string;
         score?: number;
@@ -58,7 +59,12 @@ export function extractAuditVitalsAndSchema(report: {
         cls,
         inp,
         schemaScore: typeof schemaCat?.score === "number" ? schemaCat.score : null,
-        aeoScore: typeof aiCat?.score === "number" ? aiCat.score : null,
+        aeoScore:
+            typeof report.aeoScore === "number"
+                ? report.aeoScore
+                : typeof aiCat?.score === "number"
+                  ? aiCat.score
+                  : null,
     };
 }
 

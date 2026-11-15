@@ -193,6 +193,25 @@ export const BasicsAnalyticsModule: AuditModule = {
             inlineScriptText.includes('gtag("config"') ||
             root.querySelectorAll('link[rel="preload"][href*="gtag/js"]').length > 0
 
+        const altAnalyticsProviders: string[] = []
+        if (allSrc.some((s) => s.includes("plausible.io")) || html.includes("data-domain=")) altAnalyticsProviders.push("Plausible")
+        if (allSrc.some((s) => s.includes("posthog.com")) || inlineScriptText.includes("posthog.init")) altAnalyticsProviders.push("PostHog")
+        if (allSrc.some((s) => s.includes("_vercel/insights")) || html.includes("va.vercel-scripts.com")) altAnalyticsProviders.push("Vercel Analytics")
+        if (allSrc.some((s) => s.includes("usefathom.com"))) altAnalyticsProviders.push("Fathom")
+        if (allSrc.some((s) => s.includes("umami")) || html.includes("data-website-id=")) altAnalyticsProviders.push("Umami")
+        if (allSrc.some((s) => s.includes("static.cloudflareinsights.com"))) altAnalyticsProviders.push("Cloudflare Web Analytics")
+        if (allSrc.some((s) => s.includes("cdn.segment.com")) || inlineScriptText.includes("analytics.load(")) altAnalyticsProviders.push("Segment")
+        if (allSrc.some((s) => s.includes("mixpanel.com")) || inlineScriptText.includes("mixpanel.init")) altAnalyticsProviders.push("Mixpanel")
+        const hasAltAnalytics = altAnalyticsProviders.length > 0
+
+        if (!hasGtm) {
+            const gtmItem = items.find((i) => i.id === "gtm-setup")
+            if (gtmItem && (hasGa4Direct || hasAltAnalytics)) {
+                gtmItem.status = "Info"
+                gtmItem.finding = `Google Tag Manager not used — direct analytics detected (${hasGa4Direct ? "GA4 gtag.js" : altAnalyticsProviders.join(", ")}).`
+            }
+        }
+
         const gtmContainerGA4Map: Record<string, string[]> = {}
         if (hasGtm) {
             await Promise.all(
@@ -206,8 +225,8 @@ export const BasicsAnalyticsModule: AuditModule = {
         const hasGa4ViaGtm = allGtmGA4Ids.length > 0
         const doubleFireIds = uniqueGa4Ids.filter((id) => allGtmGA4Ids.includes(id))
         const isDoubleTracking = hasGa4Direct && doubleFireIds.length > 0
-        const noAnalytics = !hasGa4Direct && !hasGa4ViaGtm && !hasGtm && uniqueUaIds.length === 0
-        const gtmWithoutGA4 = hasGtm && !hasGa4ViaGtm && !hasGa4Direct
+        const noAnalytics = !hasGa4Direct && !hasGa4ViaGtm && !hasGtm && uniqueUaIds.length === 0 && !hasAltAnalytics
+        const gtmWithoutGA4 = hasGtm && !hasGa4ViaGtm && !hasGa4Direct && !hasAltAnalytics
 
         if (uniqueUaIds.length > 0) {
             items.push({
@@ -291,6 +310,16 @@ export const BasicsAnalyticsModule: AuditModule = {
                     loadMethod: "direct",
                     ...(hasGtm && { gtmIds: joinIds(uniqueGtmIds), gtmHasGA4: false }),
                 },
+            })
+        } else if (hasAltAnalytics && !hasGa4Direct && !hasGa4ViaGtm) {
+            items.push({
+                id: "google-analytics-ga4",
+                label: "Web Analytics",
+                status: "Pass",
+                finding: `Active web analytics detected: ${altAnalyticsProviders.join(", ")}.`,
+                roiImpact: 90,
+                aiVisibilityImpact: 80,
+                details: { providers: altAnalyticsProviders.join(", "), loadMethod: "alternative" },
             })
         } else if (uniqueUaIds.length > 0 && !hasGa4Direct && !hasGa4ViaGtm) {
             items.push({

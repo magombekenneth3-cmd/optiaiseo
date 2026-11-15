@@ -54,12 +54,14 @@ function fetchAudit(auditId: string, userId: string) {
 }
 
 
+const COMPLETED_AUDIT_STATUSES = ["COMPLETED", "PARTIAL", "FIRST_RUN", "FIXED", "IMPROVED"];
+
 /** Fetches the most recent completed audit for the same site that ran BEFORE auditId. */
 function fetchPreviousAudit(siteId: string, beforeTimestamp: Date) {
     return prisma.audit.findFirst({
         where: {
             siteId,
-            fixStatus: "COMPLETED",
+            fixStatus: { in: COMPLETED_AUDIT_STATUSES },
             runTimestamp: { lt: beforeTimestamp },
         },
         orderBy: { runTimestamp: "desc" },
@@ -115,7 +117,7 @@ export async function getAuditById(auditId: string): Promise<GetAuditResult> {
         const isPaidUser = ["STARTER", "PRO", "AGENCY"].includes(effectiveTier);
 
         // Fetch the previous completed audit for this site (for score trending).
-        const previousAudit = audit.fixStatus === "COMPLETED"
+        const previousAudit = COMPLETED_AUDIT_STATUSES.includes(audit.fixStatus)
             ? await fetchPreviousAudit(audit.siteId, audit.runTimestamp)
             : null;
 

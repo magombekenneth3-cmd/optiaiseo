@@ -5,13 +5,167 @@ import { CONCURRENCY } from "../concurrency";
 import { getAuditEngine } from "@/lib/seo-audit";
 import { discoverPages } from "@/lib/seo-audit/crawler";
 import { logger } from "@/lib/logger";
-import { releaseAuditLease, renewAuditLease } from "@/lib/audit-lock";
+import { releaseAuditLease, renewAuditLease, acquireAuditLease } from "@/lib/audit-lock";
 import { fireWhiteLabelWebhook } from "@/lib/webhooks/white-label";
 import { sendAuditCompleteEmail } from "@/lib/email";
 import { notifyAuditComplete } from "@/lib/notifications";
 import { trackFunnelEvent } from "@/lib/funnel";
+import { refundCreditsIdempotent, CREDIT_COSTS } from "@/lib/credits";
+import { writeMetricSnapshot } from "@/lib/metrics/metric-snapshot";
+import { extractAuditVitalsAndSchema } from "@/lib/audit";
+import { persistFindingWithEvidence, reconcileResolvedFindings } from "@/lib/seo-audit/diagnostic-persistence";
+import type { DiagnosticFinding } from "@/lib/seo-audit/root-cause-engine";
+import type { ExplainablePriority } from "@/lib/seo-audit/contracts";
 
 const TERMINAL_STATES = ["COMPLETED", "FAILED", "PARTIAL"] as const;
+
+/**
+ * Aggregates completed sub-page audit scores and recommendations into the parent Audit
+ * record and updates the site's MetricSnapshot so Full Site Audits reflect site-wide health.
+ */
+export async function aggregateMultiPageAuditResults(auditId: string, siteId: string): Promise<void> {
+  const [audit, pageAudits] = await Promise.all([
+    prisma.audit.findUnique({
+      where: { id: auditId },
+      select: {
+        id: true,
+        categoryScores: true,
+        issueList: true,
+        lcp: true,
+        cls: true,
+        inp: true,
+      },
+    }),
+    prisma.pageAudit.findMany({
+      where: { auditId },
+      select: {
+        pageUrl: true,
+        overallScore: true,
+        categoryScores: true,
+        issueList: true,
+      },
+    }),
+  ]);
+
+  if (!audit || pageAudits.length === 0) return;
+
+  const baseCategoryScores = { ...((audit.categoryScores as Record<string, number>) ?? {}) };
+  const subCatBuckets = new Map<string, number[]>();
+
+  for (const pa of pageAudits) {
+    const scores = (pa.categoryScores as Record<string, number>) ?? {};
+    for (const [catId, val] of Object.entries(scores)) {
+      if (typeof val === "number" && Number.isFinite(val)) {
+        const list = subCatBuckets.get(catId) ?? [];
+        list.push(val);
+        subCatBuckets.set(catId, list);
+      }
+    }
+  }
+
+  const blendedCategoryScores: Record<string, number> = { ...baseCategoryScores };
+  for (const [catId, subVals] of subCatBuckets.entries()) {
+    const subAvg = subVals.reduce((a, b) => a + b, 0) / subVals.length;
+    const homeVal = baseCategoryScores[catId];
+    blendedCategoryScores[catId] =
+      typeof homeVal === "number"
+        ? Math.round(homeVal * 0.5 + subAvg * 0.5)
+        : Math.round(subAvg);
+  }
+
+  const issueList = ((audit.issueList as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+  const homeOverall =
+    typeof issueList.overallScore === "number"
+      ? issueList.overallScore
+      : Object.values(baseCategoryScores).length > 0
+        ? Math.round(
+            Object.values(baseCategoryScores).reduce((a, b) => a + b, 0) /
+              Object.values(baseCategoryScores).length,
+          )
+        : 0;
+  const avgSubOverall =
+    pageAudits.reduce((sum, p) => sum + (typeof p.overallScore === "number" ? p.overallScore : 0), 0) /
+    pageAudits.length;
+  const blendedOverallScore = Math.round(homeOverall * 0.5 + avgSubOverall * 0.5);
+
+  const categories = Array.isArray(issueList.categories)
+    ? (issueList.categories as Array<Record<string, unknown>>).map((cat) => {
+        const catId = typeof cat.id === "string" ? cat.id : "";
+        return catId && typeof blendedCategoryScores[catId] === "number"
+          ? { ...cat, score: blendedCategoryScores[catId] }
+          : cat;
+      })
+    : [];
+
+  const existingRecs = Array.isArray(issueList.recommendations)
+    ? [...(issueList.recommendations as Array<Record<string, unknown>>)]
+    : [];
+  const seenRecKeys = new Set<string>(
+    existingRecs.map((r) => `${String(r.itemId ?? "")}::homepage`),
+  );
+
+  const subPageRecs: Array<Record<string, unknown>> = [];
+  for (const pa of pageAudits) {
+    const paIssues = (pa.issueList as Record<string, unknown>) ?? {};
+    const paRecs = Array.isArray(paIssues.recommendations)
+      ? (paIssues.recommendations as Array<Record<string, unknown>>)
+      : [];
+    let shortPath = pa.pageUrl;
+    try {
+      shortPath = new URL(pa.pageUrl).pathname || "/";
+    } catch {}
+    for (const rec of paRecs) {
+      const key = `${String(rec.itemId ?? "")}::${pa.pageUrl}`;
+      if (seenRecKeys.has(key)) continue;
+      seenRecKeys.add(key);
+      subPageRecs.push({
+        ...rec,
+        pageUrl: pa.pageUrl,
+        label: `${String(rec.label ?? rec.itemId ?? "Issue")} (${shortPath})`,
+      });
+      if (subPageRecs.length >= 50) break;
+    }
+    if (subPageRecs.length >= 50) break;
+  }
+
+  const lowestScoringPages = [...pageAudits]
+    .sort((a, b) => a.overallScore - b.overallScore)
+    .slice(0, 5)
+    .map((p) => ({ pageUrl: p.pageUrl, overallScore: p.overallScore }));
+
+  const updatedIssueList = {
+    ...issueList,
+    overallScore: blendedOverallScore,
+    categories,
+    recommendations: [...existingRecs, ...subPageRecs],
+    subPageSummary: {
+      pagesAudited: pageAudits.length,
+      homepageScore: homeOverall,
+      avgSubPageScore: Math.round(avgSubOverall),
+      lowestScoringPages,
+    },
+  };
+
+  await prisma.audit.update({
+    where: { id: auditId },
+    data: {
+      categoryScores: blendedCategoryScores,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      issueList: updatedIssueList as any,
+    },
+  });
+
+  const vitals = extractAuditVitalsAndSchema(updatedIssueList as unknown as Parameters<typeof extractAuditVitalsAndSchema>[0]);
+  await writeMetricSnapshot({
+    siteId,
+    overallScore: blendedOverallScore,
+    aeoScore: vitals.aeoScore,
+    schemaScore: vitals.schemaScore,
+    lcp: audit.lcp ?? vitals.lcp,
+    cls: audit.cls ?? vitals.cls,
+    inp: audit.inp ?? vitals.inp,
+  }).catch(() => {});
+}
 
 async function emitParentAuditCompletion(auditId: string, siteId: string): Promise<void> {
   const audit = await prisma.audit.findUnique({
@@ -133,7 +287,17 @@ export const runPageAuditJob = inngest.createFunction(
             });
             if (count > 0) {
                 const siteId = data?.siteId as string | undefined;
+                const userId = data?.userId as string | undefined;
+                const auditMode = data?.auditMode as string | undefined;
                 if (siteId) await releaseParentLease(auditId, siteId).catch(() => null);
+                if (userId && auditMode !== "homepage") {
+                    await refundCreditsIdempotent(
+                        userId,
+                        CREDIT_COSTS.full_site_audit,
+                        `refund:audit:${auditId}`,
+                        "page_audit_coordinator_failed",
+                    ).catch(() => null);
+                }
                 logger.info("[PageAudit] Parent audit finalized as FAILED after coordinator failure", { auditId });
             }
         }
@@ -158,6 +322,10 @@ export const runPageAuditJob = inngest.createFunction(
     await step.run("verify-parent", async () => {
       const audit = await prisma.audit.findUnique({ where: { id: auditId } });
       if (!audit) throw new NonRetriableError(`Parent audit ${auditId} not found`);
+      const userId = await getUserIdForSite(siteId);
+      if (userId) {
+        await renewAuditLease(`audit-lock:${userId}:${siteId}`, auditId).catch(() => null);
+      }
     });
 
     const pageUrls = await step.run("discover-pages", async () => {
@@ -201,6 +369,14 @@ export const runPageAuditJob = inngest.createFunction(
     }
 
     await step.run("set-progress-and-fan-out", async () => {
+      const userId = await getUserIdForSite(siteId);
+      if (userId) {
+        const lockKey = `audit-lock:${userId}:${siteId}`;
+        const renewed = await renewAuditLease(lockKey, auditId).catch(() => false);
+        if (!renewed) {
+          await acquireAuditLease(lockKey, auditId).catch(() => null);
+        }
+      }
       await prisma.audit.update({
         where: { id: auditId },
         data: {
@@ -262,11 +438,19 @@ export const processPageAuditJob = inngest.createFunction(
 
     try {
       const result = await step.run("run-page-audit", async () => {
-        // Each child refreshes the parent's token-bound lease before work. This
-        // keeps long fan-outs exclusive without allowing a stale child to renew
-        // a later audit's lease.
-        const userId = await getUserIdForSite(siteId);
-        if (!userId || !await renewAuditLease(`audit-lock:${userId}:${siteId}`, auditId)) {
+        // Verify parent audit is still IN_PROGRESS and refresh or re-acquire the token-bound lease.
+        // Re-acquiring when expired (nx: true) prevents queue delays > 120s from failing sub-pages,
+        // while still failing if a newer audit has taken ownership of the lock.
+        const [userId, parentAudit] = await Promise.all([
+          getUserIdForSite(siteId),
+          prisma.audit.findUnique({ where: { id: auditId }, select: { fixStatus: true } }),
+        ]);
+        if (!userId || (parentAudit && TERMINAL_STATES.includes(parentAudit.fixStatus as typeof TERMINAL_STATES[number]))) {
+          throw new NonRetriableError("Parent audit is no longer active");
+        }
+        const lockKey = `audit-lock:${userId}:${siteId}`;
+        const leaseActive = (await renewAuditLease(lockKey, auditId)) || (await acquireAuditLease(lockKey, auditId));
+        if (!leaseActive) {
           throw new NonRetriableError("Audit lease was lost before page execution");
         }
         const engine = getAuditEngine("page");
@@ -277,6 +461,8 @@ export const processPageAuditJob = inngest.createFunction(
         });
 
         return await engine.runAudit(pageUrl, {
+          siteId,
+          userId,
           targetKeyword: site?.targetKeyword ?? undefined,
         });
       });
@@ -313,6 +499,23 @@ export const processPageAuditJob = inngest.createFunction(
             runTimestamp: new Date(),
           },
         });
+
+        const dr = result.diagnosticResult;
+        const findings = (dr?.findings ?? []) as DiagnosticFinding[];
+        const priorityMap = new Map<string, ExplainablePriority>();
+        for (const a of (dr?.plan?.actions ?? []) as Array<{ findingFingerprint?: string; priority?: ExplainablePriority }>) {
+          if (a?.findingFingerprint && a?.priority) {
+            priorityMap.set(a.findingFingerprint, a.priority);
+          }
+        }
+        for (const finding of findings) {
+          await persistFindingWithEvidence(siteId, finding, priorityMap.get(finding.fingerprint)).catch(() => null);
+        }
+        await reconcileResolvedFindings(
+          siteId,
+          findings.map((f) => f.fingerprint),
+          pageUrl,
+        ).catch(() => 0);
       });
 
       auditSucceeded = true;
@@ -365,7 +568,23 @@ export const processPageAuditJob = inngest.createFunction(
         if (count > 0) {
           await releaseParentLease(auditId, siteId).catch(() => null);
           if (finalStatus !== "FAILED") {
+            await aggregateMultiPageAuditResults(auditId, siteId).catch((err) => {
+              logger.error("[PageAudit] Failed to aggregate sub-page results", {
+                auditId,
+                error: (err as Error)?.message,
+              });
+            });
             await emitParentAuditCompletion(auditId, siteId).catch(() => null);
+          } else {
+            const userId = await getUserIdForSite(siteId);
+            if (userId) {
+              await refundCreditsIdempotent(
+                userId,
+                CREDIT_COSTS.full_site_audit,
+                `refund:audit:${auditId}`,
+                "all_subpages_failed",
+              ).catch(() => null);
+            }
           }
           logger.info("[PageAudit] All pages processed — audit finalized", {
             auditId,

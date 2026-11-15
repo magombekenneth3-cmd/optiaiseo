@@ -1,6 +1,7 @@
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem } from '../types';
 import { parse, HTMLElement } from 'node-html-parser';
 import { isSafeUrl } from '@/lib/security/safe-url';
+import { safeAuditFetch } from '../utils/fetch-html';
 import { getAhrefsDomainOverview, getAhrefsBacklinks, getAhrefsCompetitors } from '@/lib/ahrefs';
 import { getCompetitorTopPages } from '@/lib/keywords/dataforseo';
 
@@ -93,13 +94,12 @@ async function fetchWithFallback(url: string): Promise<Response> {
     const opts = (method: string) => ({
         method,
         headers: { 'User-Agent': BROWSER_UA, Accept: ACCEPT_HEADER },
-        redirect: 'follow' as RequestRedirect,
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
-    const res = await fetch(url, opts('HEAD'));
+    const res = await safeAuditFetch(url, opts('HEAD'));
     if ([400, 403, 405].includes(res.status)) {
-        return fetch(url, opts('GET'));
+        return safeAuditFetch(url, opts('GET'));
     }
     return res;
 }
@@ -112,14 +112,15 @@ async function checkLinks(urls: string[]): Promise<{ broken: BrokenLink[]; unrea
     for (let i = 0; i < limited.length; i += FETCH_CHUNK_SIZE) {
         const chunk = limited.slice(i, i + FETCH_CHUNK_SIZE);
         await Promise.allSettled(chunk.map(async (url) => {
-            if (isBotBlocked(url)) return;
+            if (isBotBlocked(url) || !isSafeUrl(url).ok) return;
             try {
                 const res = await fetchWithFallback(url);
-                if (!isSafeUrl(res.url).ok) return;
+                if (res.url && !isSafeUrl(res.url).ok) return;
                 if (res.status >= 400) {
                     broken.push({ url, status: res.status, label: `HTTP ${res.status}` });
                 }
-            } catch {
+            } catch (err: unknown) {
+                if ((err as Error)?.message?.includes('Blocked SSRF')) return;
                 unreachable.push({ url, label: 'Timeout/Unreachable' });
             }
         }));

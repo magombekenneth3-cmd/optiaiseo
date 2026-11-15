@@ -35,62 +35,108 @@ export async function fetchHtml(url: string, redirectDepth = 0): Promise<string>
     return result.html;
 }
 
-export async function fetchHtmlWithMeta(url: string, redirectDepth = 0): Promise<FetchHtmlResult> {
-    // SSRF guard — reject private/internal targets before any network call
+export async function assertSafeAuditUrl(url: string): Promise<URL> {
+    let parsed: URL;
     try {
-        const { hostname } = new URL(url);
-        if (!isValidPublicDomain(hostname)) {
-            throw new Error(`[fetchHtml] Blocked SSRF attempt: ${hostname} is not a valid public domain.`);
-        }
-
-        // Gap 1.5: DNS-level SSRF guard — blocks domains that resolve to private IPs
-        // (e.g. internal.company.com → 10.0.0.1). isValidPublicDomain only checks
-        // the string; this check verifies the actual resolved addresses.
-        try {
-            const dns = await import("dns/promises");
-            const { isIP } = await import("net");
-            const addresses4 = await dns.resolve4(hostname).catch(() => [] as string[]);
-            const addresses6 = await dns.resolve6(hostname).catch(() => [] as string[]);
-            const isPrivate = (ip: string): boolean => {
-                if (!isIP(ip)) return false;
-                if (isIP(ip) === 4) {
-                    const p = ip.split(".").map(Number);
-                    return (
-                        p[0] === 10 ||
-                        (p[0] === 172 && p[1] >= 16 && p[1] <= 31) ||
-                        (p[0] === 192 && p[1] === 168) ||
-                        p[0] === 127 ||
-                        (p[0] === 169 && p[1] === 254)
-                    );
-                }
-                if (isIP(ip) === 6) {
-                    const lower = ip.toLowerCase();
-                    return (
-                        lower === "::1" ||
-                        lower.startsWith("fc") ||
-                        lower.startsWith("fd") ||
-                        lower.startsWith("fe80") ||
-                        lower === "::"
-                    );
-                }
-                return false;
-            };
-            for (const addr of [...addresses4, ...addresses6]) {
-                if (isPrivate(addr)) {
-                    throw new Error(`[fetchHtml] Blocked SSRF: ${hostname} resolves to private IP ${addr}`);
-                }
-            }
-        } catch (dnsErr: unknown) {
-            if ((dnsErr as Error).message.includes("Blocked SSRF")) throw dnsErr;
-            // DNS lookup failure (NXDOMAIN, timeout) — not a security issue; let the
-            // fetch proceed and fail naturally with a network error.
-            logger.debug(`[fetchHtml] DNS pre-check failed for ${hostname} — proceeding`, { err: (dnsErr as Error).message });
-        }
-
-    } catch (e: unknown) {
-        if ((e as Error).message.includes("Blocked SSRF")) throw e;
+        parsed = new URL(url);
+    } catch {
         throw new Error(`[fetchHtml] Invalid URL: ${url}`);
     }
+
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error(`[fetchHtml] Blocked SSRF attempt: unsupported protocol ${parsed.protocol}`);
+    }
+
+    const { hostname } = parsed;
+    if (!isValidPublicDomain(hostname)) {
+        throw new Error(`[fetchHtml] Blocked SSRF attempt: ${hostname} is not a valid public domain.`);
+    }
+
+    // Gap 1.5: DNS-level SSRF guard — blocks domains that resolve to private IPs
+    // (e.g. internal.company.com → 10.0.0.1). isValidPublicDomain only checks
+    // the string; this check verifies the actual resolved addresses.
+    try {
+        const dns = await import("dns/promises");
+        const { isIP } = await import("net");
+        const addresses4 = await dns.resolve4(hostname).catch(() => [] as string[]);
+        const addresses6 = await dns.resolve6(hostname).catch(() => [] as string[]);
+        const isPrivate = (ip: string): boolean => {
+            if (!isIP(ip)) return false;
+            if (isIP(ip) === 4) {
+                const p = ip.split(".").map(Number);
+                return (
+                    p[0] === 0 ||
+                    p[0] === 10 ||
+                    (p[0] === 172 && p[1] >= 16 && p[1] <= 31) ||
+                    (p[0] === 192 && p[1] === 168) ||
+                    p[0] === 127 ||
+                    (p[0] === 169 && p[1] === 254)
+                );
+            }
+            if (isIP(ip) === 6) {
+                const lower = ip.toLowerCase();
+                return (
+                    lower === "::1" ||
+                    lower.startsWith("fc") ||
+                    lower.startsWith("fd") ||
+                    lower.startsWith("fe80") ||
+                    lower === "::"
+                );
+            }
+            return false;
+        };
+        for (const addr of [...addresses4, ...addresses6]) {
+            if (isPrivate(addr)) {
+                throw new Error(`[fetchHtml] Blocked SSRF: ${hostname} resolves to private IP ${addr}`);
+            }
+        }
+    } catch (dnsErr: unknown) {
+        if ((dnsErr as Error).message.includes("Blocked SSRF")) throw dnsErr;
+        logger.debug(`[fetchHtml] DNS pre-check failed for ${hostname} — proceeding`, { err: (dnsErr as Error).message });
+    }
+
+    return parsed;
+}
+
+/**
+ * SSRF-safe fetch wrapper for audit modules.
+ * Validates the target URL and every redirect hop against private/internal IPs and DNS rebinding.
+ */
+export async function safeAuditFetch(
+    url: string,
+    init?: RequestInit & { maxRedirects?: number },
+): Promise<Response> {
+    const maxRedirects = init?.maxRedirects ?? 5;
+    const callerWantsManual = init?.redirect === "manual";
+    let currentUrl = url;
+
+    for (let hop = 0; hop <= maxRedirects; hop++) {
+        await assertSafeAuditUrl(currentUrl);
+        const res = await fetch(currentUrl, {
+            ...init,
+            redirect: "manual",
+        });
+
+        if (callerWantsManual || res.status < 300 || res.status >= 400) {
+            return res;
+        }
+
+        const location = res.headers.get("location");
+        if (!location) {
+            return res;
+        }
+        if (hop === maxRedirects) {
+            throw new Error(`[safeAuditFetch] Too many redirects while fetching ${url}`);
+        }
+        currentUrl = new URL(location, currentUrl).href;
+    }
+
+    throw new Error(`[safeAuditFetch] Too many redirects while fetching ${url}`);
+}
+
+export async function fetchHtmlWithMeta(url: string, redirectDepth = 0): Promise<FetchHtmlResult> {
+    // SSRF guard — reject private/internal targets before any network call
+    await assertSafeAuditUrl(url);
 
 
     let lastError: Error | null = null;

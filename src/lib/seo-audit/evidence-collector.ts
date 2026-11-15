@@ -119,14 +119,18 @@ export function checklistItemToEvidence(
     if (typeof d.error === "string" && d.error.toLowerCase().includes("redirect")) {
       normalized.redirect_loop = true;
     }
-  } else if (item.id === "ssl-certificate") {
+  } else if (item.id === "redirect-chain") {
+    if (typeof d.hops === "number") normalized.redirect_count = d.hops;
+    if (typeof d.hasLoop === "boolean") normalized.redirect_loop = d.hasLoop;
+  } else if (item.id === "ssl-certificate" || item.id === "https-security") {
     normalized.protocol = item.status === "Fail" || url.startsWith("http://") ? "http" : "https";
-  } else if (item.id === "robots-txt") {
+  } else if (item.id === "robots-txt" || item.id === "robots-directive-check" || item.id === "technical.robots-sitemap" || item.id === "robots-sitemap") {
     const blocksGooglebot = Boolean(d.googlebotBlocked);
     const disallowsRoot = Boolean(d.disallowsRoot);
+    const urlBlocked = Boolean(d.urlBlocked);
     normalized.blocks_googlebot = blocksGooglebot;
     normalized.disallows_root = disallowsRoot;
-    normalized.disallowed = blocksGooglebot || disallowsRoot;
+    normalized.disallowed = blocksGooglebot || disallowsRoot || urlBlocked;
   } else if (item.id === "xml-sitemap") {
     normalized.exists = typeof d.exists === "boolean" ? d.exists : item.status !== "Fail";
     normalized.valid_xml = typeof d.validXml === "boolean" ? d.validXml : item.status === "Pass";
@@ -151,6 +155,9 @@ export function checklistItemToEvidence(
     normalized.has_organization = item.status === "Pass";
   } else if (item.id === "schema-missing-faq" || item.id === "schema-faq") {
     normalized.has_faq = item.status === "Pass";
+    if (item.id === "schema-missing-faq") {
+      normalized.has_qa_content = true;
+    }
   }
 
   return createEvidence({
@@ -177,7 +184,49 @@ export function categoryResultToEvidence(
   result: AuditCategoryResult,
   url: string,
 ): SEOEvidence[] {
-  return result.items.map(item => checklistItemToEvidence(item, url));
+  const items = result.items.map(item => checklistItemToEvidence(item, url));
+
+  for (const item of result.items) {
+    const d = (item.details ?? {}) as Record<string, unknown>;
+    if (
+      (item.id === "robots-directive-check" || item.id === "technical.robots-sitemap" || item.id === "robots-sitemap") &&
+      d.validXml === false
+    ) {
+      items.push(
+        createEvidence({
+          source: "SITEMAP",
+          url,
+          observedAt: new Date().toISOString(),
+          observedValue: {
+            checkId: `${item.id}:sitemap`,
+            checkStatus: item.status,
+            exists: true,
+            valid_xml: false,
+          },
+          confidence: CONFIDENCE_BY_KIND.DIRECTLY_OBSERVED,
+          confidenceKind: "DIRECTLY_OBSERVED",
+        }),
+      );
+    }
+    if (item.id === "schema-missing-faq" && item.status !== "Pass") {
+      items.push(
+        createEvidence({
+          source: "HTML",
+          url,
+          observedAt: new Date().toISOString(),
+          observedValue: {
+            checkId: "schema-missing-faq:qa-content",
+            checkStatus: item.status,
+            has_qa_content: true,
+          },
+          confidence: CONFIDENCE_BY_KIND.DERIVED,
+          confidenceKind: "DERIVED",
+        }),
+      );
+    }
+  }
+
+  return items;
 }
 
 export interface EvidenceAwareResult extends AuditCategoryResult {

@@ -48,6 +48,7 @@ export async function persistDiagnosticFinding(
       severity: finding.severity,
       confidence: finding.confidence,
       scopeUrls: finding.scope.urls,
+      resolvedAt: null,
       priorityScore: priority?.score ?? undefined,
       priorityComponents: priority?.components
         ? (priority.components as unknown as Prisma.InputJsonValue)
@@ -153,6 +154,7 @@ export async function persistFindingWithEvidence(
         severity: finding.severity,
         confidence: finding.confidence,
         scopeUrls: finding.scope.urls,
+        resolvedAt: null,
         priorityScore: priority?.score ?? undefined,
         priorityComponents: priority?.components
           ? (priority.components as unknown as Prisma.InputJsonValue)
@@ -257,6 +259,36 @@ export async function markFindingResolved(
     },
   });
   return result.count > 0;
+}
+
+/**
+ * Reconciles unresolved diagnostic findings for a site (and optional page URL)
+ * after an audit completes: marks any previously failing/warning finding whose
+ * fingerprint is no longer present in `activeFingerprints` as PASS with `resolvedAt`.
+ */
+export async function reconcileResolvedFindings(
+  siteId: string,
+  activeFingerprints: string[],
+  scopeUrl?: string,
+): Promise<number> {
+  const whereClause: Prisma.DiagnosticFindingRecordWhereInput = {
+    siteId,
+    status: { in: ["FAIL", "WARNING", "UNKNOWN"] },
+    ...(activeFingerprints.length > 0
+      ? { fingerprint: { notIn: activeFingerprints } }
+      : {}),
+    ...(scopeUrl ? { scopeUrls: { has: scopeUrl } } : {}),
+  };
+
+  const result = await prisma.diagnosticFindingRecord.updateMany({
+    where: whereClause,
+    data: {
+      status: "PASS",
+      resolvedAt: new Date(),
+    },
+  });
+
+  return result.count;
 }
 
 export async function getFindingByFingerprint(

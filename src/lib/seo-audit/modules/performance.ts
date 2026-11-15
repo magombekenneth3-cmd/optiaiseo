@@ -40,23 +40,38 @@ interface CruxResponse {
     record?: { metrics: CruxMetrics };
 }
 
+const inFlightRequests = new Map<string, Promise<unknown>>();
+
 async function fetchWithRedisCache<T>(key: string, fetcher: () => Promise<T | null>, ttlSeconds = 86400): Promise<T | null> {
-    try {
-        const { redis } = await import('@/lib/redis');
-        const cached = await redis.get(key);
-        if (cached) return JSON.parse(cached as string) as T;
-        const result = await fetcher();
-        if (result) {
-            await redis.set(key, JSON.stringify(result), { ex: ttlSeconds }).catch(() => null);
+    const existing = inFlightRequests.get(key) as Promise<T | null> | undefined;
+    if (existing) return existing;
+
+    const promise = (async (): Promise<T | null> => {
+        try {
+            const { redis } = await import('@/lib/redis');
+            const cached = await redis.get(key);
+            if (cached) {
+                const parsed = typeof cached === 'string' ? JSON.parse(cached) : cached;
+                if (parsed !== 'timeout') return parsed as T;
+            }
+            const result = await fetcher();
+            if (result && result !== ('timeout' as unknown)) {
+                await redis.set(key, JSON.stringify(result), { ex: ttlSeconds }).catch(() => null);
+            }
+            return result;
+        } catch {
+            return fetcher().catch(() => null);
+        } finally {
+            inFlightRequests.delete(key);
         }
-        return result;
-    } catch {
-        return fetcher().catch(() => null);
-    }
+    })();
+
+    inFlightRequests.set(key, promise);
+    return promise;
 }
 
-async function fetchPsi(url: string, strategy: 'mobile' | 'desktop'): Promise<PsiResponse | 'timeout' | null> {
-    const key = `psi:perf:${strategy}:v1:${url}`;
+export async function fetchPsiShared(url: string, strategy: 'mobile' | 'desktop'): Promise<PsiResponse | 'timeout' | null> {
+    const key = strategy === 'mobile' ? `psi:v1:${url}` : `psi:desktop:v1:${url}`;
     return fetchWithRedisCache<PsiResponse | 'timeout'>(key, async () => {
         const apiKey = process.env.PAGESPEED_API_KEY;
         const keyParam = apiKey ? `&key=${apiKey}` : '';
@@ -72,7 +87,7 @@ async function fetchPsi(url: string, strategy: 'mobile' | 'desktop'): Promise<Ps
     });
 }
 
-async function fetchCrux(url: string, formFactor: 'PHONE' | 'DESKTOP'): Promise<CruxResponse | null> {
+export async function fetchCruxShared(url: string, formFactor: 'PHONE' | 'DESKTOP'): Promise<CruxResponse | null> {
     const apiKey = process.env.PAGESPEED_API_KEY;
     if (!apiKey) return null;
     const key = `crux:perf:${formFactor.toLowerCase()}:v1:${url}`;
@@ -94,6 +109,9 @@ async function fetchCrux(url: string, formFactor: 'PHONE' | 'DESKTOP'): Promise<
         }
     });
 }
+
+const fetchPsi = fetchPsiShared;
+const fetchCrux = fetchCruxShared;
 
 function icon(value: number, good: number, poor: number): string {
     return value <= good ? '✓' : value <= poor ? '⚠' : '✗';

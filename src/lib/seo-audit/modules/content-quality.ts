@@ -28,7 +28,9 @@ function toSentences(text: string): string[] {
 }
 
 function scoreItems(items: ChecklistItem[]): AuditCategoryResult {
-    const analyzable = items.filter((i) => i.status !== "Skipped" && i.status !== "Info" && i.status !== "NotApplicable")
+    const analyzable = items.filter(
+        (i) => i.status !== "Skipped" && i.status !== "Info" && i.status !== "NotApplicable" && (i.status as string) !== "Error",
+    )
     const passed = analyzable.filter((i) => i.status === "Pass").length
     const failed = analyzable.filter((i) => i.status === "Fail").length
     const warnings = analyzable.filter((i) => i.status === "Warning").length

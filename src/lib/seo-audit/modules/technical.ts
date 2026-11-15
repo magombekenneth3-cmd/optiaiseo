@@ -6,6 +6,8 @@ import { validateRobotsAndSitemap, type SitemapValidationResult } from '../../on
 import { runCrawlerAgent } from '../../crawler/agent';
 import { runSecurityAudit } from '../../audit/security';
 import { inspectIndexability, type IndexabilityEvidence } from '../indexability-evidence';
+import { fetchPsiShared, fetchCruxShared } from './performance';
+import { assertSafeAuditUrl, safeAuditFetch } from '../utils/fetch-html';
 
 export const TechnicalModule: AuditModule = {
     id: 'technical-seo',
@@ -35,78 +37,9 @@ export const TechnicalModule: AuditModule = {
                 hydrationTimeMs: 0,
                 crawlerRisks: [] as string[],
             })),
-            (async () => {
-                const psiCacheKey = `psi:v1:${context.url}`;
-                try {
-                    const { redis } = await import('@/lib/redis');
-                    const cached = await redis.get(psiCacheKey);
-                    if (cached) {
-                        logger.debug(`[PSI Cache] HIT for ${context.url}`);
-                        return JSON.parse(cached as string);
-                    }
-                } catch { /* Redis unavailable — fall through to live fetch */ }
-
-                try {
-                    const keyParam = process.env.PAGESPEED_API_KEY ? `&key=${process.env.PAGESPEED_API_KEY}` : '';
-                    const psiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(context.url)}${keyParam}&strategy=mobile&category=PERFORMANCE`;
-                    const res = await fetch(psiUrl, { signal: AbortSignal.timeout(20000) });
-                    if (!res.ok) return null;
-                    const data = await res.json();
-                    // Cache the result for 24hr
-                    try {
-                        const { redis } = await import('@/lib/redis');
-                        await redis.set(psiCacheKey, JSON.stringify(data), { ex: 86400 });
-                    } catch { /* non-fatal */ }
-                    return data;
-                 
-                 
-                } catch (e: unknown) {
-                    if ((e as { name?: string }).name === 'TimeoutError') return 'timeout';
-                    return null;
-                }
-            })(),
-            (async () => {
-                const psiDesktopCacheKey = `psi:desktop:v1:${context.url}`;
-                try {
-                    const { redis } = await import('@/lib/redis');
-                    const cached = await redis.get(psiDesktopCacheKey);
-                    if (cached) return JSON.parse(cached as string);
-                } catch { }
-                try {
-                    const keyParam = process.env.PAGESPEED_API_KEY ? `&key=${process.env.PAGESPEED_API_KEY}` : '';
-                    const psiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(context.url)}${keyParam}&strategy=desktop&category=PERFORMANCE`;
-                    const res = await fetch(psiUrl, { signal: AbortSignal.timeout(20000) });
-                    if (!res.ok) return null;
-                    const data = await res.json();
-                    try {
-                        const { redis } = await import('@/lib/redis');
-                        await redis.set(psiDesktopCacheKey, JSON.stringify(data), { ex: 86400 });
-                    } catch { }
-                    return data;
-                } catch (e: unknown) {
-                    if ((e as { name?: string }).name === 'TimeoutError') return 'timeout';
-                    return null;
-                }
-            })(),
-            // FIX #17: CrUX API — real-user field data alongside lab data
-            (async () => {
-                if (!process.env.PAGESPEED_API_KEY) return null;
-                try {
-                    const res = await fetch(
-                        `https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=${process.env.PAGESPEED_API_KEY}`,
-                        {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ url: context.url, formFactor: 'PHONE' }),
-                            signal: AbortSignal.timeout(10000),
-                        }
-                    );
-                    if (!res.ok) return null;
-                    return await res.json();
-                } catch {
-                    return null;
-                }
-            })(),
+            fetchPsiShared(context.url, 'mobile'),
+            fetchPsiShared(context.url, 'desktop'),
+            fetchCruxShared(context.url, 'PHONE'),
             inspectIndexability(context.url).catch((err: unknown) => ({ _error: (err as Error)?.message ?? "unknown" })),
         ]);
 
@@ -217,6 +150,7 @@ export const TechnicalModule: AuditModule = {
             recommendation: !sitemapResult.sitemapExists ? { text: 'Create and submit an XML sitemap to Google Search Console.', priority: 'High' } : undefined,
             roiImpact: 85,
             aiVisibilityImpact: 90,
+            details: { exists: sitemapResult.sitemapExists, validXml: sitemapResult.sitemapExists },
         });
 
         // 5. Schema Markup (quick presence check; full audit in schema.ts)
@@ -737,7 +671,7 @@ export const TechnicalModule: AuditModule = {
 
             const testUrl = `${protocol}//${isWww ? bareHost : wwwHost}${urlObj.pathname}`;
 
-            const redirectRes = await fetch(testUrl, {
+            const redirectRes = await safeAuditFetch(testUrl, {
                 method: 'HEAD',
                 redirect: 'manual',
                 headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
@@ -789,9 +723,8 @@ export const TechnicalModule: AuditModule = {
             try {
                 const urlObj = new URL(context.url);
                 const testUrl = `${urlObj.origin}/__audit_probe_${Date.now()}__`;
-                const res = await fetch(testUrl, {
+                const res = await safeAuditFetch(testUrl, {
                     method: 'HEAD',
-                    redirect: 'follow',
                     signal: AbortSignal.timeout(6000),
                     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
                 });
@@ -991,6 +924,7 @@ export const TechnicalModule: AuditModule = {
             const seen = new Set<string>([current]);
             for (let i = 0; i < 8; i++) {
                 try {
+                    await assertSafeAuditUrl(current);
                     const res = await fetch(current, {
                         method: 'HEAD',
                         redirect: 'manual',
@@ -1002,6 +936,7 @@ export const TechnicalModule: AuditModule = {
                     if (status >= 300 && status < 400 && location) {
                         statuses.push(status);
                         const next = location.startsWith('http') ? location : new URL(location, current).href;
+                        await assertSafeAuditUrl(next);
                         if (seen.has(next)) { chain.push('[LOOP DETECTED]'); break; }
                         seen.add(next);
                         chain.push(next);
@@ -1174,7 +1109,7 @@ export const TechnicalModule: AuditModule = {
                 const urlObj = new URL(context.url);
                 const robotsUrl = `${urlObj.origin}/robots.txt`;
 
-                const robotsRes = await fetch(robotsUrl, {
+                const robotsRes = await safeAuditFetch(robotsUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
                     signal: AbortSignal.timeout(8000),
                     cache: 'no-store',
@@ -1283,7 +1218,7 @@ export const TechnicalModule: AuditModule = {
 
                 if (sitemapUrls.length > 0) {
                     for (const sitemapUrl of sitemapUrls.slice(0, 3)) {
-                        const sRes = await fetch(sitemapUrl, {
+                        const sRes = await safeAuditFetch(sitemapUrl, {
                             headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
                             signal: AbortSignal.timeout(8000),
                         }).catch(() => null);
@@ -1362,6 +1297,7 @@ export const TechnicalModule: AuditModule = {
                         sitemapUrlsFound: sitemapUrlCount,
                         isSitemapIndex,
                         urlBlocked: blockedByAgent != null,
+                        validXml: !sitemapIssues.some(i => i.includes('does not appear to be valid XML')),
                         issueCount: allIssues.length,
                     } as Record<string, string | number | boolean>,
                 });

@@ -483,6 +483,9 @@ export function evaluateCondition(
         const val = obs[condition.field];
         return val === undefined || val === null || val === "";
       }
+      if (condition.field === "canonical_href" && (obs.canonical_missing === true || obs.hasCanonical === false)) {
+        return true;
+      }
       return !("checkId" in obs);
     });
   }
@@ -569,10 +572,14 @@ export function diagnose(input: DiagnosisInput): DiagnosticFinding[] {
       );
 
       if (allConditionsMet) {
-        // Gather relevant evidence for this finding
-        const relevantEvidence = evidence.filter(e =>
-          cause.conditions.some(c => c.source === e.source)
+        // Gather only the specific evidence items that matched this cause's conditions
+        // (avoids attaching all 70+ unrelated HTML checklist items to a single finding).
+        const matchedEvidence = evidence.filter(e =>
+          cause.conditions.some(c => c.source === e.source && evaluateCondition(c, [e]))
         );
+        const relevantEvidence = matchedEvidence.length > 0
+          ? matchedEvidence
+          : evidence.filter(e => cause.conditions.some(c => c.source === e.source));
 
         const fingerprint = computeFindingFingerprint(
           siteId,

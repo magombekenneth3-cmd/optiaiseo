@@ -12,10 +12,11 @@ import { detectGsovDrop, generateHealingPlan } from "@/lib/self-healing/engine";
 import { executeHealingWithConfidenceGate } from "@/lib/self-healing/confidence";
 import { detectGscAnomalies, generateGscHealingPlan } from "@/lib/self-healing/gsc";
 import { writeMetricSnapshot } from "@/lib/metrics/metric-snapshot";
-import { releaseAuditLease } from "@/lib/audit-lock";
+import { releaseAuditLease, renewAuditLease } from "@/lib/audit-lock";
 import { fireWhiteLabelWebhook } from "@/lib/webhooks/white-label";
-import { persistFindingWithEvidence } from "@/lib/seo-audit/diagnostic-persistence";
+import { persistFindingWithEvidence, reconcileResolvedFindings } from "@/lib/seo-audit/diagnostic-persistence";
 import type { DiagnosticFinding } from "@/lib/seo-audit/root-cause-engine";
+import type { ExplainablePriority } from "@/lib/seo-audit/contracts";
 import { trackFunnelEvent } from "@/lib/funnel";
 import { refundCreditsIdempotent, CREDIT_COSTS } from "@/lib/credits";
 import { extractAuditVitalsAndSchema } from "@/lib/audit";
@@ -128,20 +129,35 @@ export const processManualAuditJob = inngest.createFunction(
 
         await step.run("persist-diagnostic-findings", async () => {
             const dr = auditResult.diagnosticResult;
-            if (!dr?.findings?.length) return { persisted: 0 };
+            const findings = (dr?.findings ?? []) as DiagnosticFinding[];
+            const priorityMap = new Map<string, ExplainablePriority>();
+            for (const a of (dr?.plan?.actions ?? []) as Array<{ findingFingerprint?: string; priority?: ExplainablePriority }>) {
+                if (a?.findingFingerprint && a?.priority) {
+                    priorityMap.set(a.findingFingerprint, a.priority);
+                }
+            }
             let persisted = 0;
-            for (const finding of dr.findings as DiagnosticFinding[]) {
+            for (const finding of findings) {
                 try {
-                    await persistFindingWithEvidence(siteId, finding);
+                    await persistFindingWithEvidence(siteId, finding, priorityMap.get(finding.fingerprint));
                     persisted++;
                 } catch {}
             }
-            return { persisted };
+            const resolved = await reconcileResolvedFindings(
+                siteId,
+                findings.map((f) => f.fingerprint),
+                auditResult.url,
+            ).catch(() => 0);
+            return { persisted, resolved };
         });
 
         if (lockKey && !fanOut) {
             await step.run("release-audit-lock", async () => {
                 await releaseAuditLease(lockKey, auditId).catch(() => null);
+            });
+        } else if (lockKey && fanOut) {
+            await step.run("renew-audit-lock-before-fanout", async () => {
+                await renewAuditLease(lockKey, auditId).catch(() => null);
             });
         }
 
@@ -216,7 +232,7 @@ export const runWeeklyAuditJob = inngest.createFunction(
         id: "run-weekly-audit",
         name: "Run Weekly Site Audit",
         retries: 3,
-        idempotency: "event.data.siteId",
+        idempotency: 'event.data.siteId + "-" + (has(event.data.weekKey) ? event.data.weekKey : string(event.ts))',
         concurrency: {
             limit: CONCURRENCY.auditFull,
             key: "event.data.siteId",
@@ -236,7 +252,9 @@ export const runWeeklyAuditJob = inngest.createFunction(
         triggers: [{ event: "audit.run" }],
     },
     async ({ event, step }) => {
-        if (!process.env.GEMINI_API_KEY) throw new NonRetriableError("Missing GEMINI_API_KEY - dropping job to save retries");
+        if (!process.env.GEMINI_API_KEY) {
+            logger.warn("[Inngest/WeeklyAudit] GEMINI_API_KEY not set — continuing with deterministic audit modules");
+        }
         const { siteId } = event.data;
 
         const site = await step.run("fetch-site", async () => {
@@ -310,15 +328,26 @@ export const runWeeklyAuditJob = inngest.createFunction(
 
         await step.run("persist-diagnostic-findings", async () => {
             const dr = auditResult.diagnosticResult;
-            if (!dr?.findings?.length) return { persisted: 0 };
+            const findings = (dr?.findings ?? []) as DiagnosticFinding[];
+            const priorityMap = new Map<string, ExplainablePriority>();
+            for (const a of (dr?.plan?.actions ?? []) as Array<{ findingFingerprint?: string; priority?: ExplainablePriority }>) {
+                if (a?.findingFingerprint && a?.priority) {
+                    priorityMap.set(a.findingFingerprint, a.priority);
+                }
+            }
             let persisted = 0;
-            for (const finding of dr.findings as DiagnosticFinding[]) {
+            for (const finding of findings) {
                 try {
-                    await persistFindingWithEvidence(site.id, finding);
+                    await persistFindingWithEvidence(site.id, finding, priorityMap.get(finding.fingerprint));
                     persisted++;
                 } catch {}
             }
-            return { persisted };
+            const resolved = await reconcileResolvedFindings(
+                site.id,
+                findings.map((f) => f.fingerprint),
+                auditResult.url,
+            ).catch(() => 0);
+            return { persisted, resolved };
         });
 
         await step.run("maybe-trigger-healing", async () => {

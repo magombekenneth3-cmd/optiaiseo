@@ -123,15 +123,37 @@ export async function runAudit(siteId?: string, auditMode: "homepage" | "full" =
     // Redis is a fast mutual-exclusion mechanism, but its lease can expire
     // while a large page fan-out is waiting in the queue. The persisted audit
     // state is the durable second fence that prevents overlapping site runs.
+    // Auto-recover orphaned PENDING / IN_PROGRESS audits older than 30 minutes
+    // so a worker crash or dropped event never permanently deadlocks a site.
+    const STALE_AUDIT_CUTOFF_MS = 30 * 60 * 1000;
     const activeAudit = await prisma.audit.findFirst({
       where: { siteId: site.id, fixStatus: { in: ["PENDING", "IN_PROGRESS"] } },
-      select: { id: true },
+      select: { id: true, runTimestamp: true },
     });
     if (activeAudit) {
-      return {
-        success: false,
-        error: "An audit is already running for this site. Please wait for it to finish.",
-      };
+      const ageMs = activeAudit.runTimestamp
+        ? Date.now() - new Date(activeAudit.runTimestamp).getTime()
+        : 0;
+      if (ageMs > STALE_AUDIT_CUTOFF_MS) {
+        logger.warn("[runAudit] Auto-recovering stale active audit older than 30m", {
+          siteId: site.id,
+          staleAuditId: activeAudit.id,
+          ageMinutes: Math.round(ageMs / 60000),
+        });
+        await prisma.audit
+          .updateMany({
+            where: { id: activeAudit.id, fixStatus: { in: ["PENDING", "IN_PROGRESS"] } },
+            data: { fixStatus: "FAILED" },
+          })
+          .catch(() => null);
+        const { releaseAuditLease } = await import("@/lib/audit-lock");
+        await releaseAuditLease(`audit-lock:${user.id}:${site.id}`, activeAudit.id).catch(() => null);
+      } else {
+        return {
+          success: false,
+          error: "An audit is already running for this site. Please wait for it to finish.",
+        };
+      }
     }
 
     const effectiveTier = await getEffectiveTier(user.id);

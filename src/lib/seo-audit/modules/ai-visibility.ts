@@ -1,6 +1,7 @@
 import { parse } from 'node-html-parser';
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem } from '../types';
 import { probeLlmCitation } from '../llm-citation-probe';
+import { safeAuditFetch } from '../utils/fetch-html';
 
 const AI_BOTS = [
     { name: 'GPTBot', pattern: 'gptbot' },
@@ -11,28 +12,51 @@ const AI_BOTS = [
     { name: 'Applebot-Extended', pattern: 'applebot-extended' },
 ];
 
-function parseRobotsForBot(robotsText: string, botPattern: string): boolean {
-    const lines = robotsText.split(/\r?\n/).map(l => l.split('#')[0].trim());
-    let inRelevantBlock = false;
-    let isBlocked = false;
+export function parseRobotsForBot(robotsText: string, botPattern: string): boolean {
+    const lines = robotsText.split(/\r?\n/).map(l => l.split('#')[0].trim()).filter(Boolean);
+    const groups: Array<{ agents: string[]; rules: Array<{ type: 'allow' | 'disallow'; path: string }> }> = [];
+    let currentGroup: { agents: string[]; rules: Array<{ type: 'allow' | 'disallow'; path: string }> } | null = null;
+    let sawRuleInCurrentGroup = false;
 
     for (const line of lines) {
-        const lower = line.toLowerCase();
-        if (lower.startsWith('user-agent:')) {
-            const agent = lower.replace('user-agent:', '').trim();
-            inRelevantBlock = agent === botPattern || agent === '*';
-        }
-        if (inRelevantBlock && lower.startsWith('disallow:')) {
-            const path = lower.replace('disallow:', '').trim();
-            if (path === '/' || path === '/*') isBlocked = true;
-        }
-        if (inRelevantBlock && lower.startsWith('allow:')) {
-            const path = lower.replace('allow:', '').trim();
-            if (path === '/' || path === '/*') isBlocked = false;
+        const colonIdx = line.indexOf(':');
+        if (colonIdx === -1) continue;
+        const key = line.slice(0, colonIdx).trim().toLowerCase();
+        const val = line.slice(colonIdx + 1).trim();
+
+        if (key === 'user-agent') {
+            if (!currentGroup || sawRuleInCurrentGroup) {
+                currentGroup = { agents: [], rules: [] };
+                groups.push(currentGroup);
+                sawRuleInCurrentGroup = false;
+            }
+            if (val) currentGroup.agents.push(val.toLowerCase());
+        } else if ((key === 'disallow' || key === 'allow') && currentGroup) {
+            sawRuleInCurrentGroup = true;
+            currentGroup.rules.push({ type: key, path: val });
         }
     }
 
-    return isBlocked;
+    const evaluateGroupList = (matchingGroups: typeof groups): boolean | null => {
+        if (matchingGroups.length === 0) return null;
+        let blocked = false;
+        for (const group of matchingGroups) {
+            for (const rule of group.rules) {
+                if (rule.path === '/' || rule.path === '/*') {
+                    blocked = rule.type === 'disallow';
+                }
+            }
+        }
+        return blocked;
+    };
+
+    const target = botPattern.toLowerCase();
+    const specificGroups = groups.filter(g => g.agents.includes(target));
+    const specificDecision = evaluateGroupList(specificGroups);
+    if (specificDecision !== null) return specificDecision;
+
+    const wildcardGroups = groups.filter(g => g.agents.includes('*'));
+    return evaluateGroupList(wildcardGroups) ?? false;
 }
 
 export const AiVisibilityModule: AuditModule = {
@@ -46,7 +70,7 @@ export const AiVisibilityModule: AuditModule = {
         const [llmsResult, robotsResult] = await Promise.all([
             (async () => {
                 try {
-                    const headRes = await fetch(`${origin}/llms.txt`, {
+                    const headRes = await safeAuditFetch(`${origin}/llms.txt`, {
                         method: "HEAD",
                         signal: AbortSignal.timeout(6000),
                         headers: { "User-Agent": "Mozilla/5.0 (compatible; AuditBot/1.0)" },
@@ -54,7 +78,7 @@ export const AiVisibilityModule: AuditModule = {
 
                     if (!headRes.ok) return { exists: false, hasFullVersion: false, quality: "missing" as const };
 
-                    const bodyRes = await fetch(`${origin}/llms.txt`, {
+                    const bodyRes = await safeAuditFetch(`${origin}/llms.txt`, {
                         signal: AbortSignal.timeout(8000),
                         headers: { "User-Agent": "Mozilla/5.0 (compatible; AuditBot/1.0)" },
                     });
@@ -69,7 +93,7 @@ export const AiVisibilityModule: AuditModule = {
                     else if (hasDescription || pageEntries > 0) quality = "partial";
                     else quality = "empty";
 
-                    const fullRes = await fetch(`${origin}/llms-full.txt`, {
+                    const fullRes = await safeAuditFetch(`${origin}/llms-full.txt`, {
                         method: "HEAD",
                         signal: AbortSignal.timeout(4000),
                         headers: { "User-Agent": "Mozilla/5.0 (compatible; AuditBot/1.0)" },
@@ -82,7 +106,7 @@ export const AiVisibilityModule: AuditModule = {
             })(),
             (async () => {
                 try {
-                    const res = await fetch(`${origin}/robots.txt`, {
+                    const res = await safeAuditFetch(`${origin}/robots.txt`, {
                         signal: AbortSignal.timeout(6000),
                         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
                     });
