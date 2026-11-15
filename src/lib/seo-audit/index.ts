@@ -75,7 +75,7 @@ const PROFILE_MODULES: Record<AuditProfile, AuditModule[]> = {
  *                'page'  → 10 modules (per-page sub-audit in Inngest fan-out)
  */
 export function getAuditEngine(profile: AuditProfile = 'full'): AuditEngine {
-    return new AuditEngine(PROFILE_MODULES[profile]);
+    return new AuditEngine(PROFILE_MODULES[profile], profile);
 }
 
 /** @deprecated Use getAuditEngine('full') instead */

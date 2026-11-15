@@ -190,7 +190,10 @@ function planAction(
   }
 
   if (
+    gateResult.allowed &&
+    !evidenceGapReason &&
     effectiveRemediationType !== "MANUAL" &&
+    effectiveRemediationType !== "EXPERIMENT" &&
     (finding.remediationType === "DETERMINISTIC" || hasDeterministicFix(finding.rootCauseId))
   ) {
     deterministicFix = tryDeterministicFix(finding.rootCauseId, fixCtx);
@@ -280,13 +283,30 @@ function severityToBusinessImpact(severity: string): number {
   }
 }
 
+const ISSUE_TYPE_IMPACT_WEIGHTS: ReadonlyArray<readonly [string, number]> = [
+  ["indexing", 1.0],
+  ["aeo", 0.7],
+  ["llms_txt", 0.7],
+  ["canonical", 0.85],
+  ["cwv", 0.85],
+  ["broken_internal_links", 0.8],
+  ["onpage_metadata", 0.8],
+  ["keyword_cannibalization", 0.78],
+  ["redirect", 0.75],
+  ["ssl", 0.7],
+  ["robots", 0.7],
+  ["blocked", 1.0],
+  ["head_essentials", 0.65],
+  ["social_meta", 0.65],
+  ["sitemap", 0.65],
+  ["schema", 0.55],
+];
+
 function issueTypeToSearchImpact(issueType: string): number {
-  if (issueType.includes("indexing") || issueType.includes("blocked")) return 1.0;
-  if (issueType.includes("canonical")) return 0.85;
-  if (issueType.includes("redirect")) return 0.75;
-  if (issueType.includes("sitemap")) return 0.65;
-  if (issueType.includes("schema")) return 0.55;
-  if (issueType.includes("ssl") || issueType.includes("robots")) return 0.7;
+  const lower = issueType.toLowerCase();
+  for (const [token, weight] of ISSUE_TYPE_IMPACT_WEIGHTS) {
+    if (lower.includes(token)) return weight;
+  }
   return 0.5;
 }
 

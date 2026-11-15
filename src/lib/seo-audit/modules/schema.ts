@@ -16,7 +16,7 @@ const RICH_RESULT_ELIGIBLE = new Set([
 const SCHEMA_FIELD_RULES: Record<string, { required: string[]; recommended: string[] }> = {
     Organization: { required: ['name', 'url'], recommended: ['logo', 'sameAs', 'contactPoint'] },
     LocalBusiness: { required: ['name', 'address', 'telephone'], recommended: ['openingHours', 'geo', 'url', 'image'] },
-    WebSite: { required: ['name', 'url'], recommended: ['potentialAction', 'description'] },
+    WebSite: { required: ['name', 'url'], recommended: ['description'] },
     WebPage: { required: ['name', 'url'], recommended: ['description', 'breadcrumb'] },
     Article: { required: ['headline', 'author', 'datePublished'], recommended: ['image', 'description', 'publisher', 'dateModified', 'url'] },
     BlogPosting: { required: ['headline', 'author', 'datePublished'], recommended: ['image', 'description', 'publisher', 'dateModified'] },
@@ -293,14 +293,18 @@ export const SchemaModule: AuditModule = {
         const detectedTypeNames = new Set(
             parsedBlocks.map(b => (typeof b['@type'] === 'string' ? b['@type'] : ''))
         );
+        const brandEntityHandlesSiteSchema =
+            context.auditProfile === 'full' || context.auditProfile === 'page';
 
         if (!detectedTypeNames.has('WebSite') && !detectedTypeNames.has('SiteLinksSearchBox')) {
             items.push({
                 id: 'schema-missing-website',
                 label: 'Schema: WebSite (Missing)',
-                status: 'Warning',
-                finding: 'No WebSite schema detected. WebSite schema establishes site identity and helps Google understand the site name for search results.',
-                recommendation: {
+                status: brandEntityHandlesSiteSchema ? 'Info' : 'Warning',
+                finding: brandEntityHandlesSiteSchema
+                    ? 'No WebSite schema on this page (evaluated in Brand Entity).'
+                    : 'No WebSite schema detected. WebSite schema establishes site identity and helps Google understand the site name for search results.',
+                recommendation: brandEntityHandlesSiteSchema ? undefined : {
                     // NOTE: Google retired the sitelinks search box globally Nov 21, 2024.
                     // SearchAction in WebSite schema no longer triggers it.
                     // WebSite schema is still valuable for site-name understanding.
@@ -316,9 +320,11 @@ export const SchemaModule: AuditModule = {
             items.push({
                 id: 'schema-missing-org',
                 label: 'Schema: Organization (Missing)',
-                status: 'Warning',
-                finding: 'No Organization or LocalBusiness schema detected. This is critical for Google Knowledge Panel and brand entity recognition.',
-                recommendation: {
+                status: brandEntityHandlesSiteSchema ? 'Info' : 'Warning',
+                finding: brandEntityHandlesSiteSchema
+                    ? 'No Organization or LocalBusiness schema on this page (evaluated in Brand Entity).'
+                    : 'No Organization or LocalBusiness schema detected. This is critical for Google Knowledge Panel and brand entity recognition.',
+                recommendation: brandEntityHandlesSiteSchema ? undefined : {
                     text: 'Add Organization schema with name, url, logo (as ImageObject), and sameAs links to your social profiles.',
                     priority: 'High',
                 },

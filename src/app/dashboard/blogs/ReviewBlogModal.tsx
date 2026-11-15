@@ -14,6 +14,7 @@ import {
     Loader2,
     Maximize2,
     Minimize2,
+    RefreshCw,
     Save,
     Search,
     ShieldCheck,
@@ -29,6 +30,7 @@ import { toast } from "sonner";
 import { ContentEditor } from "./ContentEditor";
 import { ScoreRadarGauge } from "@/components/blog/ScoreRadarGauge";
 import { AiDiffInspector } from "@/components/blog/AiDiffInspector";
+import type { RefreshChangeSummary, StoredRefreshMetadata } from "@/lib/content/surgical-refresh";
 import type { ContentScoreResult } from "@/lib/content-scoring";
 import type { CitationCriterion } from "@/lib/blog/ai-citation-template";
 import type { SerpCompetitiveBrief } from "@/lib/blog/contracts";
@@ -37,8 +39,11 @@ import { logger } from "@/lib/logger";
 interface Blog {
     id: string;
     title: string;
+    slug?: string;
     content: string;
     status: string;
+    pipelineType?: string | null;
+    sourceUrl?: string | null;
     targetKeywords: string[];
     validationScore?: number | null;
     evidenceCoverage?: number | null;
@@ -48,6 +53,73 @@ interface Blog {
     publicationGates?: Array<{ name: string; status: string; issues?: string[]; warnings?: string[] }> | null;
     validationErrors?: string[] | null;
     validationWarnings?: string[] | null;
+    generationInput?: StoredRefreshMetadata | Record<string, unknown> | null;
+}
+
+function getRefreshMetadata(blog: Blog): StoredRefreshMetadata | null {
+    const raw = blog.generationInput;
+    if (!raw || typeof raw !== "object") return null;
+    const candidate = raw as Partial<StoredRefreshMetadata>;
+    if (candidate.mode !== "CONTENT_REFRESH" || !candidate.refreshSummary) return null;
+    return candidate as StoredRefreshMetadata;
+}
+
+function RefreshSummaryPanel({ blog }: { blog: Blog }) {
+    const meta = getRefreshMetadata(blog);
+    const summary: RefreshChangeSummary | undefined = meta?.refreshSummary;
+    if (!summary && blog.pipelineType !== "CONTENT_REFRESH" && !blog.sourceUrl) {
+        return null;
+    }
+
+    const delta = summary?.wordCountDelta ?? 0;
+    const deltaLabel = delta > 0 ? `+${delta}` : `${delta}`;
+
+    return (
+        <section className="rounded-xl border border-amber-500/30 bg-amber-500/[0.04] p-4">
+            <div className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 text-amber-400" />
+                <h3 className="text-xs font-semibold text-amber-300">Page refresh target</h3>
+            </div>
+            <div className="mt-2 space-y-1.5 text-[11px] text-muted-foreground">
+                <p className="truncate font-mono text-foreground/90" title={summary?.targetUrl || blog.sourceUrl || ""}>
+                    {summary?.targetPath || blog.sourceUrl}
+                </p>
+                {summary && (
+                    <>
+                        <p>
+                            Preserved slug: <span className="font-mono text-foreground">{summary.preservedSlug}</span>
+                        </p>
+                        <p>
+                            Words: {summary.originalWordCount} &rarr; {summary.refreshedWordCount}{" "}
+                            <span className={delta >= 0 ? "font-semibold text-emerald-400" : "font-semibold text-amber-300"}>
+                                ({deltaLabel})
+                            </span>
+                        </p>
+                        <p>
+                            Sections: {summary.retainedHeadings.length} kept &middot; {summary.addedHeadings.length} added
+                        </p>
+                        {summary.clusterQueriesAdded.length > 0 && (
+                            <div className="pt-1">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-200/80">
+                                    Uncovered queries integrated
+                                </p>
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                    {summary.clusterQueriesAdded.slice(0, 5).map((q) => (
+                                        <span
+                                            key={q}
+                                            className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-200"
+                                        >
+                                            {q}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+        </section>
+    );
 }
 
 type ReviewMode = "write" | "review" | "simulate";
@@ -860,6 +932,11 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                                 <span className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                                     Draft
                                 </span>
+                                {(blog.pipelineType === "CONTENT_REFRESH" || blog.sourceUrl) && (
+                                    <span className="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
+                                        Page Refresh
+                                    </span>
+                                )}
                             </div>
                             <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
                                 <span>
@@ -868,6 +945,14 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                                         {blog.targetKeywords?.[0] || "No target keyword"}
                                     </span>
                                 </span>
+                                {blog.sourceUrl && (
+                                    <>
+                                        <span>·</span>
+                                        <span className="truncate font-mono text-[10px] text-amber-300/90" title={blog.sourceUrl}>
+                                            {blog.sourceUrl}
+                                        </span>
+                                    </>
+                                )}
                                 <span>·</span>
                                 <span className="flex items-center gap-1">
                                     <Clock3 className="h-3 w-3" />
@@ -1076,6 +1161,8 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                                     </button>
                                 </section>
                             ) : null}
+
+                            <RefreshSummaryPanel blog={blog} />
 
                             <SerpResearchPanel
                                 brief={blog.serpCompetitiveBrief}

@@ -1,6 +1,7 @@
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem, AuditStatus } from "../types"
 import { parse } from "node-html-parser"
 import { getKeywordMetricsBatch, getSerpData, resolveLocationCode, DATAFORSEO_LOCATION_CODES } from "@/lib/keywords/dataforseo"
+import { getSiteCannibalizationRisks, matchCannibalizationRisksForPage } from "../utils/gsc-cannibalization"
 
 const STOP_WORDS = new Set([
     "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
@@ -24,8 +25,27 @@ function tokenize(text: string): string[] {
         .filter((w) => w.length > 2 && !STOP_WORDS.has(w))
 }
 
+function stripTitleBrandSuffix(title: string): string {
+    const segments = title
+        .split(/\s*[|\u2014\u2013·]+\s*|\s+-\s+|\s+::\s+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+
+    if (segments.length <= 1) return title
+
+    // Prefer the leading segment unless it is a bare 1-token brand/home label while the second carries topic depth
+    const ranked = segments.map((seg, idx) => ({
+        seg,
+        idx,
+        tokens: tokenize(seg).length,
+    }))
+    ranked.sort((a, b) => (b.tokens - a.tokens) || (a.idx - b.idx))
+    return ranked[0]?.seg ?? segments[0]
+}
+
 function extractPrimaryKeyword(title: string | null, h1: string | null): string {
-    const words = tokenize(title ?? h1 ?? "")
+    const topicSource = title ? stripTitleBrandSuffix(title) : (h1 ?? "")
+    const words = tokenize(topicSource)
     if (words.length === 0) return ""
     return words.length >= 2 && words[0].length > 3 && words[1].length > 3
         ? `${words[0]} ${words[1]}`
@@ -73,10 +93,13 @@ export const KeywordsModule: AuditModule = {
             // invalid URL — leave slug empty
         }
 
-        const primaryKeyword =
-            (context as any).targetKeyword as string | undefined
-            ?? extractPrimaryKeyword(rawTitle, rawH1)
+        const explicitKeyword = context.targetKeyword?.trim() || undefined
+        const keywordSource = context.keywordSource ?? (explicitKeyword ? "explicit" : "inferred")
+        const isInferredSubpage = context.auditProfile === "page" && !explicitKeyword
+        const primaryKeyword = explicitKeyword ?? extractPrimaryKeyword(rawTitle, rawH1)
         const pkLabel = primaryKeyword ? `"${primaryKeyword}"` : "(could not detect)"
+        const normalizeSubpageStatus = (status: AuditStatus): AuditStatus =>
+            isInferredSubpage && status !== "Pass" ? "Info" : status
 
         // 0. Hidden Text
         {
@@ -151,30 +174,31 @@ export const KeywordsModule: AuditModule = {
             items.push({
                 id: "keyword-in-title",
                 label: "Primary Keyword in Title",
-                status: titleStatus,
+                status: normalizeSubpageStatus(titleStatus),
                 finding: titleFinding,
-                recommendation: titleRec,
+                recommendation: isInferredSubpage && titleStatus !== "Pass" ? undefined : titleRec,
                 roiImpact: 90,
                 aiVisibilityImpact: 85,
-                details: { primaryKeyword, inTitle, keywordIndex, keywordCount },
+                details: { primaryKeyword, keywordSource, inTitle, keywordIndex, keywordCount },
             })
         }
 
         // 2. Keyword in H1
         {
             const inH1 = rawH1 ? rawH1.toLowerCase().includes(primaryKeyword.toLowerCase()) : false
+            const h1Status: AuditStatus = !rawH1 ? "Fail" : inH1 ? "Pass" : "Warning"
 
             items.push({
                 id: "keyword-in-h1",
                 label: "Primary Keyword in H1",
-                status: !rawH1 ? "Fail" : inH1 ? "Pass" : "Warning",
+                status: normalizeSubpageStatus(h1Status),
                 finding: !rawH1
                     ? "No H1 found — search engines cannot confirm the page topic."
                     : inH1
                         ? `Primary keyword ${pkLabel} is present in the H1 tag.`
                         : `H1 does not contain primary keyword ${pkLabel}. H1 is the strongest on-page topical signal.`,
                 recommendation:
-                    rawH1 && !inH1
+                    !isInferredSubpage && rawH1 && !inH1
                         ? {
                             text: `Rewrite your H1 to naturally include the primary keyword ${pkLabel}.`,
                             priority: "High",
@@ -182,25 +206,26 @@ export const KeywordsModule: AuditModule = {
                         : undefined,
                 roiImpact: 85,
                 aiVisibilityImpact: 80,
-                details: { h1Text: rawH1?.slice(0, 80) ?? "", inH1 },
+                details: { h1Text: rawH1?.slice(0, 80) ?? "", keywordSource, inH1 },
             })
         }
 
         // 3. Keyword in Meta Description
         {
             const inMeta = rawMetaDesc ? rawMetaDesc.toLowerCase().includes(primaryKeyword.toLowerCase()) : false
+            const metaStatus: AuditStatus = !rawMetaDesc ? "Fail" : inMeta ? "Pass" : "Warning"
 
             items.push({
                 id: "keyword-in-meta-description",
                 label: "Primary Keyword in Meta Description",
-                status: !rawMetaDesc ? "Fail" : inMeta ? "Pass" : "Warning",
+                status: normalizeSubpageStatus(metaStatus),
                 finding: !rawMetaDesc
                     ? "No meta description — Google auto-generates one, usually suboptimally."
                     : inMeta
                         ? `Primary keyword ${pkLabel} found in meta description.`
                         : `Primary keyword ${pkLabel} is absent from the meta description. Google bolds the searched keyword in SERPs, improving CTR.`,
                 recommendation:
-                    rawMetaDesc && !inMeta
+                    !isInferredSubpage && rawMetaDesc && !inMeta
                         ? {
                             text: `Include ${pkLabel} naturally in your meta description. Google bolds keywords matching the search query, which increases click-through rate.`,
                             priority: "Medium",
@@ -208,25 +233,26 @@ export const KeywordsModule: AuditModule = {
                         : undefined,
                 roiImpact: 75,
                 aiVisibilityImpact: 70,
-                details: { primaryKeyword, inMeta },
+                details: { primaryKeyword, keywordSource, inMeta },
             })
         }
 
         // 4. Keyword in First 100 Words
         {
             const inFirstWords = primaryKeyword ? first100Words.includes(primaryKeyword.toLowerCase()) : false
+            const firstWordsStatus: AuditStatus = !primaryKeyword ? "Warning" : inFirstWords ? "Pass" : "Warning"
 
             items.push({
                 id: "keyword-in-first-100-words",
                 label: "Keyword in First 100 Words",
-                status: !primaryKeyword ? "Warning" : inFirstWords ? "Pass" : "Warning",
+                status: normalizeSubpageStatus(firstWordsStatus),
                 finding: !primaryKeyword
                     ? "Primary keyword could not be detected."
                     : inFirstWords
                         ? `Primary keyword ${pkLabel} appears in the first ~100 words.`
                         : `Primary keyword ${pkLabel} does not appear in the first 100 words. Google weighs early mention more heavily.`,
                 recommendation:
-                    primaryKeyword && !inFirstWords
+                    !isInferredSubpage && primaryKeyword && !inFirstWords
                         ? {
                             text: `Place your primary keyword ${pkLabel} in the first paragraph (within the first 100 words).`,
                             priority: "Medium",
@@ -234,7 +260,7 @@ export const KeywordsModule: AuditModule = {
                         : undefined,
                 roiImpact: 70,
                 aiVisibilityImpact: 65,
-                details: { primaryKeyword, inFirstWords },
+                details: { primaryKeyword, keywordSource, inFirstWords },
             })
         }
 
@@ -291,12 +317,12 @@ export const KeywordsModule: AuditModule = {
             items.push({
                 id: "keyword-in-url",
                 label: "URL Structure & Keyword Strategy",
-                status: urlStatus,
+                status: normalizeSubpageStatus(urlStatus),
                 finding: urlFinding,
-                recommendation: urlRec,
+                recommendation: isInferredSubpage && urlStatus !== "Pass" ? undefined : urlRec,
                 roiImpact: 60,
                 aiVisibilityImpact: 55,
-                details: { urlSlug, primaryKeyword, kwSlug, inUrl },
+                details: { urlSlug, primaryKeyword, keywordSource, kwSlug, inUrl },
             })
         }
 
@@ -337,12 +363,12 @@ export const KeywordsModule: AuditModule = {
             items.push({
                 id: "keyword-density",
                 label: "Keyword Density (informational)",
-                status: densityStatus,
+                status: normalizeSubpageStatus(densityStatus),
                 finding: densityFinding,
-                recommendation: densityRec,
+                recommendation: isInferredSubpage ? undefined : densityRec,
                 roiImpact: 30,
                 aiVisibilityImpact: 20,
-                details: { primaryKeyword, occurrences: keywordOccurrences, totalWords: totalWordCount, density },
+                details: { primaryKeyword, keywordSource, occurrences: keywordOccurrences, totalWords: totalWordCount, density },
             })
         }
 
@@ -356,11 +382,18 @@ export const KeywordsModule: AuditModule = {
                 : []
             const kwWords = primaryKeyword ? primaryKeyword.toLowerCase().split(/\s+/) : []
             const partialMatches = h2h3Texts.filter(h => kwWords.every(w => h.includes(w)))
+            const subheadingStatus: AuditStatus = matchingSubheadings.length >= 1
+                ? "Pass"
+                : partialMatches.length >= 1
+                    ? "Warning"
+                    : h2h3Texts.length === 0
+                        ? "Warning"
+                        : "Fail"
 
             items.push({
                 id: "keyword-in-subheadings",
                 label: "Keyword in Subheadings (H2/H3)",
-                status: matchingSubheadings.length >= 1 ? "Pass" : partialMatches.length >= 1 ? "Warning" : h2h3Texts.length === 0 ? "Warning" : "Fail",
+                status: normalizeSubpageStatus(subheadingStatus),
                 finding: matchingSubheadings.length >= 1
                     ? `Primary keyword ${pkLabel} found in ${matchingSubheadings.length} H2/H3 subheading(s).`
                     : partialMatches.length >= 1
@@ -368,13 +401,13 @@ export const KeywordsModule: AuditModule = {
                         : h2h3Texts.length === 0
                             ? "No H2/H3 subheadings found on this page."
                             : `Primary keyword ${pkLabel} not found in any of ${h2h3Texts.length} H2/H3 headings.`,
-                recommendation: matchingSubheadings.length === 0 ? {
+                recommendation: !isInferredSubpage && matchingSubheadings.length === 0 ? {
                     text: `Include ${pkLabel} (or a natural variation) in at least one H2 or H3. Variations like "${primaryKeyword} tips", "best ${primaryKeyword}", "how to use ${primaryKeyword}" are all valid.`,
                     priority: "Medium",
                 } : undefined,
                 roiImpact: 75,
                 aiVisibilityImpact: 70,
-                details: { primaryKeyword, h2h3Count: h2h3Texts.length, matchingCount: matchingSubheadings.length },
+                details: { primaryKeyword, keywordSource, h2h3Count: h2h3Texts.length, matchingCount: matchingSubheadings.length },
             })
         }
 
@@ -452,18 +485,27 @@ export const KeywordsModule: AuditModule = {
 
             const hasImages = images.length > 0
             const kwInAlt = imagesWithKeywordInAlt.length > 0
+            const hasExplicitTarget = Boolean(explicitKeyword)
 
             items.push({
                 id: "keyword-in-image-alt",
                 label: "Keyword in Image Alt Text",
-                status: !hasImages ? "Info" : kwInAlt ? "Pass" : "Warning",
-                finding: !hasImages
-                    ? "No images found on this page. Consider adding relevant images with keyword-optimised alt text."
-                    : kwInAlt
-                        ? `${imagesWithKeywordInAlt.length} image(s) contain primary keyword ${pkLabel} in alt text.`
-                        : `None of the ${infoImages.length} image(s) mention primary keyword ${pkLabel} in alt text.`,
+                status: !hasExplicitTarget
+                    ? "Info"
+                    : !hasImages
+                        ? "Info"
+                        : kwInAlt
+                            ? "Pass"
+                            : "Warning",
+                finding: !hasExplicitTarget
+                    ? `No explicit target keyword configured for this page (${keywordSource}); keyword-in-alt penalty skipped (alt quality is scored in Image SEO).`
+                    : !hasImages
+                        ? "No images found on this page. Consider adding relevant images with keyword-optimised alt text."
+                        : kwInAlt
+                            ? `${imagesWithKeywordInAlt.length} image(s) contain primary keyword ${pkLabel} in alt text.`
+                            : `None of the ${infoImages.length} image(s) mention primary keyword ${pkLabel} in alt text.`,
                 recommendation:
-                    hasImages && !kwInAlt
+                    hasExplicitTarget && hasImages && !kwInAlt
                         ? {
                             text: `Add ${pkLabel} naturally to the alt text of your most relevant image. Include the keyword once — do not stuff every image.`,
                             priority: "Low",
@@ -475,26 +517,107 @@ export const KeywordsModule: AuditModule = {
                     totalImages: images.length,
                     informationalImages: infoImages.length,
                     imagesWithKeywordAlt: imagesWithKeywordInAlt.length,
+                    keywordSource,
                 },
             })
         }
 
-        // 9. Keyword Cannibalization
-        items.push({
-            id: "keyword-cannibalization",
-            label: "Keyword Cannibalization",
-            status: "Info",
-            finding: `Keyword cannibalization check (multiple pages targeting "${primaryKeyword || "the same keyword"}") requires a full site crawl. Use Google Search Console's Performance report to identify URLs competing for the same query.`,
-            recommendation: {
-                text: "In GSC, filter by query → check if multiple URLs rank for the same keyword. If so: (a) merge competing pages with a 301 redirect, (b) add a canonical pointing duplicates to the primary page, or (c) differentiate content to target different search intents.",
-                priority: "High",
-            },
-            roiImpact: 85,
-            aiVisibilityImpact: 75,
-        })
+        // 9. Keyword Cannibalization (backed by 30d GSC topic cluster evidence)
+        if (!context.siteId) {
+            items.push({
+                id: "keyword-cannibalization",
+                label: "Keyword Cannibalization",
+                status: "Info",
+                finding: `Live keyword cannibalization detection requires an attached site with synced Google Search Console data. Connect GSC in site settings to identify competing URLs for ${pkLabel}.`,
+                roiImpact: 85,
+                aiVisibilityImpact: 75,
+            })
+        } else {
+            const gscCannibalization = await getSiteCannibalizationRisks(context.siteId)
+            if (!gscCannibalization || !gscCannibalization.hasGscData) {
+                items.push({
+                    id: "keyword-cannibalization",
+                    label: "Keyword Cannibalization",
+                    status: "Info",
+                    finding: `No 30-day Google Search Console performance rows are synced for this site yet; unable to evaluate URL cannibalization for ${pkLabel}.`,
+                    recommendation: {
+                        text: "Connect or sync Google Search Console so OptiAISEO can monitor whether multiple URLs compete for the same topic cluster.",
+                        priority: "Medium",
+                    },
+                    roiImpact: 85,
+                    aiVisibilityImpact: 75,
+                    details: { gscConnected: false },
+                })
+            } else {
+                const matchedRisks = matchCannibalizationRisksForPage(
+                    gscCannibalization.risks,
+                    context.url,
+                    primaryKeyword,
+                )
+
+                if (matchedRisks.length > 0) {
+                    const topRisk = matchedRisks[0]
+                    const status: AuditStatus = topRisk.riskScore >= 70 ? "Fail" : "Warning"
+                    const competingSummary = topRisk.pages
+                        .slice(0, 4)
+                        .map((p) => `${p.url} (avg pos ${p.position.toFixed(1)}, ${p.impressions} impr)`)
+                        .join("; ")
+                    const topCompeting = topRisk.pages.find((p) => p.url !== context.url) ?? topRisk.pages[0]
+
+                    items.push({
+                        id: "keyword-cannibalization",
+                        label: "Keyword Cannibalization",
+                        status,
+                        finding: `Detected ${matchedRisks.length} GSC cannibalization risk(s) for cluster "${topRisk.query}" (risk ${topRisk.riskScore}/100${topRisk.temporalEvidence ? ", URLs alternate rankings across days" : ""}). Competing URLs: ${competingSummary}.`,
+                        recommendation: {
+                            text: `Consolidate authority onto one canonical URL for "${topRisk.query}" (e.g., ${topRisk.pages[0]?.url ?? context.url}) via 301 redirect, rel="canonical", or by differentiating search intent between competing pages.`,
+                            priority: status === "Fail" ? "High" : "Medium",
+                        },
+                        roiImpact: 88,
+                        aiVisibilityImpact: 78,
+                        details: {
+                            gscConnected: true,
+                            riskCount: matchedRisks.length,
+                            riskScore: topRisk.riskScore,
+                            topClusterQuery: topRisk.query,
+                            topCompetingUrl: topCompeting?.url ?? "",
+                            competingUrls: topRisk.pages
+                                .slice(0, 5)
+                                .map((p) => `${p.url}@${p.position.toFixed(1)}`)
+                                .join(" | "),
+                            temporalEvidence: topRisk.temporalEvidence,
+                        },
+                    })
+                } else {
+                    items.push({
+                        id: "keyword-cannibalization",
+                        label: "Keyword Cannibalization",
+                        status: "Pass",
+                        finding: `Verified across 30d GSC data (${gscCannibalization.totalQueriesChecked} topic clusters checked): no competing URLs split impressions for this page.`,
+                        roiImpact: 85,
+                        aiVisibilityImpact: 75,
+                        details: {
+                            gscConnected: true,
+                            riskCount: 0,
+                            clustersChecked: gscCannibalization.totalQueriesChecked,
+                        },
+                    })
+                }
+            }
+        }
 
         // ── DataForSEO Keyword Metrics + Intent Classification ─────────────────
-        if (primaryKeyword) {
+        if (isInferredSubpage && primaryKeyword) {
+            items.push({
+                id: "keyword-market-metrics",
+                label: "Keyword Market Metrics (MSV / KD / CPC)",
+                status: "Info",
+                finding: `Skipped live DataForSEO lookup for inferred sub-page topic ${pkLabel}. Connect Google Search Console or set a page target keyword to fetch sub-page search volume.`,
+                roiImpact: 40,
+                aiVisibilityImpact: 30,
+                details: { primaryKeyword, keywordSource },
+            })
+        } else if (primaryKeyword) {
             const locationCode = resolveLocationCode((context as { targetLocation?: string }).targetLocation)
 
             const [metricsMap, serpData] = await Promise.all([

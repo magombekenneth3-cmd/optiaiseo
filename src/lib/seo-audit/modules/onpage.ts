@@ -2,6 +2,7 @@ import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem, Au
 import { parse, HTMLElement } from 'node-html-parser';
 
 import { analyzeInternalLinksForUrl } from '../internal-links';
+import { buildPageGraphNodeFromRoot } from '../site-graph';
 
 const MAX_HTML_BYTES = 10 * 1024 * 1024;
 
@@ -267,7 +268,7 @@ export const OnPageModule: AuditModule = {
             recommendation: titleRec,
             roiImpact: 90,
             aiVisibilityImpact: 80,
-            details: title ? { length: title.length, value: title.slice(0, 80) } : undefined,
+            details: title ? { length: title.length, value: title.slice(0, 160) } : undefined,
         });
 
         const metaDesc = root.querySelector('meta[name="description"]')?.getAttribute('content')?.trim() ?? null;
@@ -305,7 +306,7 @@ export const OnPageModule: AuditModule = {
             recommendation: descRec,
             roiImpact: 70,
             aiVisibilityImpact: 65,
-            details: metaDesc ? { length: metaDesc.length, value: metaDesc.slice(0, 100) } : undefined,
+            details: metaDesc ? { length: metaDesc.length, value: metaDesc.slice(0, 220) } : undefined,
         });
 
         const canonicalEl = root.querySelector('link[rel="canonical"]');
@@ -422,7 +423,10 @@ export const OnPageModule: AuditModule = {
             recommendation: h1Rec,
             roiImpact: 80,
             aiVisibilityImpact: 75,
-            details: { count: h1Elements.length },
+            details: {
+                count: h1Elements.length,
+                ...(h1Elements[0] ? { h1Text: h1Elements[0].textContent.trim().replace(/\s+/g, ' ').slice(0, 160) } : {}),
+            },
         });
 
         const allHeadings = root.querySelectorAll('h1, h2, h3, h4, h5, h6');
@@ -464,15 +468,18 @@ export const OnPageModule: AuditModule = {
         const images = root.querySelectorAll('img');
         const imgsWithoutAlt = images.filter(img => img.getAttribute('alt') === null || img.getAttribute('alt') === undefined);
         const imgsWithEmptyAlt = images.filter(img => img.getAttribute('alt') === '');
+        const hasCanonicalSiblings = context.auditProfile === 'full' || context.auditProfile === 'page';
 
         items.push({
             id: 'image-alts',
             label: 'Image Alt Tags',
-            status: imgsWithoutAlt.length === 0 ? 'Pass' : 'Fail',
-            finding: imgsWithoutAlt.length > 0
-                ? `${imgsWithoutAlt.length} of ${images.length} images are missing alt attributes. ${imgsWithEmptyAlt.length} have empty alt="" (decorative — verify correctness).`
-                : `All ${images.length} images have alt attributes. ${imgsWithEmptyAlt.length} are decorative (alt="").`,
-            recommendation: imgsWithoutAlt.length > 0
+            status: hasCanonicalSiblings ? 'Info' : imgsWithoutAlt.length === 0 ? 'Pass' : 'Fail',
+            finding: hasCanonicalSiblings
+                ? `Detected ${images.length} image(s) (${imgsWithoutAlt.length} missing alt, ${imgsWithEmptyAlt.length} empty alt="") — scored in Image SEO.`
+                : imgsWithoutAlt.length > 0
+                    ? `${imgsWithoutAlt.length} of ${images.length} images are missing alt attributes. ${imgsWithEmptyAlt.length} have empty alt="" (decorative — verify correctness).`
+                    : `All ${images.length} images have alt attributes. ${imgsWithEmptyAlt.length} are decorative (alt="").`,
+            recommendation: !hasCanonicalSiblings && imgsWithoutAlt.length > 0
                 ? { text: 'Add descriptive alt text to all informational images. Use alt="" explicitly for decorative images.', priority: 'Medium' }
                 : undefined,
             roiImpact: 55,
@@ -606,9 +613,11 @@ export const OnPageModule: AuditModule = {
         items.push({
             id: 'favicon',
             label: 'Favicon',
-            status: favicon ? 'Pass' : 'Warning',
-            finding: favicon ? 'Favicon detected.' : 'No favicon detected.',
-            recommendation: !favicon ? { text: 'Add a favicon for better brand recognition and UX.', priority: 'Low' } : undefined,
+            status: hasCanonicalSiblings ? 'Info' : favicon ? 'Pass' : 'Warning',
+            finding: hasCanonicalSiblings
+                ? (favicon ? 'Favicon detected — scored in Brand Entity.' : 'No favicon link tag detected — scored in Brand Entity.')
+                : favicon ? 'Favicon detected.' : 'No favicon detected.',
+            recommendation: !hasCanonicalSiblings && !favicon ? { text: 'Add a favicon for better brand recognition and UX.', priority: 'Low' } : undefined,
             roiImpact: 20,
             aiVisibilityImpact: 10,
         });
@@ -869,9 +878,11 @@ export const OnPageModule: AuditModule = {
             items.push({
                 id: 'json-ld-schema',
                 label: 'JSON-LD Structured Data',
-                status: jsonLdStatus,
-                finding: jsonLdFinding,
-                recommendation: jsonLdRec,
+                status: hasCanonicalSiblings ? 'Info' : jsonLdStatus,
+                finding: hasCanonicalSiblings
+                    ? `${jsonLdBlocks.length} JSON-LD block(s) detected (${presentTypes.join(', ') || 'unclassified'}) — detailed validation scored in Schema Markup.`
+                    : jsonLdFinding,
+                recommendation: hasCanonicalSiblings ? undefined : jsonLdRec,
                 roiImpact: 88,
                 aiVisibilityImpact: 95,
                 details: { blockCount: jsonLdBlocks.length, presentTypes: presentTypes.join(', '), missingHighRoiTypes: missingTypes.slice(0, 4).join(', ') },
@@ -962,8 +973,17 @@ export const OnPageModule: AuditModule = {
             });
         }
 
+        let outboundLinks: string[] | undefined;
+        let brokenLinksForGraph: Array<{ to: string; status: number | null; error?: string }> | undefined;
+
         try {
             const linkAnalysis = await analyzeInternalLinksForUrl(context.url, html, { maxLinksToCheck: 40, timeout: 6000 });
+            outboundLinks = linkAnalysis.outboundLinks;
+            brokenLinksForGraph = linkAnalysis.brokenLinks.map((b) => ({
+                to: b.url,
+                status: b.httpStatus,
+                ...(b.error ? { error: b.error } : {}),
+            }));
             const brokenCount = linkAnalysis.brokenLinks.length;
             const orphanCount = linkAnalysis.orphanPages.length;
             const sampledCount = Math.min(40, linkAnalysis.stats.uniqueInternalLinks);
@@ -1019,6 +1039,13 @@ export const OnPageModule: AuditModule = {
             });
         }
 
+        const pageGraph = buildPageGraphNodeFromRoot({
+            url: context.url,
+            root,
+            outboundInternalLinks: outboundLinks,
+            brokenInternalLinks: brokenLinksForGraph,
+        });
+
         const { score, passed, failed, warnings } = calculateScore(items);
 
         return {
@@ -1029,6 +1056,7 @@ export const OnPageModule: AuditModule = {
             passed,
             failed,
             warnings,
+            pageGraph,
         };
     },
 };

@@ -13,6 +13,7 @@ import { Project, SyntaxKind, ObjectLiteralExpression, Node } from "ts-morph";
 import { parse as parseHtml, HTMLElement } from "node-html-parser";
 import { createHash } from "crypto";
 import type { AstFixPlan, PreparedAstChange, AstOperation } from "./types";
+import { buildLlmsTxtMarkdown, validateLlmsTxtCompliance } from "@/lib/seo-audit/llms-txt";
 import { logger } from "@/lib/logger";
 
 // ── Unified Diff Generator (Display-only presentation helper) ────────────────
@@ -252,6 +253,13 @@ function computeAstFingerprint(code: string, language: string): string {
       const ast = parseRobotsAst(code);
       const summary = ast.groups.map(g => `${g.userAgent}:${g.rules.map(r=>r.directive+r.path).join(",")}`).join(";");
       return createHash("sha256").update(summary).digest("hex");
+    } else if (language === "llms_txt") {
+      if (!code.trim()) return createHash("sha256").update("").digest("hex");
+      const structuralTokens = code
+        .split(/\r?\n/)
+        .filter((line) => /^#{1,3}\s+|^>\s?https?:\/\/|^- \[.+\]\(.+\)/.test(line.trim()))
+        .map((line) => line.trim());
+      return createHash("sha256").update(structuralTokens.join(";")).digest("hex");
     }
   } catch (err) {
     throw new Error(`AST_FINGERPRINT_FAILED: Failed to generate AST fingerprint for language '${language}': ${(err as Error)?.message}`);
@@ -885,6 +893,16 @@ export function applyAstFixPlan(
     modifiedCode = applyRobotsAstOperations(sourceCode, plan.filePath, plan.operations);
   } else if (plan.language === "xml") {
     modifiedCode = applyXmlAstOperations(sourceCode, plan.filePath, plan.operations);
+  } else if (plan.language === "llms_txt") {
+    const llmsOps = plan.operations.filter(
+      (op): op is Extract<AstOperation, { kind: "setLlmsTxtDocument" }> =>
+        op.kind === "setLlmsTxtDocument",
+    );
+    if (llmsOps.length !== plan.operations.length || llmsOps.length === 0) {
+      throw new Error("AST_MUTATION_UNSUPPORTED: Only setLlmsTxtDocument operations are supported for llms_txt.");
+    }
+    const lastOp = llmsOps[llmsOps.length - 1];
+    modifiedCode = buildLlmsTxtMarkdown(lastOp.input);
   } else if (plan.language === "json") {
     try {
       const obj = sourceCode.trim() ? JSON.parse(sourceCode) : {};
@@ -930,6 +948,11 @@ export function applyAstFixPlan(
       parseHtml(modifiedCode);
     } else if (plan.language === "json") {
       JSON.parse(modifiedCode);
+    } else if (plan.language === "llms_txt") {
+      const compliance = validateLlmsTxtCompliance(modifiedCode);
+      if (!compliance.valid) {
+        throw new Error("AST_REPARSE_FAILED: Generated llms.txt failed llmstxt.org compliance validation.");
+      }
     }
   } catch (err) {
     if ((err as Error)?.message?.includes("AST_REPARSE_FAILED")) throw err;

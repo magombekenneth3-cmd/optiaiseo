@@ -140,29 +140,33 @@ export const AccessibilityModule: AuditModule = {
         const allImages = root.querySelectorAll("img")
         const imgsNoAlt = allImages.filter((img) => img.getAttribute("alt") == null)
         const longAltImages = allImages.filter((img) => (img.getAttribute("alt")?.length ?? 0) > 125)
+        const hasCanonicalSiblings = context.auditProfile === "full" || context.auditProfile === "page"
 
         items.push({
             id: "a11y-image-alt",
             label: "Image Alt Text Quality",
-            status:
-                imgsNoAlt.length === 0 && longAltImages.length === 0
+            status: hasCanonicalSiblings
+                ? "Info"
+                : imgsNoAlt.length === 0 && longAltImages.length === 0
                     ? "Pass"
                     : imgsNoAlt.length > 0
                         ? "Fail"
                         : "Warning",
-            finding: [
-                imgsNoAlt.length > 0 ? `${imgsNoAlt.length} image(s) missing alt attribute.` : null,
-                longAltImages.length > 0
-                    ? `${longAltImages.length} image(s) have alt text >125 chars (keep it concise).`
-                    : null,
-                imgsNoAlt.length === 0 && longAltImages.length === 0
-                    ? `All ${allImages.length} images have appropriate alt text.`
-                    : null,
-            ]
-                .filter(Boolean)
-                .join(" "),
+            finding: hasCanonicalSiblings
+                ? `${allImages.length} image(s) scanned (${imgsNoAlt.length} missing alt, ${longAltImages.length} >125 chars) — scored in Image SEO.`
+                : [
+                    imgsNoAlt.length > 0 ? `${imgsNoAlt.length} image(s) missing alt attribute.` : null,
+                    longAltImages.length > 0
+                        ? `${longAltImages.length} image(s) have alt text >125 chars (keep it concise).`
+                        : null,
+                    imgsNoAlt.length === 0 && longAltImages.length === 0
+                        ? `All ${allImages.length} images have appropriate alt text.`
+                        : null,
+                ]
+                    .filter(Boolean)
+                    .join(" "),
             recommendation:
-                imgsNoAlt.length > 0 || longAltImages.length > 0
+                !hasCanonicalSiblings && (imgsNoAlt.length > 0 || longAltImages.length > 0)
                     ? {
                         text: 'Add descriptive alt text under 125 chars. Decorative images should use alt="".',
                         priority: imgsNoAlt.length > 0 ? "Medium" : "Low",
@@ -178,15 +182,16 @@ export const AccessibilityModule: AuditModule = {
         items.push({
             id: "a11y-heading-structure",
             label: "Page Heading Structure",
-            status: h1Count === 1 ? "Pass" : "Warning",
-            finding:
-                h1Count === 1
+            status: hasCanonicalSiblings ? "Info" : h1Count === 1 ? "Pass" : "Warning",
+            finding: hasCanonicalSiblings
+                ? `Detected ${h1Count} H1 tag(s) — heading count scored in On-Page SEO.`
+                : h1Count === 1
                     ? "Exactly one H1 found — correct document structure for both SEO and screen readers."
                     : h1Count === 0
                         ? "No H1 found — screen readers navigate pages by headings and cannot identify the main topic."
                         : `${h1Count} H1s found — only one H1 should exist per page.`,
             recommendation:
-                h1Count !== 1
+                !hasCanonicalSiblings && h1Count !== 1
                     ? {
                         text:
                             h1Count === 0

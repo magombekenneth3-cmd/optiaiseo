@@ -2,6 +2,11 @@ import { parse } from 'node-html-parser';
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem } from '../types';
 import { probeLlmCitation } from '../llm-citation-probe';
 import { safeAuditFetch } from '../utils/fetch-html';
+import { fetchWithRedisCache } from '../utils/cache';
+import { parseRobotsForBot } from '../utils/robots';
+import { validateLlmsTxtCompliance } from '../llms-txt';
+
+export { parseRobotsForBot };
 
 const AI_BOTS = [
     { name: 'GPTBot', pattern: 'gptbot' },
@@ -12,53 +17,6 @@ const AI_BOTS = [
     { name: 'Applebot-Extended', pattern: 'applebot-extended' },
 ];
 
-export function parseRobotsForBot(robotsText: string, botPattern: string): boolean {
-    const lines = robotsText.split(/\r?\n/).map(l => l.split('#')[0].trim()).filter(Boolean);
-    const groups: Array<{ agents: string[]; rules: Array<{ type: 'allow' | 'disallow'; path: string }> }> = [];
-    let currentGroup: { agents: string[]; rules: Array<{ type: 'allow' | 'disallow'; path: string }> } | null = null;
-    let sawRuleInCurrentGroup = false;
-
-    for (const line of lines) {
-        const colonIdx = line.indexOf(':');
-        if (colonIdx === -1) continue;
-        const key = line.slice(0, colonIdx).trim().toLowerCase();
-        const val = line.slice(colonIdx + 1).trim();
-
-        if (key === 'user-agent') {
-            if (!currentGroup || sawRuleInCurrentGroup) {
-                currentGroup = { agents: [], rules: [] };
-                groups.push(currentGroup);
-                sawRuleInCurrentGroup = false;
-            }
-            if (val) currentGroup.agents.push(val.toLowerCase());
-        } else if ((key === 'disallow' || key === 'allow') && currentGroup) {
-            sawRuleInCurrentGroup = true;
-            currentGroup.rules.push({ type: key, path: val });
-        }
-    }
-
-    const evaluateGroupList = (matchingGroups: typeof groups): boolean | null => {
-        if (matchingGroups.length === 0) return null;
-        let blocked = false;
-        for (const group of matchingGroups) {
-            for (const rule of group.rules) {
-                if (rule.path === '/' || rule.path === '/*') {
-                    blocked = rule.type === 'disallow';
-                }
-            }
-        }
-        return blocked;
-    };
-
-    const target = botPattern.toLowerCase();
-    const specificGroups = groups.filter(g => g.agents.includes(target));
-    const specificDecision = evaluateGroupList(specificGroups);
-    if (specificDecision !== null) return specificDecision;
-
-    const wildcardGroups = groups.filter(g => g.agents.includes('*'));
-    return evaluateGroupList(wildcardGroups) ?? false;
-}
-
 export const AiVisibilityModule: AuditModule = {
     id: 'ai-visibility',
     label: 'AI Visibility',
@@ -66,56 +24,58 @@ export const AiVisibilityModule: AuditModule = {
     run: async (context: AuditModuleContext): Promise<AuditCategoryResult> => {
         const items: ChecklistItem[] = [];
         const origin = new URL(context.url).origin;
+        const isPageProfile = context.auditProfile === 'page';
 
         const [llmsResult, robotsResult] = await Promise.all([
-            (async () => {
-                try {
-                    const headRes = await safeAuditFetch(`${origin}/llms.txt`, {
-                        method: "HEAD",
-                        signal: AbortSignal.timeout(6000),
-                        headers: { "User-Agent": "Mozilla/5.0 (compatible; AuditBot/1.0)" },
-                    });
+            fetchWithRedisCache(
+                `audit:llms:v1:${origin}`,
+                async () => {
+                    try {
+                        const headRes = await safeAuditFetch(`${origin}/llms.txt`, {
+                            method: "HEAD",
+                            signal: AbortSignal.timeout(6000),
+                            headers: { "User-Agent": "Mozilla/5.0 (compatible; AuditBot/1.0)" },
+                        });
 
-                    if (!headRes.ok) return { exists: false, hasFullVersion: false, quality: "missing" as const };
+                        if (!headRes.ok) return { exists: false, hasFullVersion: false, quality: "missing" as const, pageEntries: 0 };
 
-                    const bodyRes = await safeAuditFetch(`${origin}/llms.txt`, {
-                        signal: AbortSignal.timeout(8000),
-                        headers: { "User-Agent": "Mozilla/5.0 (compatible; AuditBot/1.0)" },
-                    });
-                    const text = bodyRes.ok ? await bodyRes.text() : "";
+                        const bodyRes = await safeAuditFetch(`${origin}/llms.txt`, {
+                            signal: AbortSignal.timeout(8000),
+                            headers: { "User-Agent": "Mozilla/5.0 (compatible; AuditBot/1.0)" },
+                        });
+                        const text = bodyRes.ok ? await bodyRes.text() : "";
 
-                    const hasDescription = text.trim().length > 80;
-                    const pageEntries = (text.match(/^- \[.+\]\(.+\)/gm) ?? []).length;
-                    const hasSiteHeader = /^>\s?https?:\/\//m.test(text);
+                        const { quality, pageEntries } = validateLlmsTxtCompliance(text);
 
-                    let quality: "good" | "partial" | "empty";
-                    if (hasDescription && pageEntries >= 3 && hasSiteHeader) quality = "good";
-                    else if (hasDescription || pageEntries > 0) quality = "partial";
-                    else quality = "empty";
+                        const fullRes = await safeAuditFetch(`${origin}/llms-full.txt`, {
+                            method: "HEAD",
+                            signal: AbortSignal.timeout(4000),
+                            headers: { "User-Agent": "Mozilla/5.0 (compatible; AuditBot/1.0)" },
+                        }).catch(() => ({ ok: false as const }));
 
-                    const fullRes = await safeAuditFetch(`${origin}/llms-full.txt`, {
-                        method: "HEAD",
-                        signal: AbortSignal.timeout(4000),
-                        headers: { "User-Agent": "Mozilla/5.0 (compatible; AuditBot/1.0)" },
-                    }).catch(() => ({ ok: false as const }));
-
-                    return { exists: true, hasFullVersion: fullRes.ok, quality, pageEntries };
-                } catch {
-                    return { exists: false, hasFullVersion: false, quality: "missing" as const, pageEntries: 0 };
-                }
-            })(),
-            (async () => {
-                try {
-                    const res = await safeAuditFetch(`${origin}/robots.txt`, {
-                        signal: AbortSignal.timeout(6000),
-                        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
-                    });
-                    if (!res.ok) return { text: '', exists: false };
-                    return { text: await res.text(), exists: true };
-                } catch {
-                    return { text: '', exists: false };
-                }
-            })(),
+                        return { exists: true, hasFullVersion: fullRes.ok, quality, pageEntries };
+                    } catch {
+                        return { exists: false, hasFullVersion: false, quality: "missing" as const, pageEntries: 0 };
+                    }
+                },
+                600,
+            ).then(r => r ?? { exists: false, hasFullVersion: false, quality: "missing" as const, pageEntries: 0 }),
+            fetchWithRedisCache<{ text: string; exists: boolean; status?: number }>(
+                `audit:robots-raw:v1:${origin}`,
+                async () => {
+                    try {
+                        const res = await safeAuditFetch(`${origin}/robots.txt`, {
+                            signal: AbortSignal.timeout(6000),
+                            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
+                        });
+                        if (!res.ok) return { text: '', exists: false, status: res.status };
+                        return { text: await res.text(), exists: true, status: res.status };
+                    } catch {
+                        return { text: '', exists: false, status: 0 };
+                    }
+                },
+                600,
+            ).then(r => r ?? { text: '', exists: false }),
         ]);
 
         items.push({
@@ -303,7 +263,16 @@ export const AiVisibilityModule: AuditModule = {
                 details: { totalHeadings, questionHeadings: questionCount, questionRatioPercent: Math.round(questionRatio * 100) },
             });
 
-            if (!process.env.GEMINI_API_KEY) {
+            if (isPageProfile) {
+                items.push({
+                    id: 'aeo-llm-citation-probe',
+                    label: 'AI Citation Probe (Gemini)',
+                    status: 'Info',
+                    finding: 'Live Gemini citation probe runs on the homepage/full audit; sub-pages evaluate structural AEO readiness without duplicating LLM API calls.',
+                    roiImpact: 90,
+                    aiVisibilityImpact: 100,
+                });
+            } else if (!process.env.GEMINI_API_KEY) {
                 items.push({
                     id: 'aeo-llm-citation-probe',
                     label: 'AI Citation Probe (Gemini)',
@@ -452,46 +421,62 @@ export const AiVisibilityModule: AuditModule = {
                 search?: Array<{ id?: string; label?: string; description?: string; concepturi?: string }>;
             };
 
-            const [kgResult, wikidataResult] = await Promise.all([
-                (async (): Promise<KgResponse | null> => {
-                    if (!kgApiKey || !brandName) return null;
-                    try {
-                        const res = await fetch(
-                            `https://kgsearch.googleapis.com/v1/entities:search?query=${encodeURIComponent(brandName)}&key=${kgApiKey}&limit=3&types=Organization,Person,Product,SoftwareApplication,Brand`,
-                            { signal: AbortSignal.timeout(8000) }
-                        );
-                        if (!res.ok) return null;
-                        return await res.json() as KgResponse;
-                    } catch { return null; }
-                })(),
-                (async (): Promise<WdResponse | null> => {
-                    if (!brandName) return null;
-                    try {
-                        const res = await fetch(
-                            `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(brandName)}&language=en&limit=3&format=json&type=item`,
-                            { headers: { 'User-Agent': 'SEOAuditBot/1.0' }, signal: AbortSignal.timeout(8000) }
-                        );
-                        if (!res.ok) return null;
-                        return await res.json() as WdResponse;
-                    } catch { return null; }
-                })(),
+            const brandSlug = brandName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 64);
+
+            const [kgWrapper, wdWrapper] = await Promise.all([
+                (!kgApiKey || !brandName)
+                    ? Promise.resolve<{ hit: KgResponse | null } | null>(null)
+                    : fetchWithRedisCache<{ hit: KgResponse | null }>(
+                        `audit:kg:v1:${brandSlug}`,
+                        async () => {
+                            try {
+                                const res = await fetch(
+                                    `https://kgsearch.googleapis.com/v1/entities:search?query=${encodeURIComponent(brandName)}&key=${kgApiKey}&limit=3&types=Organization,Person,Product,SoftwareApplication,Brand`,
+                                    { signal: AbortSignal.timeout(8000) }
+                                );
+                                if (!res.ok) return { hit: null };
+                                return { hit: await res.json() as KgResponse };
+                            } catch { return { hit: null }; }
+                        },
+                        600,
+                    ),
+                (!brandName)
+                    ? Promise.resolve<{ hit: WdResponse | null } | null>(null)
+                    : fetchWithRedisCache<{ hit: WdResponse | null }>(
+                        `audit:wd-brand:v1:${brandSlug}`,
+                        async () => {
+                            try {
+                                const res = await fetch(
+                                    `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(brandName)}&language=en&limit=3&format=json&type=item`,
+                                    { headers: { 'User-Agent': 'SEOAuditBot/1.0' }, signal: AbortSignal.timeout(8000) }
+                                );
+                                if (!res.ok) return { hit: null };
+                                return { hit: await res.json() as WdResponse };
+                            } catch { return { hit: null }; }
+                        },
+                        600,
+                    ),
             ]);
+            const kgResult = kgWrapper?.hit ?? null;
+            const wikidataResult = wdWrapper?.hit ?? null;
 
             type TopicEntity = { topic: string; qid: string; label: string; description: string };
-            const topicEntityResults = await Promise.all(
-                candidateTopics.map(async (topic): Promise<TopicEntity | null> => {
-                    try {
-                        const res = await fetch(
-                            `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(topic)}&language=en&limit=1&format=json&type=item`,
-                            { headers: { 'User-Agent': 'SEOAuditBot/1.0' }, signal: AbortSignal.timeout(5000) }
-                        );
-                        if (!res.ok) return null;
-                        const data = await res.json() as WdResponse;
-                        const hit = data.search?.[0];
-                        return hit?.id ? { topic, qid: hit.id, label: hit.label ?? topic, description: hit.description ?? '' } : null;
-                    } catch { return null; }
-                })
-            );
+            const topicEntityResults = isPageProfile
+                ? []
+                : await Promise.all(
+                    candidateTopics.map(async (topic): Promise<TopicEntity | null> => {
+                        try {
+                            const res = await fetch(
+                                `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(topic)}&language=en&limit=1&format=json&type=item`,
+                                { headers: { 'User-Agent': 'SEOAuditBot/1.0' }, signal: AbortSignal.timeout(5000) }
+                            );
+                            if (!res.ok) return null;
+                            const data = await res.json() as WdResponse;
+                            const hit = data.search?.[0];
+                            return hit?.id ? { topic, qid: hit.id, label: hit.label ?? topic, description: hit.description ?? '' } : null;
+                        } catch { return null; }
+                    })
+                );
             const foundTopicEntities = topicEntityResults.filter((r): r is TopicEntity => r !== null);
 
             const kgTop    = kgResult?.itemListElement?.[0]?.result;
@@ -566,12 +551,15 @@ export const AiVisibilityModule: AuditModule = {
                     : '',
             ].filter(Boolean).join('\n').trim();
 
+            const subpageMissingOrg = isPageProfile && !orgBlock;
             items.push({
                 id: 'aeo-kg-entity',
                 label: 'Semantic Entity Authority (KG + Wikidata)',
-                status: entityStatus,
-                finding: entityFindings.join(' '),
-                recommendation: (sameAsIssues.length > 0 || !hasGoogleKgEntity || !hasWikidataEntity) ? {
+                status: subpageMissingOrg ? 'Info' : entityStatus,
+                finding: subpageMissingOrg
+                    ? `Domain-level brand entity authority is audited on the homepage. ${entityFindings.join(' ')}`
+                    : entityFindings.join(' '),
+                recommendation: !subpageMissingOrg && (sameAsIssues.length > 0 || !hasGoogleKgEntity || !hasWikidataEntity) ? {
                     text: sameAsRec || 'Add sameAs links to Wikidata, Wikipedia, LinkedIn, and Crunchbase in your Organization schema.',
                     priority: entityStatus === 'Fail' ? 'High' : 'Medium',
                 } : undefined,

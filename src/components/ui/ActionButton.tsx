@@ -23,25 +23,36 @@ export function ActionButton({
   variant = "secondary",
 }: ActionButtonProps) {
   const [state, setState] = useState<State>("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const isBusy = state === "loading" || isPending;
+
   const handleClick = () => {
-    if (state === "loading" || isPending) return;
+    if (isBusy) return;
+    setErrorMessage(null);
     setState("loading");
     startTransition(async () => {
       try {
         const result = await onClick();
-        setState(result.success ? "success" : "error");
-        setTimeout(() => setState("idle"), 2500);
-      } catch {
+        if (result.success) {
+          setState("success");
+          setTimeout(() => setState("idle"), 2500);
+        } else {
+          setState("error");
+          setErrorMessage(result.error ?? "Action failed. Try again.");
+          setTimeout(() => setState("idle"), 4000);
+        }
+      } catch (err) {
         setState("error");
-        setTimeout(() => setState("idle"), 2500);
+        setErrorMessage(err instanceof Error ? err.message : "Action failed. Try again.");
+        setTimeout(() => setState("idle"), 4000);
       }
     });
   };
 
   const base =
-    "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 active:scale-[0.97] disabled:opacity-50 cursor-pointer";
+    "inline-flex items-center gap-2 min-h-9 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 active:scale-[0.97] aria-disabled:opacity-60 aria-disabled:cursor-not-allowed cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground";
 
   const variants: Record<string, string> = {
     primary: "bg-foreground text-background hover:opacity-90",
@@ -57,21 +68,30 @@ export function ActionButton({
   };
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={state === "loading" || isPending}
-      className={cn(base, variants[variant], stateStyles[state], className)}
-    >
-      {state === "loading" && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-      {state === "success" && <Check className="w-3.5 h-3.5" />}
-      {state === "error" && <AlertCircle className="w-3.5 h-3.5" />}
-      {state === "loading"
-        ? loadingLabel
-        : state === "success"
-        ? successLabel
-        : state === "error"
-        ? "Try again"
-        : children}
-    </button>
+    <div className="inline-flex flex-col items-start gap-1">
+      <button
+        type="button"
+        onClick={handleClick}
+        aria-disabled={isBusy}
+        aria-busy={isBusy}
+        className={cn(base, variants[variant], stateStyles[state], className)}
+      >
+        {state === "loading" && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+        {state === "success" && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
+        {state === "error" && <AlertCircle className="w-3.5 h-3.5" aria-hidden="true" />}
+        {state === "loading"
+          ? loadingLabel
+          : state === "success"
+          ? successLabel
+          : state === "error"
+          ? "Try again"
+          : children}
+      </button>
+      {errorMessage && (
+        <p role="alert" className="text-xs text-red-500">
+          {errorMessage}
+        </p>
+      )}
+    </div>
   );
 }

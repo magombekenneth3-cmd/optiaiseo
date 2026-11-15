@@ -1,6 +1,7 @@
 import { logger } from "@/lib/logger";
-import { AuditModule, AuditModuleContext, FullAuditReport, NormalizedRecommendation, ModulePerfEntry, AeoScoreBreakdown, AuditCategoryResult } from './types';
+import { AuditModule, AuditModuleContext, FullAuditReport, NormalizedRecommendation, ModulePerfEntry, AeoScoreBreakdown, AuditCategoryResult, PageGraphNode } from './types';
 import { fetchHtmlWithMeta } from './utils/fetch-html';
+import { extractPageGraphNode } from './site-graph';
 import { runDiagnosticPipeline, type DiagnosticPipelineResult } from './diagnostic-engine';
 import { computePriorityV4, fixabilityForRemediation, type PriorityComponents } from './prioritization';
 
@@ -27,18 +28,29 @@ const AEO_WEIGHTS: Record<string, number> = {
 
 export class AuditEngine {
     private modules: AuditModule[] = [];
+    private profile?: 'full' | 'free' | 'page';
 
-    constructor(modules?: AuditModule[]) {
+    constructor(modules?: AuditModule[], profile?: 'full' | 'free' | 'page') {
         if (modules) {
             this.modules = modules;
         }
+        this.profile = profile;
     }
 
     registerModule(module: AuditModule) {
         this.modules.push(module);
     }
 
-    async runAudit(url: string, opts?: { targetKeyword?: string; userId?: string; siteId?: string }): Promise<FullAuditReport> {
+    async runAudit(
+        url: string,
+        opts?: {
+            targetKeyword?: string;
+            userId?: string;
+            siteId?: string;
+            auditProfile?: 'full' | 'free' | 'page';
+            keywordSource?: 'explicit' | 'gsc_page' | 'inferred';
+        },
+    ): Promise<FullAuditReport> {
         // WARM-UP: Fetch HTML once (with retry) BEFORE running modules.
         //
         // All 8 modules run in parallel below via Promise.all. Without
@@ -75,6 +87,8 @@ export class AuditEngine {
             headers,
             frameworkHints: [],
             targetKeyword: opts?.targetKeyword ?? undefined,
+            auditProfile: opts?.auditProfile ?? this.profile,
+            keywordSource: opts?.keywordSource ?? (opts?.targetKeyword ? 'explicit' : 'inferred'),
             userId: opts?.userId ?? undefined,
             siteId: opts?.siteId ?? undefined,
         };
@@ -280,6 +294,19 @@ export class AuditEngine {
             });
         }
 
+        let pageGraph: PageGraphNode | undefined;
+        const onPageCat = categoryResults.find((c) => c.id === 'on-page');
+        if (onPageCat?.pageGraph) {
+            pageGraph = onPageCat.pageGraph;
+            delete onPageCat.pageGraph;
+        } else if (html) {
+            try {
+                pageGraph = extractPageGraphNode(url, html);
+            } catch {
+                // Non-fatal
+            }
+        }
+
         return {
             url,
             timestamp: new Date().toISOString(),
@@ -295,6 +322,7 @@ export class AuditEngine {
             categories: categoryResults,
             recommendations: allRecommendations,
             moduleTelemetry,
+            pageGraph,
             diagnosticResult,
         };
     }

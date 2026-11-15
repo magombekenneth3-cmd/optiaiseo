@@ -495,7 +495,7 @@ export async function buildPost(
         );
 
         let linksInjected = 0;
-        const MAX_INJECTED = 3;
+        const MAX_INJECTED = 4;
         for (const target of canonicalTargets) {
             if (linksInjected >= MAX_INJECTED) break;
             const res = injectSpecificInternalLink(assembled, target, ctx.siteDomain);

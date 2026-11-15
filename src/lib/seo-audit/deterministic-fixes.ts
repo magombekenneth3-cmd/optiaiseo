@@ -14,6 +14,7 @@
 
 import type { VerificationCriterion, RemediationType, FixRisk } from "./diagnostic-types";
 import type { AstOperation, AstLanguage } from "@/lib/ast/types";
+import { buildLlmsTxtMarkdown, resolveSiteOrigin, type LlmsTxtBuildInput } from "./llms-txt";
 
 // ── Fix Result Types ────────────────────────────────────────────────────────
 
@@ -368,6 +369,87 @@ const fixRobotsTxtMissing: FixGenerator = (ctx) => ({
   impactLabel: "Guides search engine crawlers and references sitemap",
 });
 
+/**
+ * Remove lazy loading from the above-fold LCP hero image and elevate fetch priority.
+ */
+const fixLcpHeroLazyLoaded: FixGenerator = () => ({
+  patch: '<img fetchpriority="high" /> (remove loading="lazy")',
+  targetSelector: 'img[loading="lazy"]',
+  action: "replace",
+  astLanguage: "html",
+  astOperations: [
+    {
+      kind: "removeHtmlAttribute",
+      selector: 'img[loading="lazy"]',
+      attributeName: "loading",
+      occurrence: 1,
+    },
+    {
+      kind: "setHtmlAttribute",
+      selector: "img",
+      attributeName: "fetchpriority",
+      value: "high",
+      occurrence: 1,
+    },
+  ],
+  risk: "SAFE",
+  verification: [
+    { type: "HTML_SELECTOR", selector: 'img[fetchpriority="high"]:not([loading="lazy"])', expected: { exists: true } },
+  ],
+  description: 'Remove loading="lazy" from the hero image and set fetchpriority="high"',
+  impactLabel: "Eliminates LCP hero discovery delay (200–500ms faster first render)",
+});
+
+/**
+ * Create a starter /llms.txt markdown index for AI assistants and crawlers.
+ */
+const fixLlmsTxtMissing: FixGenerator = (ctx) => {
+  const { origin, cleanDomain } = resolveSiteOrigin(ctx.domain, ctx.url);
+  const detailsInput =
+    ctx.findingDetails &&
+    typeof ctx.findingDetails.llmsInput === "object" &&
+    ctx.findingDetails.llmsInput !== null
+      ? (ctx.findingDetails.llmsInput as Partial<LlmsTxtBuildInput>)
+      : undefined;
+
+  const discoveredPages = (ctx.discoveredUrls ?? []).map((rawUrl) => ({
+    url: rawUrl,
+    section: "core" as const,
+  }));
+
+  const input: LlmsTxtBuildInput = {
+    domain: cleanDomain,
+    origin,
+    brandName: detailsInput?.brandName ?? ctx.title,
+    description: detailsInput?.description ?? ctx.metaDescription,
+    techStack: detailsInput?.techStack,
+    coreServices: detailsInput?.coreServices,
+    pages: detailsInput?.pages && detailsInput.pages.length > 0 ? detailsInput.pages : discoveredPages,
+    brandFacts: detailsInput?.brandFacts,
+    topQueries: detailsInput?.topQueries,
+    faqs: detailsInput?.faqs,
+    aeoSummary: detailsInput?.aeoSummary,
+    full: false,
+  };
+
+  const patch = buildLlmsTxtMarkdown(input);
+  const pageCount = input.pages?.length ?? 0;
+
+  return {
+    patch,
+    filePath: "public/llms.txt",
+    action: "create_file",
+    astLanguage: "llms_txt",
+    astOperations: [{ kind: "setLlmsTxtDocument", input }],
+    risk: "SAFE",
+    verification: [
+      { type: "HTTP_STATUS", url: "/llms.txt", expected: 200 },
+    ],
+    description: `Create spec-compliant public/llms.txt for ${cleanDomain} (${pageCount || 3} indexed entries)`,
+    impactLabel: "Enables structured content discovery for LLM crawlers and AI search",
+  };
+};
+
 // ── Utilities ───────────────────────────────────────────────────────────────
 
 function escapeAttr(s: string): string {
@@ -406,6 +488,12 @@ export const DETERMINISTIC_FIXES: Record<string, FixGenerator> = {
   // Sitemap & Robots
   no_sitemap:                fixSitemapMissing,
   robots_txt_missing:        fixRobotsTxtMissing,
+
+  // Performance / CWV
+  lcp_hero_lazy_loaded:      fixLcpHeroLazyLoaded,
+
+  // AEO Readiness
+  llms_txt_missing:          fixLlmsTxtMissing,
 };
 
 /**

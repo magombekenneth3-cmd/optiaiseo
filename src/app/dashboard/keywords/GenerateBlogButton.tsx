@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import {
     BarChart3,
     Check,
@@ -12,8 +11,7 @@ import {
     Loader2,
     Sparkles,
 } from "lucide-react";
-import { generateBlog } from "@/app/actions/blog";
-import { showActionError } from "@/lib/ui/action-errors";
+import { submitTopicStepperAction } from "@/lib/blog/topic-submission";
 import { AuthorInput, GenerateBlogModal } from "@/app/dashboard/blogs/BlogStepper";
 import { UpgradeModal } from "@/components/UpgradeModal";
 import { CreditGate } from "@/components/ui/CreditGate";
@@ -103,87 +101,16 @@ export function GenerateBlogButton({
     const [pendingAuthor, setPendingAuthor] = useState<AuthorInput | null>(null);
 
     const handleGenerate = async (author: AuthorInput): Promise<{ success: boolean; error?: string }> => {
-        generationRequestId.current ??= crypto.randomUUID();
         setPendingAuthor(author);
-        setIsPending(true);
-
-        const loadingId = toast.loading(
-            <div className="flex flex-col gap-0.5">
-                <span className="font-semibold">Starting your post…</span>
-                <span className="text-xs opacity-70">
-                    Preparing research and generation.
-                </span>
-            </div>
-        );
-
-        try {
-            const res = await generateBlog(
-                pendingPipelineType,
-                siteId,
-                author,
-                { requestId: generationRequestId.current ?? undefined },
-            );
-
-            toast.dismiss(loadingId);
-
-            if (res && "success" in res && res.success) {
-                generationRequestId.current = null;
-                router.refresh();
-
-                toast.success(
-                    <div className="flex flex-col gap-0.5">
-                        <span className="font-semibold">
-                            Your post is being written
-                        </span>
-                        <span className="text-xs opacity-70">
-                            Research and generation are running in the
-                            background.
-                        </span>
-                    </div>,
-                    { duration: 8000 }
-                );
-
-                return { success: true };
-            }
-
-            const code = (
-                res as {
-                    success: false;
-                    error?: string;
-                    code?: string;
-                }
-            ).code;
-
-            if (
-                code === "insufficient_credits" ||
-                code === "rate_limit"
-            ) {
-                setShowUpgrade(true);
-            } else {
-                showActionError(
-                    res as {
-                        success: false;
-                        error?: string;
-                        code?: string;
-                    }
-                );
-            }
-
-            return { success: false, error: (res as any)?.error || "Generation could not be started." };
-        } catch (error: unknown) {
-            toast.dismiss(loadingId);
-            const msg = (error as Error)?.message || "Please check your connection and try again.";
-
-            toast.error(
-                <div className="flex flex-col gap-0.5">
-                    <span className="font-semibold">Network error</span>
-                    <span className="text-xs opacity-80">{msg}</span>
-                </div>
-            );
-            return { success: false, error: msg };
-        } finally {
-            setIsPending(false);
-        }
+        return submitTopicStepperAction({
+            pipelineType: pendingPipelineType,
+            siteId,
+            author,
+            requestIdRef: generationRequestId,
+            setIsPending,
+            onSuccess: () => router.refresh(),
+            onUpgradeRequired: () => setShowUpgrade(true),
+        });
     };
 
     return (

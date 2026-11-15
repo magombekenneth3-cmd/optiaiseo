@@ -14,6 +14,9 @@ import { prisma } from "@/lib/prisma";
 import { clusterKeywords, EnrichedKeyword } from "@/lib/keywords";
 import { isSafeUrl } from '@/lib/security/safe-url';
 import { redis } from "@/lib/redis";
+import { isAuditRedisUsable } from "./utils/cache";
+import { safeAuditFetch } from "./utils/fetch-html";
+import { getUrlLookupVariants, normalizeAuditUrl } from "./utils/url";
 
 
 export interface LinkingRecommendation {
@@ -85,6 +88,8 @@ export interface InternalLinkAnalysisResult {
     linkOpportunities: LinkingRecommendation[];
     brokenLinks: BrokenLink[];
     orphanPages: OrphanPage[];
+    /** Normalized unique same-origin outbound links discovered on the page (capped at 250). */
+    outboundLinks?: string[];
     stats: {
         totalInternalLinks: number;
         uniqueInternalLinks: number;
@@ -113,7 +118,7 @@ export async function analyzeInternalLinksForUrl(
         try {
             const u = new URL(href, origin);
             if (u.origin !== origin) return null;
-            return u.href.split('#')[0];
+            return normalizeAuditUrl(u.href);
         } catch {
             return null;
         }
@@ -135,19 +140,20 @@ export async function analyzeInternalLinksForUrl(
     await Promise.allSettled(
         toCheck.map(async (url) => {
             try {
-                const res = await fetch(url, {
+                const res = await safeAuditFetch(url, {
                     method: 'HEAD',
-                    redirect: 'follow',
                     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OptiAISEO-LinkBot/1.0)' },
                     signal: AbortSignal.timeout(timeout),
                 });
-                const guard = isSafeUrl(res.url);
+                const guard = isSafeUrl(res.url || url);
                 if (!guard.ok) return;
                 if (res.status >= 400) {
                     brokenLinks.push({ url, foundOn: pageUrl, httpStatus: res.status });
                 }
             } catch (err: unknown) {
-                const isDns = (err as Error)?.message?.includes('ENOTFOUND');
+                const msg = (err as Error)?.message ?? '';
+                if (msg.includes('Blocked SSRF')) return;
+                const isDns = msg.includes('ENOTFOUND');
                 brokenLinks.push({
                     url,
                     foundOn: pageUrl,
@@ -161,14 +167,20 @@ export async function analyzeInternalLinksForUrl(
     let orphanPages: OrphanPage[] = [];
     let detectedClickDepth: number | undefined = undefined;
 
-    if (origin) {
+    if (origin && isAuditRedisUsable()) {
         try {
             const cachedGraphRaw = await redis.get(`site:crawl:${origin}`);
             if (cachedGraphRaw) {
                 const cachedGraph = typeof cachedGraphRaw === 'string' ? JSON.parse(cachedGraphRaw) : cachedGraphRaw;
 
-                if (cachedGraph?.clickDepthMap && typeof cachedGraph.clickDepthMap[pageUrl] === 'number') {
-                    detectedClickDepth = cachedGraph.clickDepthMap[pageUrl];
+                if (cachedGraph?.clickDepthMap) {
+                    for (const variant of getUrlLookupVariants(pageUrl)) {
+                        const depthVal = cachedGraph.clickDepthMap[variant];
+                        if (typeof depthVal === 'number') {
+                            detectedClickDepth = depthVal;
+                            break;
+                        }
+                    }
                 }
 
                 if (Array.isArray(cachedGraph?.orphanPages)) {
@@ -197,7 +209,7 @@ export async function analyzeInternalLinksForUrl(
 
     if (orphanPages.length === 0 && origin) {
         try {
-            const sitemapRes = await fetch(`${origin}/sitemap.xml`, {
+            const sitemapRes = await safeAuditFetch(`${origin}/sitemap.xml`, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OptiAISEO-LinkBot/1.0)' },
                 signal: AbortSignal.timeout(8000),
             });
@@ -236,6 +248,7 @@ export async function analyzeInternalLinksForUrl(
         linkOpportunities: [],
         brokenLinks: brokenLinks.slice(0, 50),
         orphanPages,
+        outboundLinks: unique.slice(0, 250),
         stats: {
             totalInternalLinks: total,
             uniqueInternalLinks: unique.length,

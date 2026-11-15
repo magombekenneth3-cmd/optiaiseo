@@ -1,5 +1,6 @@
 import { AuditModule, AuditModuleContext, AuditCategoryResult, ChecklistItem } from '../types';
 import { parse } from 'node-html-parser';
+import { fetchWithRedisCache } from '../utils/cache';
 
 const MAX_HTML_BYTES = 10 * 1024 * 1024;
 const HERO_SELECTOR = 'main img, header img, section img, [class*="hero"] img, [class*="banner"] img';
@@ -40,51 +41,28 @@ interface CruxResponse {
     record?: { metrics: CruxMetrics };
 }
 
-const inFlightRequests = new Map<string, Promise<unknown>>();
-
-async function fetchWithRedisCache<T>(key: string, fetcher: () => Promise<T | null>, ttlSeconds = 86400): Promise<T | null> {
-    const existing = inFlightRequests.get(key) as Promise<T | null> | undefined;
-    if (existing) return existing;
-
-    const promise = (async (): Promise<T | null> => {
-        try {
-            const { redis } = await import('@/lib/redis');
-            const cached = await redis.get(key);
-            if (cached) {
-                const parsed = typeof cached === 'string' ? JSON.parse(cached) : cached;
-                if (parsed !== 'timeout') return parsed as T;
-            }
-            const result = await fetcher();
-            if (result && result !== ('timeout' as unknown)) {
-                await redis.set(key, JSON.stringify(result), { ex: ttlSeconds }).catch(() => null);
-            }
-            return result;
-        } catch {
-            return fetcher().catch(() => null);
-        } finally {
-            inFlightRequests.delete(key);
-        }
-    })();
-
-    inFlightRequests.set(key, promise);
-    return promise;
-}
-
 export async function fetchPsiShared(url: string, strategy: 'mobile' | 'desktop'): Promise<PsiResponse | 'timeout' | null> {
     const key = strategy === 'mobile' ? `psi:v1:${url}` : `psi:desktop:v1:${url}`;
-    return fetchWithRedisCache<PsiResponse | 'timeout'>(key, async () => {
-        const apiKey = process.env.PAGESPEED_API_KEY;
-        const keyParam = apiKey ? `&key=${apiKey}` : '';
-        const psiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}${keyParam}&strategy=${strategy}&category=PERFORMANCE`;
-        try {
-            const res = await fetch(psiUrl, { signal: AbortSignal.timeout(25000) });
-            if (!res.ok) return null;
-            return await res.json() as PsiResponse;
-        } catch (e: unknown) {
-            if ((e as { name?: string }).name === 'TimeoutError') return 'timeout';
-            return null;
-        }
-    });
+    return fetchWithRedisCache<PsiResponse | 'timeout'>(
+        key,
+        async () => {
+            const apiKey = process.env.PAGESPEED_API_KEY;
+            const keyParam = apiKey ? `&key=${apiKey}` : '';
+            const psiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}${keyParam}&strategy=${strategy}&category=PERFORMANCE`;
+            try {
+                const res = await fetch(psiUrl, { signal: AbortSignal.timeout(25000) });
+                if (!res.ok) return null;
+                return await res.json() as PsiResponse;
+            } catch (e: unknown) {
+                if ((e as { name?: string }).name === 'TimeoutError') return 'timeout';
+                return null;
+            }
+        },
+        {
+            ttlSeconds: 86400,
+            shouldCache: (v) => v !== null && v !== undefined && v !== 'timeout',
+        },
+    );
 }
 
 export async function fetchCruxShared(url: string, formFactor: 'PHONE' | 'DESKTOP'): Promise<CruxResponse | null> {

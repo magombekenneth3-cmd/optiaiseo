@@ -99,6 +99,49 @@ export interface ChecklistItem {
     details?: Record<string, string | number | boolean>;
 }
 
+export interface PageGraphBrokenLink {
+    to: string;
+    status: number | null;
+    error?: string;
+}
+
+export interface PageGraphNode {
+    url: string;
+    title?: string | null;
+    metaDescription?: string | null;
+    h1?: string | null;
+    canonicalUrl?: string | null;
+    isNoindex: boolean;
+    outboundInternalLinks: string[];
+    brokenInternalLinks?: PageGraphBrokenLink[];
+}
+
+export interface DuplicateMetadataCluster {
+    value: string;
+    urls: string[];
+}
+
+export interface DeepPageSummary {
+    url: string;
+    depth: number;
+}
+
+export interface SiteGraphSummary {
+    pagesAnalyzed: number;
+    duplicateTitlesCount: number;
+    duplicateDescriptionsCount: number;
+    duplicateH1sCount: number;
+    trueOrphanCount: number;
+    deepPageCount: number;
+    brokenLinkCount: number;
+    maxClickDepth: number;
+    duplicateTitles: DuplicateMetadataCluster[];
+    duplicateMetaDescriptions: DuplicateMetadataCluster[];
+    duplicateH1s: DuplicateMetadataCluster[];
+    trueOrphanPages: string[];
+    deepPages: DeepPageSummary[];
+}
+
 export interface AuditCategoryResult {
     id: string;
     label: string;
@@ -107,6 +150,8 @@ export interface AuditCategoryResult {
     passed: number;
     failed: number;
     warnings: number;
+    /** Optional per-page metadata & internal link graph snapshot extracted by OnPageModule */
+    pageGraph?: PageGraphNode;
 }
 
 export interface NormalizedRecommendation {
@@ -149,6 +194,10 @@ export interface FullAuditReport {
     recommendations: NormalizedRecommendation[];
     /** Per-module timing telemetry (Phase 3.1) */
     moduleTelemetry?: ModulePerfEntry[];
+    /** Per-page metadata & outbound internal link extract used by multi-page aggregation */
+    pageGraph?: PageGraphNode;
+    /** Site-wide duplicate metadata & internal link graph summary populated on Full Site Audits */
+    siteGraphSummary?: SiteGraphSummary;
     /** Evidence-driven diagnostic findings and remediation plan (Phase P1) */
     diagnosticResult?: import('./diagnostic-engine').DiagnosticPipelineResult;
 }
@@ -170,6 +219,10 @@ export interface AuditModuleContext {
     readonly pageType?: string;
     /** Target keyword from site settings — used by KeywordsModule and ImageSeoModule */
     readonly targetKeyword?: string;
+    /** Audit profile driving module scope ('full' | 'free' | 'page') */
+    readonly auditProfile?: 'full' | 'free' | 'page';
+    /** Origin of targetKeyword so modules distinguish explicit/GSC keywords from HTML-inferred guesses */
+    readonly keywordSource?: 'explicit' | 'gsc_page' | 'inferred';
     /** Authenticated user ID — passed to Moz client for per-user API token lookup */
     readonly userId?: string;
     /** Site ID — passed to backlink module for DB-enriched metrics (toxic count, doFollow ratio) */

@@ -157,9 +157,32 @@ export async function GET(
     if (!hasData) return hasDeployment ? "pending" : "unavailable";
     const obs = evidence[evidence.length - 1]?.observedValue as ObservedValue;
     const outcome = obs?.outcome as string | undefined;
-    if (outcome === "improved" || outcome === "passed") return "passed";
-    if (outcome === "degraded" || outcome === "failed") return "failed";
-    if (outcome === "neutral" || outcome === "inconclusive") return "insufficient_data";
+    if (
+      outcome === "improved" ||
+      outcome === "passed" ||
+      outcome === "TECHNICALLY_VERIFIED" ||
+      outcome === "SEARCH_VERIFIED" ||
+      outcome === "OUTCOME_MEASURED"
+    ) {
+      return "passed";
+    }
+    if (
+      outcome === "degraded" ||
+      outcome === "failed" ||
+      outcome === "REGRESSED" ||
+      outcome === "INEFFECTIVE"
+    ) {
+      return "failed";
+    }
+    if (
+      outcome === "neutral" ||
+      outcome === "inconclusive" ||
+      outcome === "PARTIALLY_VERIFIED" ||
+      outcome === "INSUFFICIENT_DATA" ||
+      outcome === "NO_MEASURABLE_CHANGE"
+    ) {
+      return "insufficient_data";
+    }
     return "pending";
   }
 

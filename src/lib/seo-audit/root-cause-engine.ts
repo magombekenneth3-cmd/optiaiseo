@@ -390,10 +390,26 @@ export const DIAGNOSTIC_RULES: Record<string, DiagnosticRule> = {
     issueType: "robots_txt_misconfigured",
     label: "robots.txt Misconfigured",
     domain: "TECHNICAL",
-    signals: ["robots_blocks_root", "robots_blocks_googlebot", "robots_no_sitemap_directive"],
+    signals: ["robots_txt_missing", "robots_blocks_root", "robots_blocks_googlebot", "robots_no_sitemap_directive"],
     dependsOn: [],
-    expectedOutcome: "robots.txt allows Googlebot access and references the sitemap.",
+    expectedOutcome: "robots.txt exists, allows Googlebot access, and references the sitemap.",
     causes: [
+      {
+        id: "robots_txt_missing",
+        label: "No robots.txt file found at /robots.txt",
+        severity: "high",
+        conditions: [
+          { source: "ROBOTS", field: "exists", operator: "eq", value: false },
+        ],
+        remediationType: "DETERMINISTIC",
+        evidenceRequirements: [
+          { source: "ROBOTS", minimumConfidence: "DIRECTLY_OBSERVED" },
+        ],
+        verification: [
+          { type: "HTTP_STATUS", url: "/robots.txt", expected: 200 },
+          { type: "ROBOTS_ALLOWED", userAgent: "*", expected: true },
+        ],
+      },
       {
         id: "blocks_googlebot",
         label: "robots.txt blocks Googlebot from crawling the site",
@@ -416,6 +432,411 @@ export const DIAGNOSTIC_RULES: Record<string, DiagnosticRule> = {
         remediationType: "DETERMINISTIC",
         verification: [
           { type: "ROBOTS_ALLOWED", userAgent: "*", expected: true },
+        ],
+      },
+    ],
+  },
+
+  VIEWPORT_MISSING: {
+    issueType: "head_essentials_viewport",
+    label: "Viewport Meta Tag Missing",
+    domain: "TECHNICAL",
+    signals: ["viewport_missing"],
+    dependsOn: [],
+    expectedOutcome: "Responsive <meta name=\"viewport\"> tag is present for mobile-first indexing.",
+    causes: [
+      {
+        id: "viewport_missing",
+        label: "Page is missing <meta name=\"viewport\"> tag",
+        severity: "high",
+        conditions: [
+          { source: "HTML", field: "viewport_missing", operator: "eq", value: true },
+        ],
+        remediationType: "DETERMINISTIC",
+        evidenceRequirements: [
+          { source: "HTML", minimumConfidence: "DIRECTLY_OBSERVED" },
+        ],
+        verification: [
+          { type: "HTML_SELECTOR", selector: 'meta[name="viewport"]', expected: { exists: true } },
+        ],
+      },
+    ],
+  },
+
+  CHARSET_MISSING: {
+    issueType: "head_essentials_charset",
+    label: "Charset Meta Declaration Missing",
+    domain: "TECHNICAL",
+    signals: ["charset_missing"],
+    dependsOn: [],
+    expectedOutcome: "<meta charset=\"UTF-8\"> is declared inside <head>.",
+    causes: [
+      {
+        id: "charset_missing",
+        label: "Page is missing <meta charset> character encoding declaration",
+        severity: "medium",
+        conditions: [
+          { source: "HTML", field: "charset_missing", operator: "eq", value: true },
+        ],
+        remediationType: "DETERMINISTIC",
+        verification: [
+          { type: "HTML_SELECTOR", selector: "meta[charset]", expected: { exists: true } },
+        ],
+      },
+    ],
+  },
+
+  HTML_LANG_MISSING: {
+    issueType: "head_essentials_lang",
+    label: "HTML Lang Attribute Missing",
+    domain: "TECHNICAL",
+    signals: ["html_lang_missing"],
+    dependsOn: [],
+    expectedOutcome: "<html> element declares a valid BCP-47 lang attribute.",
+    causes: [
+      {
+        id: "html_lang_missing",
+        label: "<html> tag is missing the lang attribute",
+        severity: "medium",
+        conditions: [
+          { source: "HTML", field: "html_lang_missing", operator: "eq", value: true },
+        ],
+        remediationType: "DETERMINISTIC",
+        evidenceRequirements: [
+          { source: "HTML", minimumConfidence: "DIRECTLY_OBSERVED" },
+        ],
+        verification: [
+          { type: "HTML_SELECTOR", selector: "html[lang]", expected: { exists: true } },
+        ],
+      },
+    ],
+  },
+
+  SOCIAL_META_MISSING: {
+    issueType: "social_meta_missing",
+    label: "OpenGraph Social Metadata Incomplete",
+    domain: "TECHNICAL",
+    signals: ["og_tags_missing"],
+    dependsOn: [],
+    expectedOutcome: "Core OpenGraph tags (og:title, og:description, og:image, og:url) are present.",
+    causes: [
+      {
+        id: "og_tags_missing",
+        label: "Required OpenGraph meta tags (og:title / og:description / og:image) are missing",
+        severity: "medium",
+        conditions: [
+          { source: "HTML", field: "og_tags_missing", operator: "eq", value: true },
+        ],
+        remediationType: "DETERMINISTIC",
+        verification: [
+          { type: "HTML_SELECTOR", selector: 'meta[property="og:title"]', expected: { exists: true } },
+        ],
+      },
+    ],
+  },
+
+  ONPAGE_TITLE_MISSING: {
+    issueType: "onpage_metadata_title",
+    label: "Title Tag Missing",
+    domain: "CONTENT",
+    signals: ["title_missing"],
+    dependsOn: ["INDEXING_BLOCKED"],
+    expectedOutcome: "Every indexable page has a unique, keyword-targeted <title> tag.",
+    causes: [
+      {
+        id: "title_missing",
+        label: "Page is missing a <title> tag",
+        severity: "critical",
+        conditions: [
+          { source: "HTML", field: "title_missing", operator: "eq", value: true },
+        ],
+        remediationType: "AI_PATCH",
+        verification: [
+          { type: "HTML_SELECTOR", selector: "title", expected: { exists: true, nonEmpty: true } },
+        ],
+      },
+    ],
+  },
+
+  ONPAGE_DESCRIPTION_MISSING: {
+    issueType: "onpage_metadata_description",
+    label: "Meta Description Missing",
+    domain: "CONTENT",
+    signals: ["meta_desc_missing"],
+    dependsOn: ["INDEXING_BLOCKED"],
+    expectedOutcome: "Page defines a compelling <meta name=\"description\"> snippet.",
+    causes: [
+      {
+        id: "meta_description_missing",
+        label: "Page is missing a <meta name=\"description\"> tag",
+        severity: "high",
+        conditions: [
+          { source: "HTML", field: "meta_desc_missing", operator: "eq", value: true },
+        ],
+        remediationType: "AI_PATCH",
+        verification: [
+          { type: "HTML_SELECTOR", selector: 'meta[name="description"]', expected: { exists: true, nonEmpty: true } },
+        ],
+      },
+    ],
+  },
+
+  ONPAGE_H1_DEFECT: {
+    issueType: "onpage_metadata_h1",
+    label: "H1 Heading Defect",
+    domain: "CONTENT",
+    signals: ["h1_missing", "h1_multiple"],
+    dependsOn: ["INDEXING_BLOCKED"],
+    expectedOutcome: "Page has exactly one descriptive <h1> heading.",
+    causes: [
+      {
+        id: "h1_missing",
+        label: "Page is missing an <h1> heading",
+        severity: "high",
+        conditions: [
+          { source: "HTML", field: "h1_missing", operator: "eq", value: true },
+        ],
+        remediationType: "AI_PATCH",
+        verification: [
+          { type: "HTML_SELECTOR", selector: "h1", expected: { exists: true, nonEmpty: true } },
+        ],
+      },
+      {
+        id: "h1_multiple",
+        label: "Page contains multiple <h1> headings",
+        severity: "medium",
+        conditions: [
+          { source: "HTML", field: "h1_multiple", operator: "eq", value: true },
+        ],
+        remediationType: "MANUAL",
+        verification: [
+          { type: "HTML_SELECTOR", selector: "h1", expected: { exists: true, nonEmpty: true } },
+        ],
+      },
+    ],
+  },
+
+  BROKEN_INTERNAL_LINKS: {
+    issueType: "broken_internal_links",
+    label: "Broken Internal Links",
+    domain: "LINKS",
+    signals: ["broken_internal_links_critical", "broken_internal_links_minor"],
+    dependsOn: [],
+    expectedOutcome: "All internal links resolve with HTTP 2xx status codes.",
+    causes: [
+      {
+        id: "broken_internal_links_critical",
+        label: "3 or more broken internal links waste crawl budget and leak link equity",
+        severity: "high",
+        conditions: [
+          { source: "LINK_GRAPH", field: "broken_count", operator: "gte", value: 3 },
+        ],
+        remediationType: "MANUAL",
+        verification: [
+          { type: "HTTP_STATUS", expected: 200 },
+        ],
+      },
+      {
+        id: "broken_internal_links_minor",
+        label: "Broken internal link(s) detected on the page",
+        severity: "medium",
+        conditions: [
+          { source: "LINK_GRAPH", field: "broken_count", operator: "gt", value: 0 },
+        ],
+        remediationType: "MANUAL",
+        verification: [
+          { type: "HTTP_STATUS", expected: 200 },
+        ],
+      },
+    ],
+  },
+
+  CWV_LCP_HERO_LAZY: {
+    issueType: "cwv_lcp_hero_lazy",
+    label: "LCP Hero Image Lazy-Loaded",
+    domain: "TECHNICAL",
+    signals: ["lcp_hero_lazy_loaded"],
+    dependsOn: [],
+    expectedOutcome: "Above-fold LCP hero image loads eagerly with fetchpriority=\"high\".",
+    causes: [
+      {
+        id: "lcp_hero_lazy_loaded",
+        label: "Above-fold hero image uses loading=\"lazy\", delaying Largest Contentful Paint",
+        severity: "high",
+        conditions: [
+          { source: "HTML", field: "lcp_hero_lazy_loaded", operator: "eq", value: true },
+        ],
+        remediationType: "DETERMINISTIC",
+        evidenceRequirements: [
+          { source: "HTML", minimumConfidence: "DIRECTLY_OBSERVED" },
+        ],
+        verification: [
+          { type: "HTML_SELECTOR", selector: 'img:not([loading="lazy"])', expected: { exists: true } },
+        ],
+      },
+    ],
+  },
+
+  CWV_RENDER_BLOCKING: {
+    issueType: "cwv_render_blocking",
+    label: "Render-Blocking Head Scripts",
+    domain: "TECHNICAL",
+    signals: ["render_blocking_head_scripts"],
+    dependsOn: [],
+    expectedOutcome: "Non-module scripts in <head> use defer or async.",
+    causes: [
+      {
+        id: "render_blocking_head_scripts",
+        label: "Render-blocking <script src> tags in <head> delay First Contentful Paint",
+        severity: "medium",
+        conditions: [
+          { source: "HTML", field: "blocking_script_count", operator: "gt", value: 0 },
+        ],
+        remediationType: "AI_PATCH",
+        verification: [
+          { type: "HTML_SELECTOR", selector: "head", expected: { exists: true } },
+        ],
+      },
+    ],
+  },
+
+  CWV_LCP_POOR: {
+    issueType: "cwv_lcp_poor",
+    label: "Poor Largest Contentful Paint (>4.0s)",
+    domain: "TECHNICAL",
+    signals: ["lcp_poor"],
+    dependsOn: [],
+    expectedOutcome: "Largest Contentful Paint is <= 2.5s in lab and CrUX field data.",
+    causes: [
+      {
+        id: "lcp_poor",
+        label: "Largest Contentful Paint exceeds 4.0s threshold",
+        severity: "high",
+        conditions: [
+          { source: "CRUX", field: "lcp_poor", operator: "eq", value: true },
+        ],
+        remediationType: "MANUAL",
+        verification: [
+          { type: "HTTP_STATUS", expected: 200 },
+        ],
+      },
+    ],
+  },
+
+  CWV_CLS_POOR: {
+    issueType: "cwv_cls_poor",
+    label: "Poor Cumulative Layout Shift (>0.25)",
+    domain: "TECHNICAL",
+    signals: ["cls_poor"],
+    dependsOn: [],
+    expectedOutcome: "Cumulative Layout Shift is <= 0.1 across viewports.",
+    causes: [
+      {
+        id: "cls_poor",
+        label: "Cumulative Layout Shift exceeds 0.25 poor threshold",
+        severity: "high",
+        conditions: [
+          { source: "CRUX", field: "cls_poor", operator: "eq", value: true },
+        ],
+        remediationType: "MANUAL",
+        verification: [
+          { type: "HTTP_STATUS", expected: 200 },
+        ],
+      },
+    ],
+  },
+
+  AEO_AI_CRAWLERS_BLOCKED: {
+    issueType: "aeo_readiness_ai_bots",
+    label: "AI Crawlers Blocked in robots.txt",
+    domain: "AEO",
+    signals: ["ai_crawlers_blocked_robots"],
+    dependsOn: [],
+    expectedOutcome: "Approved AI crawlers (GPTBot, PerplexityBot, ClaudeBot) can index content.",
+    causes: [
+      {
+        id: "ai_crawlers_blocked_robots",
+        label: "One or more AI assistant crawlers are blocked in robots.txt",
+        severity: "high",
+        conditions: [
+          { source: "AI_VISIBILITY", field: "ai_bots_blocked_count", operator: "gt", value: 0 },
+        ],
+        remediationType: "AI_PATCH",
+        verification: [
+          { type: "ROBOTS_ALLOWED", userAgent: "GPTBot", expected: true },
+        ],
+      },
+    ],
+  },
+
+  AEO_LLMS_TXT_GAP: {
+    issueType: "aeo_readiness_llms_txt",
+    label: "llms.txt Missing or Incomplete",
+    domain: "AEO",
+    signals: ["llms_txt_missing", "llms_txt_partial"],
+    dependsOn: [],
+    expectedOutcome: "Valid /llms.txt at site root with >=3 page entries and site header.",
+    causes: [
+      {
+        id: "llms_txt_missing",
+        label: "No /llms.txt file found for AI crawler content discovery",
+        severity: "high",
+        conditions: [
+          { source: "AI_VISIBILITY", field: "llms_txt_quality", operator: "eq", value: "missing" },
+        ],
+        remediationType: "DETERMINISTIC",
+        evidenceRequirements: [
+          { source: "AI_VISIBILITY", minimumConfidence: "DIRECTLY_OBSERVED" },
+        ],
+        verification: [
+          { type: "HTTP_STATUS", url: "/llms.txt", expected: 200 },
+        ],
+      },
+      {
+        id: "llms_txt_partial",
+        label: "/llms.txt exists but lacks required header or page entries",
+        severity: "medium",
+        conditions: [
+          { source: "AI_VISIBILITY", field: "llms_txt_quality", operator: "eq", value: "partial" },
+        ],
+        remediationType: "AI_PATCH",
+        verification: [
+          { type: "HTTP_STATUS", url: "/llms.txt", expected: 200 },
+        ],
+      },
+    ],
+  },
+
+  KEYWORD_CANNIBALIZATION: {
+    issueType: "keyword_cannibalization",
+    label: "GSC Keyword Cannibalization",
+    domain: "CONTENT",
+    signals: ["high_cannibalization_risk", "moderate_cannibalization_risk"],
+    dependsOn: ["INDEXING_BLOCKED"],
+    expectedOutcome: "Each query cluster maps cleanly to one authoritative landing page.",
+    causes: [
+      {
+        id: "high_cannibalization_risk",
+        label: "High GSC cannibalization risk (>=70): multiple URLs compete for the same cluster",
+        severity: "high",
+        conditions: [
+          { source: "GSC", field: "cannibalization_risk_score", operator: "gte", value: 70 },
+        ],
+        remediationType: "EXPERIMENT",
+        verification: [
+          { type: "GSC_INDEXED", url: "__CURRENT_URL__", expected: true },
+        ],
+      },
+      {
+        id: "moderate_cannibalization_risk",
+        label: "Moderate GSC cannibalization risk (30-69): overlapping query impressions",
+        severity: "medium",
+        conditions: [
+          { source: "GSC", field: "cannibalization_risk_score", operator: "gte", value: 30 },
+        ],
+        remediationType: "MANUAL",
+        verification: [
+          { type: "GSC_INDEXED", url: "__CURRENT_URL__", expected: true },
         ],
       },
     ],

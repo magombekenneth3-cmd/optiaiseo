@@ -3,9 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { generateBlog } from "@/app/actions/blog";
-import { showActionError } from "@/lib/ui/action-errors";
+import { isSurgicalRefreshSelection, submitTopicStepperAction } from "@/lib/blog/topic-submission";
 import { Loader2, Sparkles, ChevronDown, FileText, BarChart3, Check } from "lucide-react";
 import { AuthorInput, GenerateBlogModal } from "./BlogStepper";
 import { UpgradeModal } from "@/components/UpgradeModal";
@@ -123,68 +121,30 @@ export function GenerateBlogButton({
         []
     );
 
-    /** Runs the actual generateBlog call after gate has passed. */
+    /** Runs either surgical existing-page refresh or generateBlog after gate checks. */
     const executeGenerate = useCallback(
         async (author: AuthorInput, options?: { preflightId?: string; forceSerpMismatch?: boolean }): Promise<{ success: boolean; error?: string }> => {
-            generationRequestId.current ??= crypto.randomUUID();
-            setIsPending(true);
-            const loadingId = toast.loading(
-                <div className="flex flex-col gap-0.5">
-                    <span className="font-semibold">Starting…</span>
-                    <span className="text-xs opacity-70">
-                        Researching keywords &amp; selecting pipeline
-                    </span>
-                </div>
-            );
-
-            try {
-                const res = await generateBlog(pendingPipelineType, siteId, author, {
-                    ...options,
-                    requestId: generationRequestId.current,
-                });
-                toast.dismiss(loadingId);
-
-                if (res && "success" in res && res.success) {
-                    generationRequestId.current = null;
-                    router.refresh();
-                    toast.success(
-                        <div className="flex flex-col gap-0.5">
-                            <span className="font-semibold">Your post is being written</span>
-                            <span className="text-xs opacity-70">
-                                Research and generation are running in the background.
-                            </span>
-                        </div>,
-                        { duration: 8000 }
-                    );
-                    return { success: true };
-                } else {
-                    const r = res as { success: false; error?: string; code?: string };
-                    if (r.code === "insufficient_credits" || r.code === "rate_limit") {
-                        setShowUpgrade(true);
-                    } else {
-                        showActionError(r);
-                    }
-                    return { success: false, error: r.error || "Generation could not be started." };
-                }
-            } catch (error: unknown) {
-                toast.dismiss(loadingId);
-                const msg = (error as Error)?.message || "Please check your connection and try again.";
-                toast.error(
-                    <div className="flex flex-col gap-0.5">
-                        <span className="font-semibold">Network error</span>
-                        <span className="text-xs opacity-80">{msg}</span>
-                    </div>
-                );
-                return { success: false, error: msg };
-            } finally {
-                setIsPending(false);
-            }
+            return submitTopicStepperAction({
+                pipelineType: pendingPipelineType,
+                siteId,
+                author,
+                options,
+                requestIdRef: generationRequestId,
+                setIsPending,
+                onSuccess: () => router.refresh(),
+                onUpgradeRequired: () => setShowUpgrade(true),
+            });
         },
         [pendingPipelineType, siteId, router]
     );
 
     const handleGenerate = useCallback(
         async (author: AuthorInput): Promise<{ success: boolean; error?: string }> => {
+            // Surgical page refreshes optimize an existing ranking page directly without a new-article SERP gate
+            if (isSurgicalRefreshSelection(author)) {
+                return await executeGenerate(author);
+            }
+
             const keyword = author.keyword?.trim() ?? "";
 
             if (keyword) {

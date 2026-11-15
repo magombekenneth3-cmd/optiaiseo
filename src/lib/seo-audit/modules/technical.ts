@@ -8,6 +8,7 @@ import { runSecurityAudit } from '../../audit/security';
 import { inspectIndexability, type IndexabilityEvidence } from '../indexability-evidence';
 import { fetchPsiShared, fetchCruxShared } from './performance';
 import { assertSafeAuditUrl, safeAuditFetch } from '../utils/fetch-html';
+import { fetchWithRedisCache } from '../utils/cache';
 
 export const TechnicalModule: AuditModule = {
     id: 'technical-seo',
@@ -28,8 +29,13 @@ export const TechnicalModule: AuditModule = {
         const html = context.html;
         const items: ChecklistItem[] = [];
         const root = parse(html);
+        const isPageProfile = context.auditProfile === 'page';
+        const hasCanonicalSiblings = context.auditProfile === 'full' || context.auditProfile === 'page';
+        const origin = (() => {
+            try { return new URL(context.url).origin; } catch { return context.url; }
+        })();
 
-        // Run Crawler Agent + PageSpeed API + CrUX in parallel for maximum efficiency
+        // Run Crawler Agent + Indexability in parallel; PSI/CrUX only when PerformanceModule is not canonical owner and not sub-page crawl
         const [crawlerRes, psiData, psiDesktopData, cruxData, indexabilityEvidence] = await Promise.all([
             runCrawlerAgent(context.url, context.html).catch(() => ({
                 isJavaScriptHeavy: false,
@@ -37,9 +43,9 @@ export const TechnicalModule: AuditModule = {
                 hydrationTimeMs: 0,
                 crawlerRisks: [] as string[],
             })),
-            fetchPsiShared(context.url, 'mobile'),
-            fetchPsiShared(context.url, 'desktop'),
-            fetchCruxShared(context.url, 'PHONE'),
+            hasCanonicalSiblings ? Promise.resolve(null) : fetchPsiShared(context.url, 'mobile'),
+            hasCanonicalSiblings ? Promise.resolve(null) : fetchPsiShared(context.url, 'desktop'),
+            hasCanonicalSiblings ? Promise.resolve(null) : fetchCruxShared(context.url, 'PHONE'),
             inspectIndexability(context.url).catch((err: unknown) => ({ _error: (err as Error)?.message ?? "unknown" })),
         ]);
 
@@ -123,8 +129,13 @@ export const TechnicalModule: AuditModule = {
             });
         }
 
-        // 4. Robots.txt & XML Sitemap
-        const sitemapResult = await validateRobotsAndSitemap(context.url).catch((): SitemapValidationResult => ({ robotsTxtExists: false, sitemapReferenced: false, sitemapExists: false, details: [] }));
+        // 4. Robots.txt & XML Sitemap (cached per origin across sub-page crawls)
+        const emptySitemapResult: SitemapValidationResult = { robotsTxtExists: false, sitemapReferenced: false, sitemapExists: false, details: [] };
+        const sitemapResult = (await fetchWithRedisCache<SitemapValidationResult>(
+            `audit:robots-sitemap:v1:${origin}`,
+            () => validateRobotsAndSitemap(origin).catch(() => emptySitemapResult),
+            600,
+        )) ?? emptySitemapResult;
         items.push({
             id: 'robots-txt',
             label: 'Robots.txt',
@@ -139,7 +150,11 @@ export const TechnicalModule: AuditModule = {
                 : undefined,
             roiImpact: 80,
             aiVisibilityImpact: 95,
-            details: { googlebotBlocked: !!sitemapResult.robotsParsed?.blocksGooglebot, disallowsRoot: !!sitemapResult.robotsParsed?.disallowsRoot },
+            details: {
+                exists: sitemapResult.robotsTxtExists,
+                googlebotBlocked: !!sitemapResult.robotsParsed?.blocksGooglebot,
+                disallowsRoot: !!sitemapResult.robotsParsed?.disallowsRoot,
+            },
         });
 
         items.push({
@@ -160,11 +175,15 @@ export const TechnicalModule: AuditModule = {
         items.push({
             id: 'technical.schema-quick-check',
             label: 'Schema Markup (Structured Data)',
-            status: hasSomeSchema ? 'Pass' : 'Warning',
+            status: hasCanonicalSiblings ? 'Info' : hasSomeSchema ? 'Pass' : 'Warning',
             finding: hasSomeSchema
-                ? `Detected ${schemaElements.length} JSON-LD block(s)${hasMicrodata ? ' + Microdata' : ''}.`
-                : 'No structured data found. See Schema Markup module for detailed validation.',
-            recommendation: !hasSomeSchema ? { text: 'Add JSON-LD schema markup. Start with Organization and WebSite types, then add page-specific types (Article, Product, FAQ, etc.).', priority: 'Medium' } : undefined,
+                ? `Detected ${schemaElements.length} JSON-LD block(s)${hasMicrodata ? ' + Microdata' : ''}.${hasCanonicalSiblings ? ' Detailed validation is scored in Schema Markup.' : ''}`
+                : hasCanonicalSiblings
+                    ? 'No structured data found on this page (scored in Schema Markup module).'
+                    : 'No structured data found. See Schema Markup module for detailed validation.',
+            recommendation: !hasCanonicalSiblings && !hasSomeSchema
+                ? { text: 'Add JSON-LD schema markup. Start with Organization and WebSite types, then add page-specific types (Article, Product, FAQ, etc.).', priority: 'Medium' }
+                : undefined,
             roiImpact: 75,
             aiVisibilityImpact: 100,
             details: { jsonLdBlocks: schemaElements.length, microdata: hasMicrodata },
@@ -322,7 +341,19 @@ export const TechnicalModule: AuditModule = {
         }
 
         // 12. Core Web Vitals (PageSpeed Insights)
-        if (psiData === 'timeout') {
+        // PerformanceModule is canonical owner on 'full'; sub-pages skip PSI/CrUX on 'page'
+        if (hasCanonicalSiblings) {
+            items.push({
+                id: 'core-web-vitals-info',
+                label: 'Core Web Vitals',
+                status: 'Info',
+                finding: isPageProfile
+                    ? 'Core Web Vitals (LCP, CLS, INP) & CrUX field metrics are evaluated at the homepage/site level.'
+                    : 'Core Web Vitals (LCP, CLS, INP) & CrUX field metrics are scored in Performance Analytics.',
+                roiImpact: 95,
+                aiVisibilityImpact: 75,
+            });
+        } else if (psiData === 'timeout') {
             items.push({
                 id: 'core-web-vitals-timeout',
                 label: 'Core Web Vitals',
@@ -391,6 +422,7 @@ export const TechnicalModule: AuditModule = {
                     recommendation: clsStatus !== 'Pass' ? { text: 'Google threshold: ≤0.1 good, ≤0.25 needs improvement.', priority: clsStatus === 'Fail' ? 'High' : 'Medium' } : undefined,
                     roiImpact: 95,
                     aiVisibilityImpact: 75,
+                    details: { labCls: clsValue },
                 });
             }
 
@@ -410,6 +442,7 @@ export const TechnicalModule: AuditModule = {
                     recommendation: inpStatus !== 'Pass' ? { text: 'Google threshold: ≤200ms good, ≤500ms needs improvement.', priority: inpStatus === 'Fail' ? 'High' : 'Medium' } : undefined,
                     roiImpact: 95,
                     aiVisibilityImpact: 75,
+                    details: { labInpMs: inpValue },
                 });
             }
         } else {
@@ -658,51 +691,91 @@ export const TechnicalModule: AuditModule = {
         }
 
         // 14. www vs non-www Redirect Consistency
-        let wwwStatus: 'Pass' | 'Warning' | 'Fail' = 'Pass';
+        let wwwStatus: 'Pass' | 'Warning' | 'Fail' | 'Info' = 'Pass';
         let wwwFinding = '';
         let wwwDetails: Record<string, string | number | boolean> = {};
-        try {
-            const urlObj = new URL(context.url);
-            const hostname = urlObj.hostname;
-            const isWww = hostname.startsWith('www.');
-            const bareHost = isWww ? hostname.slice(4) : hostname;
-            const wwwHost = isWww ? hostname : `www.${hostname}`;
-            const protocol = urlObj.protocol;
+        if (isPageProfile) {
+            wwwStatus = 'Info';
+            wwwFinding = 'Domain-wide www vs non-www canonical redirect is evaluated on the homepage audit.';
+        } else {
+            const cachedWww = await fetchWithRedisCache<{
+                status: 'Pass' | 'Warning' | 'Fail';
+                finding: string;
+                details: Record<string, string | number | boolean>;
+            }>(
+                `audit:www-redirect:v1:${origin}`,
+                async () => {
+                    try {
+                        const urlObj = new URL(context.url);
+                        const hostname = urlObj.hostname;
+                        const isWww = hostname.startsWith('www.');
+                        const bareHost = isWww ? hostname.slice(4) : hostname;
+                        const wwwHost = isWww ? hostname : `www.${hostname}`;
+                        const protocol = urlObj.protocol;
 
-            const testUrl = `${protocol}//${isWww ? bareHost : wwwHost}${urlObj.pathname}`;
+                        const testUrl = `${protocol}//${isWww ? bareHost : wwwHost}${urlObj.pathname}`;
 
-            const redirectRes = await safeAuditFetch(testUrl, {
-                method: 'HEAD',
-                redirect: 'manual',
-                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
-                signal: AbortSignal.timeout(8000),
-            });
+                        const redirectRes = await safeAuditFetch(testUrl, {
+                            method: 'HEAD',
+                            redirect: 'manual',
+                            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
+                            signal: AbortSignal.timeout(8000),
+                        });
 
-            const redirectStatus = redirectRes.status;
-            const location = redirectRes.headers.get('location') || '';
-            wwwDetails = { alternativeUrl: testUrl, httpStatus: redirectStatus, location: location.substring(0, 80) };
+                        const redirectStatus = redirectRes.status;
+                        const location = redirectRes.headers.get('location') || '';
+                        const details: Record<string, string | number | boolean> = {
+                            alternativeUrl: testUrl,
+                            httpStatus: redirectStatus,
+                            location: location.substring(0, 80),
+                        };
 
-            if (redirectStatus === 301) {
-                // Correct permanent redirect
-                const _redirectsToCanonical = location.includes(isWww ? hostname : hostname);
-                wwwStatus = 'Pass';
-                wwwFinding = `Correct: ${testUrl} returns 301 → ${location.substring(0, 60) || 'canonical URL'}. No duplicate content risk.`;
-            } else if (redirectStatus === 302) {
-                wwwStatus = 'Warning';
-                wwwFinding = `${testUrl} returns a 302 (temporary) redirect instead of 301 (permanent). Temporary redirects do not pass PageRank. Change to 301.`;
-            } else if (redirectStatus === 200) {
-                wwwStatus = 'Warning';
-                wwwFinding = `Both ${hostname} and ${wwwHost} return HTTP 200. This creates duplicate content — Google indexes both versions and splits link equity. Canonical tag alone is not enough; a server-level 301 redirect is required.`;
-            } else if (redirectStatus >= 400) {
-                wwwStatus = 'Warning';
-                wwwFinding = `${testUrl} returns HTTP ${redirectStatus}. The alternate URL is unreachable, which is fine if you only use one version — but ensure your canonical tag and GSC are set to the primary version.`;
-            } else {
-                wwwFinding = `Unexpected HTTP ${redirectStatus} from ${testUrl}. Manually verify your redirect configuration.`;
-                wwwStatus = 'Warning';
-            }
-        } catch {
-            wwwFinding = 'Could not check www/non-www consistency (request timed out or DNS error). Manually verify using: https://redirectchecker.org';
-            wwwStatus = 'Warning';
+                        if (redirectStatus === 301) {
+                            const _redirectsToCanonical = location.includes(hostname);
+                            void _redirectsToCanonical;
+                            return {
+                                status: 'Pass',
+                                finding: `Correct: ${testUrl} returns 301 → ${location.substring(0, 60) || 'canonical URL'}. No duplicate content risk.`,
+                                details,
+                            };
+                        } else if (redirectStatus === 302) {
+                            return {
+                                status: 'Warning',
+                                finding: `${testUrl} returns a 302 (temporary) redirect instead of 301 (permanent). Temporary redirects do not pass PageRank. Change to 301.`,
+                                details,
+                            };
+                        } else if (redirectStatus === 200) {
+                            return {
+                                status: 'Warning',
+                                finding: `Both ${hostname} and ${wwwHost} return HTTP 200. This creates duplicate content — Google indexes both versions and splits link equity. Canonical tag alone is not enough; a server-level 301 redirect is required.`,
+                                details,
+                            };
+                        } else if (redirectStatus >= 400) {
+                            return {
+                                status: 'Warning',
+                                finding: `${testUrl} returns HTTP ${redirectStatus}. The alternate URL is unreachable, which is fine if you only use one version — but ensure your canonical tag and GSC are set to the primary version.`,
+                                details,
+                            };
+                        } else {
+                            return {
+                                status: 'Warning',
+                                finding: `Unexpected HTTP ${redirectStatus} from ${testUrl}. Manually verify your redirect configuration.`,
+                                details,
+                            };
+                        }
+                    } catch {
+                        return {
+                            status: 'Warning',
+                            finding: 'Could not check www/non-www consistency (request timed out or DNS error). Manually verify using: https://redirectchecker.org',
+                            details: {},
+                        };
+                    }
+                },
+                600,
+            );
+            wwwStatus = cachedWww?.status ?? 'Warning';
+            wwwFinding = cachedWww?.finding ?? 'Could not check www/non-www consistency.';
+            wwwDetails = cachedWww?.details ?? {};
         }
 
         items.push({
@@ -710,7 +783,7 @@ export const TechnicalModule: AuditModule = {
             label: 'www vs non-www Redirect',
             status: wwwStatus,
             finding: wwwFinding,
-            recommendation: wwwStatus !== 'Pass' ? {
+            recommendation: wwwStatus === 'Warning' || wwwStatus === 'Fail' ? {
                 text: 'Choose one canonical version (www or non-www) and 301-redirect the other server-side.\n• Nginx: `return 301 https://www.yourdomain.com$request_uri;`\n• Apache: use mod_rewrite in .htaccess\n• Next.js/Vercel: set "alias" and "redirect" in vercel.json\n• After fixing: update your canonical tag, GSC preferred domain, and sitemap URLs to match.',
                 priority: 'High',
             } : undefined,
@@ -719,23 +792,32 @@ export const TechnicalModule: AuditModule = {
             details: wwwDetails,
         });
 
-        const soft404HttpStatus = await (async () => {
-            try {
-                const urlObj = new URL(context.url);
-                const testUrl = `${urlObj.origin}/__audit_probe_${Date.now()}__`;
-                const res = await safeAuditFetch(testUrl, {
-                    method: 'HEAD',
-                    signal: AbortSignal.timeout(6000),
-                    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
-                });
-                return res.status;
-            } catch {
-                return null;
-            }
-        })();
+        let soft404HttpStatus: number | null = null;
+        if (!isPageProfile) {
+            const cachedSoft404 = await fetchWithRedisCache<{ status: number | null }>(
+                `audit:soft404:v1:${origin}`,
+                async () => {
+                    try {
+                        const urlObj = new URL(context.url);
+                        const testUrl = `${urlObj.origin}/__audit_probe_${Date.now()}__`;
+                        const res = await safeAuditFetch(testUrl, {
+                            method: 'HEAD',
+                            signal: AbortSignal.timeout(6000),
+                            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
+                        });
+                        return { status: res.status };
+                    } catch {
+                        return { status: null };
+                    }
+                },
+                600,
+            );
+            soft404HttpStatus = cachedSoft404?.status ?? null;
+        }
 
-        const soft404Status: 'Pass' | 'Warning' | 'Fail' =
-            soft404HttpStatus === 404 || soft404HttpStatus === 410 ? 'Pass'
+        const soft404Status: 'Pass' | 'Warning' | 'Fail' | 'Info' =
+            isPageProfile ? 'Info'
+            : soft404HttpStatus === 404 || soft404HttpStatus === 410 ? 'Pass'
             : soft404HttpStatus === 200 ? 'Fail'
             : 'Warning';
 
@@ -743,9 +825,11 @@ export const TechnicalModule: AuditModule = {
             id: 'soft-404',
             label: 'Soft 404 Detection',
             status: soft404Status,
-            finding: soft404HttpStatus === 404 || soft404HttpStatus === 410
-                ? `Non-existent pages correctly return HTTP ${soft404HttpStatus}.`
-                : soft404HttpStatus === 200
+            finding: isPageProfile
+                ? 'Domain-wide soft-404 status behavior is evaluated on the homepage audit.'
+                : soft404HttpStatus === 404 || soft404HttpStatus === 410
+                    ? `Non-existent pages correctly return HTTP ${soft404HttpStatus}.`
+                    : soft404HttpStatus === 200
                 ? 'Soft 404 detected: non-existent URLs return HTTP 200. Googlebot indexes these as live pages, wasting crawl budget and polluting your index.'
                 : `Could not verify 404 behaviour (HTTP ${soft404HttpStatus ?? 'timeout/network error'}).`,
             recommendation: soft404Status === 'Fail' ? {
@@ -890,30 +974,46 @@ export const TechnicalModule: AuditModule = {
             details: { ...mobileMeta, score: `${mobileMetaScore}/2 core tags` },
         });
 
-        // FIX #19: Security Headers Audit
-        const secIssues = await runSecurityAudit(context.url).catch(() => []);
-        for (const issue of secIssues) {
-            items.push({
-                id: 'sec-' + issue.title.toLowerCase().replace(/\s+/g, '-'),
-                label: issue.title,
-                status: issue.severity === 'error' ? 'Fail' : 'Warning',
-                finding: issue.description,
-                recommendation: { text: issue.fixSuggestion ?? '', priority: issue.impact === 'HIGH' ? 'High' : issue.impact === 'MEDIUM' ? 'Medium' : 'Low' },
-                roiImpact: issue.impact === 'HIGH' ? 75 : issue.impact === 'MEDIUM' ? 50 : 30,
-                aiVisibilityImpact: 30,
-                details: {},
-            });
-        }
-        if (secIssues.length === 0) {
+        // FIX #19: Security Headers Audit (domain-wide headers cached per origin; delegated to homepage on sub-page crawls)
+        if (isPageProfile) {
             items.push({
                 id: 'security-headers',
                 label: 'Security Headers & SSL',
-                status: 'Pass',
-                finding: 'Security headers present, SSL grade acceptable, domain not flagged by Safe Browsing.',
+                status: 'Info',
+                finding: 'Domain-wide security headers, SSL grade, and Safe Browsing checks are evaluated on the homepage audit.',
                 roiImpact: 0,
                 aiVisibilityImpact: 0,
                 details: {},
             });
+        } else {
+            const secIssues = (await fetchWithRedisCache(
+                `audit:sec:v1:${origin}`,
+                () => runSecurityAudit(origin).catch(() => []),
+                600,
+            )) ?? [];
+            for (const issue of secIssues) {
+                items.push({
+                    id: 'sec-' + issue.title.toLowerCase().replace(/\s+/g, '-'),
+                    label: issue.title,
+                    status: issue.severity === 'error' ? 'Fail' : 'Warning',
+                    finding: issue.description,
+                    recommendation: { text: issue.fixSuggestion ?? '', priority: issue.impact === 'HIGH' ? 'High' : issue.impact === 'MEDIUM' ? 'Medium' : 'Low' },
+                    roiImpact: issue.impact === 'HIGH' ? 75 : issue.impact === 'MEDIUM' ? 50 : 30,
+                    aiVisibilityImpact: 30,
+                    details: {},
+                });
+            }
+            if (secIssues.length === 0) {
+                items.push({
+                    id: 'security-headers',
+                    label: 'Security Headers & SSL',
+                    status: 'Pass',
+                    finding: 'Security headers present, SSL grade acceptable, domain not flagged by Safe Browsing.',
+                    roiImpact: 0,
+                    aiVisibilityImpact: 0,
+                    details: {},
+                });
+            }
         }
 
         // FIX #21: Redirect Chain Detection
@@ -1018,11 +1118,11 @@ export const TechnicalModule: AuditModule = {
         items.push({
             id: 'invisible-text-cloaking',
             label: 'Invisible Text (Cloaking Risk)',
-            status: invisibleCount === 0 ? 'Pass' : 'Warning',
+            status: hasCanonicalSiblings ? 'Info' : invisibleCount === 0 ? 'Pass' : 'Warning',
             finding: invisibleCount === 0
                 ? 'No significant invisible text detected.'
-                : `Detected ${invisibleCount} block(s) of hidden text >10 characters (e.g. "${invisibleExamples[0]}").`,
-            recommendation: invisibleCount > 0 ? {
+                : `Detected ${invisibleCount} block(s) of hidden text >10 characters (e.g. "${invisibleExamples[0]}").${hasCanonicalSiblings ? ' Black-hat keyword cloaking is evaluated in Keyword Optimization.' : ''}`,
+            recommendation: !hasCanonicalSiblings && invisibleCount > 0 ? {
                 text: 'Review hidden text. If it contains keywords intended only for search engines, Google may issue a manual cloaking penalty. If used for UI states (like accordions or tabs), ensure they are accessible to screen readers using ARIA attributes.',
                 priority: 'Medium'
             } : undefined,
@@ -1109,18 +1209,30 @@ export const TechnicalModule: AuditModule = {
                 const urlObj = new URL(context.url);
                 const robotsUrl = `${urlObj.origin}/robots.txt`;
 
-                const robotsRes = await safeAuditFetch(robotsUrl, {
-                    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
-                    signal: AbortSignal.timeout(8000),
-                    cache: 'no-store',
-                }).catch(() => null);
+                const robotsCache = await fetchWithRedisCache<{ text: string; exists: boolean; status?: number }>(
+                    `audit:robots-raw:v1:${urlObj.origin}`,
+                    async () => {
+                        try {
+                            const robotsRes = await safeAuditFetch(robotsUrl, {
+                                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
+                                signal: AbortSignal.timeout(8000),
+                                cache: 'no-store',
+                            });
+                            if (!robotsRes.ok) return { text: '', exists: false, status: robotsRes.status };
+                            return { text: await robotsRes.text(), exists: true, status: robotsRes.status };
+                        } catch {
+                            return { text: '', exists: false, status: 0 };
+                        }
+                    },
+                    600,
+                );
 
-                if (!robotsRes?.ok) {
+                if (!robotsCache?.exists) {
                     items.push({
                         id: 'robots-directive-check',
                         label: 'Robots.txt Directive Verification',
                         status: 'Warning',
-                        finding: `robots.txt at ${robotsUrl} returned HTTP ${robotsRes?.status ?? 'timeout/network error'}. Could not verify directives.`,
+                        finding: `robots.txt at ${robotsUrl} returned HTTP ${robotsCache?.status || 'timeout/network error'}. Could not verify directives.`,
                         recommendation: { text: 'Ensure robots.txt is accessible at your domain root and returns HTTP 200.', priority: 'Medium' },
                         roiImpact: 80,
                         aiVisibilityImpact: 70,
@@ -1128,7 +1240,7 @@ export const TechnicalModule: AuditModule = {
                     return;
                 }
 
-                const robotsText = await robotsRes.text();
+                const robotsText = robotsCache.text;
                 const robotsLines = robotsText.split('\n').map(l => l.trim());
 
                 const blocks: Array<{ agents: string[]; disallow: string[]; allow: string[] }> = [];
@@ -1218,18 +1330,33 @@ export const TechnicalModule: AuditModule = {
 
                 if (sitemapUrls.length > 0) {
                     for (const sitemapUrl of sitemapUrls.slice(0, 3)) {
-                        const sRes = await safeAuditFetch(sitemapUrl, {
-                            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
-                            signal: AbortSignal.timeout(8000),
-                        }).catch(() => null);
+                        const sCached = await fetchWithRedisCache<{ ok: boolean; status?: number; text: string }>(
+                            `audit:sitemap-xml:v1:${sitemapUrl}`,
+                            async () => {
+                                try {
+                                    const sRes = await safeAuditFetch(sitemapUrl, {
+                                        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' },
+                                        signal: AbortSignal.timeout(8000),
+                                    });
+                                    return {
+                                        ok: sRes.ok,
+                                        status: sRes.status,
+                                        text: sRes.ok ? await sRes.text().catch(() => '') : '',
+                                    };
+                                } catch {
+                                    return { ok: false, text: '' };
+                                }
+                            },
+                            600,
+                        );
 
-                        if (!sRes?.ok) {
-                            sitemapIssues.push(`Sitemap "${sitemapUrl}" listed in robots.txt is inaccessible (HTTP ${sRes?.status ?? 'error'}).`);
+                        if (!sCached?.ok) {
+                            sitemapIssues.push(`Sitemap "${sitemapUrl}" listed in robots.txt is inaccessible (HTTP ${sCached?.status ?? 'error'}).`);
                             continue;
                         }
 
                         sitemapAccessible = true;
-                        const sitemapText = await sRes.text().catch(() => '');
+                        const sitemapText = sCached.text;
 
                         if (sitemapText.includes('<sitemapindex')) {
                             isSitemapIndex = true;

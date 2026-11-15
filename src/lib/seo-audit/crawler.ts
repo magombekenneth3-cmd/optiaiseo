@@ -25,6 +25,8 @@ import { prisma } from "@/lib/prisma";
 import { fetchGSCKeywords } from "@/lib/gsc";
 import { getUserGscToken } from "@/lib/gsc/token";
 import { isSafeUrl } from "@/lib/security/safe-url";
+import { redis } from "@/lib/redis";
+import { isAuditRedisUsable } from "@/lib/seo-audit/utils/cache";
 import { fetchHtml } from "@/lib/seo-audit/utils/fetch-html";
 
 const DEFAULT_LIMIT = 50;
@@ -200,7 +202,7 @@ function normalise(href: string, base: string): string | null {
 }
 
 /** Parse <urlset> or <sitemapindex> XML string and return hrefs. */
-function parseSitemapXml(xml: string): string[] {
+export function parseSitemapXml(xml: string): string[] {
   const urls: string[] = [];
   const locRe = /<loc>\s*(https?:\/\/[^<\s]+)\s*<\/loc>/gi;
   let m: RegExpExecArray | null;
@@ -237,7 +239,15 @@ async function fromSitemap(origin: string): Promise<string[]> {
           if (childXml) childUrls.push(...parseSitemapXml(childXml));
         })
       );
-      if (childUrls.length > 0) return childUrls;
+      if (childUrls.length > 0) {
+        if (isAuditRedisUsable()) {
+          await redis.set(`audit:sitemap-urls:v1:${origin}`, JSON.stringify(childUrls.slice(0, MAX_SITEMAP_URLS)), { ex: 3600 }).catch(() => null);
+        }
+        return childUrls;
+      }
+    }
+    if (isAuditRedisUsable()) {
+      await redis.set(`audit:sitemap-urls:v1:${origin}`, JSON.stringify(entries.slice(0, MAX_SITEMAP_URLS)), { ex: 3600 }).catch(() => null);
     }
     return entries;
   }

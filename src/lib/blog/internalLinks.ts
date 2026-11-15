@@ -91,6 +91,246 @@ function buildEntityUrl(
         : `/services/${slug}`;
 }
 
+const INVENTORY_ASSET_EXT_RE = /\.(?:png|jpe?g|gif|svg|webp|ico|css|js|mjs|map|xml|txt|json|pdf|woff2?|ttf|eot)$/i;
+const INVENTORY_SYSTEM_PATH_RE = /^\/(?:api|_next|wp-admin|wp-json|admin|cgi-bin)(?:\/|$)/i;
+const UNHEALTHY_AUDIT_ISSUE_RE = /(?:noindex|server_error|client_error|\b404\b|\b410\b|\b500\b|\b502\b|\b503\b|redirect_loop)/i;
+
+interface SiteInventoryCandidate {
+    destination: string;
+    path: string;
+    slug: string;
+    title: string;
+    targetKeywords: string[];
+    fromPageAudit: boolean;
+    fromGsc: boolean;
+    impressions: number;
+    clicks: number;
+    overallScore: number | null;
+}
+
+function normalizeHostName(value: string): string {
+    return value.toLowerCase().replace(/^www\./, "").trim();
+}
+
+function resolveSameOriginUrlAndPath(
+    rawUrl: string,
+    siteDomain?: string | null
+): { destination: string; path: string; slug: string } | null {
+    if (typeof rawUrl !== "string") return null;
+    const trimmed = rawUrl.trim();
+    if (!trimmed || trimmed.startsWith("//")) return null;
+
+    const normalizedSiteHost = normalizeDomain(siteDomain);
+    const comparableSiteHost = normalizedSiteHost ? normalizeHostName(normalizedSiteHost) : null;
+
+    let pathname: string;
+    if (trimmed.startsWith("/")) {
+        try {
+            const parsed = new URL(trimmed, "https://local.invalid");
+            pathname = parsed.pathname;
+        } catch {
+            return null;
+        }
+    } else if (/^https?:\/\//i.test(trimmed)) {
+        try {
+            const parsed = new URL(trimmed);
+            const host = normalizeHostName(parsed.hostname);
+            if (!comparableSiteHost || host !== comparableSiteHost) {
+                return null;
+            }
+            pathname = parsed.pathname;
+        } catch {
+            return null;
+        }
+    } else {
+        return null;
+    }
+
+    const cleanPath = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname || "/";
+    if (INVENTORY_ASSET_EXT_RE.test(cleanPath) || INVENTORY_SYSTEM_PATH_RE.test(cleanPath)) {
+        return null;
+    }
+
+    const segments = cleanPath.split("/").filter(Boolean);
+    const slug = segments[segments.length - 1] || "home";
+    const destination = normalizedSiteHost
+        ? `https://${normalizedSiteHost}${cleanPath}`
+        : cleanPath;
+
+    return { destination, path: cleanPath, slug };
+}
+
+function isHealthyPageAuditRow(row: {
+    pageUrl: string;
+    issueList?: unknown;
+}): boolean {
+    if (!row?.pageUrl) return false;
+    if (Array.isArray(row.issueList)) {
+        for (const item of row.issueList) {
+            const text = typeof item === "string"
+                ? item
+                : JSON.stringify(item ?? "");
+            if (UNHEALTHY_AUDIT_ISSUE_RE.test(text)) {
+                return false;
+            }
+        }
+    } else if (typeof row.issueList === "string" && UNHEALTHY_AUDIT_ISSUE_RE.test(row.issueList)) {
+        return false;
+    }
+    return true;
+}
+
+function deriveTitleFromUrlPath(urlPath: string): string {
+    const segments = urlPath.split("/").filter(Boolean);
+    const meaningful = segments.filter(
+        s => !["blog", "articles", "posts", "pages"].includes(s.toLowerCase())
+    );
+    const chosen = meaningful[meaningful.length - 1] ?? segments[segments.length - 1] ?? "";
+    return chosen.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function deriveKeywordsFromUrlPath(urlPath: string): string[] {
+    const segments = urlPath.split("/").filter(Boolean);
+    const phrases: string[] = [];
+    for (const seg of segments) {
+        if (["blog", "articles", "posts", "pages"].includes(seg.toLowerCase())) continue;
+        const phrase = seg.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+        if (phrase.length >= MIN_TERM_LENGTH) {
+            phrases.push(phrase);
+        }
+    }
+    return uniqueStrings(phrases);
+}
+
+async function fetchSiteInventoryCandidates(
+    siteId: string,
+    siteDomain?: string | null,
+    excludeSlugs?: Set<string>
+): Promise<SiteInventoryCandidate[]> {
+    const byPath = new Map<string, SiteInventoryCandidate>();
+
+    const upsertCandidate = (
+        resolved: { destination: string; path: string; slug: string },
+        patch: {
+            keyword?: string;
+            fromPageAudit?: boolean;
+            fromGsc?: boolean;
+            impressions?: number;
+            clicks?: number;
+            overallScore?: number | null;
+        }
+    ) => {
+        if (excludeSlugs && resolved.path.startsWith("/blog/") && excludeSlugs.has(resolved.slug)) {
+            return;
+        }
+
+        const existing = byPath.get(resolved.path);
+        const derivedKeywords = deriveKeywordsFromUrlPath(resolved.path);
+        if (existing) {
+            if (patch.keyword && patch.keyword.trim().length >= MIN_TERM_LENGTH) {
+                existing.targetKeywords = uniqueStrings([...existing.targetKeywords, patch.keyword]);
+            }
+            if (patch.fromPageAudit) existing.fromPageAudit = true;
+            if (patch.fromGsc) existing.fromGsc = true;
+            if (typeof patch.impressions === "number") existing.impressions += patch.impressions;
+            if (typeof patch.clicks === "number") existing.clicks += patch.clicks;
+            if (typeof patch.overallScore === "number" && (existing.overallScore === null || patch.overallScore > existing.overallScore)) {
+                existing.overallScore = patch.overallScore;
+            }
+            return;
+        }
+
+        const initialKeywords = uniqueStrings([
+            ...(patch.keyword ? [patch.keyword] : []),
+            ...derivedKeywords,
+        ]).filter(k => k.length >= MIN_TERM_LENGTH);
+
+        const title = deriveTitleFromUrlPath(resolved.path) || patch.keyword?.trim() || resolved.slug;
+        byPath.set(resolved.path, {
+            destination: resolved.destination,
+            path: resolved.path,
+            slug: resolved.slug,
+            title,
+            targetKeywords: initialKeywords,
+            fromPageAudit: !!patch.fromPageAudit,
+            fromGsc: !!patch.fromGsc,
+            impressions: patch.impressions ?? 0,
+            clicks: patch.clicks ?? 0,
+            overallScore: patch.overallScore ?? null,
+        });
+    };
+
+    try {
+        const pageAuditDelegate = (prisma as unknown as {
+            pageAudit?: { findMany: (args: Record<string, unknown>) => Promise<Array<{ pageUrl: string; overallScore?: number; issueList?: unknown }>> };
+        }).pageAudit;
+
+        if (typeof pageAuditDelegate?.findMany === "function") {
+            const pageAudits = await pageAuditDelegate.findMany({
+                where: { siteId },
+                orderBy: { runTimestamp: "desc" },
+                take: 150,
+                select: { pageUrl: true, overallScore: true, issueList: true },
+            });
+
+            if (Array.isArray(pageAudits)) {
+                for (const row of pageAudits) {
+                    if (!isHealthyPageAuditRow(row)) continue;
+                    const resolved = resolveSameOriginUrlAndPath(row.pageUrl, siteDomain);
+                    if (!resolved || resolved.path === "/") continue;
+                    upsertCandidate(resolved, {
+                        fromPageAudit: true,
+                        overallScore: typeof row.overallScore === "number" ? row.overallScore : null,
+                    });
+                }
+            }
+        }
+    } catch {
+        // Non-fatal — fall back gracefully when PageAudit is unavailable or unmocked
+    }
+
+    try {
+        const gscDelegate = (prisma as unknown as {
+            gscDailyPerformance?: { findMany: (args: Record<string, unknown>) => Promise<Array<{ url: string; keyword: string; clicks?: number; impressions?: number }>> };
+        }).gscDailyPerformance;
+
+        if (typeof gscDelegate?.findMany === "function") {
+            const ninetyDaysAgo = new Date();
+            ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+            const gscRows = await gscDelegate.findMany({
+                where: {
+                    siteId,
+                    fetchedAt: { gte: ninetyDaysAgo },
+                },
+                orderBy: { impressions: "desc" },
+                take: 200,
+                select: { url: true, keyword: true, clicks: true, impressions: true },
+            });
+
+            if (Array.isArray(gscRows)) {
+                for (const row of gscRows) {
+                    const resolved = resolveSameOriginUrlAndPath(row.url, siteDomain);
+                    if (!resolved) continue;
+                    // Only link homepage when it carries an explicit ranking query from GSC
+                    if (resolved.path === "/" && (!row.keyword || row.keyword.trim().length < MIN_TERM_LENGTH)) {
+                        continue;
+                    }
+                    upsertCandidate(resolved, {
+                        keyword: row.keyword,
+                        fromGsc: true,
+                        impressions: Number(row.impressions ?? 0),
+                        clicks: Number(row.clicks ?? 0),
+                    });
+                }
+            }
+        }
+    } catch {
+        // Non-fatal — fall back gracefully when GSC performance table is unavailable
+    }
+
+    return Array.from(byPath.values());
+}
+
 function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -516,6 +756,7 @@ export function injectSpecificInternalLink(
     htmlContent: string,
     target: {
         slug: string;
+        url?: string;
         title: string;
         targetKeywords: string[];
     },
@@ -527,7 +768,7 @@ export function injectSpecificInternalLink(
             "p, li, blockquote"
         );
 
-        const href = buildBlogUrl(
+        const href = target.url?.trim() || buildBlogUrl(
             target.slug,
             siteDomain
         );
@@ -1059,6 +1300,174 @@ export interface TopicLinkContext {
     excludeSlugs?: string[];
 }
 
+interface TopicScoringCandidate {
+    id: string;
+    slug: string;
+    title: string;
+    targetKeywords: string[];
+    destination: string;
+    normalizedPath: string;
+    sourceLabel?: string;
+    scoreBoost?: number;
+}
+
+function scoreTopicLinkCandidate(
+    candidate: TopicScoringCandidate,
+    ctx: {
+        normPrimaryKw: string;
+        topicTitle: string;
+        topicKeywordsList: string[];
+        topicSecondaryKws: string[];
+        topicEntities: Set<string>;
+        vectorScores?: Map<string, number>;
+    }
+): (InternalLinkSuggestion & { _score: number }) | null {
+    const {
+        normPrimaryKw,
+        topicTitle,
+        topicKeywordsList,
+        topicSecondaryKws,
+        topicEntities,
+        vectorScores,
+    } = ctx;
+
+    const candidateTargetKeywords = uniqueStrings(
+        (candidate.targetKeywords || []).filter(
+            k => typeof k === "string" && k.trim().length >= MIN_TERM_LENGTH
+        )
+    );
+
+    const [candPrimaryKw] = candidateTargetKeywords;
+
+    const topicKeywordMatches = topicKeywordsList.filter(
+        tk =>
+            containsTerm(candidate.title, tk) ||
+            candidateTargetKeywords.some(ck => containsTerm(ck, tk) || containsTerm(tk, ck))
+    );
+
+    const candidateKeywordMatches = candidateTargetKeywords.filter(
+        ck =>
+            (normPrimaryKw && containsTerm(ck, normPrimaryKw)) ||
+            (topicTitle && containsTerm(topicTitle, ck)) ||
+            topicSecondaryKws.some(sk => containsTerm(ck, sk) || containsTerm(sk, ck))
+    );
+
+    const allKeywordOverlap = uniqueStrings([
+        ...topicKeywordMatches,
+        ...candidateKeywordMatches,
+    ]);
+
+    const candidateEntities = extractEntities(
+        `${candidate.title} ${candidateTargetKeywords.join(" ")}`
+    );
+
+    const entityOverlap = computeEntityOverlap(topicEntities, candidateEntities);
+
+    const titleMatch =
+        (normPrimaryKw && containsTerm(candidate.title, normPrimaryKw)) ||
+        (topicTitle && containsTerm(topicTitle, candidate.title)) ||
+        (topicTitle && containsTerm(candidate.title, topicTitle));
+
+    const hasVectorScore = vectorScores?.has(candidate.id) ?? false;
+    const rawVectorScore = hasVectorScore
+        ? Number(vectorScores?.get(candidate.id) ?? 0)
+        : 0;
+    const vectorScore = Number.isFinite(rawVectorScore)
+        ? Math.max(0, Math.min(1, rawVectorScore))
+        : 0;
+
+    const hasSemanticMatch = hasVectorScore && vectorScore >= SEMANTIC_THRESHOLD;
+
+    if (
+        allKeywordOverlap.length === 0 &&
+        entityOverlap.shared.length === 0 &&
+        !titleMatch &&
+        !hasSemanticMatch
+    ) {
+        return null;
+    }
+
+    let matchType: MatchType = "title";
+    let anchorConcept = candidate.title;
+
+    if (candPrimaryKw && (topicKeywordMatches.includes(candPrimaryKw) || (normPrimaryKw && containsTerm(candPrimaryKw, normPrimaryKw)))) {
+        matchType = "primary_keyword";
+        anchorConcept = candPrimaryKw;
+    } else if (normPrimaryKw && containsTerm(candidate.title, normPrimaryKw)) {
+        matchType = "primary_keyword";
+        anchorConcept = normPrimaryKw;
+    } else if (allKeywordOverlap.length > 0) {
+        matchType = "secondary_keyword";
+        anchorConcept = allKeywordOverlap[0];
+    } else if (entityOverlap.shared.length > 0) {
+        matchType = "entity";
+        anchorConcept = entityOverlap.shared[0];
+    } else if (titleMatch) {
+        matchType = "title";
+        anchorConcept = candidate.title;
+    } else if (hasSemanticMatch) {
+        matchType = "semantic";
+        anchorConcept = candidate.title;
+    }
+
+    const keywordScore = scoreLinkRelevance(matchType, allKeywordOverlap.length);
+
+    let relevance: number;
+    if (hasVectorScore) {
+        relevance = Math.round(
+            keywordScore * 0.5 +
+            entityOverlap.score * 100 * 0.25 +
+            vectorScore * 100 * 0.25
+        );
+    } else {
+        relevance = Math.round(
+            keywordScore * 0.65 +
+            entityOverlap.score * 100 * 0.35
+        );
+    }
+
+    if (titleMatch) {
+        relevance += 2;
+    }
+    if (candidate.scoreBoost) {
+        relevance += candidate.scoreBoost;
+    }
+
+    relevance = Math.max(0, Math.min(100, relevance));
+
+    const relationship = classifyRelationship(matchType, entityOverlap.score);
+
+    const reasonParts: string[] = [];
+    if (allKeywordOverlap.length > 0) {
+        reasonParts.push(`topic keyword match: ${allKeywordOverlap.slice(0, 3).join(", ")}`);
+    }
+    if (entityOverlap.shared.length > 0) {
+        reasonParts.push(`shared entities: ${entityOverlap.shared.slice(0, 3).join(", ")}`);
+    }
+    if (titleMatch) {
+        reasonParts.push(`title match with "${candidate.title}"`);
+    }
+    if (hasVectorScore) {
+        reasonParts.push(`semantic similarity ${vectorScore.toFixed(2)}`);
+    }
+    if (candidate.sourceLabel) {
+        reasonParts.push(candidate.sourceLabel);
+    }
+
+    const reason = reasonParts.length > 0
+        ? reasonParts.join("; ")
+        : `Topic match with "${candidate.title}"`;
+
+    return {
+        destination: candidate.destination,
+        relationship,
+        anchorConcept,
+        relevance,
+        reason,
+        _score: relevance,
+    };
+}
+
 export async function findInternalLinkOpportunitiesForTopic(
     primaryKeyword: string,
     siteId: string,
@@ -1075,7 +1484,15 @@ export async function findInternalLinkOpportunitiesForTopic(
             topicContext?.title || "",
         ]).filter(t => t.length >= MIN_TERM_LENGTH);
 
-        let relevantPool: Array<{ id: string; slug: string; title: string; targetKeywords: string[] }> = [];
+        type BlogCandidateRow = {
+            id: string;
+            slug: string;
+            title: string;
+            targetKeywords: string[];
+            pipelineType?: string | null;
+        };
+
+        let relevantPool: BlogCandidateRow[] = [];
         if (searchTerms.length > 0) {
             try {
                 const boundedTerms = searchTerms.slice(0, 5);
@@ -1113,6 +1530,7 @@ export async function findInternalLinkOpportunitiesForTopic(
                         slug: true,
                         title: true,
                         targetKeywords: true,
+                        pipelineType: true,
                     },
                 });
             } catch {
@@ -1120,7 +1538,7 @@ export async function findInternalLinkOpportunitiesForTopic(
             }
         }
 
-        const recencyPool = await prisma.blog.findMany({
+        const recencyPool: BlogCandidateRow[] = await prisma.blog.findMany({
             where: {
                 siteId,
                 status: "PUBLISHED",
@@ -1134,10 +1552,11 @@ export async function findInternalLinkOpportunitiesForTopic(
                 slug: true,
                 title: true,
                 targetKeywords: true,
+                pipelineType: true,
             },
         });
 
-        const candidateMap = new Map<string, typeof recencyPool[0]>();
+        const candidateMap = new Map<string, BlogCandidateRow>();
         for (const blog of relevantPool) {
             candidateMap.set(blog.id, blog);
         }
@@ -1146,8 +1565,9 @@ export async function findInternalLinkOpportunitiesForTopic(
         }
 
         const otherBlogs = Array.from(candidateMap.values());
+        const inventoryCandidates = await fetchSiteInventoryCandidates(siteId, siteDomain, excludeSlugs);
 
-        if (otherBlogs.length === 0) {
+        if (otherBlogs.length === 0 && inventoryCandidates.length === 0) {
             return [];
         }
 
@@ -1172,150 +1592,94 @@ export async function findInternalLinkOpportunitiesForTopic(
             ...topicSecondaryKws,
         ]);
 
+        const scoringContext = {
+            normPrimaryKw,
+            topicTitle,
+            topicKeywordsList,
+            topicSecondaryKws,
+            topicEntities,
+            vectorScores,
+        };
+
         const suggestions: (InternalLinkSuggestion & { _score: number })[] = [];
         const seenDestinations = new Set<string>();
+        const seenPaths = new Set<string>();
 
         for (const blog of otherBlogs) {
             if (excludeSlugs.has(blog.slug)) {
                 continue;
             }
 
-            const destination = buildBlogUrl(blog.slug, siteDomain);
-            if (seenDestinations.has(destination)) {
+            const isEntityPage = blog.pipelineType === "ENTITY_PAGE";
+            const destination = isEntityPage
+                ? buildEntityUrl(blog.slug, siteDomain)
+                : buildBlogUrl(blog.slug, siteDomain);
+            const normalizedPath = isEntityPage ? `/services/${blog.slug}` : `/blog/${blog.slug}`;
+
+            if (seenDestinations.has(destination) || seenPaths.has(normalizedPath)) {
                 continue;
             }
 
-            const candidateTargetKeywords = uniqueStrings(
-                (blog.targetKeywords || []).filter(
-                    k => typeof k === "string" && k.trim().length >= MIN_TERM_LENGTH
-                )
+            const scored = scoreTopicLinkCandidate(
+                {
+                    id: blog.id,
+                    slug: blog.slug,
+                    title: blog.title,
+                    targetKeywords: blog.targetKeywords || [],
+                    destination,
+                    normalizedPath,
+                    sourceLabel: isEntityPage ? "published entity page" : undefined,
+                },
+                scoringContext
             );
 
-            const [candPrimaryKw] = candidateTargetKeywords;
+            if (scored) {
+                suggestions.push(scored);
+                seenDestinations.add(destination);
+                seenPaths.add(normalizedPath);
+            }
+        }
 
-            const topicKeywordMatches = topicKeywordsList.filter(
-                tk =>
-                    containsTerm(blog.title, tk) ||
-                    candidateTargetKeywords.some(ck => containsTerm(ck, tk) || containsTerm(tk, ck))
-            );
-
-            const candidateKeywordMatches = candidateTargetKeywords.filter(
-                ck =>
-                    (normPrimaryKw && containsTerm(ck, normPrimaryKw)) ||
-                    (topicTitle && containsTerm(topicTitle, ck)) ||
-                    topicSecondaryKws.some(sk => containsTerm(ck, sk) || containsTerm(sk, ck))
-            );
-
-            const allKeywordOverlap = uniqueStrings([
-                ...topicKeywordMatches,
-                ...candidateKeywordMatches,
-            ]);
-
-            const candidateEntities = extractEntities(
-                `${blog.title} ${candidateTargetKeywords.join(" ")}`
-            );
-
-            const entityOverlap = computeEntityOverlap(topicEntities, candidateEntities);
-
-            const titleMatch =
-                (normPrimaryKw && containsTerm(blog.title, normPrimaryKw)) ||
-                (topicTitle && containsTerm(topicTitle, blog.title)) ||
-                (topicTitle && containsTerm(blog.title, topicTitle));
-
-            const hasVectorScore = vectorScores?.has(blog.id) ?? false;
-            const rawVectorScore = hasVectorScore
-                ? Number(vectorScores?.get(blog.id) ?? 0)
-                : 0;
-            const vectorScore = Number.isFinite(rawVectorScore)
-                ? Math.max(0, Math.min(1, rawVectorScore))
-                : 0;
-
-            const hasSemanticMatch = hasVectorScore && vectorScore >= SEMANTIC_THRESHOLD;
-
-            if (
-                allKeywordOverlap.length === 0 &&
-                entityOverlap.shared.length === 0 &&
-                !titleMatch &&
-                !hasSemanticMatch
-            ) {
+        for (const inv of inventoryCandidates) {
+            if (seenDestinations.has(inv.destination) || seenPaths.has(inv.path)) {
                 continue;
             }
 
-            let matchType: MatchType = "title";
-            let anchorConcept = blog.title;
-
-            if (candPrimaryKw && (topicKeywordMatches.includes(candPrimaryKw) || (normPrimaryKw && containsTerm(candPrimaryKw, normPrimaryKw)))) {
-                matchType = "primary_keyword";
-                anchorConcept = candPrimaryKw;
-            } else if (normPrimaryKw && containsTerm(blog.title, normPrimaryKw)) {
-                matchType = "primary_keyword";
-                anchorConcept = normPrimaryKw;
-            } else if (allKeywordOverlap.length > 0) {
-                matchType = "secondary_keyword";
-                anchorConcept = allKeywordOverlap[0];
-            } else if (entityOverlap.shared.length > 0) {
-                matchType = "entity";
-                anchorConcept = entityOverlap.shared[0];
-            } else if (titleMatch) {
-                matchType = "title";
-                anchorConcept = blog.title;
-            } else if (hasSemanticMatch) {
-                matchType = "semantic";
-                anchorConcept = blog.title;
-            }
-
-            const keywordScore = scoreLinkRelevance(matchType, allKeywordOverlap.length);
-
-            let relevance: number;
-            if (hasVectorScore) {
-                relevance = Math.round(
-                    keywordScore * 0.5 +
-                    entityOverlap.score * 100 * 0.25 +
-                    vectorScore * 100 * 0.25
-                );
-            } else {
-                relevance = Math.round(
-                    keywordScore * 0.65 +
-                    entityOverlap.score * 100 * 0.35
+            const labels: string[] = [];
+            if (inv.fromPageAudit) labels.push("verified crawled site page (PageAudit)");
+            if (inv.fromGsc) {
+                labels.push(
+                    inv.impressions > 0
+                        ? `top GSC page (${inv.impressions} impressions)`
+                        : "GSC performance page"
                 );
             }
 
-            if (titleMatch) {
-                relevance += 2;
+            const scoreBoost = (inv.fromPageAudit && inv.fromGsc)
+                ? 4
+                : inv.fromGsc && inv.impressions >= 100
+                    ? 2
+                    : 0;
+
+            const scored = scoreTopicLinkCandidate(
+                {
+                    id: `inventory:${inv.path}`,
+                    slug: inv.slug,
+                    title: inv.title,
+                    targetKeywords: inv.targetKeywords,
+                    destination: inv.destination,
+                    normalizedPath: inv.path,
+                    sourceLabel: labels.join(" + "),
+                    scoreBoost,
+                },
+                scoringContext
+            );
+
+            if (scored) {
+                suggestions.push(scored);
+                seenDestinations.add(inv.destination);
+                seenPaths.add(inv.path);
             }
-
-            relevance = Math.max(0, Math.min(100, relevance));
-
-            const relationship = classifyRelationship(matchType, entityOverlap.score);
-
-            const reasonParts: string[] = [];
-            if (allKeywordOverlap.length > 0) {
-                reasonParts.push(`topic keyword match: ${allKeywordOverlap.slice(0, 3).join(", ")}`);
-            }
-            if (entityOverlap.shared.length > 0) {
-                reasonParts.push(`shared entities: ${entityOverlap.shared.slice(0, 3).join(", ")}`);
-            }
-            if (titleMatch) {
-                reasonParts.push(`title match with "${blog.title}"`);
-            }
-            if (hasVectorScore) {
-                reasonParts.push(`semantic similarity ${vectorScore.toFixed(2)}`);
-            }
-
-            const reason = reasonParts.length > 0
-                ? reasonParts.join("; ")
-                : `Topic match with "${blog.title}"`;
-
-            suggestions.push({
-                destination,
-                relationship,
-                anchorConcept,
-                relevance,
-                reason,
-                _score: relevance,
-            });
-
-            seenDestinations.add(destination);
         }
 
         return suggestions
@@ -1342,92 +1706,118 @@ export async function resolveCanonicalInternalLinks(
     opportunities: InternalLinkSuggestion[],
     currentSlug?: string,
     siteDomain?: string | null
-): Promise<Array<{ slug: string; title: string; targetKeywords: string[] }>> {
+): Promise<Array<{ slug: string; url?: string; title: string; targetKeywords: string[] }>> {
     if (!siteId || !Array.isArray(opportunities) || opportunities.length === 0) {
         return [];
     }
 
-    const domain = normalizeDomain(siteDomain);
-    const targetSlugToOpp = new Map<string, InternalLinkSuggestion>();
-    const orderedSlugs: string[] = [];
+    const normCurrentSlug = currentSlug ? currentSlug.toLowerCase().trim() : "";
+
+    type CandidateTarget = {
+        opp: InternalLinkSuggestion;
+        resolved: { destination: string; path: string; slug: string };
+        blogSlug: string | null;
+    };
+
+    const candidates: CandidateTarget[] = [];
+    const seenPaths = new Set<string>();
+    const orderedBlogSlugs: string[] = [];
 
     for (const opp of opportunities) {
         if (typeof opp?.destination !== "string" || !opp.destination.trim()) {
             continue;
         }
 
-        const dest = opp.destination.trim();
-        let extractedSlug: string | null = null;
-
-        if (dest.startsWith("/")) {
-            const match = dest.match(/^\/(?:blog|services)\/([^/?#]+)/i);
-            if (match) {
-                extractedSlug = match[1];
-            }
-        } else {
-            try {
-                const parsed = new URL(dest);
-                const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
-                if (domain && host !== domain && !domain.includes(host)) {
-                    continue;
-                }
-                const match = parsed.pathname.match(/^\/(?:blog|services)\/([^/?#]+)/i);
-                if (match) {
-                    extractedSlug = match[1];
-                }
-            } catch {
-                continue;
-            }
-        }
-
-        if (!extractedSlug) {
+        const resolvedUrl = resolveSameOriginUrlAndPath(opp.destination.trim(), siteDomain);
+        if (!resolvedUrl) {
             continue;
         }
 
-        const normSlug = extractedSlug.toLowerCase().trim();
-        const normCurrentSlug = currentSlug ? currentSlug.toLowerCase().trim() : "";
+        const normPath = resolvedUrl.path.toLowerCase();
+        const blogOrServiceMatch = resolvedUrl.path.match(/^\/(?:blog|services)\/([^/?#]+)$/i);
+        const blogSlug = blogOrServiceMatch ? blogOrServiceMatch[1].toLowerCase().trim() : null;
 
-        if (normCurrentSlug && normSlug === normCurrentSlug) {
+        if (normCurrentSlug && blogSlug === normCurrentSlug) {
             continue;
         }
 
-        if (!targetSlugToOpp.has(normSlug)) {
-            targetSlugToOpp.set(normSlug, opp);
-            orderedSlugs.push(normSlug);
+        if (seenPaths.has(normPath)) {
+            continue;
+        }
+        seenPaths.add(normPath);
+
+        candidates.push({ opp, resolved: resolvedUrl, blogSlug });
+        if (blogSlug && !orderedBlogSlugs.includes(blogSlug)) {
+            orderedBlogSlugs.push(blogSlug);
         }
     }
 
-    if (orderedSlugs.length === 0) {
+    if (candidates.length === 0) {
         return [];
     }
 
     try {
-        const matchedBlogs = await prisma.blog.findMany({
-            where: {
-                siteId,
-                status: "PUBLISHED",
-                slug: {
-                    in: orderedSlugs,
+        const blogMap = new Map<string, { slug: string; title: string; targetKeywords: string[]; pipelineType?: string | null }>();
+
+        if (orderedBlogSlugs.length > 0) {
+            const matchedBlogs = await prisma.blog.findMany({
+                where: {
+                    siteId,
+                    status: "PUBLISHED",
+                    slug: {
+                        in: orderedBlogSlugs,
+                    },
                 },
-            },
-            select: {
-                slug: true,
-                title: true,
-                targetKeywords: true,
-            },
-        });
+                select: {
+                    slug: true,
+                    title: true,
+                    targetKeywords: true,
+                    pipelineType: true,
+                },
+            });
 
-        const blogMap = new Map(matchedBlogs.map(b => [b.slug.toLowerCase().trim(), b]));
+            for (const b of matchedBlogs) {
+                blogMap.set(b.slug.toLowerCase().trim(), b);
+            }
+        }
 
-        const resolved: Array<{ slug: string; title: string; targetKeywords: string[] }> = [];
+        const needsInventoryLookup = candidates.some(
+            c => !c.blogSlug || !blogMap.has(c.blogSlug)
+        );
 
-        for (const slug of orderedSlugs) {
-            const blog = blogMap.get(slug);
+        const inventoryByPath = new Map<string, SiteInventoryCandidate>();
+        if (needsInventoryLookup) {
+            const inventory = await fetchSiteInventoryCandidates(siteId, siteDomain);
+            for (const item of inventory) {
+                inventoryByPath.set(item.path.toLowerCase(), item);
+            }
+        }
+
+        const resolved: Array<{ slug: string; url?: string; title: string; targetKeywords: string[] }> = [];
+
+        for (const item of candidates) {
+            const blog = item.blogSlug ? blogMap.get(item.blogSlug) : undefined;
             if (blog) {
+                const isEntityPage = blog.pipelineType === "ENTITY_PAGE";
                 resolved.push({
                     slug: blog.slug,
+                    ...(isEntityPage ? { url: buildEntityUrl(blog.slug, siteDomain) } : {}),
                     title: blog.title,
                     targetKeywords: blog.targetKeywords || [],
+                });
+                continue;
+            }
+
+            const inv = inventoryByPath.get(item.resolved.path.toLowerCase());
+            if (inv) {
+                resolved.push({
+                    slug: inv.slug,
+                    url: inv.destination,
+                    title: inv.title,
+                    targetKeywords: uniqueStrings([
+                        ...(item.opp.anchorConcept ? [item.opp.anchorConcept] : []),
+                        ...inv.targetKeywords,
+                    ]),
                 });
             }
         }

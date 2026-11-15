@@ -230,21 +230,34 @@ export const verifyFixT7Job = inngest.createFunction(
         },
       });
 
-      if (!site?.user?.gscConnected) {
-        return { outcome: "INSUFFICIENT_DATA" as const, reason: "GSC not connected" };
+      let accessToken: string | null = null;
+      if (site?.user?.gscConnected) {
+        try {
+          const { getUserGscToken } = await import("@/lib/gsc/token");
+          const gscToken = await getUserGscToken(site.userId);
+          if (typeof gscToken === "string" && gscToken.trim()) {
+            accessToken = gscToken;
+          }
+        } catch {
+          accessToken = null;
+        }
+
+        if (!accessToken) {
+          const account = await prisma.account.findFirst({
+            where: { userId: site.userId, provider: { in: ["google-gsc", "google"] } },
+            select: { access_token: true },
+          });
+          accessToken = account?.access_token ?? null;
+        }
       }
 
-      const account = await prisma.account.findFirst({
-        where: { userId: site.userId, provider: "google" },
-        select: { access_token: true },
-      });
-
-      if (!account?.access_token) {
-        return { outcome: "INSUFFICIENT_DATA" as const, reason: "No Google access token" };
+      if (!site?.user?.gscConnected || !accessToken) {
+        return { outcome: "INSUFFICIENT_DATA" as const, reason: "GSC not connected" };
       }
 
       try {
         const { fetchGSCKeywordsByDateRange, normaliseSiteUrl } = await import("@/lib/gsc");
+        const { inspectGscUrl } = await import("@/lib/gsc/indexing");
         const siteUrl = normaliseSiteUrl(site.domain);
 
         const targetUrl = normalizeTargetUrl(url, site.domain);
@@ -258,9 +271,10 @@ export const verifyFixT7Job = inngest.createFunction(
         const postStart = new Date();
         postStart.setDate(postStart.getDate() - 7);
 
-        const [baselineRows, postRows] = await Promise.all([
-          fetchGSCKeywordsByDateRange(account.access_token, siteUrl, baselineStart, baselineEnd),
-          fetchGSCKeywordsByDateRange(account.access_token, siteUrl, postStart, postEnd),
+        const [baselineRows, postRows, urlInspection] = await Promise.all([
+          fetchGSCKeywordsByDateRange(accessToken, siteUrl, baselineStart, baselineEnd),
+          fetchGSCKeywordsByDateRange(accessToken, siteUrl, postStart, postEnd),
+          inspectGscUrl(site.userId, site.domain, targetUrl).catch(() => null),
         ]);
 
         const filterByUrl = (rows: any[]) => {
@@ -312,6 +326,7 @@ export const verifyFixT7Job = inngest.createFunction(
           postCtr,
           baselineAvgPosition: baselineAvgPosition ? parseFloat(Number(baselineAvgPosition).toFixed(2)) : null,
           postAvgPosition: postAvgPosition ? parseFloat(Number(postAvgPosition).toFixed(2)) : null,
+          urlInspection: urlInspection?.success ? urlInspection.data : null,
         };
       } catch (err) {
         return {
@@ -349,6 +364,7 @@ export const verifyFixT7Job = inngest.createFunction(
               postCtr: "postCtr" in result ? result.postCtr : null,
               baselineAvgPosition: "baselineAvgPosition" in result ? result.baselineAvgPosition : null,
               postAvgPosition: "postAvgPosition" in result ? result.postAvgPosition : null,
+              urlInspection: "urlInspection" in result ? result.urlInspection : null,
               deploymentRevision: deploymentRevision ?? null,
             },
             confidence: result.outcome === "SEARCH_VERIFIED" ? 0.85 : 0.5,

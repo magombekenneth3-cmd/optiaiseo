@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -22,6 +22,8 @@ import {
     Award,
     Zap,
     Filter,
+    RefreshCw,
+    AlertTriangle,
 } from "lucide-react";
 import { getSiteAuthorDetails } from "@/app/actions/blog";
 import { getSiteKeywordSuggestions, type KeywordSuggestion } from "@/app/actions/keyword-suggest";
@@ -30,6 +32,13 @@ import {
     formatUrlPathForDisplay,
     isViableGscTopicQuery,
 } from "@/lib/gsc/topic-cluster";
+import {
+    buildSelectedTopicContext,
+    type SelectedTopicContext,
+    type SurgicalExecutionMode,
+} from "@/lib/content/surgical-refresh";
+
+export type { SelectedTopicContext, SurgicalExecutionMode };
 
 export interface AuthorInput {
     authorName: string;
@@ -39,6 +48,7 @@ export interface AuthorInput {
     realNumbers: string;
     localContext: string;
     keyword: string;
+    topicContext?: SelectedTopicContext;
 }
 
 interface GenerateBlogModalProps {
@@ -154,13 +164,15 @@ function KeywordStep({
     siteId,
     initialKeyword,
     keyword,
+    topicContext,
     onSelect,
     onNext,
 }: {
     siteId: string;
     initialKeyword?: string;
     keyword: string;
-    onSelect: (kw: string) => void;
+    topicContext?: SelectedTopicContext;
+    onSelect: (kw: string, topicContext?: SelectedTopicContext) => void;
     onNext: () => void;
 }) {
     const [suggestions, setSuggestions] = useState<KeywordSuggestion[]>([]);
@@ -168,6 +180,10 @@ function KeywordStep({
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [custom, setCustom] = useState(keyword || "");
     const [filterSource, setFilterSource] = useState<"all" | "gsc_gap" | "no_content" | "competitor_gap">("all");
+    const [executionMode, setExecutionMode] = useState<SurgicalExecutionMode>(
+        topicContext?.executionMode ?? "refresh"
+    );
+    const lastSyncedMatchKey = useRef<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -219,6 +235,55 @@ function KeywordStep({
         [suggestions, activeTopic]
     );
 
+    const isUpdateOpportunity =
+        matchedSuggestion?.actionType === "UPDATE_PAGE" && Boolean(matchedSuggestion.existingPageUrl);
+
+    const emitSelection = useCallback(
+        (nextKeyword: string, explicitSuggestion?: KeywordSuggestion | null, modeOverride?: SurgicalExecutionMode) => {
+            const matched =
+                explicitSuggestion ??
+                suggestions.find((s) => s.keyword.toLowerCase() === nextKeyword.trim().toLowerCase());
+            const nextMode: SurgicalExecutionMode =
+                matched?.actionType === "UPDATE_PAGE" && matched.existingPageUrl
+                    ? (modeOverride ?? "refresh")
+                    : "new_article";
+            if (matched?.actionType === "UPDATE_PAGE" && matched.existingPageUrl) {
+                setExecutionMode(nextMode);
+            }
+            onSelect(nextKeyword, buildSelectedTopicContext(nextKeyword, matched, nextMode));
+        },
+        [suggestions, onSelect]
+    );
+
+    useEffect(() => {
+        if (!matchedSuggestion) {
+            lastSyncedMatchKey.current = null;
+            return;
+        }
+        const matchKey = `${matchedSuggestion.keyword.toLowerCase()}::${matchedSuggestion.actionType ?? ""}::${matchedSuggestion.existingPageUrl ?? ""}`;
+        if (lastSyncedMatchKey.current !== matchKey) {
+            lastSyncedMatchKey.current = matchKey;
+            const initialMode: SurgicalExecutionMode =
+                matchedSuggestion.actionType === "UPDATE_PAGE" && matchedSuggestion.existingPageUrl
+                    ? (topicContext?.existingPageUrl === matchedSuggestion.existingPageUrl
+                          ? topicContext.executionMode
+                          : "refresh")
+                    : "new_article";
+            setExecutionMode(initialMode);
+            onSelect(activeTopic, buildSelectedTopicContext(activeTopic, matchedSuggestion, initialMode));
+        }
+    }, [matchedSuggestion, activeTopic, topicContext?.existingPageUrl, topicContext?.executionMode, onSelect]);
+
+    const handleExecutionModeChange = useCallback(
+        (nextMode: SurgicalExecutionMode) => {
+            setExecutionMode(nextMode);
+            if (matchedSuggestion) {
+                onSelect(activeTopic, buildSelectedTopicContext(activeTopic, matchedSuggestion, nextMode));
+            }
+        },
+        [matchedSuggestion, activeTopic, onSelect]
+    );
+
     const canContinue = activeTopic.length >= 2;
 
     return (
@@ -240,7 +305,7 @@ function KeywordStep({
                     value={custom}
                     onChange={(e) => {
                         setCustom(e.target.value);
-                        onSelect(e.target.value);
+                        emitSelection(e.target.value);
                     }}
                     onKeyDown={(e) => {
                         if (e.key === "Enter" && canContinue) {
@@ -258,7 +323,7 @@ function KeywordStep({
                         aria-label="Clear target keyword"
                         onClick={() => {
                             setCustom("");
-                            onSelect("");
+                            emitSelection("", null);
                         }}
                         className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-300"
                     >
@@ -290,7 +355,7 @@ function KeywordStep({
                                     ? baseTopic
                                     : `${chip.prefix}${baseTopic}${chip.suffix}`;
                                 setCustom(nextValue);
-                                onSelect(nextValue);
+                                emitSelection(nextValue);
                             }}
                             className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                                 isApplied
@@ -364,7 +429,11 @@ function KeywordStep({
                                 key={s.keyword}
                                 type="button"
                                 onClick={() => {
-                                    onSelect(s.keyword);
+                                    emitSelection(
+                                        s.keyword,
+                                        s,
+                                        s.actionType === "UPDATE_PAGE" && s.existingPageUrl ? "refresh" : "new_article"
+                                    );
                                     setCustom(s.keyword);
                                 }}
                                 className={`group flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all ${
@@ -486,12 +555,112 @@ function KeywordStep({
                 </div>
             )}
 
+            {/* Page Refresh Mode selector for UPDATE_PAGE opportunities */}
+            {isUpdateOpportunity && matchedSuggestion?.existingPageUrl && (
+                <fieldset className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] p-3.5">
+                    <legend className="px-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                        Page Refresh Mode · Existing Ranking Page
+                    </legend>
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-zinc-900/80 px-2 py-0.5 font-mono text-[11px] text-zinc-200">
+                            {formatUrlPathForDisplay(matchedSuggestion.existingPageUrl) ?? matchedSuggestion.existingPageUrl}
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+                            <RefreshCw className="h-3 w-3" />
+                            {formatRecommendedActionLabel(matchedSuggestion.recommendedAction, "UPDATE_PAGE")}
+                        </span>
+                    </div>
+
+                    {matchedSuggestion.clusterQueries && matchedSuggestion.clusterQueries.length > 0 && (
+                        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                                Cluster queries:
+                            </span>
+                            {matchedSuggestion.clusterQueries.slice(0, 6).map((q) => (
+                                <span
+                                    key={q}
+                                    className="rounded border border-white/10 bg-zinc-900/70 px-1.5 py-0.5 text-[10px] text-zinc-300"
+                                >
+                                    {q}
+                                </span>
+                            ))}
+                            {matchedSuggestion.clusterQueries.length > 6 && (
+                                <span className="text-[10px] text-zinc-400">
+                                    +{matchedSuggestion.clusterQueries.length - 6} more
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    <div className="mt-3 space-y-2">
+                        <div
+                            className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors ${
+                                executionMode === "refresh"
+                                    ? "border-emerald-500/40 bg-emerald-500/10"
+                                    : "border-white/10 bg-zinc-900/60"
+                            }`}
+                        >
+                            <input
+                                id="topic-mode-refresh"
+                                name="topic-execution-mode"
+                                type="radio"
+                                value="refresh"
+                                checked={executionMode === "refresh"}
+                                onChange={() => handleExecutionModeChange("refresh")}
+                                className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-emerald-500"
+                            />
+                            <label htmlFor="topic-mode-refresh" className="min-w-0 flex-1 cursor-pointer">
+                                <span className="block text-xs font-semibold text-white">
+                                    Refresh existing page <span className="text-emerald-400">(Recommended)</span>
+                                </span>
+                                <span className="mt-0.5 block text-[11px] leading-relaxed text-zinc-400">
+                                    Preserves your canonical page slug, executes{" "}
+                                    {formatRecommendedActionLabel(matchedSuggestion.recommendedAction, "UPDATE_PAGE")},
+                                    and weaves missing cluster queries without creating a competing URL.
+                                </span>
+                            </label>
+                        </div>
+
+                        <div
+                            className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors ${
+                                executionMode === "new_article"
+                                    ? "border-amber-500/40 bg-amber-500/10"
+                                    : "border-white/10 bg-zinc-900/60"
+                            }`}
+                        >
+                            <input
+                                id="topic-mode-new-article"
+                                name="topic-execution-mode"
+                                type="radio"
+                                value="new_article"
+                                checked={executionMode === "new_article"}
+                                onChange={() => handleExecutionModeChange("new_article")}
+                                className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-emerald-500"
+                            />
+                            <label htmlFor="topic-mode-new-article" className="min-w-0 flex-1 cursor-pointer">
+                                <span className="flex items-center gap-1.5 text-xs font-semibold text-white">
+                                    Create new competing article
+                                    <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                                </span>
+                                <span className="mt-0.5 block text-[11px] leading-relaxed text-amber-300/90">
+                                    Creating a separate post for this cluster risks keyword cannibalization against{" "}
+                                    <span className="font-mono">{formatUrlPathForDisplay(matchedSuggestion.existingPageUrl)}</span>.
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                </fieldset>
+            )}
+
             {/* Footer with Selected Topic Summary + CTA */}
             <div className="sticky -bottom-4 z-10 -mx-6 mt-4 flex items-center justify-between gap-3 border-t border-white/10 bg-zinc-950/95 px-6 py-3.5 backdrop-blur-md">
                 <div className="min-w-0 flex-1">
                     {activeTopic ? (
                         <div className="truncate text-xs text-zinc-300">
-                            <span className="text-zinc-500">Target: </span>
+                            <span className="text-zinc-500">
+                                {isUpdateOpportunity && executionMode === "refresh" ? "Refreshing: " : "Target: "}
+                            </span>
                             <span className="font-bold text-white">{activeTopic}</span>
                             {matchedSuggestion?.existingPageUrl && (
                                 <span className="ml-1.5 font-mono text-[10px] text-amber-300">
@@ -519,17 +688,21 @@ function KeywordStep({
 
 function AuthorStep({
     form,
+    topicContext,
     onChangeField,
     onNext,
     onBack,
     isGenerating,
 }: {
     form: AuthorInput;
+    topicContext?: SelectedTopicContext;
     onChangeField: (field: keyof AuthorInput, value: string) => void;
     onNext: () => void;
     onBack: () => void;
     isGenerating: boolean;
 }) {
+    const isRefreshMode =
+        topicContext?.executionMode === "refresh" && Boolean(topicContext.existingPageUrl);
     const handleChange = useCallback(
         (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
             onChangeField(e.target.name as keyof AuthorInput, e.target.value);
@@ -555,6 +728,29 @@ function AuthorStep({
 
     return (
         <div>
+            {isRefreshMode && topicContext?.existingPageUrl && (
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.08] px-3.5 py-2.5 text-xs">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <RefreshCw className="h-3.5 w-3.5 shrink-0 text-amber-300" />
+                        <span className="truncate font-semibold text-white">
+                            Surgical Refresh:{" "}
+                            <span className="font-mono text-amber-300">
+                                {formatUrlPathForDisplay(topicContext.existingPageUrl) ?? topicContext.existingPageUrl}
+                            </span>
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <span className="rounded border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+                            {formatRecommendedActionLabel(topicContext.recommendedAction, "UPDATE_PAGE")}
+                        </span>
+                        {topicContext.clusterQueries && topicContext.clusterQueries.length > 0 && (
+                            <span className="rounded border border-white/10 bg-zinc-900/70 px-1.5 py-0.5 text-[10px] text-zinc-300">
+                                {topicContext.clusterQueries.length} cluster {topicContext.clusterQueries.length === 1 ? "query" : "queries"}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            )}
             <div className="mb-4">
                 <div className="flex items-start justify-between gap-4">
                     <div>
@@ -801,7 +997,11 @@ function AuthorStep({
                 >
                     {isGenerating ? (
                         <>
-                            <Loader2 className="h-4 w-4 animate-spin" /> Launching Pipeline…
+                            <Loader2 className="h-4 w-4 animate-spin" /> {isRefreshMode ? "Refreshing Page…" : "Launching Pipeline…"}
+                        </>
+                    ) : isRefreshMode ? (
+                        <>
+                            <RefreshCw className="h-4 w-4" /> Launch Surgical Page Refresh
                         </>
                     ) : (
                         <>
@@ -814,7 +1014,17 @@ function AuthorStep({
     );
 }
 
-function GeneratingStep({ pipelineType, onClose }: { pipelineType?: string; onClose?: () => void }) {
+function GeneratingStep({
+    pipelineType,
+    isRefreshing,
+    targetPath,
+    onClose,
+}: {
+    pipelineType?: string;
+    isRefreshing?: boolean;
+    targetPath?: string | null;
+    onClose?: () => void;
+}) {
     const isDataReport = pipelineType === "DATA_REPORT";
     const [elapsed, setElapsed] = useState(0);
 
@@ -833,7 +1043,9 @@ function GeneratingStep({ pipelineType, onClose }: { pipelineType?: string; onCl
     return (
         <div className="flex flex-col items-center justify-center gap-4 py-12 text-center" aria-live="polite">
             <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-purple-500/30 bg-purple-500/15 text-purple-400 shadow-xl shadow-purple-500/20">
-                {isDataReport ? (
+                {isRefreshing ? (
+                    <RefreshCw className="h-7 w-7 animate-pulse text-amber-300" />
+                ) : isDataReport ? (
                     <BarChart className="h-7 w-7 animate-pulse text-emerald-400" />
                 ) : (
                     <Sparkles className="h-7 w-7 animate-pulse text-purple-300" />
@@ -843,10 +1055,16 @@ function GeneratingStep({ pipelineType, onClose }: { pipelineType?: string; onCl
             </div>
             <div>
                 <p className="mb-1 text-base font-bold text-white">
-                    {isDataReport ? "Building Data-Journalism Report…" : "AI Research & Generation Pipeline Active"}
+                    {isRefreshing
+                        ? "Surgical Page Refresh in Progress…"
+                        : isDataReport
+                            ? "Building Data-Journalism Report…"
+                            : "AI Research & Generation Pipeline Active"}
                 </p>
                 <p className="max-w-xs text-xs text-purple-300 font-semibold">
-                    Background functions are assembling SERP research &amp; writing article content.
+                    {isRefreshing
+                        ? `Fetching ${targetPath ?? "target page"}, preserving canonical slug, and weaving cluster queries.`
+                        : "Background functions are assembling SERP research & writing article content."}
                 </p>
                 <p className="mx-auto mt-2 max-w-xs text-xs text-zinc-400">
                     Elapsed: <span className="font-mono font-bold text-white">{elapsedLabel}</span>.
@@ -877,6 +1095,9 @@ export function GenerateBlogModal({
 }: GenerateBlogModalProps) {
     const [step, setStep] = useState(0);
     const [keyword, setKeyword] = useState(initialAuthor?.keyword ?? initialKeyword ?? "");
+    const [topicContext, setTopicContext] = useState<SelectedTopicContext | undefined>(
+        initialAuthor?.topicContext
+    );
     const [form, setForm] = useState<AuthorInput>(
         initialAuthor ?? {
             authorName: "",
@@ -918,8 +1139,15 @@ export function GenerateBlogModal({
         });
     }, [siteId, initialAuthor]);
 
-    const isDirty = keyword.trim() !== (initialKeyword ?? "").trim() ||
-        Object.values(form).some((value) => value.trim().length > 0);
+    const isDirty =
+        keyword.trim() !== (initialKeyword ?? "").trim() ||
+        Object.values(form).some((value) => typeof value === "string" && value.trim().length > 0);
+
+    const isRefreshMode =
+        topicContext?.executionMode === "refresh" && Boolean(topicContext.existingPageUrl);
+    const refreshTargetPath = isRefreshMode && topicContext?.existingPageUrl
+        ? formatUrlPathForDisplay(topicContext.existingPageUrl) ?? topicContext.existingPageUrl
+        : null;
 
     const requestClose = useCallback(() => {
         if (isDirty) {
@@ -941,7 +1169,7 @@ export function GenerateBlogModal({
         setIsGenerating(true);
         setStep(2);
         try {
-            const res = await onGenerate({ ...form, keyword });
+            const res = await onGenerate({ ...form, keyword, topicContext });
             if (res && typeof res === "object" && "success" in res && res.success === false) {
                 setGenError(res.error || "Generation couldn't be started. Please check your inputs and try again.");
                 setStep(1);
@@ -955,7 +1183,7 @@ export function GenerateBlogModal({
         } finally {
             setIsGenerating(false);
         }
-    }, [form, keyword, onGenerate, onClose]);
+    }, [form, keyword, topicContext, onGenerate, onClose]);
 
     const isDataReport = pipelineType === "DATA_REPORT";
 
@@ -966,21 +1194,43 @@ export function GenerateBlogModal({
                 className="!flex max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl flex-col !gap-0 overflow-hidden border-white/10 bg-zinc-950/95 p-0 text-foreground shadow-2xl backdrop-blur-2xl sm:w-full"
             >
                 <DialogHeader className="sr-only">
-                    <DialogTitle>{isDataReport ? "Data Report Creator" : "Create Article Studio"}</DialogTitle>
-                    <DialogDescription>Choose a topic, add author details, and create the article.</DialogDescription>
+                    <DialogTitle>
+                        {isRefreshMode
+                            ? "Surgical Page Refresh"
+                            : isDataReport
+                                ? "Data Report Creator"
+                                : "Create Article Studio"}
+                    </DialogTitle>
+                    <DialogDescription>
+                        {isRefreshMode
+                            ? "Refresh an existing ranking page with cluster queries and author evidence."
+                            : "Choose a topic, add author details, and create the article."}
+                    </DialogDescription>
                 </DialogHeader>
                 {/* Header */}
                 <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-zinc-900/60 px-6 py-3.5">
                     <div>
                         <div className="flex items-center gap-2">
                             <h2 className="text-base font-bold text-white">
-                                {isDataReport ? "Data Report Creator" : "Create Article Studio"}
+                                {isRefreshMode
+                                    ? "Surgical Page Refresh"
+                                    : isDataReport
+                                        ? "Data Report Creator"
+                                        : "Create Article Studio"}
                             </h2>
-                            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                                E-E-A-T V2
+                            <span
+                                className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                                    isRefreshMode
+                                        ? "border-amber-500/30 bg-amber-500/15 text-amber-300"
+                                        : "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
+                                }`}
+                            >
+                                {isRefreshMode ? "UPDATE PAGE" : "E-E-A-T V2"}
                             </span>
                         </div>
-                        <p className="mt-0.5 font-mono text-xs text-zinc-400">{siteDomain}</p>
+                        <p className="mt-0.5 font-mono text-xs text-zinc-400">
+                            {refreshTargetPath ? `${siteDomain}${refreshTargetPath}` : siteDomain}
+                        </p>
                     </div>
                     <button
                         type="button"
@@ -1016,8 +1266,10 @@ export function GenerateBlogModal({
                             siteId={siteId}
                             initialKeyword={initialKeyword}
                             keyword={keyword}
-                            onSelect={(kw) => {
+                            topicContext={topicContext}
+                            onSelect={(kw, nextContext) => {
                                 setKeyword(kw);
+                                setTopicContext(nextContext);
                                 setForm((prev) => ({ ...prev, keyword: kw }));
                             }}
                             onNext={() => setStep(1)}
@@ -1027,6 +1279,7 @@ export function GenerateBlogModal({
                     {step === 1 && (
                         <AuthorStep
                             form={form}
+                            topicContext={topicContext}
                             onChangeField={handleChangeField}
                             onNext={handleGenerate}
                             onBack={() => setStep(0)}
@@ -1034,7 +1287,14 @@ export function GenerateBlogModal({
                         />
                     )}
 
-                    {step === 2 && <GeneratingStep pipelineType={pipelineType} onClose={onClose} />}
+                    {step === 2 && (
+                        <GeneratingStep
+                            pipelineType={pipelineType}
+                            isRefreshing={isRefreshMode}
+                            targetPath={refreshTargetPath}
+                            onClose={onClose}
+                        />
+                    )}
                 </div>
             </DialogContent>
         </Dialog>

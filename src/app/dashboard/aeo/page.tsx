@@ -12,6 +12,7 @@ import { PromptSimulator } from "@/components/aeo/PromptSimulator";
 import type { AeoResult } from "@/lib/aeo";
 import { runAeoReport, getAeoReportStatus } from "@/app/actions/aeo";
 import { generateAeoRecommendationFix, generateAeoFix, type AeoRecommendationFix } from "@/app/actions/aeoFix";
+import { LlmsTxtExportCard } from "@/components/dashboard/aeo/LlmsTxtExportCard";
 import Link from "next/link";
 import {
     Bot, Zap, ChevronDown, ChevronUp, Lightbulb, Globe,
@@ -1023,6 +1024,11 @@ function AeoRankPageInner() {
                             hasCompetitors={(activeSite?.competitors?.length ?? 0) > 0}
                             onTabChange={setMainTab}
                         />
+
+                        {/* llms.txt & llms-full.txt generator + 1-click export */}
+                        {activeSite && (
+                            <LlmsTxtExportCard siteId={activeSite.id} domain={activeSite.domain} />
+                        )}
                     </div>
 
                     {/* ── Right: sticky sidebar ── */}

@@ -7,6 +7,7 @@
 // =============================================================================
 
 import type { FixRisk, VerificationCriterion } from "@/lib/seo-audit/contracts";
+import type { LlmsTxtBuildInput } from "@/lib/seo-audit/llms-txt";
 
 export type AstLanguage =
   | "typescript"
@@ -17,7 +18,8 @@ export type AstLanguage =
   | "mdx"
   | "json"
   | "xml"
-  | "robots";
+  | "robots"
+  | "llms_txt";
 
 // ── AST Operation Kinds ──────────────────────────────────────────────────────
 
@@ -156,6 +158,11 @@ export interface SetXmlNodeOp {
   allMatches?: boolean;
 }
 
+export interface SetLlmsTxtDocumentOp {
+  kind: "setLlmsTxtDocument";
+  input: LlmsTxtBuildInput;
+}
+
 export type AstOperation =
   | SetObjectPropertyOp
   | RemoveObjectPropertyOp
@@ -172,7 +179,8 @@ export type AstOperation =
   | RemoveJsonLdNodeOp
   | SetRobotsDirectiveOp
   | RemoveRobotsDirectiveOp
-  | SetXmlNodeOp;
+  | SetXmlNodeOp
+  | SetLlmsTxtDocumentOp;
 
 // ── AST Fix Plan ─────────────────────────────────────────────────────────────
 

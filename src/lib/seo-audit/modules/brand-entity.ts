@@ -39,6 +39,74 @@ function getSchemaType(node: Record<string, unknown>): string {
     return '';
 }
 
+function hasSchemaType(node: Record<string, unknown>, target: string): boolean {
+    const t = node['@type'];
+    if (typeof t === 'string') return t === target;
+    if (Array.isArray(t)) return (t as unknown[]).some(v => v === target);
+    return false;
+}
+
+function resolveBrandLabel(
+    nodes: Record<string, unknown>[],
+    html: string,
+    url: string,
+): string {
+    const orgNode = nodes.find(n => hasSchemaType(n, 'Organization') || hasSchemaType(n, 'LocalBusiness'));
+    if (typeof orgNode?.name === 'string' && orgNode.name.trim().length > 0) {
+        return orgNode.name.trim();
+    }
+
+    const root = parse(html.slice(0, MAX_HTML_BYTES));
+    const ogSiteName = root.querySelector('meta[property="og:site_name"]')?.getAttribute('content')?.trim();
+    if (ogSiteName) return ogSiteName;
+
+    try {
+        const hostname = new URL(url).hostname.replace(/^www\./i, '');
+        const raw = hostname.split('.')[0] ?? '';
+        if (raw.length > 0) {
+            return raw
+                .split(/[-_]+/)
+                .filter(Boolean)
+                .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+                .join(' ');
+        }
+    } catch { /* fall through */ }
+
+    return 'Your Brand';
+}
+
+function isSameSiteHomeHref(href: string | undefined, pageUrl: string): boolean {
+    if (!href) return false;
+    const trimmed = href.trim();
+    if (!trimmed) return false;
+    if (trimmed === '/' || trimmed === './') return true;
+
+    try {
+        const base = new URL(pageUrl);
+        const resolved = new URL(trimmed, base);
+        if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') return false;
+        const baseHost = base.hostname.replace(/^www\./i, '').toLowerCase();
+        const targetHost = resolved.hostname.replace(/^www\./i, '').toLowerCase();
+        return (
+            baseHost === targetHost &&
+            (resolved.pathname === '/' || resolved.pathname === '') &&
+            resolved.search === '' &&
+            resolved.hash === ''
+        );
+    } catch {
+        return false;
+    }
+}
+
+function isHomepageUrlPath(url: string): boolean {
+    try {
+        const path = new URL(url).pathname;
+        return path === '/' || path === '';
+    } catch {
+        return true;
+    }
+}
+
 
 function checkOrganizationSchema(nodes: Record<string, unknown>[]): ChecklistItem {
     const org = nodes.find(n => getSchemaType(n) === 'Organization');
@@ -156,15 +224,15 @@ function checkLogoSchema(nodes: Record<string, unknown>[]): ChecklistItem {
 }
 
 function checkWebsiteSchema(nodes: Record<string, unknown>[]): ChecklistItem {
-    const site = nodes.find(n => getSchemaType(n) === 'WebSite');
+    const site = nodes.find(n => hasSchemaType(n, 'WebSite'));
     if (!site) {
         return {
             id: 'brand-website-schema',
-            label: 'WebSite schema + SearchAction',
+            label: 'WebSite schema',
             status: 'Fail',
-            finding: 'No WebSite JSON-LD block found. Missing sitelink search box eligibility and site navigation signals.',
+            finding: 'No WebSite JSON-LD block found. Search engines and AI systems use WebSite schema (name, url) to establish your canonical site entity.',
             recommendation: {
-                text: 'Add WebSite schema with name, url, description, and a potentialAction SearchAction pointing to your search endpoint.',
+                text: 'Add WebSite schema with @id, name, url, and description.',
                 priority: 'Medium',
             },
             roiImpact: 60,
@@ -172,21 +240,20 @@ function checkWebsiteSchema(nodes: Record<string, unknown>[]): ChecklistItem {
         };
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const action = site.potentialAction as any;
-    const hasSearchAction =
-        action &&
-        (getSchemaType(action) === 'SearchAction' ||
-            (action['@type'] === 'SearchAction'));
+    const hasName = typeof site.name === 'string' && site.name.trim().length > 0;
+    const hasUrl = typeof site.url === 'string' && site.url.trim().length > 0;
+    const missing: string[] = [];
+    if (!hasName) missing.push('name');
+    if (!hasUrl) missing.push('url');
 
-    if (!hasSearchAction) {
+    if (missing.length > 0) {
         return {
             id: 'brand-website-schema',
-            label: 'WebSite schema + SearchAction',
+            label: 'WebSite schema',
             status: 'Warning',
-            finding: 'WebSite schema present but missing potentialAction SearchAction. Sitelink search box will not be eligible.',
+            finding: `WebSite schema present but missing recommended fields: ${missing.join(', ')}.`,
             recommendation: {
-                text: 'Add potentialAction: { "@type": "SearchAction", target: { urlTemplate: "https://yourdomain.com/search?q={search_term_string}" }, "query-input": "required name=search_term_string" }',
+                text: `Add ${missing.join(' and ')} to your WebSite JSON-LD block so search engines can confirm your site identity.`,
                 priority: 'Medium',
             },
             roiImpact: 45,
@@ -194,17 +261,26 @@ function checkWebsiteSchema(nodes: Record<string, unknown>[]): ChecklistItem {
         };
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const action = site.potentialAction as any;
+    const hasSearchAction = Boolean(
+        action &&
+        (hasSchemaType(action, 'SearchAction') || action['@type'] === 'SearchAction')
+    );
+
     return {
         id: 'brand-website-schema',
-        label: 'WebSite schema + SearchAction',
+        label: 'WebSite schema',
         status: 'Pass',
-        finding: 'WebSite schema present with SearchAction (sitelink search box eligible).',
+        finding: hasSearchAction
+            ? 'WebSite schema present with name, url, and SearchAction.'
+            : 'WebSite schema present with name and url (Google retired Sitelinks SearchBox Nov 2024; SearchAction is optional).',
         roiImpact: 60,
         aiVisibilityImpact: 65,
     };
 }
 
-function checkLogoAltText(html: string): ChecklistItem {
+function checkLogoAltText(html: string, brandLabel: string): ChecklistItem {
     const root = parse(html.slice(0, MAX_HTML_BYTES));
 
     // Find all img tags that look like logos (src contains "logo")
@@ -247,7 +323,7 @@ function checkLogoAltText(html: string): ChecklistItem {
             status: 'Warning',
             finding: 'No <img> logo detected. If using CSS background or inline SVG, ensure an aria-label on the container or parent link describes the brand.',
             recommendation: {
-                text: 'Add aria-label="BrandName — descriptive tagline" to the logo link element, or title/aria-label to the SVG.',
+                text: `Add aria-label="${brandLabel} — descriptive tagline" to the logo link element, or title/aria-label to the SVG.`,
                 priority: 'Medium',
             },
             roiImpact: 50,
@@ -275,7 +351,7 @@ function checkLogoAltText(html: string): ChecklistItem {
             status: 'Fail',
             finding: `${missingAlt.length} logo image(s) have no alt text: ${missingAlt.slice(0, 2).join(', ')}. Google cannot associate your logo with your brand keywords.`,
             recommendation: {
-                text: 'Add alt="BrandName — AI SEO audit and automation platform" to every logo <img>. Be descriptive: include your brand name + core keyword.',
+                text: `Add alt="${brandLabel} — primary offering" to every logo <img>. Be descriptive: include your brand name + core topic.`,
                 priority: 'High',
             },
             roiImpact: 65,
@@ -290,7 +366,7 @@ function checkLogoAltText(html: string): ChecklistItem {
             status: 'Warning',
             finding: `Logo alt text too short (under 10 chars): ${weakAlt.join(', ')}. Missed keyword association opportunity.`,
             recommendation: {
-                text: 'Expand logo alt to include brand name + primary keyword (e.g. "OptiAISEO — AI SEO audit and automation platform").',
+                text: `Expand logo alt to include brand name + primary offering (e.g. "${brandLabel} — primary product or platform").`,
                 priority: 'Medium',
             },
             roiImpact: 50,
@@ -308,11 +384,13 @@ function checkLogoAltText(html: string): ChecklistItem {
     };
 }
 
-function checkLogoHomepageAnchor(html: string): ChecklistItem {
+function checkLogoHomepageAnchor(html: string, url: string, brandLabel: string): ChecklistItem {
     const root = parse(html.slice(0, MAX_HTML_BYTES));
 
-    // Check if logo is wrapped in a link pointing to "/"
-    const homeLinks = root.querySelectorAll('a[href="/"], a[href="https://optiaiseo.online"], a[href="https://optiaiseo.online"]');
+    // Match relative `/` or normalized same-site homepage URLs dynamically
+    const homeLinks = root
+        .querySelectorAll('a[href]')
+        .filter(link => isSameSiteHomeHref(link.getAttribute('href'), url));
     if (homeLinks.length === 0) {
         return {
             id: 'brand-logo-home-anchor',
@@ -320,7 +398,7 @@ function checkLogoHomepageAnchor(html: string): ChecklistItem {
             status: 'Warning',
             finding: 'No link pointing to the homepage root (/) was found near the logo. Every page should reinforce homepage authority via a logo link.',
             recommendation: {
-                text: 'Wrap your logo in <Link href="/" aria-label="BrandName homepage"> on every layout. This consolidates homepage authority and reinforces entity root.',
+                text: `Wrap your logo in <Link href="/" aria-label="${brandLabel} homepage"> on every layout. This consolidates homepage authority and reinforces entity root.`,
                 priority: 'Medium',
             },
             roiImpact: 55,
@@ -337,7 +415,7 @@ function checkLogoHomepageAnchor(html: string): ChecklistItem {
             status: 'Warning',
             finding: 'Logo links to homepage but has no aria-label — missed brand keyword signal for assistive tech and Google\'s link analysis.',
             recommendation: {
-                text: 'Add aria-label="OptiAISEO — AI SEO audit and automation platform" to the logo link.',
+                text: `Add aria-label="${brandLabel} homepage" to the logo link.`,
                 priority: 'Medium',
             },
             roiImpact: 45,
@@ -555,18 +633,38 @@ export const BrandEntityModule: AuditModule = {
     requiresHtml: true,
 
     async run(context: AuditModuleContext): Promise<AuditCategoryResult> {
-        const { html, url } = context;
+        const { html, url, auditProfile } = context;
 
         const nodes = parseJsonLdBlocks(html);
+        const brandLabel = resolveBrandLabel(nodes, html, url);
+        const isSubPageScope = auditProfile === 'page' && !isHomepageUrlPath(url);
+
+        const orgCheck = checkOrganizationSchema(nodes);
+        const logoSchemaCheck = checkLogoSchema(nodes);
+        const websiteCheck = checkWebsiteSchema(nodes);
+        const sameAsCheck = checkSameAsLinks(nodes);
+
+        const scopeSiteLevelCheck = (item: ChecklistItem, hasNode: boolean): ChecklistItem => {
+            if (!isSubPageScope || hasNode) return item;
+            return {
+                ...item,
+                status: 'Info',
+                finding: `${item.label} is absent on this sub-page — evaluated primarily on the homepage audit.`,
+                recommendation: undefined,
+            };
+        };
+
+        const hasOrgNode = nodes.some(n => hasSchemaType(n, 'Organization') || hasSchemaType(n, 'LocalBusiness'));
+        const hasWebsiteNode = nodes.some(n => hasSchemaType(n, 'WebSite'));
 
         const items: ChecklistItem[] = [
-            checkOrganizationSchema(nodes),
-            checkLogoSchema(nodes),
-            checkWebsiteSchema(nodes),
-            checkLogoAltText(html),
-            checkLogoHomepageAnchor(html),
+            scopeSiteLevelCheck(orgCheck, hasOrgNode),
+            scopeSiteLevelCheck(logoSchemaCheck, hasOrgNode),
+            scopeSiteLevelCheck(websiteCheck, hasWebsiteNode),
+            checkLogoAltText(html, brandLabel),
+            checkLogoHomepageAnchor(html, url, brandLabel),
             checkFavicon(html),
-            checkSameAsLinks(nodes),
+            scopeSiteLevelCheck(sameAsCheck, hasOrgNode),
             checkBrandMentionDensity(html, url),
         ];
 

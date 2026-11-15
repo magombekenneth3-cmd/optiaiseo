@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger";
  */
 
 import { getUserGscToken } from "@/lib/gsc/token";
+import { normaliseSiteUrl } from "@/lib/gsc";
 
 export type IndexingType = "URL_UPDATED" | "URL_DELETED";
 
@@ -25,14 +26,64 @@ type IndexingApiResponse = {
     };
 };
 
+export type GoogleApiFailureCode =
+    | "API_DISABLED"
+    | "AUTH_FAILED"
+    | "PERMISSION_DENIED"
+    | "RATE_LIMITED"
+    | "UNKNOWN";
+
+export type GoogleApiFailureResult = {
+    success: false;
+    code: GoogleApiFailureCode;
+    message: string;
+    debug?: string;
+};
+
 export type IndexingResult =
     | { success: true; metadata?: IndexingApiResponse }
-    | {
-        success: false;
-        code: "API_DISABLED" | "AUTH_FAILED" | "PERMISSION_DENIED" | "RATE_LIMITED" | "UNKNOWN";
-        message: string;
-        debug?: string;
+    | GoogleApiFailureResult;
+
+type UrlInspectionApiResponse = {
+    inspectionResult?: {
+        inspectionResultLink?: string;
+        indexStatusResult?: {
+            verdict?: string;
+            coverageState?: string;
+            robotsTxtState?: string;
+            indexingState?: string;
+            lastCrawlTime?: string;
+            pageFetchState?: string;
+            googleCanonical?: string;
+            userCanonical?: string;
+            referringUrls?: string[];
+            crawledAs?: string;
+        };
+        mobileUsabilityResult?: { verdict?: string };
+        richResultsResult?: { verdict?: string };
     };
+};
+
+export interface GscUrlInspectionDetails {
+    verdict?: string;
+    coverageState?: string;
+    robotsTxtState?: string;
+    indexingState?: string;
+    lastCrawlTime?: string;
+    pageFetchState?: string;
+    googleCanonical?: string;
+    userCanonical?: string;
+    referringUrls?: string[];
+    crawledAs?: string;
+    mobileUsabilityVerdict?: string;
+    richResultsVerdict?: string;
+    inspectionResultLink?: string;
+    inspectedSiteUrl: string;
+}
+
+export type GscUrlInspectionResult =
+    | { success: true; data: GscUrlInspectionDetails }
+    | GoogleApiFailureResult;
 
 const INDEXING_API_TIMEOUT_MS = 8_000;
 const INDEXING_API_RETRY_DELAY_MS = 500;
@@ -63,7 +114,7 @@ function isNonRetryableStatus(status: number): boolean {
     return status === 400 || status === 401 || status === 403 || status === 429;
 }
 
-async function getAccessTokenSafe(userId: string): Promise<string | IndexingResult> {
+async function getAccessTokenSafe(userId: string): Promise<string | GoogleApiFailureResult> {
     try {
         return await getUserGscToken(userId);
     } catch (e: unknown) {
@@ -119,12 +170,28 @@ async function parseGoogleError(res: Response): Promise<{
     };
 }
 
-function mapToIndexingResult(error: {
-    statusCode: number;
-    status?: string;
-    message: string;
-}): IndexingResult {
+function mapToGoogleApiFailure(
+    error: {
+        statusCode: number;
+        status?: string;
+        message: string;
+    },
+    apiName: "Indexing API" | "Search Console API" = "Indexing API"
+): GoogleApiFailureResult {
     const { statusCode, status, message } = error;
+
+    if (
+        statusCode === 403 &&
+        (status === "ACCESS_TOKEN_SCOPE_INSUFFICIENT" ||
+            /insufficient.*scope|webmasters/i.test(message))
+    ) {
+        return {
+            success: false,
+            code: "PERMISSION_DENIED",
+            message: "Missing Google Search Console permission (webmasters.readonly scope). Reconnect Google Search Console.",
+            debug: message,
+        };
+    }
 
     if (
         statusCode === 403 &&
@@ -133,13 +200,17 @@ function mapToIndexingResult(error: {
     ) {
         const projectMatch = message.match(/projects?\/(\d+)/i);
         const projectId = projectMatch ? projectMatch[1] : null;
+        const apiSlug =
+            apiName === "Search Console API"
+                ? "searchconsole.googleapis.com"
+                : "indexing.googleapis.com";
         const consoleUrl = projectId
-            ? `https://console.developers.google.com/apis/api/indexing.googleapis.com/overview?project=${projectId}`
-            : "https://console.developers.google.com/apis/api/indexing.googleapis.com";
+            ? `https://console.developers.google.com/apis/api/${apiSlug}/overview?project=${projectId}`
+            : `https://console.developers.google.com/apis/api/${apiSlug}`;
         return {
             success: false,
             code: "API_DISABLED",
-            message: "Enable the Google Indexing API for your Cloud project.",
+            message: `Enable the Google ${apiName} for your Cloud project.`,
             debug: consoleUrl,
         };
     }
@@ -157,7 +228,7 @@ function mapToIndexingResult(error: {
         return {
             success: false,
             code: "RATE_LIMITED",
-            message: "Too many requests to Google Indexing API. Please try again later.",
+            message: `Too many requests to Google ${apiName}. Please try again later.`,
             debug: message,
         };
     }
@@ -179,115 +250,101 @@ function mapToIndexingResult(error: {
     };
 }
 
-async function executeWithRetry(
-    url: string,
-    type: IndexingType,
-    accessToken: string,
-    timeoutMs: number,
-    requestId: string | undefined
-): Promise<IndexingResult> {
+async function executeGoogleJsonWithRetry<TResponse, TResult extends { success: boolean }>(params: {
+    logTag: string;
+    apiName: "Indexing API" | "Search Console API";
+    logMeta: Record<string, unknown>;
+    requestFn: () => Promise<Response>;
+    mapSuccess: (data: TResponse | undefined) => TResult;
+}): Promise<TResult | GoogleApiFailureResult> {
+    const { logTag, apiName, logMeta, requestFn, mapSuccess } = params;
     const startTime = Date.now();
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         if (attempt > 0) {
-            logger.debug("[Indexing API]", { event: "retrying", requestId, url, type, attempt });
+            logger.debug(logTag, { event: "retrying", ...logMeta, attempt });
             await jitteredDelay(INDEXING_API_RETRY_DELAY_MS);
         }
 
         try {
-            const res = await callIndexingApi(url, type, accessToken, timeoutMs);
+            const res = await requestFn();
 
             if (isNonRetryableStatus(res.status)) {
                 const parsedError = await parseGoogleError(res);
                 const durationMs = Date.now() - startTime;
-                logger.error("[Indexing API]", {
+                logger.error(logTag, {
                     event: "request_failed",
-                    requestId,
-                    url,
-                    type,
+                    ...logMeta,
                     statusCode: parsedError.statusCode,
                     message: parsedError.message,
                     durationMs,
                 });
-                return mapToIndexingResult(parsedError);
+                return mapToGoogleApiFailure(parsedError, apiName);
             }
 
             if (isRetryableStatus(res.status)) {
                 const parsedError = await parseGoogleError(res);
                 const durationMs = Date.now() - startTime;
-                logger.error("[Indexing API]", {
+                logger.error(logTag, {
                     event: "server_error",
-                    requestId,
-                    url,
-                    type,
+                    ...logMeta,
                     statusCode: parsedError.statusCode,
                     attempt,
                     durationMs,
                 });
 
                 if (attempt === MAX_RETRIES) {
-                    return mapToIndexingResult(parsedError);
+                    return mapToGoogleApiFailure(parsedError, apiName);
                 }
 
                 lastError = new Error(parsedError.message);
                 continue;
             }
 
-            let data: IndexingApiResponse | undefined;
-            try { data = await res.json() as IndexingApiResponse; } catch { data = undefined; }
+            let data: TResponse | undefined;
+            try { data = await res.json() as TResponse; } catch { data = undefined; }
 
             const durationMs = Date.now() - startTime;
-            logger.debug("[Indexing API]", { event: "request_success", requestId, url, type, notified: true, durationMs });
-            return { success: true, metadata: data };
+            logger.debug(logTag, { event: "request_success", ...logMeta, durationMs });
+            return mapSuccess(data);
 
         } catch (err: unknown) {
             const error = err instanceof Error ? err : new Error(String(err));
 
             if (error.name === "AbortError") {
                 const durationMs = Date.now() - startTime;
-                logger.error("[Indexing API]", { event: "request_timeout", requestId, url, type, durationMs });
+                logger.error(logTag, { event: "request_timeout", ...logMeta, durationMs });
                 return {
                     success: false,
                     code: "UNKNOWN",
-                    message: "Request to Google Indexing API timed out.",
+                    message: `Request to Google ${apiName} timed out.`,
                     debug: error.message,
                 };
             }
 
             const isNetworkError = err instanceof TypeError;
-            if (!isNetworkError) {
+            if (!isNetworkError || attempt === MAX_RETRIES) {
                 const durationMs = Date.now() - startTime;
-                logger.error("[Indexing API]", { event: "request_error", requestId, url, type, error: error.message, durationMs });
+                logger.error(logTag, { event: "request_error", ...logMeta, error: error.message, durationMs });
                 return {
                     success: false,
                     code: "UNKNOWN",
-                    message: "Unexpected error contacting Google Indexing API.",
+                    message: `Unexpected error contacting Google ${apiName}.`,
                     debug: error.message,
                 };
             }
 
             lastError = error;
-
-            if (attempt === MAX_RETRIES) {
-                const durationMs = Date.now() - startTime;
-                logger.error("[Indexing API]", { event: "request_error", requestId, url, type, error: error.message, durationMs });
-                return {
-                    success: false,
-                    code: "UNKNOWN",
-                    message: "Unexpected error contacting Google Indexing API.",
-                    debug: error.message,
-                };
-            }
         }
     }
 
     const durationMs = Date.now() - startTime;
-    logger.error("[Indexing API]", { event: "request_error", requestId, url, type, error: lastError?.message, durationMs });
+    logger.error(logTag, { event: "request_error", ...logMeta, error: lastError?.message, durationMs });
     return {
         success: false,
         code: "UNKNOWN",
-        message: "Unexpected error contacting Google Indexing API.",
+        message: `Unexpected error contacting Google ${apiName}.`,
         debug: lastError?.message,
     };
 }
@@ -308,5 +365,139 @@ export async function pingGoogleIndexingApi(
     const timeoutMs = options?.timeoutMs ?? INDEXING_API_TIMEOUT_MS;
     const requestId = options?.requestId;
 
-    return executeWithRetry(url, type, tokenResult, timeoutMs, requestId);
+    return executeGoogleJsonWithRetry<IndexingApiResponse, IndexingResult>({
+        logTag: "[Indexing API]",
+        apiName: "Indexing API",
+        logMeta: { requestId, url, type },
+        requestFn: () => callIndexingApi(url, type, tokenResult, timeoutMs),
+        mapSuccess: (data) => ({ success: true, metadata: data }),
+    });
+}
+
+async function callUrlInspectionApi(
+    inspectionUrl: string,
+    siteUrl: string,
+    accessToken: string,
+    timeoutMs: number
+): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        return await fetch("https://searchconsole.googleapis.com/v1/urlInspection/index:inspect", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+                inspectionUrl,
+                siteUrl,
+                languageCode: "en-US",
+            }),
+            signal: controller.signal,
+        });
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+function buildUrlInspectionCandidates(siteDomainOrProperty: string): string[] {
+    const trimmed = siteDomainOrProperty.trim();
+    if (!trimmed) return [];
+
+    if (trimmed.startsWith("sc-domain:")) {
+        return [trimmed];
+    }
+
+    const primary = normaliseSiteUrl(trimmed);
+    const cleanHost = trimmed
+        .replace(/^https?:\/\//i, "")
+        .replace(/[/?#].*$/, "")
+        .replace(/^www\./i, "")
+        .trim();
+
+    if (!cleanHost) return [primary];
+    return Array.from(new Set([primary, `sc-domain:${cleanHost}`]));
+}
+
+/**
+ * Inspects a live URL via Google Search Console URL Inspection API v1.
+ * Gracefully handles missing `webmasters.readonly` scope (`403`) without throwing.
+ */
+export async function inspectGscUrl(
+    userId: string,
+    siteDomainOrProperty: string,
+    inspectionUrl: string,
+    options?: { timeoutMs?: number; requestId?: string }
+): Promise<GscUrlInspectionResult> {
+    if (!isValidUrl(inspectionUrl)) {
+        return { success: false, code: "UNKNOWN", message: "Invalid URL. Must be a valid http or https address." };
+    }
+
+    const tokenResult = await getAccessTokenSafe(userId);
+    if (typeof tokenResult !== "string") return tokenResult;
+
+    const timeoutMs = options?.timeoutMs ?? INDEXING_API_TIMEOUT_MS;
+    const requestId = options?.requestId;
+    const siteUrlCandidates = buildUrlInspectionCandidates(siteDomainOrProperty);
+
+    if (siteUrlCandidates.length === 0) {
+        return { success: false, code: "UNKNOWN", message: "Site domain or Search Console property is required." };
+    }
+
+    let lastFailure: GoogleApiFailureResult | null = null;
+
+    for (const candidateSiteUrl of siteUrlCandidates) {
+        const result = await executeGoogleJsonWithRetry<UrlInspectionApiResponse, GscUrlInspectionResult>({
+            logTag: "[GSC URL Inspection]",
+            apiName: "Search Console API",
+            logMeta: { requestId, inspectionUrl, siteUrl: candidateSiteUrl },
+            requestFn: () => callUrlInspectionApi(inspectionUrl, candidateSiteUrl, tokenResult, timeoutMs),
+            mapSuccess: (data) => {
+                const idx = data?.inspectionResult?.indexStatusResult;
+                return {
+                    success: true,
+                    data: {
+                        verdict: idx?.verdict,
+                        coverageState: idx?.coverageState,
+                        robotsTxtState: idx?.robotsTxtState,
+                        indexingState: idx?.indexingState,
+                        lastCrawlTime: idx?.lastCrawlTime,
+                        pageFetchState: idx?.pageFetchState,
+                        googleCanonical: idx?.googleCanonical,
+                        userCanonical: idx?.userCanonical,
+                        referringUrls: idx?.referringUrls,
+                        crawledAs: idx?.crawledAs,
+                        mobileUsabilityVerdict: data?.inspectionResult?.mobileUsabilityResult?.verdict,
+                        richResultsVerdict: data?.inspectionResult?.richResultsResult?.verdict,
+                        inspectionResultLink: data?.inspectionResult?.inspectionResultLink,
+                        inspectedSiteUrl: candidateSiteUrl,
+                    },
+                };
+            },
+        });
+
+        if (result.success) {
+            return result;
+        }
+
+        lastFailure = result;
+
+        // If OAuth scope itself is missing, retrying another property prefix cannot help
+        if (result.code === "PERMISSION_DENIED" && /webmasters\.readonly|scope/i.test(result.message)) {
+            return result;
+        }
+
+        // Only try sc-domain: fallback if the URL-prefix property wasn't owned
+        if (result.code !== "PERMISSION_DENIED") {
+            return result;
+        }
+    }
+
+    return lastFailure ?? {
+        success: false,
+        code: "UNKNOWN",
+        message: "Failed to inspect URL in Google Search Console.",
+    };
 }

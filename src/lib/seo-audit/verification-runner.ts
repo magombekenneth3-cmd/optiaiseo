@@ -16,6 +16,8 @@
 import { logger } from "@/lib/logger";
 import type { VerificationCriterion } from "./diagnostic-types";
 import type { VerificationOutcome, VerificationWindow } from "../mutations/types";
+import { fetchHtml, safeAuditFetch } from "./utils/fetch-html";
+import { isPathAllowedByRobots } from "./utils/robots";
 
 // ── Result Types ────────────────────────────────────────────────────────────
 
@@ -55,7 +57,6 @@ export function createDefaultFetcher(): VerificationFetcher {
   return {
     async fetchHtml(url: string): Promise<string | null> {
       try {
-        const { fetchHtml } = await import("./utils/fetch-html");
         return await fetchHtml(url);
       } catch {
         return null;
@@ -64,9 +65,8 @@ export function createDefaultFetcher(): VerificationFetcher {
 
     async fetchHeaders(url: string): Promise<Record<string, string>> {
       try {
-        const res = await fetch(url, {
+        const res = await safeAuditFetch(url, {
           method: "HEAD",
-          redirect: "follow",
           signal: AbortSignal.timeout(15_000),
         });
         const headers: Record<string, string> = {};
@@ -81,9 +81,8 @@ export function createDefaultFetcher(): VerificationFetcher {
 
     async getStatus(url: string): Promise<number> {
       try {
-        const res = await fetch(url, {
+        const res = await safeAuditFetch(url, {
           method: "HEAD",
-          redirect: "follow",
           signal: AbortSignal.timeout(15_000),
         });
         return res.status;
@@ -125,14 +124,20 @@ async function evaluateHtmlSelector(
       passed = actual === expected;
     } else if (expected && typeof expected === "object") {
       const exp = expected as Record<string, unknown>;
+      const hasKnownPredicate =
+        "exists" in exp || "nonEmpty" in exp || "not_contains" in exp || "contains" in exp;
+      passed = hasKnownPredicate;
       if ("exists" in exp) {
-        passed = exp.exists ? !!element : !element;
+        passed = passed && (exp.exists ? !!element : !element);
+      }
+      if ("nonEmpty" in exp && exp.nonEmpty === true) {
+        passed = passed && typeof actual === "string" && actual.trim().length > 0;
       }
       if ("not_contains" in exp && typeof exp.not_contains === "string") {
-        passed = typeof actual === "string" && !actual.toLowerCase().includes(exp.not_contains.toLowerCase());
+        passed = passed && typeof actual === "string" && !actual.toLowerCase().includes(exp.not_contains.toLowerCase());
       }
       if ("contains" in exp && typeof exp.contains === "string") {
-        passed = typeof actual === "string" && actual.toLowerCase().includes(exp.contains.toLowerCase());
+        passed = passed && typeof actual === "string" && actual.toLowerCase().includes(exp.contains.toLowerCase());
       }
     } else {
       passed = !!element;
@@ -235,28 +240,12 @@ async function evaluateRobotsAllowed(
     return { criterion, passed: criterion.expected === true, actual: "no robots.txt" };
   }
 
-  const targetPath = criterion.url
-    ? new URL(criterion.url, baseUrl).pathname
-    : "/";
-
-  // Simple robots.txt check — look for Disallow directives
-  const lines = content.split("\n");
-  const userAgent = criterion.userAgent?.toLowerCase() ?? "*";
-  let inMatchingBlock = false;
-  let isAllowed = true;
-
-  for (const line of lines) {
-    const trimmed = line.trim().toLowerCase();
-    if (trimmed.startsWith("user-agent:")) {
-      const ua = trimmed.replace("user-agent:", "").trim();
-      inMatchingBlock = ua === userAgent || ua === "*";
-    } else if (inMatchingBlock && trimmed.startsWith("disallow:")) {
-      const disallowed = trimmed.replace("disallow:", "").trim();
-      if (disallowed && targetPath.startsWith(disallowed)) {
-        isAllowed = false;
-      }
-    }
-  }
+  const parsed = criterion.url
+    ? new URL(criterion.url, baseUrl)
+    : new URL("/", baseUrl);
+  const fullPath = `${parsed.pathname || "/"}${parsed.search || ""}`;
+  const userAgent = criterion.userAgent ?? "*";
+  const isAllowed = isPathAllowedByRobots(content, userAgent, fullPath);
 
   return {
     criterion,
