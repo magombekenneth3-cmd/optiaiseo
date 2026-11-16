@@ -62,6 +62,12 @@ export interface PublicationGateInput {
      * outline. The outline quality gate blocks publication in this case.
      */
     outlineDegraded?: boolean;
+    /**
+     * Skip the remote LLM originality call during synchronous/inline post-edit
+     * revalidation, reusing `previousOriginalityGate` when available.
+     */
+    skipRemoteOriginality?: boolean;
+    previousOriginalityGate?: IndependentGateResult | null;
 }
 
 export interface PublicationDecision {
@@ -186,7 +192,7 @@ function evaluateClaimsGate(
 
     const materialClaims = extractMaterialClaims(input.content);
     if (materialClaims.length === 0) {
-        return { name: "Claims", status: "PASS", isHard: true, issues: [], warnings: ["No material claims detected."] };
+        return { name: "Claims", status: "PASS", isHard: true, issues: [], warnings: [] };
     }
 
     const hasRealExperience = input.hasFirstPartyEvidence;
@@ -231,6 +237,25 @@ function evaluateClaimsGate(
 async function evaluateOriginalityGate(input: PublicationGateInput): Promise<IndependentGateResult> {
     const issues: string[] = [];
     const warnings: string[] = [];
+
+    if (input.skipRemoteOriginality) {
+        if (input.previousOriginalityGate) {
+            return {
+                name: "Originality",
+                status: input.previousOriginalityGate.status,
+                isHard: false,
+                issues: [...(input.previousOriginalityGate.issues ?? [])],
+                warnings: [...(input.previousOriginalityGate.warnings ?? [])],
+            };
+        }
+        return {
+            name: "Originality",
+            status: "PASS",
+            isHard: false,
+            issues: [],
+            warnings: [],
+        };
+    }
 
     try {
         const { status: origStatus, result } = await evaluateOriginality({

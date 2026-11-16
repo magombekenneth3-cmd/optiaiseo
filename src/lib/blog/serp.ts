@@ -64,7 +64,7 @@ const UNSCRAPPABLE_DOMAINS = [
   "linkedin.com",
 ];
 
-function isUnscrappable(url: string): boolean {
+export function isUnscrappable(url: string): boolean {
   return UNSCRAPPABLE_DOMAINS.some((d) => url.includes(d));
 }
 
@@ -602,6 +602,95 @@ export interface SerpFormatSignal {
 }
 
 
+export type ClassifiedSerpPageType =
+  | "interactive_tool"
+  | "comparison"
+  | "listicle"
+  | "tutorial"
+  | "product_page"
+  | "forum"
+  | "video"
+  | "news"
+  | "article";
+
+const EDITORIAL_URL_PATH_RE =
+  /\/(?:blog|articles?|guides?|resources|learn|insights|reviews?|roundups?)(?:\/|$)/i;
+const EDITORIAL_SLUG_LEAF_RE =
+  /^(?:best-|top-|\d+-|how-to-|choosing-|buyer-guide-|complete-guide-|ultimate-guide-)/i;
+const INTERACTIVE_TOOL_URL_RE =
+  /\/(?:tools?|calculators?|checkers?|generators?|audits?|analyzers?)(?:\/|$)/i;
+const INTERACTIVE_TOOL_SLUG_LEAF_RE =
+  /(?:^|-)(?:calculator|generator|checker|analyzer)(?:$|-)/i;
+
+/**
+ * Classifies an individual SERP result using explicit format/path precedence
+ * so editorial roundups mentioning "checker" or "tool" in snippets are not
+ * misclassified as interactive tools.
+ */
+export function classifySerpResultPageType(result: Pick<SerpResult, "link" | "title" | "snippet">): ClassifiedSerpPageType {
+  const url = (result.link ?? "").toLowerCase();
+  const title = (result.title ?? "").toLowerCase();
+  const snippet = (result.snippet ?? "").toLowerCase();
+  const combined = `${title} ${snippet}`;
+
+  let slugLeaf = "";
+  let hostname = "";
+  try {
+    const parsedUrl = new URL(url);
+    hostname = parsedUrl.hostname;
+    const pathname = parsedUrl.pathname.replace(/\/+$/, "");
+    slugLeaf = pathname.split("/").pop() ?? "";
+  } catch {
+    slugLeaf = url.split("?")[0].replace(/\/+$/, "").split("/").pop() ?? "";
+  }
+
+  if (/youtube\.com|youtu\.be|vimeo\.com/.test(url)) return "video";
+  if (/reddit\.com|quora\.com|stackoverflow\.com/.test(url)) return "forum";
+  if (/\b(news|press release|announces|breaking)\b/.test(combined) && /news|press/.test(url)) return "news";
+  if (/\/(pricing|product|features|platform)(?:\/|$)/.test(url)) return "product_page";
+
+  const isEditorialPath = EDITORIAL_URL_PATH_RE.test(url) || EDITORIAL_SLUG_LEAF_RE.test(slugLeaf);
+  const isComparisonTitle =
+    /\b(vs\.?|versus|compare|comparison|alternatives?|which is better)\b/.test(title) ||
+    /(?:^|[/-])(vs-|versus|alternatives)/.test(url);
+  const isListicleTitle =
+    /\b(best\s+\d+|\d+\s+best|top\s+\d+|\d+\s+(?:best|top|free)\s+\w+|listicle|best\s+(?:seo|ai|marketing|keyword|backlink|content|analytics)\s+tools?|tested\s*&\s*reviewed|ranked)\b/.test(title) ||
+    /^(?:best-|top-|\d+-)/.test(slugLeaf);
+  const isGuideTitle =
+    /\b(how to|step[\s-]by[\s-]step|tutorial|(?:ultimate|complete|beginner'?s?|buyer'?s?)\s+guide|choosing\s+(?:an?|the)|framework\s+for)\b/.test(title) ||
+    /(?:how-to|guide|tutorial|choosing)/.test(slugLeaf);
+
+  if (isComparisonTitle) return "comparison";
+  if (isListicleTitle) return "listicle";
+  if (isGuideTitle) return "tutorial";
+
+  const hasToolUrl =
+    INTERACTIVE_TOOL_URL_RE.test(url) ||
+    INTERACTIVE_TOOL_SLUG_LEAF_RE.test(slugLeaf) ||
+    /(?:^|\.)(?:tools?|checkers?|calculators?)\./i.test(hostname);
+  const hasToolTitle =
+    /\b(calculator|generator|checker|analyzer|interactive\s+tool)\b/.test(title) ||
+    /\b(free|online|instant)\b.{0,25}\b(tool|audit|checker|calculator|generator)\b/.test(title);
+
+  if (hasToolUrl || (!isEditorialPath && hasToolTitle)) {
+    return "interactive_tool";
+  }
+
+  // Fallback to snippet-level classification when neither title nor URL is decisive
+  if (/\b(vs\.?|versus|compare|comparison|alternatives?|which is better)\b/.test(snippet)) return "comparison";
+  if (/\b(best\s+\d+|\d+\s+best|top\s+\d+|\d+\s+(?:ways|tips|tools|strategies|examples|ideas|platforms)|listicle)\b/.test(snippet)) return "listicle";
+  if (/\b(how to|step[\s-]by[\s-]step|tutorial|(?:ultimate|complete|beginner'?s?)\s+guide)\b/.test(snippet)) return "tutorial";
+  if (!isEditorialPath && /\b(try it|enter your|paste your|run a free)\b/.test(combined)) {
+    return "interactive_tool";
+  }
+
+  return "article";
+}
+
+export function isInteractiveToolSerpResult(result: Pick<SerpResult, "link" | "title" | "snippet">): boolean {
+  return classifySerpResultPageType(result) === "interactive_tool";
+}
+
 export function classifySerpFormat(results: SerpResult[]): SerpFormatSignal {
   if (results.length === 0) {
     return { format: "general", confidence: "low", reasoning: "No results to classify" };
@@ -623,30 +712,35 @@ export function classifySerpFormat(results: SerpResult[]): SerpFormatSignal {
     const snippet = r.snippet.toLowerCase();
     const slug = r.link.toLowerCase();
     const combined = `${title} ${snippet}`;
+    const pageType = classifySerpResultPageType(r);
 
-    // Tool signals
-    if (/\b(calculator|generator|checker|interactive)\b/.test(combined)) scores.tool += 2 * weight;
-    if (/\b(try it|enter your|use this tool)\b/.test(combined)) scores.tool += 1 * weight;
-    if (/calculator|generator|checker/.test(slug)) scores.tool += 2 * weight;
+    if (pageType === "interactive_tool") {
+      scores.tool += 3 * weight;
+      if (INTERACTIVE_TOOL_URL_RE.test(slug) || /\b(calculator|generator|checker|interactive)\b/.test(title)) {
+        scores.tool += 1 * weight;
+      }
+    } else if (pageType === "listicle") {
+      scores.listicle += 3 * weight;
+      if (/^(best-|top-|\d+-)/.test(slug.split("?")[0].replace(/\/+$/, "").split("/").pop() ?? "")) {
+        scores.listicle += 2 * weight;
+      }
+    } else if (pageType === "comparison") {
+      scores.comparison += 3 * weight;
+      if (/\bvs-|versus|alternatives/.test(slug)) scores.comparison += 2 * weight;
+    } else if (pageType === "tutorial") {
+      scores.guide += 2 * weight;
+      if (/how-to|guide|tutorial|choosing/.test(slug)) scores.guide += 1 * weight;
+    } else if (pageType === "video") {
+      scores.video += 3 * weight;
+    } else if (pageType === "product_page") {
+      scores.product += 2 * weight;
+    }
 
-    // Listicle signals
-    if (/\b(best \d+|top \d+|\d+ (ways|tips|tools|strategies|examples|ideas))\b/.test(combined)) scores.listicle += 3 * weight;
-    if (/^(best-|top-|\d+-)/.test(slug.split("/").pop() ?? "")) scores.listicle += 2 * weight;
-
-    // Comparison signals — note: "or" removed; was matching everything
-    if (/\bvs\.?\b|\bversus\b|\bcompar(e|ison)\b|\balternatives?\b|\bwhich is better\b/.test(combined)) scores.comparison += 2 * weight;
-    if (/\bvs-|versus|alternatives/.test(slug)) scores.comparison += 2 * weight;
-
-    // Guide signals
-    if (/\bhow to\b|\bstep.by.step\b|\b(ultimate|complete|beginner.s) guide\b|\btutorial\b/.test(combined)) scores.guide += 2 * weight;
-    if (/how-to|guide|tutorial/.test(slug)) scores.guide += 1 * weight;
-
-    // Product / commercial signals
-    if (/\b(buy|price|shop|purchase|discount|review|rating|amazon)\b/.test(combined)) scores.product += 2 * weight;
-
-    // Video signals
-    if (r.link.includes("youtube.com") || r.link.includes("vimeo.com")) scores.video += 3 * weight;
-    if (/\b(watch|video tutorial)\b/.test(combined)) scores.video += 1 * weight;
+    // Secondary commercial/product & video signals only when not classified as editorial guide/listicle
+    if (pageType === "article" || pageType === "product_page") {
+      if (/\b(buy|price|shop|purchase|discount|rating|amazon)\b/.test(combined)) scores.product += 2 * weight;
+      if (/\b(watch|video tutorial)\b/.test(combined)) scores.video += 1 * weight;
+    }
   });
 
   const sorted = (Object.entries(scores) as [SerpFormat, number][]).sort(

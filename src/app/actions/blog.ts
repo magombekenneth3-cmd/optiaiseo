@@ -23,6 +23,7 @@ import {
     validateSerpPreflight,
     type SerpGateDecision,
 } from "@/lib/blog/serp-gate";
+import { resolvePageExistence } from "@/lib/opportunity-engine/page-existence-resolver";
 import { blogGenerationEventId } from "@/lib/blog/generation-recovery";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -43,6 +44,8 @@ type SerpGateInput = {
     preflightId?: string;
     /** User explicitly acknowledged the SERP mismatch warning. */
     forceSerpMismatch?: boolean;
+    /** User explicitly confirmed creating a new post despite an existing page match. */
+    forceExistingPage?: boolean;
     /** Stable idempotency key retained by the client across ambiguous responses. */
     requestId?: string;
 };
@@ -504,6 +507,32 @@ export async function generateBlog(
         const gateResult = await runSerpGate(user.id, site.id, chosenKeywordForGate, gateInput);
         if (gateResult.blocked) return gateResult.result;
         const serpSignalForInngest = gateResult.signal;
+
+        // ── Existing-page cannibalization / UPDATE_EXISTING guard ──────────────
+        if (
+            chosenKeywordForGate &&
+            !gateInput?.forceExistingPage &&
+            !gateInput?.forceSerpMismatch
+        ) {
+            const existence = await resolvePageExistence(site.id, chosenKeywordForGate).catch(() => null);
+            if (
+                existence &&
+                (existence.verdict === "EXISTING_NEEDS_FIX" ||
+                    existence.verdict === "EXISTING_CANNIBALIZED" ||
+                    existence.verdict === "EXISTING_HEALTHY") &&
+                existence.existingPage?.url
+            ) {
+                return {
+                    success: false,
+                    code: "EXISTING_PAGE_CONFLICT" as const,
+                    recommendedAction: "UPDATE_EXISTING" as const,
+                    existingUrl: existence.existingPage.url,
+                    verdict: existence.verdict,
+                    requiresConfirmation: true,
+                    error: `An existing page (${existence.existingPage.url}) already targets "${chosenKeywordForGate}". Update or refresh that page instead of creating a competing article.`,
+                };
+            }
+        }
 
         const author = buildAuthorProfile(authorInput, site, user.name);
 

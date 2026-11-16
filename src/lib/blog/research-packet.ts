@@ -1,4 +1,4 @@
-import { classifySerpFormat } from "./serp";
+import { classifySerpFormat, isUnscrappable, scrapePageData } from "./serp";
 import type { AuthorProfile } from "./index";
 import type { SerpContext, SerpResult } from "./serp";
 import {
@@ -82,8 +82,64 @@ function confidence(type: SourceType, evidence: string): number {
     return evidence.length >= 100 ? base : Math.max(0.3, base - 0.12);
 }
 
-export function sourceFromSerpResult(result: SerpResult, id: string, retrievedAt = new Date().toISOString()): SourceEvidence | null {
+function normalizeAttributionUrl(url: string): string {
+    return url.trim().replace(/\/$/, "").toLowerCase();
+}
+
+/**
+ * Only full-text successfully scraped pages (`scrapeStatus === "ANALYZED"`)
+ * may serve as citable attribution sources. Blocked (`403`/`FAILED`),
+ * excluded (`UNSCRAPPABLE`), and snippet-only pages must never be cited as
+ * full sources. For synthetic fixtures that omit `scrapeStatus`, require
+ * scraped content and ensure no `FAILED`/`UNSCRAPPABLE` brief observation.
+ */
+export function isAnalyzedAttributionCandidate(
+    result: Pick<SerpResult, "link" | "scrapeStatus" | "scrapedContent">,
+    brief?: Pick<SerpCompetitiveBrief, "pages"> | null,
+): boolean {
+    if (result.scrapeStatus !== undefined) {
+        return result.scrapeStatus === "ANALYZED";
+    }
+    const targetUrl = normalizeAttributionUrl(result.link);
+    const observed = brief?.pages?.find(p => normalizeAttributionUrl(p.url) === targetUrl);
+    if (observed?.scrapeStatus === "FAILED" || observed?.scrapeStatus === "UNSCRAPPABLE") {
+        return false;
+    }
+    return Boolean(result.scrapedContent && result.scrapedContent.trim().length > 0);
+}
+
+/**
+ * Checks whether an existing `SourceEvidence` entry is allowed as an
+ * attribution target (`scrapeStatus === "ANALYZED"`, or no blocked observation
+ * when `scrapeStatus` is omitted in legacy persisted snapshots).
+ */
+export function isAnalyzedSource(
+    source: Pick<SourceEvidence, "url" | "scrapeStatus">,
+    researchPacket?: Pick<ResearchPacket, "serp"> | null,
+): boolean {
+    if (source.scrapeStatus !== undefined) {
+        return source.scrapeStatus === "ANALYZED";
+    }
+    if (researchPacket?.serp?.competitors?.length) {
+        const targetUrl = normalizeAttributionUrl(source.url);
+        const competitor = researchPacket.serp.competitors.find(
+            c => normalizeAttributionUrl(c.url) === targetUrl,
+        );
+        if (competitor?.scrapeStatus === "FAILED" || competitor?.scrapeStatus === "UNSCRAPPABLE") {
+            return false;
+        }
+    }
+    return true;
+}
+
+export function sourceFromSerpResult(
+    result: SerpResult,
+    id: string,
+    retrievedAt = new Date().toISOString(),
+    brief?: Pick<SerpCompetitiveBrief, "pages"> | null,
+): SourceEvidence | null {
     if (!isUrl(result.link) || !result.title.trim() || !result.snippet.trim()) return null;
+    if (!isAnalyzedAttributionCandidate(result, brief)) return null;
     const evidence = truncate(result.scrapedContent || result.snippet || "", 3_500);
     const type = sourceType(result.link);
     const publishedAt = result.scrapedPublishedDate && Number.isFinite(Date.parse(result.scrapedPublishedDate))
@@ -101,6 +157,7 @@ export function sourceFromSerpResult(result: SerpResult, id: string, retrievedAt
         sourceType: type,
         confidence: confidence(type, evidence),
         authorityScore: sourceAuthority(type),
+        scrapeStatus: result.scrapeStatus ?? ("ANALYZED" as const),
     };
     const parsed = SourceEvidenceSchema.safeParse(candidate);
     return parsed.success ? parsed.data : null;
@@ -158,7 +215,7 @@ export async function buildResearchPacket(params: {
         gscEvidence, existingSite, siteContentLibrary, serpCompetitiveBrief, internalLinkOpportunities,
     } = params;
     const serpSources = (serpContext?.results ?? [])
-        .map((result, index) => sourceFromSerpResult(result, `serp-${index + 1}`, retrievedAt))
+        .map((result, index) => sourceFromSerpResult(result, `serp-${index + 1}`, retrievedAt, serpCompetitiveBrief))
         .filter((source): source is SourceEvidence => source !== null);
 
     // Research evidence required by data/comparison/case-study sections is
@@ -360,12 +417,24 @@ async function deepenSources(
         const data = await response.json() as {
             organic?: Array<{ title?: string; link?: string; snippet?: string }>;
         };
-        return (data.organic ?? [])
-            .map((result, index) => sourceFromSerpResult({
+        const candidates = (data.organic ?? [])
+            .filter(r => r.link && r.title?.trim() && r.snippet?.trim() && !isUnscrappable(r.link))
+            .slice(0, 4);
+        const scraped = await Promise.all(candidates.map(async (result, index) => {
+            const page = await scrapePageData(result.link!);
+            if (page.status !== "ANALYZED") return null;
+            return sourceFromSerpResult({
                 title: result.title ?? "",
                 link: result.link ?? "",
                 snippet: result.snippet ?? "",
-            }, `${sectionSourceId(section, sectionIndex)}-source-${index + 1}`, retrievedAt))
+                scrapedContent: page.text,
+                scrapedHeadings: page.headings,
+                scrapedSchemaTypes: page.schemaTypes,
+                scrapedPublishedDate: page.publishedDate,
+                scrapeStatus: page.status,
+            }, `${sectionSourceId(section, sectionIndex)}-source-${index + 1}`, retrievedAt);
+        }));
+        return scraped
             .filter((source): source is SourceEvidence => source !== null)
             .filter(source => source.confidence >= 0.55)
             .slice(0, MAX_SOURCES_PER_SECTION);
@@ -446,8 +515,9 @@ export async function buildSectionResearchMap(
 }
 
 export function renderSourceContext(sources: SourceEvidence[]): string {
-    if (sources.length === 0) return "No external sources are available for this section.";
-    return sources.map(source => `[${source.id}] ${source.title}${source.publisher ? ` — ${source.publisher}` : ""}
+    const usable = sources.filter(source => isAnalyzedSource(source));
+    if (usable.length === 0) return "No external sources are available for this section.";
+    return usable.map(source => `[${source.id}] ${source.title}${source.publisher ? ` — ${source.publisher}` : ""}
 URL: ${source.url}
 Evidence: ${truncate(source.evidence, 900)}`).join("\n\n");
 }

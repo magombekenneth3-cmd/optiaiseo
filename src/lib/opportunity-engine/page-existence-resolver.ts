@@ -347,41 +347,22 @@ export async function resolvePageExistenceBatch(
           }
         }
 
-        // 3. Fast PageAudit matching via token index
+        // 3. Fast PageAudit matching via shared intent-aware token evaluator
         for (const item of auditTokenIndex) {
-          const overlap = topicTokens.filter((t) => item.pathTokens.has(t)).length;
-          const overlapRatio = overlap / topicTokens.length;
+          const matchedAudit = evaluatePageAuditCandidate(
+            item.audit,
+            topic.keyword,
+            topicTokens,
+            item.pathTokens,
+          );
+          if (!matchedAudit) continue;
 
-          if (overlapRatio >= SLUG_MATCH_THRESHOLD) {
-            const audit = item.audit;
-            const issues: string[] = [];
-            if (audit.overallScore < 50) issues.push("LOW_AUDIT_SCORE");
-
-            const issueList = audit.issueList as unknown[];
-            if (Array.isArray(issueList)) {
-              for (const issueItem of issueList) {
-                const str = typeof issueItem === "string" ? issueItem : JSON.stringify(issueItem);
-                if (str.includes("noindex")) issues.push("NOINDEX_DETECTED");
-                if (str.includes("canonical")) issues.push("CANONICAL_CONFLICT");
-                if (str.includes("thin")) issues.push("THIN_CONTENT");
-                if (str.includes("orphan") || str.includes("internal_link")) issues.push("ORPHAN_PAGE");
-              }
-            }
-
-            const confidence = Math.min(1, 0.35 + overlapRatio * 0.55);
-            const existingIdx = candidates.findIndex((c) => areUrlsEquivalent(c.url, audit.pageUrl));
-            if (existingIdx === -1) {
-              candidates.push({
-                url: audit.pageUrl,
-                matchSource: "PAGE_AUDIT",
-                matchConfidence: confidence,
-                matchType: confidence >= STRONG_MATCH_THRESHOLD ? "AUDIT_MATCH" : "LOW_CONFIDENCE_MATCH",
-                issues,
-              });
-            } else {
-              const existing = candidates[existingIdx];
-              existing.issues = Array.from(new Set([...existing.issues, ...issues]));
-            }
+          const existingIdx = candidates.findIndex((c) => areUrlsEquivalent(c.url, matchedAudit.url));
+          if (existingIdx === -1) {
+            candidates.push(matchedAudit);
+          } else {
+            const existing = candidates[existingIdx];
+            existing.issues = Array.from(new Set([...existing.issues, ...matchedAudit.issues]));
           }
         }
       }
@@ -656,35 +637,8 @@ async function findMatchingPageAudits(
     const results: ExistingPageEvidence[] = [];
 
     for (const audit of pageAudits) {
-      const pathTokens = new Set(tokenize(extractPath(audit.pageUrl)));
-      const overlap = topicTokens.filter((t) => pathTokens.has(t)).length;
-      const overlapRatio = overlap / topicTokens.length;
-
-      if (overlapRatio >= SLUG_MATCH_THRESHOLD) {
-        const issues: string[] = [];
-        if (audit.overallScore < 50) issues.push("LOW_AUDIT_SCORE");
-
-        const issueList = audit.issueList as unknown[];
-        if (Array.isArray(issueList)) {
-          for (const item of issueList) {
-            const str = typeof item === "string" ? item : JSON.stringify(item);
-            if (str.includes("noindex")) issues.push("NOINDEX_DETECTED");
-            if (str.includes("canonical")) issues.push("CANONICAL_CONFLICT");
-            if (str.includes("thin")) issues.push("THIN_CONTENT");
-            if (str.includes("orphan") || str.includes("internal_link")) issues.push("ORPHAN_PAGE");
-          }
-        }
-
-        const confidence = Math.min(1, 0.35 + overlapRatio * 0.55);
-
-        results.push({
-          url: audit.pageUrl,
-          matchSource: "PAGE_AUDIT",
-          matchConfidence: confidence,
-          matchType: confidence >= STRONG_MATCH_THRESHOLD ? "AUDIT_MATCH" : "LOW_CONFIDENCE_MATCH",
-          issues,
-        });
-      }
+      const matched = evaluatePageAuditCandidate(audit, topicKeyword, topicTokens);
+      if (matched) results.push(matched);
     }
 
     return results;
@@ -877,10 +831,100 @@ function detectGscIssues(
   return issues;
 }
 
+const INTERACTIVE_TOOL_URL_PATH_RE =
+  /\/(?:tools?|calculators?|checkers?|generators?|analyzers?|apps?)(?:\/|$)/i;
+const EDITORIAL_TOPIC_INTENT_RE =
+  /\b(best|top|choosing|choose|compare|comparison|vs|versus|review|reviews|guide|framework|how to|what is|why|alternatives|list|tips|ways|strategies|tools)\b/i;
+
+export function isInteractiveToolUrl(url: string): boolean {
+  const norm = normalizeUrl(url);
+  const pathPart = norm.includes("/") ? norm.slice(norm.indexOf("/")) : norm;
+  return INTERACTIVE_TOOL_URL_PATH_RE.test(pathPart);
+}
+
+function extractPathnameOnly(url: string): string {
+  const norm = normalizeUrl(url);
+  const slashIdx = norm.indexOf("/");
+  if (!norm.startsWith("/") && slashIdx !== -1) {
+    return norm.slice(slashIdx);
+  }
+  return norm;
+}
+
+/**
+ * Shared intent-aware matcher for PageAudit candidates. Prevents utility `/tools/*`
+ * pages (e.g. `/tools/free-seo-audit-tool-online`) from hijacking editorial or broad
+ * topic queries (e.g. `"seo tool"`, `"choosing an seo tool"`) as UPDATE_EXISTING.
+ */
+export function evaluatePageAuditCandidate(
+  audit: { pageUrl: string; overallScore: number; issueList: unknown },
+  topicKeyword: string,
+  topicTokens: string[],
+  precomputedPathTokens?: Set<string>,
+): ExistingPageEvidence | null {
+  if (topicTokens.length === 0) return null;
+
+  const isToolPage = isInteractiveToolUrl(audit.pageUrl);
+  if (isToolPage && EDITORIAL_TOPIC_INTENT_RE.test(topicKeyword.toLowerCase())) {
+    return null;
+  }
+
+  const pathTokens = precomputedPathTokens ?? new Set(tokenize(extractPath(audit.pageUrl)));
+  const overlap = topicTokens.filter((t) => pathTokens.has(t)).length;
+  const overlapRatio = overlap / topicTokens.length;
+
+  if (overlapRatio < SLUG_MATCH_THRESHOLD) {
+    return null;
+  }
+
+  if (isToolPage) {
+    // Strip host & `/tools/` container prefix so generic words like "seo" + "tool"
+    // cannot trigger a high-confidence collision against a specific utility slug
+    // such as `/tools/free-seo-audit-tool-online`.
+    const pathnameOnly = extractPathnameOnly(audit.pageUrl)
+      .replace(/^\/(?:tools?|calculators?|checkers?|generators?|analyzers?|apps?)\//i, "");
+    const slugTokens = tokenize(pathnameOnly.replace(/[/\-_]/g, " "));
+    const slugSet = new Set(slugTokens);
+    const slugOverlap = topicTokens.filter((t) => slugSet.has(t)).length;
+    const topicCoverage = slugOverlap / topicTokens.length;
+    const slugPrecision = slugTokens.length > 0 ? slugOverlap / slugTokens.length : 0;
+
+    if (topicCoverage < 0.6 || slugPrecision < 0.5) {
+      return null;
+    }
+  }
+
+  const issues: string[] = [];
+  if (audit.overallScore < 50) issues.push("LOW_AUDIT_SCORE");
+
+  const issueList = audit.issueList as unknown[];
+  if (Array.isArray(issueList)) {
+    for (const issueItem of issueList) {
+      const str = typeof issueItem === "string" ? issueItem : JSON.stringify(issueItem);
+      if (str.includes("noindex")) issues.push("NOINDEX_DETECTED");
+      if (str.includes("canonical")) issues.push("CANONICAL_CONFLICT");
+      if (str.includes("thin")) issues.push("THIN_CONTENT");
+      if (str.includes("orphan") || str.includes("internal_link")) issues.push("ORPHAN_PAGE");
+    }
+  }
+
+  const confidence = Math.min(1, 0.35 + overlapRatio * 0.55);
+  return {
+    url: audit.pageUrl,
+    matchSource: "PAGE_AUDIT",
+    matchConfidence: confidence,
+    matchType: confidence >= STRONG_MATCH_THRESHOLD ? "AUDIT_MATCH" : "LOW_CONFIDENCE_MATCH",
+    issues,
+  };
+}
+
 /**
  * Phase 5: Check intent similarity between two URLs competing for same query.
  */
 function checkIntentSimilarity(url1: string, url2: string, topicKeyword: string): boolean {
+  if (isInteractiveToolUrl(url1) !== isInteractiveToolUrl(url2)) {
+    return false;
+  }
   const p1 = extractPath(url1);
   const p2 = extractPath(url2);
   const t1 = tokenize(p1);

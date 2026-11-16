@@ -44,6 +44,7 @@ import {
     buildResearchPacket,
     buildSectionResearchMap,
     getVerifiedCaseStudyAvailability,
+    isAnalyzedSource,
     renderSourceContext,
 } from "./research-packet";
 import type { ResearchEvidenceLedger } from "./evidence-ledger";
@@ -879,6 +880,14 @@ Violating these rules produces fabricated content that will be caught by the pub
         faq:        "Answer only the highest-value reader questions that fit the intent; do not force every PAA query into a separate question. Each answer should lead directly with a clear answer and stay under 3 sentences.",
     };
 
+    const citableUrlSet = new Set(
+        researchPacket.sources
+            .filter(s => isAnalyzedSource(s, researchPacket))
+            .map(s => s.url.trim().replace(/\/$/, "").toLowerCase()),
+    );
+    const citableCompetitiveUrls = (section.competitiveSourceUrls ?? [])
+        .filter(url => citableUrlSet.has(url.trim().replace(/\/$/, "").toLowerCase()));
+
     const sectionCompetitivePlan = `
 SECTION VALUE CONTRACT:
 - Reader task: ${section.readerTask || section.goal}
@@ -886,8 +895,9 @@ SECTION VALUE CONTRACT:
 - Additional value intended for this section: ${section.additionalValue || "Add practical reasoning, caveats, and evidence beyond a surface-level summary."}
 - Contribution status before writing: ${section.contributionStatus || "requires_research"}. Do not claim a contribution is verified until supplied evidence verifies it.
 - Evidence requirements: ${section.evidenceRequirements?.slice(0, 5).join("; ") || "Verify material and freshness-sensitive claims against relevant sources."}
-- Ranking-page URLs reviewed for scope: ${section.competitiveSourceUrls?.slice(0, 5).join(", ") || "none mapped"}.
+- Ranking-page URLs available for verified citation: ${citableCompetitiveUrls.slice(0, 5).join(", ") || "none verified"}.
 - Do not copy or closely paraphrase ranking-page wording. Competitive pages establish what was observed, not whether a factual claim is true.
+- NEVER cite or link to blocked, unscraped, or unlisted competitor URLs (even if you recognize the brand). Use ONLY URLs supplied in AUTHORITATIVE RESEARCH SNAPSHOT below.
 - Use only the sources supplied in the authoritative research snapshot for factual claims. If evidence is missing, qualify the point as an inference/research task or omit it.
 `;
 

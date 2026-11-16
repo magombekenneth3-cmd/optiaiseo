@@ -32,7 +32,10 @@ import { ScoreRadarGauge } from "@/components/blog/ScoreRadarGauge";
 import { AiDiffInspector } from "@/components/blog/AiDiffInspector";
 import type { RefreshChangeSummary, StoredRefreshMetadata } from "@/lib/content/surgical-refresh";
 import type { ContentScoreResult } from "@/lib/content-scoring";
-import type { CitationCriterion } from "@/lib/blog/ai-citation-template";
+import {
+    normalizeCitationCriteria,
+    type CitationCriterion,
+} from "@/lib/blog/ai-citation-template";
 import type { SerpCompetitiveBrief } from "@/lib/blog/contracts";
 import { logger } from "@/lib/logger";
 
@@ -128,6 +131,7 @@ interface ReviewBlogModalProps {
     blog: Blog;
     onClose: () => void;
     onPublish: (id: string) => Promise<{ success: boolean; mediumUrl?: string; hashnodeUrl?: string }>;
+    onBlogUpdated?: (updated: Partial<Blog> & { id: string }) => void;
 }
 
 function getScoreState(score: number) {
@@ -240,23 +244,59 @@ function SerpResearchPanel({
     publicationGates,
     validationErrors,
     validationWarnings,
+    onRevalidate,
+    isRevalidating,
 }: {
     brief?: SerpCompetitiveBrief | null;
     publicationGates?: Array<{ name: string; status: string; issues?: string[]; warnings?: string[] }> | null;
     validationErrors?: string[] | null;
     validationWarnings?: string[] | null;
+    onRevalidate?: () => void;
+    isRevalidating?: boolean;
 }) {
-    const issues = [...(validationErrors ?? []), ...(publicationGates ?? []).flatMap(gate =>
-        gate.status !== "PASS" ? [...(gate.issues ?? []), ...(gate.warnings ?? [])] : [],
-    )];
-    const warnings = [...(validationWarnings ?? []), ...(publicationGates ?? []).flatMap(gate => gate.warnings ?? [])];
+    const issues = [...new Set([
+        ...(validationErrors ?? []),
+        ...(publicationGates ?? []).flatMap((gate) =>
+            gate.status !== "PASS"
+                ? [
+                    ...(gate.issues ?? []),
+                    ...(gate.status === "REVIEW" ? (gate.warnings ?? []) : []),
+                ]
+                : [],
+        ),
+    ].map((item) => item.trim()).filter(Boolean))];
+
+    const issueSet = new Set(issues);
+    const warnings = [...new Set([
+        ...(validationWarnings ?? []),
+        ...(publicationGates ?? []).flatMap((gate) => gate.warnings ?? []),
+    ].map((item) => item.trim()).filter((item) => item && !issueSet.has(item)))];
 
     if (!brief) {
         return (
             <section className="rounded-xl border border-amber-500/20 bg-card p-4">
-                <div className="flex items-center gap-2">
-                    <Info className="h-4 w-4 text-amber-400" />
-                    <h3 className="text-xs font-semibold">SERP research</h3>
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                        <Info className="h-4 w-4 text-amber-400" />
+                        <h3 className="text-xs font-semibold">SERP research</h3>
+                    </div>
+                    {onRevalidate && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (!isRevalidating) onRevalidate();
+                            }}
+                            aria-disabled={Boolean(isRevalidating)}
+                            className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/60 px-2 py-1 text-[10px] font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                        >
+                            {isRevalidating ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                                <RefreshCw className="h-3 w-3" />
+                            )}
+                            {isRevalidating ? "Checking…" : "Re-check quality gates"}
+                        </button>
+                    )}
                 </div>
                 <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
                     No competitive research snapshot is saved for this article. Verify search intent, ranking formats,
@@ -451,7 +491,29 @@ function SerpResearchPanel({
 
                 {(issues.length > 0 || warnings.length > 0) && (
                     <div className="rounded-lg border border-amber-500/20 p-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Unresolved quality issues</p>
+                        <div className="flex items-center justify-between gap-2">
+                            <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                <AlertTriangle className="h-3 w-3 text-amber-400" />
+                                Unresolved quality issues
+                            </p>
+                            {onRevalidate && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (!isRevalidating) onRevalidate();
+                                    }}
+                                    aria-disabled={Boolean(isRevalidating)}
+                                    className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/60 px-2 py-0.5 text-[10px] font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                                >
+                                    {isRevalidating ? (
+                                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                    ) : (
+                                        <RefreshCw className="h-2.5 w-2.5" />
+                                    )}
+                                    {isRevalidating ? "Checking…" : "Re-check quality gates"}
+                                </button>
+                            )}
+                        </div>
                         {issues.slice(0, 6).map((item, index) => <p key={"i" + index} className="mt-1 text-[10px] text-rose-300">{item}</p>)}
                         {warnings.slice(0, 6).map((item, index) => <p key={"w" + index} className="mt-1 text-[10px] text-amber-300">{item}</p>)}
                     </div>
@@ -678,22 +740,38 @@ function SerpAiSimulator({
     );
 }
 
-export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalProps) {
+export function ReviewBlogModal({ blog, onClose, onPublish, onBlogUpdated }: ReviewBlogModalProps) {
     const [mode, setMode] = useState<ReviewMode>("write");
     const [isFullScreen, setIsFullScreen] = useState(true);
     const [showSidebar, setShowSidebar] = useState(false);
     const [copiedType, setCopiedType] = useState<string | null>(null);
+    const [liveBlog, setLiveBlog] = useState<Blog>(blog);
     const [editedContent, setEditedContent] = useState(blog.content);
     // lastSavedContent tracks what is persisted server-side; hasUnsavedChanges derives from this
     const [lastSavedContent, setLastSavedContent] = useState(blog.content);
     const [scoreResult, setScoreResult] = useState<ContentScoreResult | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [isRevalidating, setIsRevalidating] = useState(false);
     const [isPublishing, setIsPublishing] = useState(false);
     const [isImproving, setIsImproving] = useState(false);
     const [improvingStep, setImprovingStep] = useState("");
     const [aiContent, setAiContent] = useState<string | null>(null);
     const [showAiReview, setShowAiReview] = useState(false);
     const [preAiContent, setPreAiContent] = useState<string | null>(null);
+
+    useEffect(() => {
+        setLiveBlog((prev) => (prev.id === blog.id ? { ...prev, ...blog } : blog));
+    }, [blog]);
+
+    useEffect(() => {
+        setLiveBlog(blog);
+        setEditedContent(blog.content);
+        setLastSavedContent(blog.content);
+        setAiContent(null);
+        setShowAiReview(false);
+        setPreAiContent(null);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [blog.id]);
 
     const handleCopy = useCallback((type: "markdown" | "html" | "answer") => {
         let textToCopy = "";
@@ -713,22 +791,23 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
         }
     }, [editedContent]);
 
-    const citationScore = blog.citationScore ?? null;
-    const evidenceCoverage = blog.evidenceCoverage != null ? Math.round(Number(blog.evidenceCoverage)) : 0;
-    const validationScore = blog.validationScore != null ? Math.round(Number(blog.validationScore)) : null;
-    const citationCriteria: CitationCriterion[] = Array.isArray(blog.citationCriteria)
-        ? (blog.citationCriteria as CitationCriterion[])
-        : [];
+    const citationScore = liveBlog.citationScore ?? null;
+    const evidenceCoverage = liveBlog.evidenceCoverage != null ? Math.round(Number(liveBlog.evidenceCoverage)) : 0;
+    const validationScore = liveBlog.validationScore != null ? Math.round(Number(liveBlog.validationScore)) : null;
+    const citationCriteria: CitationCriterion[] = useMemo(
+        () => normalizeCitationCriteria(liveBlog.citationCriteria),
+        [liveBlog.citationCriteria]
+    );
 
     // Do not display raw structural citationScore as the overall Content Score.
     // Until live NLP scoring (scoreResult) completes, compute composite readiness
     // factoring in SEO validation (40%), evidence coverage (35%), and citation structure (25%).
     const compositeReadiness = useMemo(() => {
-        if (validationScore == null && citationScore == null && blog.evidenceCoverage == null) return null;
+        if (validationScore == null && citationScore == null && liveBlog.evidenceCoverage == null) return null;
         const seoVal = validationScore ?? citationScore ?? 0;
         const ciVal = citationScore ?? validationScore ?? 0;
         return Math.round(0.4 * seoVal + 0.35 * evidenceCoverage + 0.25 * ciVal);
-    }, [validationScore, citationScore, blog.evidenceCoverage, evidenceCoverage]);
+    }, [validationScore, citationScore, liveBlog.evidenceCoverage, evidenceCoverage]);
 
     const activeScore = scoreResult?.score ?? compositeReadiness;
 
@@ -737,12 +816,42 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
         [editedContent, lastSavedContent]
     );
 
+    const unresolvedGateIssues = useMemo(() => {
+        const deduped = new Set<string>();
+        for (const err of liveBlog.validationErrors ?? []) {
+            if (typeof err === "string" && err.trim().length > 0) {
+                deduped.add(err.trim());
+            }
+        }
+        for (const gate of liveBlog.publicationGates ?? []) {
+            if (gate.status !== "PASS") {
+                for (const issue of gate.issues ?? []) {
+                    if (typeof issue === "string" && issue.trim().length > 0) {
+                        deduped.add(issue.trim());
+                    }
+                }
+            }
+        }
+        return Array.from(deduped);
+    }, [liveBlog.validationErrors, liveBlog.publicationGates]);
+
+    const hasBlockingErrors = useMemo(
+        () =>
+            unresolvedGateIssues.length > 0 ||
+            liveBlog.status === "EVIDENCE_REVIEW" ||
+            liveBlog.status === "REJECTED",
+        [unresolvedGateIssues.length, liveBlog.status]
+    );
+
     const failedCitationCriteria = useMemo(
         () => citationCriteria.filter((c) => !c.passed).sort((a, b) => b.weight - a.weight),
         [citationCriteria]
     );
 
-    const issueCount = failedCitationCriteria.length + (scoreResult?.topOpportunities?.length ?? 0);
+    const issueCount =
+        unresolvedGateIssues.length +
+        failedCitationCriteria.length +
+        (scoreResult?.topOpportunities?.length ?? 0);
 
     const scoreState = activeScore !== null
         ? getScoreState(activeScore)
@@ -762,27 +871,77 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
     const handleContentChange = useCallback((c: string) => setEditedContent(c), []);
     const handleScoreChange = useCallback((s: ContentScoreResult | null) => setScoreResult(s), []);
 
+    const applyUpdatedBlog = useCallback(
+        (updatedData: Partial<Blog> | undefined, fallbackContent?: string) => {
+            const nextBlog: Blog = updatedData
+                ? {
+                    ...liveBlog,
+                    ...updatedData,
+                    content: updatedData.content ?? fallbackContent ?? liveBlog.content,
+                }
+                : {
+                    ...liveBlog,
+                    content: fallbackContent ?? liveBlog.content,
+                };
+            setLiveBlog(nextBlog);
+            onBlogUpdated?.(nextBlog);
+        },
+        [liveBlog, onBlogUpdated]
+    );
+
     const handleSaveEdits = useCallback(async () => {
-        if (!hasUnsavedChanges) return;
+        if (!hasUnsavedChanges || isSaving || isRevalidating) return;
         setIsSaving(true);
         try {
-            const res = await fetch(`/api/blogs/${blog.id}`, {
+            const res = await fetch(`/api/blogs/${liveBlog.id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ content: editedContent }),
             });
-            if (!res.ok) throw new Error("Failed to save edits");
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || "Failed to save edits");
             setLastSavedContent(editedContent);
-            toast.success("Draft saved");
+            applyUpdatedBlog(data.blog as Partial<Blog> | undefined, editedContent);
+            toast.success("Draft saved & quality gates re-checked");
         } catch (error) {
             logger.error("Failed to save blog edits", { error: (error as Error)?.message || error });
             toast.error("Couldn't save the draft");
         } finally {
             setIsSaving(false);
         }
-    }, [blog.id, editedContent, hasUnsavedChanges, lastSavedContent]);
+    }, [applyUpdatedBlog, editedContent, hasUnsavedChanges, isRevalidating, isSaving, liveBlog.id]);
+
+    const handleRevalidate = useCallback(async () => {
+        if (isRevalidating || isSaving || isPublishing) return;
+        setIsRevalidating(true);
+        try {
+            const res = await fetch(
+                hasUnsavedChanges
+                    ? `/api/blogs/${liveBlog.id}`
+                    : `/api/blogs/${liveBlog.id}/revalidate`,
+                {
+                    method: hasUnsavedChanges ? "PATCH" : "POST",
+                    headers: hasUnsavedChanges ? { "Content-Type": "application/json" } : undefined,
+                    body: hasUnsavedChanges ? JSON.stringify({ content: editedContent }) : undefined,
+                }
+            );
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || "Failed to re-check quality gates");
+            if (hasUnsavedChanges) {
+                setLastSavedContent(editedContent);
+            }
+            applyUpdatedBlog(data.blog as Partial<Blog> | undefined, hasUnsavedChanges ? editedContent : undefined);
+            toast.success("Quality gates re-checked");
+        } catch (error) {
+            logger.error("Failed to re-check quality gates", { error: (error as Error)?.message || error });
+            toast.error(error instanceof Error ? error.message : "Couldn't re-check quality gates");
+        } finally {
+            setIsRevalidating(false);
+        }
+    }, [applyUpdatedBlog, editedContent, hasUnsavedChanges, isPublishing, isRevalidating, isSaving, liveBlog.id]);
 
     const handleAIImprove = useCallback(async () => {
+        if (isImproving || isPublishing) return;
         setIsImproving(true);
         setImprovingStep("Analyzing issues…");
         try {
@@ -799,12 +958,20 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
             const citationIssues = failedCitationCriteria
                 .map((c) => `[CITATION] ${c.fix}`);
 
+            const combinedIssues = Array.from(
+                new Set(
+                    [...unresolvedGateIssues, ...issues, ...citationIssues]
+                        .map((item) => item.trim().slice(0, 480))
+                        .filter(Boolean)
+                )
+            ).slice(0, 20);
+
             setImprovingStep("Rewriting content…");
-            const res = await fetch(`/api/blogs/${blog.id}/improve`, {
+            const res = await fetch(`/api/blogs/${liveBlog.id}/improve`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    issues: [...issues, ...citationIssues],
+                    issues: combinedIssues,
                     citationScore,
                     scoreData: scoreResult
                         ? {
@@ -851,7 +1018,7 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
             setIsImproving(false);
             setImprovingStep("");
         }
-    }, [blog.id, citationScore, failedCitationCriteria, scoreResult]);
+    }, [citationScore, failedCitationCriteria, isImproving, isPublishing, liveBlog.id, scoreResult, unresolvedGateIssues]);
 
     const acceptAiChanges = useCallback(() => {
         if (!aiContent) return;
@@ -864,14 +1031,14 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
             action: {
                 label: "Undo",
                 onClick: () => {
-                    setEditedContent(preAiContent ?? blog.content);
+                    setEditedContent(preAiContent ?? liveBlog.content);
                     setPreAiContent(null);
                     toast.info("AI changes reverted");
                 },
             },
             duration: 8000,
         });
-    }, [aiContent, editedContent, preAiContent, blog.content]);
+    }, [aiContent, editedContent, preAiContent, liveBlog.content]);
 
     const rejectAiChanges = useCallback(() => {
         setAiContent(null);
@@ -879,14 +1046,25 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
         toast("AI suggestions discarded");
     }, []);
 
+    const publishBlockReason = hasUnsavedChanges
+        ? "Save your changes before publishing"
+        : hasBlockingErrors
+            ? "Resolve blocking quality gate issues before publishing"
+            : activeScore !== null && activeScore < 60
+                ? "Improve readiness score before publishing"
+                : null;
+
+    const isPublishDisabled =
+        isPublishing ||
+        isSaving ||
+        isRevalidating ||
+        publishBlockReason !== null;
+
     const handlePublish = useCallback(async () => {
-        if (hasUnsavedChanges) {
-            toast.error("Save your latest changes before publishing");
-            return;
-        }
+        if (isPublishDisabled) return;
         setIsPublishing(true);
         try {
-            const result = await onPublish(blog.id);
+            const result = await onPublish(liveBlog.id);
             if (result.success) {
                 onClose();
             }
@@ -897,21 +1075,35 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
         } finally {
             setIsPublishing(false);
         }
-    }, [blog.id, hasUnsavedChanges, onClose, onPublish]);
+    }, [isPublishDisabled, liveBlog.id, onClose, onPublish]);
+
+    const statusLabel =
+        liveBlog.status === "PUBLISHED"
+            ? "Published"
+            : liveBlog.status === "EVIDENCE_REVIEW"
+                ? "Needs review"
+                : liveBlog.status === "REJECTED"
+                    ? "Rejected"
+                    : "Draft";
 
     return (
         <div className={isFullScreen ? "fixed inset-0 z-50 bg-background" : "fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-2 sm:p-6"}>
-            <div className={isFullScreen ? "flex h-full w-full flex-col" : "relative flex h-full max-h-[94vh] w-full max-w-7xl flex-col rounded-2xl border border-border bg-background shadow-2xl overflow-hidden"}>
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="review-blog-modal-title"
+                className={isFullScreen ? "flex h-full w-full flex-col" : "relative flex h-full max-h-[94vh] w-full max-w-7xl flex-col rounded-2xl border border-border bg-background shadow-2xl overflow-hidden"}
+            >
                 {/* ── Top bar ── */}
                 <header className="flex h-16 shrink-0 items-center border-b border-border bg-card">
                     <div className="flex min-w-0 flex-1 items-center gap-3 px-5">
                         <button
                             type="button"
                             onClick={onClose}
-                            aria-label="Close"
-                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            aria-label="Close review dialog"
+                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                            <X className="h-4 w-4" />
+                            <X className="h-4 w-4" aria-hidden="true" />
                         </button>
 
                         <button
@@ -919,20 +1111,20 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                             onClick={() => setIsFullScreen((s) => !s)}
                             aria-label={isFullScreen ? "Exit Fullscreen" : "Enter Fullscreen"}
                             title={isFullScreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                            {isFullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                            {isFullScreen ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
                         </button>
 
                         <div className="h-6 w-px bg-border" />
 
                         <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                                <h1 className="truncate text-sm font-semibold">{blog.title}</h1>
+                                <h1 id="review-blog-modal-title" className="truncate text-sm font-semibold">{liveBlog.title}</h1>
                                 <span className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                    Draft
+                                    {statusLabel}
                                 </span>
-                                {(blog.pipelineType === "CONTENT_REFRESH" || blog.sourceUrl) && (
+                                {(liveBlog.pipelineType === "CONTENT_REFRESH" || liveBlog.sourceUrl) && (
                                     <span className="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
                                         Page Refresh
                                     </span>
@@ -942,20 +1134,20 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                                 <span>
                                     Target:{" "}
                                     <span className="font-medium text-foreground/80">
-                                        {blog.targetKeywords?.[0] || "No target keyword"}
+                                        {liveBlog.targetKeywords?.[0] || "No target keyword"}
                                     </span>
                                 </span>
-                                {blog.sourceUrl && (
+                                {liveBlog.sourceUrl && (
                                     <>
                                         <span>·</span>
-                                        <span className="truncate font-mono text-[10px] text-amber-300/90" title={blog.sourceUrl}>
-                                            {blog.sourceUrl}
+                                        <span className="truncate font-mono text-[10px] text-amber-300/90" title={liveBlog.sourceUrl}>
+                                            {liveBlog.sourceUrl}
                                         </span>
                                     </>
                                 )}
                                 <span>·</span>
                                 <span className="flex items-center gap-1">
-                                    <Clock3 className="h-3 w-3" />
+                                    <Clock3 className="h-3 w-3" aria-hidden="true" />
                                     {hasUnsavedChanges ? "Unsaved changes" : "Saved"}
                                 </span>
                             </div>
@@ -970,11 +1162,16 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                                 ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
                                 : "bg-rose-500/10 border-rose-500/20 text-rose-400"
                             }`}>
+                            {evidenceCoverage >= 80 ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            ) : (
+                                <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            )}
                             <span className="text-[11px] font-semibold">Evidence: {evidenceCoverage}%</span>
                         </div>
                         {activeScore !== null && (
                             <div className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 ${headerTone.bg} ${headerTone.border}`}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${headerTone.bar}`} />
+                                <span className={`h-1.5 w-1.5 rounded-full ${headerTone.bar}`} aria-hidden="true" />
                                 <span className={`text-xs font-semibold ${headerTone.text}`}>{activeScore}/100</span>
                                 <span className="text-[11px] text-muted-foreground">{scoreState.shortLabel}</span>
                             </div>
@@ -985,9 +1182,9 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                     <button
                         type="button"
                         onClick={() => setShowSidebar(s => !s)}
-                        className="mr-2 xl:hidden flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        className="mr-2 xl:hidden flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                        <PanelRight className="h-3.5 w-3.5" />
+                        <PanelRight className="h-3.5 w-3.5" aria-hidden="true" />
                         <span className="hidden sm:inline">Optimize</span>
                     </button>
 
@@ -996,28 +1193,28 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                         <button
                             type="button"
                             onClick={() => setMode("write")}
-                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mode === "write" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${mode === "write" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                                 }`}
                         >
-                            <FileText className="h-3.5 w-3.5" />
+                            <FileText className="h-3.5 w-3.5" aria-hidden="true" />
                             Write
                         </button>
                         <button
                             type="button"
                             onClick={() => setMode("review")}
-                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mode === "review" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${mode === "review" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                                 }`}
                         >
-                            <ShieldCheck className="h-3.5 w-3.5" />
+                            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
                             Review
                         </button>
                         <button
                             type="button"
                             onClick={() => setMode("simulate")}
-                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mode === "simulate" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${mode === "simulate" ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                                 }`}
                         >
-                            <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+                            <Sparkles className="h-3.5 w-3.5 text-purple-400" aria-hidden="true" />
                             SERP &amp; AI
                         </button>
                     </div>
@@ -1031,8 +1228,8 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                             <div className="mx-auto h-full w-full max-w-5xl px-6 py-8 lg:px-10">
                                 <ContentEditor
                                     initialContent={editedContent}
-                                    initialKeyword={blog.targetKeywords?.[0] || ""}
-                                    blogId={blog.id}
+                                    initialKeyword={liveBlog.targetKeywords?.[0] || ""}
+                                    blogId={liveBlog.id}
                                     onContentChange={handleContentChange}
                                     onScoreChange={handleScoreChange}
                                 />
@@ -1040,11 +1237,11 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                         ) : mode === "review" ? (
                             <div className="mx-auto w-full max-w-4xl px-8 py-12">
                                 <article className="prose prose-invert prose-emerald max-w-none prose-headings:scroll-m-20 prose-img:w-full prose-img:rounded-xl prose-img:object-cover">
-                                    <h1>{blog.title}</h1>
+                                    <h1>{liveBlog.title}</h1>
                                     <div className="not-prose mb-8 flex items-center gap-3 border-b border-border pb-5 text-xs text-muted-foreground">
-                                        <span>Draft</span>
+                                        <span>{statusLabel}</span>
                                         <span>·</span>
-                                        <span>{blog.targetKeywords?.[0] || "No target keyword"}</span>
+                                        <span>{liveBlog.targetKeywords?.[0] || "No target keyword"}</span>
                                     </div>
                                     <ReactMarkdown
                                         rehypePlugins={[
@@ -1058,7 +1255,7 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                             </div>
                         ) : (
                             <SerpAiSimulator
-                                blog={blog}
+                                blog={liveBlog}
                                 content={editedContent}
                                 onCopy={handleCopy}
                                 copiedType={copiedType}
@@ -1093,28 +1290,41 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                                 <section className="rounded-xl border border-brand/20 bg-brand/[0.04] p-4">
                                     <div className="flex items-start gap-3">
                                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                                            <Sparkles className="h-4 w-4 text-primary" />
+                                            <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
                                         </div>
                                         <div className="min-w-0">
                                             <h3 className="text-xs font-semibold">Recommended improvements</h3>
                                             <ul className="mt-1.5 space-y-1">
+                                                {unresolvedGateIssues.slice(0, 2).map((issue, i) => (
+                                                    <li key={`g-${i}`} className="text-[11px] leading-relaxed text-rose-300 flex items-start gap-1.5">
+                                                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-rose-400" aria-hidden="true" />
+                                                        <span>{issue}</span>
+                                                    </li>
+                                                ))}
                                                 {failedCitationCriteria.slice(0, 2).map((c, i) => (
                                                     <li key={i} className="text-[11px] leading-relaxed text-muted-foreground flex items-start gap-1.5">
-                                                        <span className="mt-0.5 h-1 w-1 shrink-0 rounded-full bg-rose-400" />
-                                                        {c.fix}
+                                                        <span className="mt-0.5 h-1 w-1 shrink-0 rounded-full bg-rose-400" aria-hidden="true" />
+                                                        <span>{c.fix}</span>
                                                     </li>
                                                 ))}
                                                 {scoreResult?.topOpportunities?.slice(0, 2).map((o, i) => (
                                                     <li key={`o-${i}`} className="text-[11px] leading-relaxed text-muted-foreground flex items-start gap-1.5">
-                                                        <span className="mt-0.5 h-1 w-1 shrink-0 rounded-full bg-amber-400" />
-                                                        {o}
+                                                        <span className="mt-0.5 h-1 w-1 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
+                                                        <span>{o}</span>
                                                     </li>
                                                 ))}
-                                                {issueCount > 4 && (
-                                                    <li className="text-[10px] text-muted-foreground/60">
-                                                        +{issueCount - 4} more issue{issueCount - 4 > 1 ? "s" : ""}
-                                                    </li>
-                                                )}
+                                                {(() => {
+                                                    const shownCount =
+                                                        Math.min(unresolvedGateIssues.length, 2) +
+                                                        Math.min(failedCitationCriteria.length, 2) +
+                                                        Math.min(scoreResult?.topOpportunities?.length ?? 0, 2);
+                                                    const remainingCount = issueCount - shownCount;
+                                                    return remainingCount > 0 ? (
+                                                        <li className="text-[10px] text-muted-foreground/60">
+                                                            +{remainingCount} more issue{remainingCount > 1 ? "s" : ""}
+                                                        </li>
+                                                    ) : null;
+                                                })()}
                                             </ul>
                                         </div>
                                     </div>
@@ -1124,21 +1334,21 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                                     <button
                                         type="button"
                                         onClick={handleAIImprove}
-                                        disabled={isImproving || isPublishing}
-                                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                                        aria-disabled={isImproving || isPublishing}
+                                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
                                     >
                                         {isImproving ? (
-                                            <><Loader2 className="h-3.5 w-3.5 animate-spin" />{improvingStep || "Improving…"}</>
+                                            <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />{improvingStep || "Improving…"}</>
                                         ) : (
-                                            <><Zap className="h-3.5 w-3.5" />Fix {issueCount} issue{issueCount !== 1 ? "s" : ""} with AI</>
+                                            <><Zap className="h-3.5 w-3.5" aria-hidden="true" />Fix {issueCount} issue{issueCount !== 1 ? "s" : ""} with AI</>
                                         )}
                                     </button>
                                 </section>
-                            ) : activeScore !== null && activeScore < 95 ? (
+                            ) : !hasBlockingErrors && activeScore !== null && activeScore < 95 ? (
                                 <section className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4">
                                     <div className="flex items-start gap-3">
                                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
-                                            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                                            <CheckCircle2 className="h-4 w-4 text-emerald-400" aria-hidden="true" />
                                         </div>
                                         <div className="min-w-0">
                                             <h3 className="text-xs font-semibold text-emerald-400">Looking good!</h3>
@@ -1150,31 +1360,33 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                                     <button
                                         type="button"
                                         onClick={handleAIImprove}
-                                        disabled={isImproving || isPublishing}
-                                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                        aria-disabled={isImproving || isPublishing}
+                                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
                                     >
                                         {isImproving ? (
-                                            <><Loader2 className="h-3.5 w-3.5 animate-spin" />{improvingStep || "Fine-tuning…"}</>
+                                            <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />{improvingStep || "Fine-tuning…"}</>
                                         ) : (
-                                            <><Sparkles className="h-3.5 w-3.5" />Fine-tune with AI</>
+                                            <><Sparkles className="h-3.5 w-3.5" aria-hidden="true" />Fine-tune with AI</>
                                         )}
                                     </button>
                                 </section>
                             ) : null}
 
-                            <RefreshSummaryPanel blog={blog} />
+                            <RefreshSummaryPanel blog={liveBlog} />
 
                             <SerpResearchPanel
-                                brief={blog.serpCompetitiveBrief}
-                                publicationGates={blog.publicationGates}
-                                validationErrors={blog.validationErrors}
-                                validationWarnings={blog.validationWarnings}
+                                brief={liveBlog.serpCompetitiveBrief}
+                                publicationGates={liveBlog.publicationGates}
+                                validationErrors={liveBlog.validationErrors}
+                                validationWarnings={liveBlog.validationWarnings}
+                                onRevalidate={handleRevalidate}
+                                isRevalidating={isRevalidating || isSaving}
                             />
 
                             {/* Publishing checklist */}
                             <section className="rounded-xl border border-border bg-card p-4">
                                 <div className="mb-3 flex items-center gap-2">
-                                    <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                                    <CheckCircle2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                                     <h3 className="text-xs font-semibold">Publishing checklist</h3>
                                 </div>
                                 <div className="space-y-2.5">
@@ -1184,6 +1396,7 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                                         complete={scoreResult !== null || citationScore !== null}
                                     />
                                     <ChecklistItem label="Changes saved" complete={!hasUnsavedChanges} />
+                                    <ChecklistItem label="Quality gates passed" complete={!hasBlockingErrors} />
                                     <ChecklistItem
                                         label="Citation ready"
                                         complete={activeScore !== null && activeScore >= 60}
@@ -1199,38 +1412,66 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                     <div className="flex items-center gap-3">
                         {hasUnsavedChanges ? (
                             <span className="flex items-center gap-2 text-xs text-amber-400">
-                                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" aria-hidden="true" />
                                 Unsaved changes
                             </span>
                         ) : (
                             <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <Check className="h-3.5 w-3.5 text-emerald-400" />
+                                <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
                                 All changes saved
                             </span>
                         )}
 
                         {mode === "write" && (
-                            <button
-                                type="button"
-                                onClick={handleSaveEdits}
-                                disabled={!hasUnsavedChanges || isSaving}
-                                className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-2 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                                {isSaving ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                    <Save className="h-3.5 w-3.5" />
-                                )}
-                                {isSaving ? "Saving..." : "Save draft"}
-                            </button>
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={handleSaveEdits}
+                                    aria-disabled={!hasUnsavedChanges || isSaving || isRevalidating}
+                                    aria-describedby="save-draft-status"
+                                    className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-2 text-xs font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
+                                >
+                                    {isSaving ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                                    ) : (
+                                        <Save className="h-3.5 w-3.5" aria-hidden="true" />
+                                    )}
+                                    {isSaving ? "Saving..." : "Save draft"}
+                                </button>
+                                <span id="save-draft-status" className="sr-only">
+                                    {isSaving
+                                        ? "Saving draft and re-checking quality gates"
+                                        : hasUnsavedChanges
+                                            ? "Save your latest edits and re-check quality gates"
+                                            : "No unsaved changes to save"}
+                                </span>
+                            </>
                         )}
+
+                        <button
+                            type="button"
+                            onClick={handleRevalidate}
+                            aria-disabled={isRevalidating || isSaving || isPublishing}
+                            aria-describedby="recheck-gates-help"
+                            className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-2 text-xs font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
+                        >
+                            {isRevalidating ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                            ) : (
+                                <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                            )}
+                            {isRevalidating ? "Checking..." : "Re-check"}
+                        </button>
+                        <span id="recheck-gates-help" className="sr-only">
+                            Re-runs quality gates and evidence checks{hasUnsavedChanges ? " after saving unsaved changes" : ""}
+                        </span>
                     </div>
 
                     <div className="flex items-center gap-2">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            className="rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                             Close
                         </button>
@@ -1238,27 +1479,20 @@ export function ReviewBlogModal({ blog, onClose, onPublish }: ReviewBlogModalPro
                         <button
                             type="button"
                             onClick={handlePublish}
-                            disabled={
-                                isPublishing ||
-                                isSaving ||
-                                hasUnsavedChanges ||
-                                (activeScore !== null && activeScore < 60)
-                            }
-                            title={
-                                hasUnsavedChanges
-                                    ? "Save your changes before publishing"
-                                    : activeScore !== null && activeScore < 60
-                                        ? "Improve citation readiness before publishing"
-                                        : "Publish article"
-                            }
-                            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+                            aria-disabled={isPublishDisabled}
+                            aria-describedby="publish-gate-status"
+                            title={publishBlockReason ?? "Publish article"}
+                            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
                         >
                             {isPublishing ? (
-                                <><Loader2 className="h-3.5 w-3.5 animate-spin" />Publishing...</>
+                                <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />Publishing...</>
                             ) : (
-                                <><CheckCircle2 className="h-3.5 w-3.5" />Publish</>
+                                <><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />Publish</>
                             )}
                         </button>
+                        <span id="publish-gate-status" className="sr-only">
+                            {publishBlockReason ?? "All readiness and quality gate checks passed; ready to publish"}
+                        </span>
                     </div>
                 </footer>
             </div>

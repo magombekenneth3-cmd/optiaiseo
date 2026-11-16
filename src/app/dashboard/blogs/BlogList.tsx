@@ -1009,6 +1009,7 @@ export function BlogList({
     const searchParams = useSearchParams();
 
     const [previewBlog, setPreviewBlog] = useState<Blog | null>(null);
+    const [localBlogs, setLocalBlogs] = useState<Blog[]>(blogs);
     const [linkModalBlog, setLinkModalBlog] = useState<Blog | null>(null);
     const [repurposeBlog, setRepurposeBlog] = useState<Blog | null>(null);
     const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
@@ -1033,15 +1034,29 @@ export function BlogList({
     const sortRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
+        setLocalBlogs(blogs);
+    }, [blogs]);
+
+    const handleBlogUpdated = useCallback((updated: Partial<Blog> & { id: string }) => {
+        setLocalBlogs((prev) =>
+            prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
+        );
+        setPreviewBlog((prev) =>
+            prev && prev.id === updated.id ? { ...prev, ...updated } : prev,
+        );
+        pendingRefreshRef.current = true;
+    }, []);
+
+    useEffect(() => {
         if (hasOpenedReviewRef.current) return;
         const reviewId = initialReviewId ?? searchParams.get("review");
-        if (!reviewId || !blogs?.length) return;
-        const target = blogs.find((blog) => blog.id === reviewId);
+        if (!reviewId || !localBlogs?.length) return;
+        const target = localBlogs.find((blog) => blog.id === reviewId);
         if (target) {
             hasOpenedReviewRef.current = true;
             setPreviewBlog(target);
         }
-    }, [initialReviewId, searchParams, blogs]);
+    }, [initialReviewId, searchParams, localBlogs]);
 
     useEffect(() => {
         setPage(1);
@@ -1217,13 +1232,13 @@ export function BlogList({
 
     const hasActiveBlog = useMemo(
         () =>
-            blogs?.some((blog) => {
+            localBlogs?.some((blog) => {
                 if (blog.status !== "GENERATING" && blog.status !== "QUEUED") return false;
                 const createdAt = new Date(blog.createdAt).getTime();
                 if (Number.isNaN(createdAt)) return false;
                 return Date.now() - createdAt < TEN_MINUTES_MS;
             }) ?? false,
-        [blogs]
+        [localBlogs]
     );
 
     useEffect(() => {
@@ -1247,7 +1262,7 @@ export function BlogList({
 
     const filteredBlogs = useMemo(() => {
         const normalizedSearch = search.trim().toLowerCase();
-        const result = [...(blogs ?? [])].filter((blog) => {
+        const result = [...(localBlogs ?? [])].filter((blog) => {
             if (statusFilter === "DRAFT" && blog.status !== "DRAFT") return false;
             if (statusFilter === "REVIEW" && !isReviewStatus(blog.status) && !isEditorialRejection(blog.status)) return false;
             if (statusFilter === "PUBLISHED" && blog.status !== "PUBLISHED") return false;
@@ -1309,7 +1324,7 @@ export function BlogList({
         });
 
         return result;
-    }, [blogs, search, statusFilter, healthFilter, sort]);
+    }, [localBlogs, search, statusFilter, healthFilter, sort]);
 
     const totalPages = Math.max(1, Math.ceil(filteredBlogs.length / PAGE_SIZE));
     const currentPage = Math.min(page, totalPages);
@@ -1320,7 +1335,7 @@ export function BlogList({
     }, [filteredBlogs, currentPage]);
 
     const stats = useMemo(() => {
-        const all = blogs ?? [];
+        const all = localBlogs ?? [];
         return {
             total: all.length,
             draft: all.filter((blog) => blog.status === "DRAFT").length,
@@ -1335,10 +1350,10 @@ export function BlogList({
                 return hasErrors || lowScore || blog.status === "FAILED" || isEditorialRejection(blog.status);
             }).length,
         };
-    }, [blogs]);
+    }, [localBlogs]);
 
     const repurposeBannerBlog =
-        blogs?.find(
+        localBlogs?.find(
             (blog) => blog.status === "PUBLISHED" && blog.id !== dismissedRepurposeId
         ) ?? null;
 
@@ -1904,6 +1919,7 @@ export function BlogList({
             {previewBlog && (
                 <ReviewBlogModal
                     blog={previewBlog as any}
+                    onBlogUpdated={handleBlogUpdated as any}
                     onClose={() => {
                         setPreviewBlog(null);
                         if (pendingRefreshRef.current) {

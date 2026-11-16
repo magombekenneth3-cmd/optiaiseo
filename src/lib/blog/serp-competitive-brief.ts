@@ -11,7 +11,12 @@ import {
     type SiteContentLibrary,
     type SiteContentLibraryEntry,
 } from "./contracts";
-import { classifySerpFormat, type SerpContext, type SerpResult } from "./serp";
+import {
+    classifySerpFormat,
+    classifySerpResultPageType,
+    type SerpContext,
+    type SerpResult,
+} from "./serp";
 
 const LIBRARY_SCAN_LIMIT = 100;
 const LIBRARY_RESULTS_LIMIT = 10;
@@ -185,24 +190,7 @@ export async function loadRelevantSiteContentLibrary(params: {
 }
 
 function pageTypeForResult(result: SerpResult): SerpPageType {
-    const url = (result.link ?? "").toLowerCase();
-    const title = result.title.toLowerCase();
-    const snippet = result.snippet.toLowerCase();
-    const combined = title + " " + snippet;
-
-    if (/youtube\.com|youtu\.be|vimeo\.com/.test(url)) return "video";
-    if (/reddit\.com|quora\.com|stackoverflow\.com/.test(url)) return "forum";
-    if (/news|press release|announces|breaking/.test(combined) && /news|press/.test(url)) return "news";
-    if (/\/pricing|\/product|\/features|\/platform/.test(url)) return "product_page";
-    if (/\b(calculator|generator|checker)\b/.test(combined) ||
-        /\b(free|online|interactive)\b.{0,35}\b(tool|audit|checker|calculator)\b/.test(combined) ||
-        /\/(tools?|calculators?|checkers?|audits?)\/?$/i.test(url)) {
-        return "interactive_tool";
-    }
-    if (/\b(vs\.?|versus|compare|comparison|alternative|alternatives)\b/.test(combined)) return "comparison";
-    if (/\b(best|top\s+\d+|\d+\s+best|alternatives|ranked|listicle)\b/.test(title)) return "listicle";
-    if (/\b(how to|step by step|tutorial|guide)\b/.test(combined)) return "tutorial";
-    return "article";
+    return classifySerpResultPageType(result);
 }
 
 function formatForPageType(pageType: SerpPageType): SerpFormatType {

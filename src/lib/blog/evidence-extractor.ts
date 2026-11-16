@@ -15,6 +15,7 @@ import {
     type ResearchPacket,
     type SourceEvidence,
 } from "./contracts";
+import { isAnalyzedSource } from "./research-packet";
 
 const EXTRACTOR_VERSION = "blog-evidence-v1";
 
@@ -179,8 +180,13 @@ export function extractEvidencePacket(
     researchPacket: ResearchPacket | null,
     content: string,
 ): EvidencePacket {
-    const availability = evidenceAvailability(researchPacket);
-    const sources = researchPacket?.sources ?? [];
+    const rawAvailability = evidenceAvailability(researchPacket);
+    const sources = (researchPacket?.sources ?? []).filter(source =>
+        isAnalyzedSource(source, researchPacket),
+    );
+    const availability = rawAvailability === "AVAILABLE" && sources.length === 0
+        ? "EMPTY"
+        : rawAvailability;
     const sourceIdsByUrl = new Map(
         sources.flatMap(source => {
             const normalized = normalizeUrl(source.url);
@@ -202,7 +208,10 @@ export function extractEvidencePacket(
             const hasStatistic = STATISTIC_PATTERN.test(sentence);
             STATISTIC_PATTERN.lastIndex = 0;
             const hasCitation = block.sourceIds.length > 0;
-            const hasFactSignal = /(?:according to|research|study|survey|report|data|found|shows?|reported)/i.test(sentence);
+            const hasFactSignal =
+                /\b(?:according to|reported that|found that|studies show|research shows|survey found)\b/i.test(sentence) ||
+                /\b(?:the|a|an|this|our|recent|new|20\d{2})\s+(?:research|study|survey|report|analysis|benchmark)\s+(?:shows?|found|finds|indicates?|suggests?|demonstrates?|reveals?|reports?|that|by|from|of)\b/i.test(sentence) ||
+                /\b(?:research|studies|surveys|reports|benchmarks|findings|evidence)\s+(?:shows?|found|finds|indicates?|suggests?|demonstrates?|reveals?)\b/i.test(sentence);
 
             // A source link makes an otherwise ordinary declarative sentence
             // auditable. Conversely, phrases such as "research shows" must

@@ -642,6 +642,18 @@ import type { GroundedSiteContext } from "@/lib/prompt-context/build-site-contex
 import type { CompetitorAnalysis } from "./contracts";
 import { analyzeCompetitorGap } from "./competitor-gap-analyzer";
 
+function resolveBrandDisplayName(
+    groundedCtx?: GroundedSiteContext | null,
+    siteContext?: SiteContext | null,
+    siteDomain?: string,
+): string {
+    const explicitBrand = groundedCtx?.data.brandName?.trim();
+    if (explicitBrand) return explicitBrand;
+    const scrapedBrand = siteContext?.title?.split(" — ")[0]?.trim();
+    if (scrapedBrand) return scrapedBrand;
+    return cleanDomainToDisplayName(siteContext?.domain ?? siteDomain ?? groundedCtx?.data.domain ?? "");
+}
+
 export async function generateEvergreenPost(
     category: string,
     keywords: string[],
@@ -659,7 +671,7 @@ export async function generateEvergreenPost(
     if (!hasConfiguredAiProvider()) throw new Error("No AI provider is configured.");
 
     const primaryKeyword = keywords[0];
-    const displayName = siteContext?.title.split(" — ")[0] ?? cleanDomainToDisplayName(siteContext?.domain ?? groundedCtx?.data.domain ?? "");
+    const displayName = resolveBrandDisplayName(groundedCtx, siteContext);
 
     const resolvedIntent = (intentOverride as SearchIntent) ?? detectIntent(primaryKeyword);
 
@@ -741,7 +753,7 @@ export async function generateBlogFromKeywordGap(
         category: keyword,
         intent,
         hasAuthorGrounding: !!(author.realExperience || author.realNumbers || groundedCtx?.data.realExperience),
-        displayName: cleanDomainToDisplayName(siteDomain ?? groundedCtx?.data.domain ?? ""),
+        displayName: resolveBrandDisplayName(groundedCtx, null, siteDomain),
         siteDomain: siteDomain ?? groundedCtx?.data.domain,
     });
 
@@ -801,7 +813,7 @@ export async function generateBlogFromCompetitorGap(
         category: keyword,
         intent,
         hasAuthorGrounding: !!(author.realExperience || author.realNumbers || groundedCtx?.data.realExperience),
-        displayName: cleanDomainToDisplayName(siteDomain ?? groundedCtx?.data.domain ?? ""),
+        displayName: resolveBrandDisplayName(groundedCtx, null, siteDomain),
         siteDomain: siteDomain ?? groundedCtx?.data.domain,
     });
 

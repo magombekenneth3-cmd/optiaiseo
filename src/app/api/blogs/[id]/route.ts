@@ -48,12 +48,17 @@ export async function PATCH(
 
         const safeContent = sanitizeHtml(content);
 
-        await prisma.blog.update({
-            where: { id },
-            data: { content: safeContent, updatedAt: new Date() },
+        const { revalidateAndPersistBlog } = await import("@/lib/blog/revalidate-post");
+        const updatedBlog = await revalidateAndPersistBlog({
+            blogId: id,
+            nextContent: safeContent,
         });
 
-        return NextResponse.json({ success: true });
+        if (!updatedBlog) {
+            return NextResponse.json({ error: "Blog not found" }, { status: 404 });
+        }
+
+        return NextResponse.json({ success: true, blog: updatedBlog });
     } catch (error: unknown) {
         logger.error("[PATCH /api/blogs/[id]] Error:", { error: (error as Error)?.message || String(error) });
         return NextResponse.json({ error: "Failed to save edits" }, { status: 500 });

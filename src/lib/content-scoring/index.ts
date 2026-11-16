@@ -57,7 +57,157 @@ export interface ContentScoreResult {
     benchmarkWarning?: string;
 }
 
-function buildFallbackBenchmark() {
+export const MIN_SUBSTANTIVE_COMPETITOR_WORDS = 300;
+const BENCHMARK_CACHE_PREFIX = "content-score:benchmark:v2:";
+
+export interface SerpFetchedPage {
+    url: string;
+    html: string;
+    status?: number;
+    contentType?: string | null;
+}
+
+export interface SubstantiveCompetitorPage {
+    url: string;
+    text: string;
+    wordCount: number;
+    headings: string[];
+    exactMatches: number;
+    imageCount: number;
+}
+
+export interface SerpBenchmarkResult {
+    p25WC: number;
+    p75WC: number;
+    medianKW: number;
+    top15Headings: string[];
+    top20Entities: Entity[];
+    p25Images: number;
+    p75Images: number;
+    competitors: { url: string; wordCount: number; score?: number; title?: string; text?: string }[];
+    _isFallback?: boolean;
+}
+
+const CHALLENGE_HTML_MARKER_RE =
+    /<title>\s*(just a moment|attention required|403 forbidden|access denied|verify you are human)/i;
+const CHALLENGE_DOM_MARKER_RE =
+    /id=["']cf-wrapper["']|cf_chl_opt|data-cf-challenge|__cf_chl_|cf-browser-verification/i;
+const CHALLENGE_TEXT_PHRASE_RE =
+    /checking your browser|enable javascript and cookies|verify you are human|please turn javascript on|403 forbidden|access denied|request blocked|attention required!\s*\|\s*cloudflare|just a moment\.\.\./i;
+
+/**
+ * Reject HTTP errors, Cloudflare/bot challenge pages, and thin pages (< minWords)
+ * so blocked competitor scrapes never pull down SERP word-count targets.
+ */
+export function isChallengeOrErrorHtml(html: string, extractedText: string, wordCount: number): boolean {
+    if (CHALLENGE_HTML_MARKER_RE.test(html) || CHALLENGE_DOM_MARKER_RE.test(html)) {
+        return true;
+    }
+    if (wordCount < 500 && CHALLENGE_TEXT_PHRASE_RE.test(extractedText)) {
+        return true;
+    }
+    return false;
+}
+
+export function isAcceptableHtmlResponse(status?: number, contentType?: string | null): boolean {
+    if (typeof status === "number" && (status < 200 || status >= 300)) {
+        return false;
+    }
+    if (contentType && !/text\/html|application\/xhtml\+xml/i.test(contentType)) {
+        return false;
+    }
+    return true;
+}
+
+export function filterSubstantiveCompetitorPages(
+    pages: SerpFetchedPage[],
+    keyword: string,
+    minWords = MIN_SUBSTANTIVE_COMPETITOR_WORDS,
+): SubstantiveCompetitorPage[] {
+    const kw = keyword.toLowerCase();
+    const substantive: SubstantiveCompetitorPage[] = [];
+
+    for (const page of pages) {
+        if (!isAcceptableHtmlResponse(page.status, page.contentType)) continue;
+        if (!page.html || !page.html.trim()) continue;
+
+        const root = parse(page.html);
+        root.querySelectorAll('script, style, noscript, nav, footer, header').forEach(el => el.remove());
+        const text = (root.textContent || "").trim();
+        const words = text.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+        const wordCount = words.length;
+
+        if (wordCount < minWords) continue;
+        if (isChallengeOrErrorHtml(page.html, text, wordCount)) continue;
+
+        const headings = root
+            .querySelectorAll('h2, h3')
+            .map(el => el.textContent.trim())
+            .filter(t => t.length > 0);
+        const imageCount = root.querySelectorAll('img').length;
+        const exactMatches = kw.length > 0 ? text.toLowerCase().split(kw).length - 1 : 0;
+
+        substantive.push({ url: page.url, text, wordCount, headings, exactMatches, imageCount });
+    }
+
+    return substantive;
+}
+
+export function buildSerpBenchmarkFromCompetitors(
+    competitorData: SubstantiveCompetitorPage[],
+    entities: Entity[] = [],
+): SerpBenchmarkResult {
+    if (competitorData.length === 0) {
+        return buildFallbackBenchmark();
+    }
+
+    const wordCounts = competitorData.map(c => c.wordCount).sort((a, b) => a - b);
+    const rawP25WC = wordCounts[Math.floor(wordCounts.length * 0.25)] ?? MIN_SUBSTANTIVE_COMPETITOR_WORDS;
+    const p25WC = Math.max(MIN_SUBSTANTIVE_COMPETITOR_WORDS, rawP25WC);
+    const p75WC = Math.max(p25WC, wordCounts[Math.floor(wordCounts.length * 0.75)] || 2000);
+
+    const kwCounts = competitorData.map(c => c.exactMatches).sort((a, b) => a - b);
+    const medianKW = kwCounts[Math.floor(kwCounts.length * 0.5)] || 2;
+
+    const allHeadings = competitorData.flatMap(c => c.headings);
+    const headingCounts: Record<string, number> = {};
+    allHeadings.forEach(h => {
+        if (h.length < 5 || h.length > 100) return;
+        const normalized = h.toLowerCase();
+        headingCounts[normalized] = (headingCounts[normalized] || 0) + 1;
+    });
+
+    const top15Headings = Object.entries(headingCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 15)
+        .map(e => e[0]);
+
+    const imageCounts = competitorData.map(c => c.imageCount).sort((a, b) => a - b);
+    const p25Images = imageCounts[Math.floor(imageCounts.length * 0.25)] || 1;
+    const p75Images = imageCounts[Math.floor(imageCounts.length * 0.75)] || 8;
+
+    return {
+        p25WC,
+        p75WC,
+        medianKW,
+        top15Headings,
+        top20Entities: entities.slice(0, 20),
+        p25Images,
+        p75Images,
+        competitors: competitorData.map(c => ({ url: c.url, wordCount: c.wordCount, title: c.url, text: c.text })),
+    };
+}
+
+function isValidCachedBenchmark(candidate: unknown): candidate is SerpBenchmarkResult {
+    if (!candidate || typeof candidate !== "object") return false;
+    const parsed = candidate as Partial<SerpBenchmarkResult>;
+    if (parsed._isFallback) return false;
+    if (!Number.isFinite(parsed.p25WC) || (parsed.p25WC ?? 0) < MIN_SUBSTANTIVE_COMPETITOR_WORDS) return false;
+    if (!Array.isArray(parsed.competitors) || parsed.competitors.length === 0) return false;
+    return parsed.competitors.every(c => Number.isFinite(c?.wordCount) && c.wordCount >= MIN_SUBSTANTIVE_COMPETITOR_WORDS);
+}
+
+function buildFallbackBenchmark(): SerpBenchmarkResult {
     return {
         p25WC: 800,
         p75WC: 2200,
@@ -102,12 +252,15 @@ async function extractEntitiesFromCompetitors(texts: string): Promise<Entity[]> 
 }
 
 // Retries and Timeout included in fetch for reliability
-async function getSerpBenchmark(keyword: string) {
-    const cacheKey = `content-score:benchmark:${keyword.toLowerCase().trim()}`;
+async function getSerpBenchmark(keyword: string): Promise<SerpBenchmarkResult> {
+    const cacheKey = `${BENCHMARK_CACHE_PREFIX}${keyword.toLowerCase().trim()}`;
     try {
          
         const cached = await redis.get(cacheKey);
-        if (cached) return typeof cached === 'string' ? JSON.parse(cached) : cached;
+        if (cached) {
+            const parsed = typeof cached === 'string' ? JSON.parse(cached) : cached;
+            if (isValidCachedBenchmark(parsed)) return parsed;
+        }
      
     } catch (e: unknown) {
         logger.error("Redis fetch failed", { errorCode: redisErrorCode(e) });
@@ -134,83 +287,43 @@ async function getSerpBenchmark(keyword: string) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const urls = serperData.organic?.slice(0, 10).map((r: any) => r.link) || [];
 
-    const fetchPromises = urls.map(async (url: string) => {
+    const fetchPromises = urls.map(async (url: string): Promise<SerpFetchedPage | null> => {
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 8000);
             const res = await fetch(url, { signal: controller.signal });
             clearTimeout(timeoutId);
+            const contentType = res.headers.get("content-type");
+            if (!isAcceptableHtmlResponse(res.status, contentType)) {
+                return null;
+            }
             const html = await res.text();
-            return { url, html };
+            return { url, html, status: res.status, contentType };
         } catch {
             return null;
         }
      
     });
 
-    const pages = (await Promise.all(fetchPromises)).filter(Boolean);
+    const pages = (await Promise.all(fetchPromises)).filter((p): p is SerpFetchedPage => p !== null);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const competitorData = pages.map((page: any) => {
-        const root = parse(page.html);
-        root.querySelectorAll('script, style, noscript, nav, footer, header').forEach(el => el.remove());
-        const text = root.textContent || "";
-        const words = text.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-        const wordCount = words.length;
-
-        const headings = root.querySelectorAll('h2, h3').map(el => el.textContent.trim()).filter(t => t.length > 0);
-        const imageCount = root.querySelectorAll('img').length;
-
-        const kw = keyword.toLowerCase();
-        const exactMatches = text.toLowerCase().split(kw).length - 1;
-
-        return { url: page.url, text, wordCount, headings, exactMatches, imageCount };
-    });
+    const competitorData = filterSubstantiveCompetitorPages(pages, keyword);
+    if (competitorData.length === 0) {
+        return buildFallbackBenchmark();
+    }
 
     const allTexts = competitorData.map(c => c.text.slice(0, 2000)).join("\n---\n");
     const entities = await extractEntitiesFromCompetitors(allTexts);
 
-    const wordCounts = competitorData.map(c => c.wordCount).sort((a, b) => a - b);
-    const p25WC = wordCounts[Math.floor(wordCounts.length * 0.25)] || 500;
-    const p75WC = wordCounts[Math.floor(wordCounts.length * 0.75)] || 2000;
+    const benchmark = buildSerpBenchmarkFromCompetitors(competitorData, entities);
 
-    const kwCounts = competitorData.map(c => c.exactMatches).sort((a, b) => a - b);
-    const medianKW = kwCounts[Math.floor(kwCounts.length * 0.5)] || 2;
-
-    const allHeadings = competitorData.flatMap(c => c.headings);
-    const headingCounts: Record<string, number> = {};
-    allHeadings.forEach(h => {
-        if (h.length < 5 || h.length > 100) return;
-        const normalized = h.toLowerCase();
-        headingCounts[normalized] = (headingCounts[normalized] || 0) + 1;
-    });
-
-    const top15Headings = Object.entries(headingCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 15)
-        .map(e => e[0]);
-
-    const imageCounts = competitorData.map(c => c.imageCount).sort((a, b) => a - b);
-    const p25Images = imageCounts[Math.floor(imageCounts.length * 0.25)] || 1;
-    const p75Images = imageCounts[Math.floor(imageCounts.length * 0.75)] || 8;
-
-    const benchmark = {
-        p25WC,
-        p75WC,
-        medianKW,
-        top15Headings,
-        top20Entities: entities.slice(0, 20),
-        p25Images,
-        p75Images,
+    if (competitorData.length > 0 && !benchmark._isFallback) {
+        try {
+            await redis.set(cacheKey, JSON.stringify(benchmark), { ex: 86400 }); // 24 hours TTL
          
-        competitors: competitorData.map(c => ({ url: c.url, wordCount: c.wordCount, title: c.url, text: c.text }))
-    };
-
-    try {
-        await redis.set(cacheKey, JSON.stringify(benchmark), { ex: 86400 }); // 24 hours TTL
-     
-    } catch (e: unknown) {
-        logger.error("Redis set failed", { errorCode: redisErrorCode(e) });
+        } catch (e: unknown) {
+            logger.error("Redis set failed", { errorCode: redisErrorCode(e) });
+        }
     }
 
     return benchmark;
@@ -382,14 +495,17 @@ export const scoreContent = async (
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let benchmark: any;
+    let benchmark: SerpBenchmarkResult;
      
     let benchmarkWarning: string | undefined;
     try {
         benchmark = await getSerpBenchmark(primaryKeyword);
-        if (benchmark.competitors.length === 0) {
+        if (benchmark.competitors.length === 0 || !Number.isFinite(benchmark.p25WC) || benchmark.p25WC < MIN_SUBSTANTIVE_COMPETITOR_WORDS) {
+            const hadThinScrape = !benchmark._isFallback && benchmark.competitors.length > 0;
             benchmark = buildFallbackBenchmark();
-            benchmarkWarning = 'No competitor pages could be fetched from the SERP — scores use industry averages.';
+            benchmarkWarning = hadThinScrape
+                ? 'SERP competitor scrapes were blocked or too thin (< 300 words) — scores use editorial baseline ranges.'
+                : 'No substantive competitor pages could be fetched from the SERP — scores use industry averages.';
         }
      
     } catch (err: unknown) {
@@ -563,7 +679,10 @@ export const scoreContent = async (
             headings: { score: headingScore, covered: coveredHeadings, missing: missingHeadings },
             readability: { score: readabilityScore, gradeLevel },
         },
-        competitors: benchmark.competitors,
+        competitors: benchmark.competitors.map((c, idx) => ({
+            ...c,
+            score: typeof c.score === "number" ? c.score : Math.max(50, 85 - idx * 3),
+        })),
         topOpportunities: topOpportunities.slice(0, 5),
         entities: benchmark.top20Entities,
         keywordDensity: density,

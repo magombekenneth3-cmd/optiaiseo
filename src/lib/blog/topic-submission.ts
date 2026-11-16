@@ -23,6 +23,7 @@ export interface AuthorSubmissionPayload {
 export interface TopicDispatchOptions {
     preflightId?: string;
     forceSerpMismatch?: boolean;
+    forceExistingPage?: boolean;
     requestId?: string;
 }
 

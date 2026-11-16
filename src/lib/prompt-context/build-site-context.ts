@@ -20,6 +20,7 @@ export interface GroundedSiteContext {
     /** Structured data for programmatic use */
     data: {
         domain: string;
+        brandName?: string | null;
         coreServices: string | null;
         location: string | null;
         authorName: string | null;
@@ -52,6 +53,7 @@ export async function buildGroundedContext(siteId: string): Promise<GroundedSite
                 where: { id: siteId },
                 select: {
                     domain: true,
+                    brandName: true,
                     coreServices: true,
                     location: true,
                     authorName: true,
@@ -113,6 +115,7 @@ export async function buildGroundedContext(siteId: string): Promise<GroundedSite
         // Build the structured data object
         const data: GroundedSiteContext["data"] = {
             domain: site.domain,
+            brandName: site.brandName ?? null,
             coreServices: site.coreServices ?? null,
             location: site.location ?? null,
             authorName: site.authorName ?? null,
@@ -133,6 +136,8 @@ export async function buildGroundedContext(siteId: string): Promise<GroundedSite
             "=== SITE CONTEXT (use this to make your response specific and accurate) ===",
             `Domain: ${site.domain}`,
         ];
+
+        if (site.brandName) lines.push(`Brand Name: ${site.brandName}`);
 
         if (site.coreServices) lines.push(`Core Services: ${site.coreServices}`);
         if (site.location) lines.push(`Location / Market: ${site.location}`);

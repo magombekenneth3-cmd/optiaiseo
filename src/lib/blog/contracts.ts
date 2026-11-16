@@ -53,6 +53,13 @@ export const EvidenceAvailabilitySchema = z.enum([
     "UNAVAILABLE",
 ]);
 
+export const ScrapeStatusSchema = z.enum([
+    "ANALYZED",
+    "SNIPPET_ONLY",
+    "FAILED",
+    "UNSCRAPPABLE",
+]);
+
 export const SourceEvidenceSchema = z.object({
     id: z.string().regex(/^[a-z0-9_-]+$/i),
     url: z.string().url(),
@@ -65,6 +72,7 @@ export const SourceEvidenceSchema = z.object({
     sourceType: SourceTypeSchema,
     confidence: z.number().min(0).max(1),
     authorityScore: z.number().min(0).max(1).optional(),
+    scrapeStatus: ScrapeStatusSchema.optional(),
 });
 
 export const ClaimSchema = z.object({

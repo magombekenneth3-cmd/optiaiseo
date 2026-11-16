@@ -397,6 +397,43 @@ ${content.slice(0, 12000)}`;
 
 
 /**
+ * Normalizes stored `citationCriteria` JSON values back into a `CitationCriterion[]` array.
+ * Handles direct arrays, `{ criteria: [...] }` wrappers, and legacy corrupted records
+ * where numeric keys (`"0"`, `"1"`, ...) were object-spread alongside metadata keys.
+ */
+export function normalizeCitationCriteria(raw: unknown): CitationCriterion[] {
+  const isCriterion = (item: unknown): item is CitationCriterion => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const candidate = item as Record<string, unknown>;
+    return (
+      typeof candidate.id === "string" &&
+      typeof candidate.label === "string" &&
+      typeof candidate.passed === "boolean" &&
+      typeof candidate.weight === "number" &&
+      typeof candidate.score === "number"
+    );
+  };
+
+  if (Array.isArray(raw)) {
+    return raw.filter(isCriterion);
+  }
+  if (!raw || typeof raw !== "object") {
+    return [];
+  }
+
+  const record = raw as Record<string, unknown>;
+  if (Array.isArray(record.criteria)) {
+    return record.criteria.filter(isCriterion);
+  }
+
+  return Object.keys(record)
+    .filter((key) => /^\d+$/.test(key))
+    .sort((a, b) => Number(a) - Number(b))
+    .map((key) => record[key])
+    .filter(isCriterion);
+}
+
+/**
  * Quick gate: run scoring + return whether the blog passes the citation threshold.
  * Designed to be called from the Inngest blog generation pipeline before save.
  */

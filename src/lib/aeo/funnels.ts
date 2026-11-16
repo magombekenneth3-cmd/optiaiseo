@@ -50,7 +50,7 @@ export function getFunnelForIntent(
                     goal: 'sale',
                 },
                 htmlSnippet: `
-<div style="background:#eff6ff;border:2px solid #3b82f6;border-radius:12px;padding:2rem;text-align:center;margin:2.5rem 0;">
+<div data-funnel-cta="true" style="background:#eff6ff;border:2px solid #3b82f6;border-radius:12px;padding:2rem;text-align:center;margin:2.5rem 0;">
   <h3 style="color:#1e3a8a;margin-top:0;font-size:1.3rem;">${brand}</h3>
   <p style="color:#3b82f6;margin-bottom:1.5rem;">Ready to get started? Visit our website for full details, pricing, and to get in touch.</p>
   <a href="${siteUrl}" style="background:#2563eb;color:white;padding:12px 28px;border-radius:8px;font-weight:700;text-decoration:none;display:inline-block;">Visit ${brand} →</a>
@@ -69,7 +69,7 @@ export function getFunnelForIntent(
                     goal: 'demo',
                 },
                 htmlSnippet: `
-<div style="background:#ecfdf5;border:2px solid #10b981;border-radius:12px;padding:2rem;margin:2.5rem 0;">
+<div data-funnel-cta="true" style="background:#ecfdf5;border:2px solid #10b981;border-radius:12px;padding:2rem;margin:2.5rem 0;">
   <h3 style="color:#064e3b;margin-top:0;font-size:1.2rem;">Want to know more about ${brand}?</h3>
   <p style="color:#047857;margin-bottom:1.2rem;">Visit our website for service details, packages, and to get in touch directly with our team.</p>
   <a href="${siteUrl}" style="background:#10b981;color:white;padding:11px 24px;border-radius:8px;font-weight:700;text-decoration:none;display:inline-block;">Go to ${brand} →</a>
@@ -88,7 +88,7 @@ export function getFunnelForIntent(
                     goal: 'lead',
                 },
                 htmlSnippet: `
-<div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:5px solid #64748b;border-radius:8px;padding:1.5rem;margin:2.5rem 0;">
+<div data-funnel-cta="true" style="background:#f8fafc;border:1px solid #e2e8f0;border-left:5px solid #64748b;border-radius:8px;padding:1.5rem;margin:2.5rem 0;">
   <p style="color:#1e293b;font-weight:700;margin:0 0 0.5rem;">${brand}</p>
   <p style="color:#64748b;margin:0 0 1rem;font-size:0.95rem;">For more information about our services and how we can help, visit our website.</p>
   <a href="${siteUrl}" style="color:#1e293b;font-weight:700;text-decoration:underline;">Visit ${brand} →</a>
@@ -108,7 +108,7 @@ export function getFunnelForIntent(
                     goal: 'branding',
                 },
                 htmlSnippet: `
-<div style="margin:2.5rem 0;border-top:1px solid #e2e8f0;padding-top:1.5rem;text-align:center;">
+<div data-funnel-cta="true" style="margin:2.5rem 0;border-top:1px solid #e2e8f0;padding-top:1.5rem;text-align:center;">
   <p style="color:#64748b;margin-bottom:0.75rem;">Learn more about ${brand}:</p>
   <a href="${siteUrl}" style="color:#1e293b;font-weight:800;text-decoration:none;letter-spacing:0.03em;">${siteUrl} →</a>
 </div>`
@@ -117,10 +117,29 @@ export function getFunnelForIntent(
     }
 }
 
+const LEGACY_FUNNEL_CTA_PATTERNS = [
+    /Ready to get started\? Visit our website for full details, pricing, and to get in touch\./i,
+    /Visit our website for service details, packages, and to get in touch directly with our team\./i,
+    /For more information about our services and how we can help, visit our website\./i,
+];
+
+/**
+ * Returns true if the HTML content already includes a rendered funnel CTA block.
+ */
+export function hasFunnelCta(content: string): boolean {
+    if (!content) return false;
+    if (/data-funnel-cta=["']true["']/i.test(content)) return true;
+    return LEGACY_FUNNEL_CTA_PATTERNS.some((pattern) => pattern.test(content));
+}
+
 /**
  * Injects a funnel CTA into the blog content at a strategic position.
+ * No-ops if a funnel CTA is already present to avoid duplicate blocks.
  */
 export function injectFunnelCta(content: string, funnelJson: FunnelConfig): string {
+    if (hasFunnelCta(content)) {
+        return content;
+    }
     const paragraphs = content.split('</p>');
     if (paragraphs.length > 3) {
         let safeIndex = 2;

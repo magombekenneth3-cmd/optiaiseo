@@ -13,12 +13,17 @@ import {
 import { extractSiteContext } from "@/lib/blog/context";
 import { fetchGSCKeywords, findOpportunities, normaliseSiteUrl } from "@/lib/gsc";
 import { callGemini, callGeminiJson } from "@/lib/gemini/client";
-import { getFunnelForIntent, SearchIntent as FunnelIntent } from "@/lib/aeo/funnels";
+import { getFunnelForIntent, hasFunnelCta, SearchIntent as FunnelIntent } from "@/lib/aeo/funnels";
 import { detectIntent, cleanDomainToDisplayName } from "@/lib/blog/prompt-context";
-import { gateCitationScore } from "@/lib/blog/ai-citation-template";
+import { gateCitationScore, normalizeCitationCriteria } from "@/lib/blog/ai-citation-template";
 import { AI_MODELS } from "@/lib/constants/ai-models";
 import { getSerpContextForKeyword, type SerpContext, type SerpFormatSignal } from "@/lib/blog/serp";
 import { replayGenerationOutbox } from "@/lib/blog/generation-recovery";
+import {
+    computeEvidenceMetrics,
+    findUnresolvedPlaceholders,
+    htmlToPlainText,
+} from "@/lib/blog/revalidate-post";
 
 // getEffectiveTier / getPlan removed — monthly blog count limit no longer enforced.
 
@@ -498,6 +503,7 @@ export const generateBlogJob = inngest.createFunction(
                 select: {
                     id: true,
                     domain: true,
+                    brandName: true,
                     userId: true,
                     blogTone: true,
                     authorName: true,
@@ -513,7 +519,7 @@ export const generateBlogJob = inngest.createFunction(
             return s;
         });
 
-        const displayName = cleanDomainToDisplayName(site.domain);
+        const displayName = site.brandName?.trim() || cleanDomainToDisplayName(site.domain);
         const author = {
             name: (event.data.authorName as string | undefined)?.trim() || site.authorName?.trim() || site.user?.name?.trim() || displayName || site.domain,
             role: (event.data.authorRole as string | undefined)?.trim() || site.authorRole || undefined,
@@ -1038,8 +1044,13 @@ ${liveBlogPost.content.substring(0, 120000)}`,
         // ── 1. Final length normalization ──────────────────────────────────
         // Overly long content (>6000 words) is truncated at the last sentence boundary
         // before the limit before fact-checking or gating runs.
-        await step.run("validate-length-constraints", async () => {
-            const plainText = liveBlogPost.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        const lengthCheck = await step.run("validate-length-constraints", async () => {
+            let normalizedContent = liveBlogPost.content;
+            let normalizedMeta = liveBlogPost.metaDescription;
+            const errors: string[] = [];
+            const warnings: string[] = [];
+
+            const plainText = normalizedContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
             let wordCount = plainText.split(" ").filter(Boolean).length;
 
             const MAX_WORDS = 6000;
@@ -1054,15 +1065,15 @@ ${liveBlogPost.content.substring(0, 120000)}`,
                 let htmlCursor = 0;
                 let textCursor = 0;
                 let inTag = false;
-                while (htmlCursor < liveBlogPost.content.length && textCursor < cutAt) {
-                    const ch = liveBlogPost.content[htmlCursor];
+                while (htmlCursor < normalizedContent.length && textCursor < cutAt) {
+                    const ch = normalizedContent[htmlCursor];
                     if (ch === "<") inTag = true;
                     if (!inTag) textCursor++;
                     if (ch === ">") inTag = false;
                     htmlCursor++;
                 }
 
-                let truncated = liveBlogPost.content.slice(0, htmlCursor);
+                const truncated = normalizedContent.slice(0, htmlCursor);
                 const openTags: string[] = [];
                 const tagRegex = /<\/?([a-zA-Z][a-zA-Z0-9]*)[^>]*>/g;
                 let tagMatch;
@@ -1079,10 +1090,10 @@ ${liveBlogPost.content.substring(0, 120000)}`,
                     }
                 }
                 const closingTags = openTags.reverse().map(t => `</${t}>`).join("");
-                liveBlogPost.content = truncated + closingTags;
+                normalizedContent = truncated + closingTags;
                 wordCount = MAX_WORDS;
 
-                liveBlogPost.validationWarnings.push(
+                warnings.push(
                     `Content exceeded ${MAX_WORDS} words and was trimmed. Review the truncated ending before publishing.`
                 );
                 logger.warn(`[Blog/LengthGate] Content trimmed from ${words.length} → ${MAX_WORDS} words`, {
@@ -1091,31 +1102,34 @@ ${liveBlogPost.content.substring(0, 120000)}`,
             }
 
             if (wordCount < 900) {
-                liveBlogPost.validationWarnings.push(
+                warnings.push(
                     `Content is thin (${wordCount} words) relative to the planned search-task scope. Review coverage before publishing.`
                 );
                 if (wordCount < 500) {
-                    liveBlogPost.validationErrors.push(`Content too short: ${wordCount} words (minimum 500).`);
+                    errors.push(`Content too short: ${wordCount} words (minimum 500).`);
                 }
             }
 
             if (liveBlogPost.title.length > 60) {
-                liveBlogPost.validationWarnings.push(
+                warnings.push(
                     `Title is ${liveBlogPost.title.length} chars — Google truncates at ~60. Consider shortening.`
                 );
             }
 
-            if (liveBlogPost.metaDescription.length > 160) {
-                liveBlogPost.metaDescription = liveBlogPost.metaDescription.slice(0, 157) + "...";
-                liveBlogPost.validationWarnings.push("Meta description truncated to 160 chars.");
-            } else if (liveBlogPost.metaDescription.length < 50) {
-                liveBlogPost.validationWarnings.push(
-                    `Meta description is very short (${liveBlogPost.metaDescription.length} chars). Aim for 130-160 chars.`
+            if (normalizedMeta.length > 160) {
+                normalizedMeta = normalizedMeta.slice(0, 157) + "...";
+                warnings.push("Meta description truncated to 160 chars.");
+            } else if (normalizedMeta.length < 50) {
+                warnings.push(
+                    `Meta description is very short (${normalizedMeta.length} chars). Aim for 130-160 chars.`
                 );
             }
 
-            logger.info(`[Blog/LengthGate] words=${wordCount} titleLen=${liveBlogPost.title.length} metaLen=${liveBlogPost.metaDescription.length}`);
+            logger.info(`[Blog/LengthGate] words=${wordCount} titleLen=${liveBlogPost.title.length} metaLen=${normalizedMeta.length}`);
+            return { content: normalizedContent, metaDescription: normalizedMeta, errors, warnings };
         });
+        liveBlogPost.content = lengthCheck.content;
+        liveBlogPost.metaDescription = lengthCheck.metaDescription;
 
         // ── 2. Interactive Widget Generation & Validation ──────────────────
         const interactiveWidget = await step.run("generate-interactive-widget", async () => {
@@ -1125,6 +1139,10 @@ ${liveBlogPost.content.substring(0, 120000)}`,
 
         // ── 3. Final Content Assembly (Funnel CTA) ─────────────────────────
         const finalContent = await step.run("inject-funnel-cta", async () => {
+            const { sanitizeHtml } = await import("@/lib/sanitize-html");
+            if (hasFunnelCta(liveBlogPost.content)) {
+                return sanitizeHtml(liveBlogPost.content);
+            }
             try {
                 const funnelIntent = (detectedIntent === "local" ? "informational" : detectedIntent) as FunnelIntent;
                 const funnelConfig = getFunnelForIntent(
@@ -1138,7 +1156,6 @@ ${liveBlogPost.content.substring(0, 120000)}`,
                 const content = h2Splits.length >= 3
                     ? [...h2Splits.slice(0, 2), funnelConfig.htmlSnippet, ...h2Splits.slice(2)].join("")
                     : liveBlogPost.content + funnelConfig.htmlSnippet;
-                const { sanitizeHtml } = await import("@/lib/sanitize-html");
                 return sanitizeHtml(content);
             } catch (funnelErr: unknown) {
                 logger.warn("[Blog/Funnel] inject-funnel-cta threw — using original content", {
@@ -1146,35 +1163,24 @@ ${liveBlogPost.content.substring(0, 120000)}`,
                     siteId,
                     keyword,
                 });
-                const { sanitizeHtml } = await import("@/lib/sanitize-html");
                 return sanitizeHtml(liveBlogPost.content);
             }
         });
         liveBlogPost.content = finalContent;
 
         // ── 4. Placeholder & Secondary Surface Validation ──────────────────
-        const PLACEHOLDER_PATTERN = /\[Section generation failed|\[EDITOR:|\bTODO\b|\bTBD\b|\bFIXME\b|lorem ipsum|Example Company|YourCompany|\{\{[^}]+\}\}|\[INSERT STAT\]|\[IMAGE HERE\]/i;
         const fullContentToCheck = liveBlogPost.content + (interactiveWidget ?? "");
+        const matchedPlaceholders = findUnresolvedPlaceholders(fullContentToCheck);
+        const placeholderErrors: string[] = [];
 
-        if (PLACEHOLDER_PATTERN.test(fullContentToCheck)) {
-            const matchedPatterns = [
-                /\[Section generation failed/i.test(fullContentToCheck) && "[Section generation failed] (section writer failure)",
-                /\[EDITOR:/i.test(fullContentToCheck) && "[EDITOR:] (editorial pass artefact)",
-                /\b(?:TODO|FIXME)\b/i.test(fullContentToCheck) && "TODO/FIXME (LLM template artefact)",
-                /\bTBD\b/i.test(fullContentToCheck) && "TBD (LLM template artefact)",
-                /lorem ipsum/i.test(fullContentToCheck) && "lorem ipsum (LLM filler)",
-                /Example Company|YourCompany/i.test(fullContentToCheck) && "Example Company/YourCompany (template variable)",
-                /\{\{[^}]+\}\}/i.test(fullContentToCheck) && "{{...}} (unresolved template variable)",
-                /\[INSERT STAT\]/i.test(fullContentToCheck) && "[INSERT STAT] (stat placeholder)",
-                /\[IMAGE HERE\]/i.test(fullContentToCheck) && "[IMAGE HERE] (image placeholder)",
-            ].filter(Boolean);
+        if (matchedPlaceholders.length > 0) {
             logger.error("[Blog/Pipeline] Content or widget contains placeholder text — marking FAILED, will not publish", {
                 siteId,
                 keyword,
-                matchedPatterns,
+                matchedPatterns: matchedPlaceholders,
             });
-            liveBlogPost.validationErrors.push(
-                `Content contains unresolved placeholder text (${matchedPatterns.join("; ")}). ` +
+            placeholderErrors.push(
+                `Content contains unresolved placeholder text (${matchedPlaceholders.join("; ")}). ` +
                 "This is a content pipeline failure, not a quality gate failure. " +
                 "Regenerate before publishing."
             );
@@ -1263,13 +1269,21 @@ ${liveBlogPost.content.substring(0, 120000)}`,
         const freshValidation = runCompositeValidation({
             title: liveBlogPost.title,
             htmlContent: liveBlogPost.content,
-            markdownContent: liveBlogPost.contentMarkdown,
+            markdownContent: htmlToPlainText(liveBlogPost.content),
             metaDescription: liveBlogPost.metaDescription,
             author,
         });
         liveBlogPost.validationScore = freshValidation.score;
-        liveBlogPost.validationErrors = [...new Set([...liveBlogPost.validationErrors, ...freshValidation.errors])];
-        liveBlogPost.validationWarnings = [...new Set([...liveBlogPost.validationWarnings, ...freshValidation.warnings])];
+        liveBlogPost.validationErrors = [...new Set([
+            ...lengthCheck.errors,
+            ...placeholderErrors,
+            ...freshValidation.errors,
+            ...freshValidation.blockingIssues,
+        ])];
+        liveBlogPost.validationWarnings = [...new Set([
+            ...lengthCheck.warnings,
+            ...freshValidation.warnings,
+        ])];
 
         const qualityScore = factCheck.qualityScore !== null
             ? Math.min(factCheck.qualityScore, liveBlogPost.validationScore)
@@ -1396,20 +1410,16 @@ ${liveBlogPost.content.substring(0, 120000)}`,
             }
         });
         liveBlogPost.evidencePacket = publicationGateStep.evidencePacket;
-        liveBlogPost.evidenceCoverage = publicationGateStep.evidencePacket.claims.length > 0
-            ? Math.round(
-                (publicationGateStep.evidencePacket.claims.filter(claim => claim.sourceIds.length > 0).length /
-                    publicationGateStep.evidencePacket.claims.length) * 100
-            )
-            : 0;
-        liveBlogPost.missingEvidence = publicationGateStep.evidencePacket.unsupportedClaims.slice(0, 50);
+        const evidenceMetrics = computeEvidenceMetrics(publicationGateStep.evidencePacket);
+        liveBlogPost.evidenceCoverage = evidenceMetrics.evidenceCoverage;
+        liveBlogPost.missingEvidence = evidenceMetrics.missingEvidence;
         const publicationGateResult = publicationGateStep.publicationGate;
 
         // Publication gate determines status — no score override
         let blogStatus: "DRAFT" | "NEEDS_REVIEW" | "EVIDENCE_REVIEW" | "REJECTED" | "FAILED";
 
         // Placeholder text is always FAILED (separate from evidence gates)
-        if (PLACEHOLDER_PATTERN.test(liveBlogPost.content)) {
+        if (findUnresolvedPlaceholders(liveBlogPost.content).length > 0) {
             blogStatus = "FAILED";
             logger.error("[Blog/Pipeline] Placeholder text detected — FAILED", { siteId, keyword });
         } else {
@@ -1593,19 +1603,21 @@ ${liveBlogPost.content.substring(0, 120000)}`,
             try {
                 if (!resolvedBlogId) return;
                 const existingBlog = await prisma.blog.findUnique({ where: { id: resolvedBlogId }, select: { citationCriteria: true } });
-                const existingCriteria = existingBlog?.citationCriteria as Record<string, unknown> | null;
-                await prisma.blog.update({
-                    where: { id: resolvedBlogId },
-                    data: {
-                        citationCriteria: {
-                            ...(existingCriteria ?? {}),
-                            missingEntities: enrichment.missingEntities,
-                            enrichmentScore: enrichment.enrichmentScore,
-                            enrichmentAvailable: enrichment.available,
-                            expectedEntities: enrichment.expectedEntities,
-                            factCheckScore: factCheck.qualityScore,
-                        },
-                    },
+                // Preserve `citationCriteria` as a CitationCriterion[] array; repair legacy object-spread records if needed.
+                if (existingBlog?.citationCriteria && !Array.isArray(existingBlog.citationCriteria)) {
+                    const repairedCriteria = normalizeCitationCriteria(existingBlog.citationCriteria);
+                    await prisma.blog.update({
+                        where: { id: resolvedBlogId },
+                        data: { citationCriteria: repairedCriteria as unknown as Prisma.InputJsonValue },
+                    });
+                }
+                logger.info("[Blog/Enrichment] Completed post-save enrichment", {
+                    siteId,
+                    blogId: resolvedBlogId,
+                    enrichmentScore: enrichment.enrichmentScore,
+                    enrichmentAvailable: enrichment.available,
+                    missingEntitiesCount: enrichment.missingEntities.length,
+                    factCheckScore: factCheck.qualityScore,
                 });
             } catch (enrichErr: unknown) {
                 logger.warn("[Blog/Enrichment] save-enrichment-data failed — skipping", {

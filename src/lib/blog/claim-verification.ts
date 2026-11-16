@@ -1,6 +1,7 @@
 import { logger } from "@/lib/logger";
 import type { ResearchPacket, SourceEvidence } from "./contracts";
 import type { ResearchEvidenceLedger, LedgerEvidenceItem } from "./evidence-ledger";
+import { isAnalyzedSource } from "./research-packet";
 
 export type ClaimType =
     | "FACT"
@@ -171,7 +172,8 @@ export function findEvidenceForClaim(
     const claimWords = keywordsFrom(claim.text);
 
     if (researchPacket) {
-        for (const source of researchPacket.sources) {
+        const analyzedSources = researchPacket.sources.filter(s => isAnalyzedSource(s, researchPacket));
+        for (const source of analyzedSources) {
             const evidenceWords = keywordsFrom(source.evidence + " " + source.claim);
             const overlap = scoreOverlap(claimWords, evidenceWords);
             if (overlap < 0.1) continue;
@@ -190,10 +192,17 @@ export function findEvidenceForClaim(
     }
 
     if (ledger) {
+        const blockedUrlSet = new Set(
+            (researchPacket?.serp?.competitors ?? [])
+                .filter(c => c.scrapeStatus && c.scrapeStatus !== "ANALYZED")
+                .map(c => c.url.trim().replace(/\/$/, "").toLowerCase()),
+        );
         const factualItems = ledger.evidenceItems.filter(
             (item) =>
                 item.provenance.sourceType !== "LLM_GENERATED" &&
-                item.provenance.sourceType !== "INFERENCE",
+                item.provenance.sourceType !== "INFERENCE" &&
+                (!item.provenance.sourceUrl ||
+                    !blockedUrlSet.has(item.provenance.sourceUrl.trim().replace(/\/$/, "").toLowerCase())),
         );
         for (const item of factualItems) {
             const evidenceWords = keywordsFrom(item.content + " " + (item.excerpt ?? ""));
