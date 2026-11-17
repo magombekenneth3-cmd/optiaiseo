@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import {
-    AlertTriangle,
-    Check,
     CheckCircle2,
     ChevronRight,
     Clock3,
     Copy,
+    ExternalLink,
     FileText,
     Globe,
     Info,
@@ -22,6 +21,8 @@ import {
     X,
     Zap,
     PanelRight,
+    AlertTriangle,
+    Check,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
@@ -37,6 +38,13 @@ import {
     type CitationCriterion,
 } from "@/lib/blog/ai-citation-template";
 import type { SerpCompetitiveBrief } from "@/lib/blog/contracts";
+import {
+    formatBriefBadgeLabel,
+    formatOpportunityGuidanceForUi,
+    formatPublishedDateLabel,
+    formatSourceDomainLabel,
+} from "@/lib/blog/brief-display";
+import { formatKeywordDisplay, slugifyHeading } from "@/lib/blog/markdown";
 import { logger } from "@/lib/logger";
 
 interface Blog {
@@ -246,6 +254,8 @@ function SerpResearchPanel({
     validationWarnings,
     onRevalidate,
     isRevalidating,
+    onFixIssues,
+    isImproving,
 }: {
     brief?: SerpCompetitiveBrief | null;
     publicationGates?: Array<{ name: string; status: string; issues?: string[]; warnings?: string[] }> | null;
@@ -253,6 +263,8 @@ function SerpResearchPanel({
     validationWarnings?: string[] | null;
     onRevalidate?: () => void;
     isRevalidating?: boolean;
+    onFixIssues?: () => void;
+    isImproving?: boolean;
 }) {
     const issues = [...new Set([
         ...(validationErrors ?? []),
@@ -356,16 +368,34 @@ function SerpResearchPanel({
                             {brief.serpFeatures.slice(0, 5).map((feature, index) => (
                                 <div key={feature.type + index} className="rounded-lg border border-border bg-background/50 p-2.5">
                                     <div className="flex items-center justify-between gap-2">
-                                        <p className="text-[11px] font-medium capitalize">{feature.type.replace(/_/g, " ")}</p>
-                                        <span className="text-[10px] text-muted-foreground">{feature.classification} · {Math.round(feature.confidence * 100)}%</span>
+                                        <span className="inline-flex items-center rounded border border-border bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                                            {formatBriefBadgeLabel("feature", feature.type)}
+                                        </span>
+                                        <span className="text-[10px] text-muted-foreground">
+                                            {formatBriefBadgeLabel("verification", feature.classification)} · {Math.round(feature.confidence * 100)}%
+                                        </span>
                                     </div>
-                                    <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{feature.description}</p>
+                                    <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">{feature.description}</p>
                                     {feature.evidence.slice(0, 3).map((item, itemIndex) => (
                                         <p key={itemIndex} className="mt-1 text-[10px] text-muted-foreground">· {item}</p>
                                     ))}
-                                    {feature.sourceUrls.slice(0, 3).map(url => (
-                                        <a key={url} href={url} target="_blank" rel="noreferrer" className="mr-2 mt-1 inline-block text-[10px] text-primary hover:underline">Source</a>
-                                    ))}
+                                    {feature.sourceUrls.length > 0 && (
+                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                            {feature.sourceUrls.slice(0, 3).map(url => (
+                                                <a
+                                                    key={url}
+                                                    href={url}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    title={url}
+                                                    className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                                                >
+                                                    <span>{formatSourceDomainLabel(url)}</span>
+                                                    <ExternalLink className="h-2.5 w-2.5 shrink-0 opacity-70" aria-hidden="true" />
+                                                </a>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -383,30 +413,36 @@ function SerpResearchPanel({
                         Ranking pages analysed ({brief.pages.length})
                     </h4>
                     <div className="space-y-2">
-                        {brief.pages.map(page => (
-                            <div key={page.url} className="rounded-lg border border-border p-2.5">
-                                <div className="flex items-start gap-2">
-                                    <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded bg-muted px-1 text-[10px] font-semibold tabular-nums">
-                                        {page.rank}
-                                    </span>
-                                    <div className="min-w-0 flex-1">
-                                        <a href={page.url} target="_blank" rel="noreferrer" className="line-clamp-2 text-[11px] font-medium leading-relaxed text-foreground hover:text-primary hover:underline">
-                                            {page.title}
-                                        </a>
-                                        <p className="mt-1 text-[10px] text-muted-foreground">
-                                            {page.pageType.replace(/_/g, " ")} · {page.scrapeStatus.replace(/_/g, " ").toLowerCase()}
-                                            {page.publishedAt ? ` · date ${page.publishedAt.slice(0, 10)}` : ""}
-                                        </p>
-                                        {page.headings.length > 0 && (
-                                            <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">
-                                                Headings observed: {page.headings.slice(0, 4).join(" · ")}
-                                            </p>
-                                        )}
-                                        {page.snippet && <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">{page.snippet}</p>}
+                        {brief.pages.map(page => {
+                            const formattedDate = formatPublishedDateLabel(page.publishedAt);
+                            return (
+                                <div key={page.url} className="rounded-lg border border-border p-2.5">
+                                    <div className="flex items-start gap-2">
+                                        <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded bg-muted px-1 text-[10px] font-semibold tabular-nums">
+                                            {page.rank}
+                                        </span>
+                                        <div className="min-w-0 flex-1">
+                                            <a href={page.url} target="_blank" rel="noreferrer" className="line-clamp-2 text-[11px] font-medium leading-relaxed text-foreground hover:text-primary hover:underline">
+                                                {page.title}
+                                            </a>
+                                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                                                <span className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[9px] font-medium">
+                                                    {formatBriefBadgeLabel("pageType", page.pageType)}
+                                                </span>
+                                                <span>{formatBriefBadgeLabel("scrapeStatus", page.scrapeStatus)}</span>
+                                                {formattedDate && <span>· {formattedDate}</span>}
+                                            </div>
+                                            {page.headings.length > 0 && (
+                                                <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">
+                                                    Headings observed: {page.headings.slice(0, 4).join(" · ")}
+                                                </p>
+                                            )}
+                                            {page.snippet && <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">{page.snippet}</p>}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -420,10 +456,26 @@ function SerpResearchPanel({
                                     <p className="mt-0.5 text-[10px] text-muted-foreground">
                                         {item.classification.replace(/_/g, " ")} · observed on {item.supportCount}/{item.totalAnalyzed} analysed pages
                                     </p>
-                                    {item.observedOn.slice(0, 3).map(url => {
-                                        const page = brief.pages.find(candidate => candidate.url === url);
-                                        return <a key={url} href={url} target="_blank" rel="noreferrer" className="mr-2 mt-1 inline-block text-[10px] text-primary hover:underline">{page?.title.slice(0, 36) ?? url}</a>;
-                                    })}
+                                    {item.observedOn.length > 0 && (
+                                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                            {item.observedOn.slice(0, 3).map(url => {
+                                                const page = brief.pages.find(candidate => candidate.url === url);
+                                                return (
+                                                    <a
+                                                        key={url}
+                                                        href={url}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        title={page?.title ?? url}
+                                                        className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                                                    >
+                                                        <span>{formatSourceDomainLabel(url)}</span>
+                                                        <ExternalLink className="h-2.5 w-2.5 shrink-0 opacity-70" aria-hidden="true" />
+                                                    </a>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -439,19 +491,33 @@ function SerpResearchPanel({
                             <div key={opportunity.id} className="rounded-lg border border-border p-2.5">
                                 <div className="flex items-start justify-between gap-2">
                                     <p className="text-[11px] font-medium leading-relaxed">{opportunity.description}</p>
-                                    <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] uppercase ${opportunity.verificationStatus === "observed" ? "border-emerald-500/20 text-emerald-400" : "border-amber-500/20 text-amber-300"}`}>
-                                        {opportunity.verificationStatus.replace(/_/g, " ")}
+                                    <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-medium ${opportunity.verificationStatus === "observed" ? "border-emerald-500/20 text-emerald-400" : "border-amber-500/20 text-amber-300"}`}>
+                                        {formatBriefBadgeLabel("verification", opportunity.verificationStatus)}
                                     </span>
                                 </div>
                                 <p className="mt-1 text-[10px] text-muted-foreground">
-                                    Confidence {Math.round(opportunity.confidence * 100)}% · {opportunity.type.replace(/_/g, " ")}
+                                    Confidence {Math.round(opportunity.confidence * 100)}% · {formatBriefBadgeLabel("opportunity", opportunity.type)}
                                 </p>
-                                <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{opportunity.additionalValue}</p>
-                                {opportunity.sourceUrls.slice(0, 3).map(url => (
-                                    <a key={url} href={url} target="_blank" rel="noreferrer" className="mr-2 mt-1 inline-block text-[10px] text-primary hover:underline">
-                                        Source
-                                    </a>
-                                ))}
+                                <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                                    {formatOpportunityGuidanceForUi(opportunity.additionalValue, opportunity.type, opportunity.sourceUrls.length)}
+                                </p>
+                                {opportunity.sourceUrls.length > 0 && (
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                        {opportunity.sourceUrls.slice(0, 3).map(url => (
+                                            <a
+                                                key={url}
+                                                href={url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                title={url}
+                                                className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                                            >
+                                                <span>{formatSourceDomainLabel(url)}</span>
+                                                <ExternalLink className="h-2.5 w-2.5 shrink-0 opacity-70" aria-hidden="true" />
+                                            </a>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -472,7 +538,7 @@ function SerpResearchPanel({
                 {brief.siteFit && (
                     <div className="rounded-lg border border-border bg-background/50 p-3">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Content action decision</p>
-                        <p className="mt-1 text-xs font-semibold">{brief.siteFit.recommendedAction.replace(/_/g, " ")}</p>
+                        <p className="mt-1 text-xs font-semibold">{formatBriefBadgeLabel("action", brief.siteFit.recommendedAction)}</p>
                         <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{brief.siteFit.rationale}</p>
                         {brief.siteFit.matchingPageUrl && <a href={brief.siteFit.matchingPageUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[10px] text-primary hover:underline">Open matched site page</a>}
                     </div>
@@ -491,28 +557,47 @@ function SerpResearchPanel({
 
                 {(issues.length > 0 || warnings.length > 0) && (
                     <div className="rounded-lg border border-amber-500/20 p-3">
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                                 <AlertTriangle className="h-3 w-3 text-amber-400" />
                                 Unresolved quality issues
                             </p>
-                            {onRevalidate && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (!isRevalidating) onRevalidate();
-                                    }}
-                                    aria-disabled={Boolean(isRevalidating)}
-                                    className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/60 px-2 py-0.5 text-[10px] font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                                >
-                                    {isRevalidating ? (
-                                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                    ) : (
-                                        <RefreshCw className="h-2.5 w-2.5" />
-                                    )}
-                                    {isRevalidating ? "Checking…" : "Re-check quality gates"}
-                                </button>
-                            )}
+                            <div className="flex items-center gap-1.5">
+                                {issues.length > 0 && onFixIssues && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (!isImproving && !isRevalidating) onFixIssues();
+                                        }}
+                                        aria-disabled={Boolean(isImproving || isRevalidating)}
+                                        className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                                    >
+                                        {isImproving ? (
+                                            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                        ) : (
+                                            <Zap className="h-2.5 w-2.5" />
+                                        )}
+                                        {isImproving ? "Fixing…" : "Fix with AI"}
+                                    </button>
+                                )}
+                                {onRevalidate && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (!isRevalidating) onRevalidate();
+                                        }}
+                                        aria-disabled={Boolean(isRevalidating)}
+                                        className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/60 px-2 py-0.5 text-[10px] font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                                    >
+                                        {isRevalidating ? (
+                                            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="h-2.5 w-2.5" />
+                                        )}
+                                        {isRevalidating ? "Checking…" : "Re-check quality gates"}
+                                    </button>
+                                )}
+                            </div>
                         </div>
                         {issues.slice(0, 6).map((item, index) => <p key={"i" + index} className="mt-1 text-[10px] text-rose-300">{item}</p>)}
                         {warnings.slice(0, 6).map((item, index) => <p key={"w" + index} className="mt-1 text-[10px] text-amber-300">{item}</p>)}
@@ -740,7 +825,18 @@ function SerpAiSimulator({
     );
 }
 
+function extractReactText(node: ReactNode): string {
+    if (typeof node === "string" || typeof node === "number") return String(node);
+    if (Array.isArray(node)) return node.map(extractReactText).join("");
+    if (node && typeof node === "object" && "props" in node) {
+        const props = (node as { props?: { children?: ReactNode } }).props;
+        return props?.children ? extractReactText(props.children) : "";
+    }
+    return "";
+}
+
 export function ReviewBlogModal({ blog, onClose, onPublish, onBlogUpdated }: ReviewBlogModalProps) {
+    const previewArticleRef = useRef<HTMLElement | null>(null);
     const [mode, setMode] = useState<ReviewMode>("write");
     const [isFullScreen, setIsFullScreen] = useState(true);
     const [showSidebar, setShowSidebar] = useState(false);
@@ -758,6 +854,34 @@ export function ReviewBlogModal({ blog, onClose, onPublish, onBlogUpdated }: Rev
     const [aiContent, setAiContent] = useState<string | null>(null);
     const [showAiReview, setShowAiReview] = useState(false);
     const [preAiContent, setPreAiContent] = useState<string | null>(null);
+
+    const handlePreviewAnchorClick = useCallback((href: string | undefined, e: ReactMouseEvent<HTMLAnchorElement>) => {
+        if (!href) return;
+        let hashId = "";
+        if (href.startsWith("#")) {
+            hashId = href.slice(1);
+        } else if (typeof window !== "undefined") {
+            try {
+                const parsed = new URL(href, window.location.href);
+                if (parsed.origin === window.location.origin && parsed.pathname === window.location.pathname && parsed.hash) {
+                    hashId = parsed.hash.slice(1);
+                }
+            } catch {
+                // Ignore invalid URL strings
+            }
+        }
+        if (!hashId) return;
+        e.preventDefault();
+        const container = previewArticleRef.current;
+        if (!container) return;
+        const decodedId = decodeURIComponent(hashId);
+        const target =
+            container.querySelector(`[id="${CSS.escape(decodedId)}"]`) ||
+            Array.from(container.querySelectorAll("h2, h3")).find(
+                (el) => slugifyHeading(el.textContent ?? "") === slugifyHeading(decodedId),
+            );
+        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, []);
 
     useEffect(() => {
         setLiveBlog((prev) => (prev.id === blog.id ? { ...prev, ...blog } : blog));
@@ -1134,7 +1258,7 @@ export function ReviewBlogModal({ blog, onClose, onPublish, onBlogUpdated }: Rev
                                 <span>
                                     Target:{" "}
                                     <span className="font-medium text-foreground/80">
-                                        {liveBlog.targetKeywords?.[0] || "No target keyword"}
+                                        {formatKeywordDisplay(liveBlog.targetKeywords?.[0]) || "No target keyword"}
                                     </span>
                                 </span>
                                 {liveBlog.sourceUrl && (
@@ -1236,18 +1360,45 @@ export function ReviewBlogModal({ blog, onClose, onPublish, onBlogUpdated }: Rev
                             </div>
                         ) : mode === "review" ? (
                             <div className="mx-auto w-full max-w-4xl px-8 py-12">
-                                <article className="prose prose-invert prose-emerald max-w-none prose-headings:scroll-m-20 prose-img:w-full prose-img:rounded-xl prose-img:object-cover">
+                                <article
+                                    ref={previewArticleRef}
+                                    className="prose prose-invert prose-emerald max-w-none prose-headings:scroll-m-20 prose-img:w-full prose-img:rounded-xl prose-img:object-cover"
+                                >
                                     <h1>{liveBlog.title}</h1>
                                     <div className="not-prose mb-8 flex items-center gap-3 border-b border-border pb-5 text-xs text-muted-foreground">
                                         <span>{statusLabel}</span>
                                         <span>·</span>
-                                        <span>{liveBlog.targetKeywords?.[0] || "No target keyword"}</span>
+                                        <span>{formatKeywordDisplay(liveBlog.targetKeywords?.[0]) || "No target keyword"}</span>
                                     </div>
                                     <ReactMarkdown
                                         rehypePlugins={[
                                             rehypeRaw,
                                             [rehypeExternalLinks, { target: "_blank", rel: ["noopener", "noreferrer"] }],
                                         ]}
+                                        components={{
+                                            h2: ({ id, children, ...props }) => (
+                                                <h2 id={id || slugifyHeading(extractReactText(children))} {...props}>
+                                                    {children}
+                                                </h2>
+                                            ),
+                                            h3: ({ id, children, ...props }) => (
+                                                <h3 id={id || slugifyHeading(extractReactText(children))} {...props}>
+                                                    {children}
+                                                </h3>
+                                            ),
+                                            a: ({ href, onClick, children, ...props }) => (
+                                                <a
+                                                    href={href}
+                                                    onClick={(e) => {
+                                                        handlePreviewAnchorClick(href, e);
+                                                        onClick?.(e);
+                                                    }}
+                                                    {...props}
+                                                >
+                                                    {children}
+                                                </a>
+                                            ),
+                                        }}
                                     >
                                         {editedContent}
                                     </ReactMarkdown>
@@ -1381,6 +1532,8 @@ export function ReviewBlogModal({ blog, onClose, onPublish, onBlogUpdated }: Rev
                                 validationWarnings={liveBlog.validationWarnings}
                                 onRevalidate={handleRevalidate}
                                 isRevalidating={isRevalidating || isSaving}
+                                onFixIssues={handleAIImprove}
+                                isImproving={isImproving || isPublishing}
                             />
 
                             {/* Publishing checklist */}

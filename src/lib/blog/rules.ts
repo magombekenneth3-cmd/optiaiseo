@@ -731,8 +731,8 @@ interface AuthorProfile {
 export function getClaimRules(ctx: PromptContext): string {
     const high = ctx.riskTier === "high";
     return `CLAIM INTEGRITY:
-- Never write a percentage, dollar amount, or multiplier without naming its source inline.
-- If you have no named source, state the claim without the number.
+- Never write a percentage, dollar amount, pricing range (e.g. "$49 to $250/month", "$500+"), or multiplier without naming its source inline from the supplied research.
+- If you have no named source for pricing or benchmarks, describe pricing tiers qualitatively (e.g. entry-level vs. enterprise plans) without inventing figures.
 ${high ? "- HIGH-RISK TOPIC: Every factual claim requires a named source or must be removed.\n- Include a disclaimer: this content is informational only and not professional advice." : ""}
 - After every strong assertion add one boundary condition explaining when it does NOT apply.`;
 }
@@ -823,6 +823,8 @@ Intro: 3 sentences — (1) the most useful/surprising fact about "${ctx.keyword}
 
 HEADINGS must describe the actual information underneath them.
 Avoid generic headings: Introduction, Conclusion, Final Thoughts, Why This Matters, The Future of SEO.
+NEVER use a bare person or reviewer name as a standalone subheading (e.g. "### Karsten Madsen") — name the insight or finding instead (e.g. "### Benchmark Findings Across 350 Hours of Testing").
+Do NOT repeat or re-pitch the same product list across multiple H2 sections (e.g. "Best Tools" followed by redundant "Other Tools" and single-feature subsections).
 Prefer specific headings that answer questions.
 
 CONCLUSION: Do not repeat the entire article. Summarize the key takeaway and provide the next useful action.

@@ -259,16 +259,75 @@ function inferIntent(keyword: string, context: SerpContext | null, priorIntent?:
     };
 }
 
-function sourceUrlsRelevantTo(query: string, pages: Array<{ url: string; title: string; snippet: string; headings: string[] }>, limit = 5): string[] {
+function normalizePublishedDate(raw?: string | null): string | undefined {
+    if (!raw) return undefined;
+    const cleaned = raw.replace(/[,\s]+$/g, "").trim();
+    if (!cleaned || !/\b(?:19|20)\d{2}\b/.test(cleaned)) {
+        return undefined;
+    }
+    const isoPrefix = cleaned.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (isoPrefix) return isoPrefix[1];
+    const parsed = Date.parse(cleaned);
+    if (!Number.isNaN(parsed)) {
+        const dt = new Date(parsed);
+        const hasTimeOrZone = /\d{2}:\d{2}|(?:gmt|utc|[zZ]|[+-]\d{2}:?\d{2})/.test(cleaned);
+        if (hasTimeOrZone) {
+            return dt.toISOString().slice(0, 10);
+        }
+        const y = String(dt.getFullYear()).padStart(4, "0");
+        const m = String(dt.getMonth() + 1).padStart(2, "0");
+        const d = String(dt.getDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+    }
+    return cleaned.slice(0, 100);
+}
+
+function sourceUrlsRelevantTo(
+    query: string,
+    pages: Array<{ url: string; title: string; snippet: string; headings: string[] }>,
+    limit = 5,
+    baseKeyword?: string,
+): string[] {
+    const queryTokens = tokens(query);
+    if (queryTokens.length === 0) return [];
+    const baseTokenSet = new Set(baseKeyword ? tokens(baseKeyword) : []);
+    const distinctiveTokens = queryTokens.filter(token => !baseTokenSet.has(token));
+
     return pages
-        .map(page => ({
-            url: page.url,
-            relevance: overlapRatio(query, `${page.title} ${page.snippet} ${page.headings.join(" ")}`),
-        }))
-        .filter(result => result.relevance >= 0.15)
-        .sort((a, b) => b.relevance - a.relevance)
+        .map(page => {
+            const candidateText = `${page.title} ${page.snippet} ${page.headings.join(" ")}`;
+            const candidateTokenSet = new Set(tokens(candidateText));
+            const matchedDistinctive = distinctiveTokens.filter(token => candidateTokenSet.has(token)).length;
+            const relevance = queryTokens.filter(token => candidateTokenSet.has(token)).length / queryTokens.length;
+            return {
+                url: page.url,
+                relevance,
+                matchedDistinctive,
+            };
+        })
+        .filter(result => {
+            if (distinctiveTokens.length > 0 && result.matchedDistinctive === 0) {
+                return false;
+            }
+            return queryTokens.length === 1 ? result.relevance >= 0.4 : result.relevance >= 0.35;
+        })
+        .sort((a, b) => b.matchedDistinctive - a.matchedDistinctive || b.relevance - a.relevance)
         .slice(0, limit)
         .map(result => result.url);
+}
+
+function computeReaderNeedConfidence(params: {
+    source: "people_also_ask" | "related_search";
+    hasAnswerSnippet: boolean;
+    supportingUrlCount: number;
+    analyzedCount: number;
+}): number {
+    const base = params.source === "people_also_ask"
+        ? (params.hasAnswerSnippet ? 0.62 : 0.54)
+        : 0.46;
+    const denom = Math.max(1, params.analyzedCount);
+    const supportBonus = Math.min(0.28, (params.supportingUrlCount / denom) * 0.25);
+    return Math.round(Math.min(0.92, base + supportBonus) * 100) / 100;
 }
 
 function siteActionFor(
@@ -376,6 +435,7 @@ export function buildSerpCompetitiveBrief(params: {
         const pageType = pageTypeForResult(result);
         const scrapeStatus = result.scrapeStatus
             ?? ((result.scrapedContent?.length ?? 0) > 200 ? "ANALYZED" : "SNIPPET_ONLY");
+        const normalizedDate = normalizePublishedDate(result.scrapedPublishedDate);
         return {
             rank: result.rank ?? index + 1,
             title: result.title.slice(0, 500),
@@ -384,7 +444,7 @@ export function buildSerpCompetitiveBrief(params: {
             pageType,
             dominantFormat: formatForPageType(pageType),
             headings: [...new Set((result.scrapedHeadings ?? []).map(h => h.trim()).filter(Boolean))].slice(0, 12),
-            ...(result.scrapedPublishedDate ? { publishedAt: result.scrapedPublishedDate.slice(0, 100) } : {}),
+            ...(normalizedDate ? { publishedAt: normalizedDate } : {}),
             schemaTypes: [...new Set(result.scrapedSchemaTypes ?? [])].slice(0, 12),
             ...(typeof result.wordCount === "number" ? { wordCount: result.wordCount } : {}),
             scrapeStatus,
@@ -441,23 +501,35 @@ export function buildSerpCompetitiveBrief(params: {
         const normalized = normalizedText(question);
         if (!question || seenNeeds.has(normalized)) continue;
         seenNeeds.add(normalized);
+        const relatedUrls = sourceUrlsRelevantTo(question, pagesForMatching, 5, keyword);
         readerNeeds.push({
             question: question.slice(0, 500),
             source: "people_also_ask",
             ...(item.answer ? { answerSnippetObserved: item.answer.slice(0, 800) } : {}),
-            relatedUrls: sourceUrlsRelevantTo(question, pagesForMatching, 5),
-            confidence: 0.9,
+            relatedUrls,
+            confidence: computeReaderNeedConfidence({
+                source: "people_also_ask",
+                hasAnswerSnippet: Boolean(item.answer?.trim()),
+                supportingUrlCount: relatedUrls.length,
+                analyzedCount: analyzedPages.length,
+            }),
         });
     }
     for (const query of (serpContext?.relatedSearches ?? []).slice(0, 10)) {
         const normalized = normalizedText(query);
         if (!query.trim() || seenNeeds.has(normalized)) continue;
         seenNeeds.add(normalized);
+        const relatedUrls = sourceUrlsRelevantTo(query, pagesForMatching, 5, keyword);
         readerNeeds.push({
             question: query.trim().slice(0, 500),
             source: "related_search",
-            relatedUrls: sourceUrlsRelevantTo(query, pagesForMatching, 5),
-            confidence: 0.65,
+            relatedUrls,
+            confidence: computeReaderNeedConfidence({
+                source: "related_search",
+                hasAnswerSnippet: false,
+                supportingUrlCount: relatedUrls.length,
+                analyzedCount: analyzedPages.length,
+            }),
         });
     }
 
@@ -487,6 +559,11 @@ export function buildSerpCompetitiveBrief(params: {
     }> = [];
 
     for (const need of readerNeeds.slice(0, 8)) {
+        const supportSummary = need.relatedUrls.length > 0
+            ? `Aligned with ${need.relatedUrls.length} ranking result${need.relatedUrls.length === 1 ? "" : "s"} in the live SERP.`
+            : need.source === "people_also_ask"
+                ? "Surfaced directly in Google People Also Ask for this query."
+                : "Surfaced in live SERP related searches for this query.";
         opportunities.push({
             id: `reader-${opportunities.length + 1}`,
             description: `Answer the surfaced reader query: “${need.question}”`.slice(0, 500),
@@ -503,7 +580,9 @@ export function buildSerpCompetitiveBrief(params: {
                 sourceUrls: need.relatedUrls.slice(0, 10),
                 evidence: [`Observed SERP query: ${need.question}`],
             }],
-            additionalValue: "Give a direct, evidence-supported answer, explain caveats, and avoid implying the ranking pages failed to answer unless accessible page text supports that claim.",
+            additionalValue: need.answerSnippetObserved
+                ? `Live answer snippet observed. ${supportSummary}`
+                : supportSummary,
         });
     }
 
@@ -528,7 +607,7 @@ export function buildSerpCompetitiveBrief(params: {
                     sourceUrls: relevant,
                     evidence: [`${analyzedPages.length} accessible page sample(s) were checked against the query; absence from sampled text is not proof of absence from the full page.`],
                 }],
-                additionalValue: "Research the underlying question and answer it clearly. Treat this as a hypothesis until full-page evidence or independent research confirms the need.",
+                additionalValue: `Low overlap across ${analyzedPages.length} sampled page excerpt${analyzedPages.length === 1 ? "" : "s"}; verify whether a concise answer adds original depth.`,
             });
         }
     }
@@ -548,7 +627,7 @@ export function buildSerpCompetitiveBrief(params: {
                 sourceUrls: criterion.sourceUrls,
                 evidence: [`Found in ${criterion.sourceUrls.length} analysed page sample(s).`],
             }],
-            additionalValue: "Translate the concept into practical criteria, checks, trade-offs, and exceptions rather than repeating competitor wording.",
+            additionalValue: `Evaluated across ${criterion.sourceUrls.length} analysed page sample${criterion.sourceUrls.length === 1 ? "" : "s"}; cover practical checks and trade-offs.`,
         });
     }
 
@@ -606,7 +685,7 @@ export function buildSerpCompetitiveBrief(params: {
     const paaQuestions = (serpContext?.peopleAlsoAsk ?? []).slice(0, 6);
     if (paaQuestions.length > 0) {
         const paaUrls = [...new Set(paaQuestions.flatMap(item =>
-            sourceUrlsRelevantTo(item.question, pagesForMatching, 2),
+            sourceUrlsRelevantTo(item.question, pagesForMatching, 2, keyword),
         ))].slice(0, 10);
         serpFeatures.push({
             type: "people_also_ask",
@@ -624,7 +703,7 @@ export function buildSerpCompetitiveBrief(params: {
             classification: "observed",
             description: "Related query suggestions were returned by the SERP provider.",
             confidence: 0.8,
-            sourceUrls: [...new Set(relatedQueries.flatMap(query => sourceUrlsRelevantTo(query, pagesForMatching, 2)))].slice(0, 10),
+            sourceUrls: [...new Set(relatedQueries.flatMap(query => sourceUrlsRelevantTo(query, pagesForMatching, 2, keyword)))].slice(0, 10),
             evidence: relatedQueries.map(query => query.slice(0, 250)),
         });
     }

@@ -215,17 +215,18 @@ ${contentSample}`,
 
 async function generateInteractiveWidget(keyword: string, content: string): Promise<string | null> {
     try {
+        const { validateInteractiveWidgetHtml } = await import("@/lib/blog/validators");
+        const { sanitizeHtml } = await import("@/lib/sanitize-html");
         const text = await callGemini(
-            `Based on this article about "${keyword}", generate ONE safe, declarative interactive-content placeholder.
+            `Based on this article about "${keyword}", generate ONE safe, theme-adaptive declarative checklist or expandable scorecard widget.
 
 Rules:
-- Return HTML only.
-- No JavaScript.
-- No <script>, event handlers, iframes, forms, external resources, or executable code.
-- Use only div, p, h3, label, input, ul, li, span.
-- The result is a progressive-enhancement placeholder; the application may attach behavior later.
-- Self-contained in a single div with id="blog-interactive-widget".
-- Mobile responsive with inline styles only.
+- Return HTML only wrapped in a single <div id="blog-interactive-widget">.
+- MUST actually work natively with zero JavaScript: use ONLY <details>, <summary>, div, p, h3, ul, li, span.
+- Do NOT include <button>, <input>, <form>, <script>, event handlers, iframes, external resources, or JavaScript.
+- Do NOT invent statistics, benchmarks, percentages, or pricing numbers not verified in the article.
+- Do NOT include placeholder strings (TODO, TBD, Example Company, {{...}}).
+- Theme-safe styling ONLY: use background-color:rgba(148,163,184,0.08); border:1px solid rgba(148,163,184,0.25); color:inherit (NEVER hardcode white/pastel hex backgrounds like #fff or #f8fafc or dark-only text colors like #1e293b).
 - Maximum 40 lines.
 
 Article excerpt:
@@ -234,11 +235,9 @@ ${content.substring(0, 3000)}
 Return ONLY the HTML starting with <div id="blog-interactive-widget">`,
             { maxOutputTokens: 2048, temperature: 0.2, timeoutMs: 45000 }
         );
-        const match = text.match(/<div[\s\S]*id=["']blog-interactive-widget["'][\s\S]*<\/div>\s*$/i);
-        if (!match) return null;
-        const html = match[0].trim();
-        if (/<script|javascript:|on\w+\s*=|<iframe|<form/i.test(html)) return null;
-        return html;
+        const validated = validateInteractiveWidgetHtml(text);
+        if (!validated) return null;
+        return sanitizeHtml(validated);
     } catch (e: unknown) {
         logger.warn("[Blog/Widget] Widget generation failed:", { error: (e as Error)?.message });
         return null;

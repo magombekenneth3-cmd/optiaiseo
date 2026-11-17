@@ -40,6 +40,7 @@ import {
     GhostIcon,
 } from "@/components/icons/platforms";
 import { EvidenceDrawer } from "@/components/blog/EvidenceDrawer";
+import { formatKeywordDisplay } from "@/lib/blog/markdown";
 
 type BlogStatus =
     | "PUBLISHED"
@@ -1615,7 +1616,7 @@ export function BlogList({
                                         )}
                                         <div className="flex items-center justify-between">
                                             <span className="max-w-[45%] truncate text-xs text-muted-foreground">
-                                                {blog.targetKeywords?.[0] || "Auto-assigned"}
+                                                {formatKeywordDisplay(blog.targetKeywords?.[0]) || "Auto-assigned"}
                                             </span>
                                             <div className="flex items-center gap-2">
                                                 <EvidenceBadge blog={blog} />
@@ -1759,7 +1760,7 @@ export function BlogList({
                                                 {/* Keyword — separate column */}
                                                 <td className="max-w-[160px] px-4 py-3.5">
                                                     <p className="truncate text-xs text-muted-foreground">
-                                                        {blog.targetKeywords?.[0] || "—"}
+                                                        {formatKeywordDisplay(blog.targetKeywords?.[0]) || "—"}
                                                     </p>
                                                 </td>
                                                 <td className="px-4 py-3.5">

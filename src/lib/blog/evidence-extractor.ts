@@ -19,7 +19,7 @@ import { isAnalyzedSource } from "./research-packet";
 
 const EXTRACTOR_VERSION = "blog-evidence-v1";
 
-const STATISTIC_PATTERN = /\b(?:\d{1,3}(?:\.\d+)?\s*%|\$\d[\d,.]*(?:\s*(?:million|billion|m|b|k))?|\d+(?:\.\d+)?x|\d[\d,]*\+?\s*(?:users?|customers?|companies|businesses|sites?|clients?))(?!\w)/gi;
+const STATISTIC_PATTERN = /(?:\b\d{1,3}(?:\.\d+)?\s*%|\$\d[\d,.]*(?:\s*(?:million|billion|m|b|k))?|\b\d+(?:\.\d+)?x|\b\d[\d,]*\+?\s*(?:users?|customers?|companies|businesses|sites?|clients?))(?!\w)/gi;
 const CASE_STUDY_RESULT_PATTERN = /(?:increased|decreased|improved|reduced|boosted|grew|dropped|rose|fell|achieved|generated|delivered)\s+(?:by\s+)?\d[\d,.]*(?:\.\d+)?\s*%/i;
 
 interface ContentBlock {

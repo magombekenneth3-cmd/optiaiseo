@@ -184,31 +184,33 @@ export function detectUnsourcedStatistics(content: string): string[] {
     // Patterns that look like precise stats
     const STAT_PATTERNS = [
         /\b(\d{1,3}(?:\.\d+)?)\s*%/g,                            // "37%", "4.5%"
-        /\b\$\d[\d,.]*(?:\s*(?:million|billion|M|B|k))?\b/gi,    // "$1.2 million"
+        /\$\d[\d,.]*(?:\s*(?:million|billion|M|B|k))?\b/gi,      // "$49", "$1.2 million"
         /\b\d+(?:\.\d+)?x\b/gi,                                  // "3.2x"
         /\b\d[\d,]*\+?\s*(?:users?|customers?|companies|businesses|sites?|clients?)\b/gi, // "50,000 users"
     ];
 
-    // Source attribution patterns — if present near the stat, it's OK
-    const SOURCE_NEARBY = /(?:according to|source:|per |data from|reported by|study by|research by|found that|published by|survey|analysis by|[\(\[].*?(?:20\d{2}|source).*?[\)\]])/i;
+    // Source attribution patterns — if present near the stat, it's OK.
+    // Note: "per <Source>" is checked case-sensitively against capitalized entities
+    // so phrases like "per month" or "$49 per seat" never count as source attribution.
+    const SOURCE_NEARBY = /(?:according to|source:|data from|reported by|study by|research by|found that|published by|survey|analysis by|[\(\[].*?(?:20\d{2}|source).*?[\)\]])/i;
+    const PER_NAMED_SOURCE = /\bper\s+(?!month\b|year\b|week\b|day\b|hour\b|seat\b|user\b|click\b|page\b|domain\b|query\b|site\b|article\b|post\b|report\b|project\b|account\b|client\b|visit\b|session\b|view\b|lead\b|keyword\b)[A-Z][a-zA-Z0-9.-]+/;
 
     const sentences = text.match(/[^.!?]+[.!?]+/g) ?? [];
 
     for (let i = 0; i < sentences.length; i++) {
         const sentence = sentences[i];
+        const window = [
+            sentences[i - 1] ?? "",
+            sentence,
+            sentences[i + 1] ?? "",
+        ].join(" ");
+        const hasSourceNearby = SOURCE_NEARBY.test(window) || PER_NAMED_SOURCE.test(window);
+        if (hasSourceNearby) continue;
+
         for (const pattern of STAT_PATTERNS) {
             pattern.lastIndex = 0;
-            const match = pattern.exec(sentence);
-            if (!match) continue;
-
-            // Check surrounding 2-sentence window for source attribution
-            const window = [
-                sentences[i - 1] ?? "",
-                sentence,
-                sentences[i + 1] ?? "",
-            ].join(" ");
-
-            if (!SOURCE_NEARBY.test(window)) {
+            let match: RegExpExecArray | null;
+            while ((match = pattern.exec(sentence)) !== null) {
                 const stat = match[0].trim();
                 issues.push(
                     `Unsourced statistic: "${stat}" in "${sentence.trim().slice(0, 120)}…" — add a named source or remove the number.`
@@ -535,6 +537,12 @@ export function runCompositeValidation(params: {
         warnings.push(...padding);
     }
 
+    // Weak bare-name or filler H3 subheadings (WARNING)
+    const subheadingWarnings = auditSubheadingQuality(params.htmlContent);
+    if (subheadingWarnings.length > 0) {
+        warnings.push(...subheadingWarnings);
+    }
+
     // Word count is a WARNING, not a quality signal
     const wordCount = params.markdownContent.split(/\s+/).length;
     if (wordCount < 500) {
@@ -550,5 +558,60 @@ export function runCompositeValidation(params: {
     const passed = blockingIssues.length === 0 && errors.length === 0;
 
     return { errors, warnings, blockingIssues, passed, score: Math.max(0, score) };
+}
+
+/**
+ * Flags bare two-word Title Case subheadings (e.g. `<h3>Karsten Madsen</h3>`) that read
+ * like standalone person names rather than descriptive subheadings.
+ */
+export function auditSubheadingQuality(htmlContent: string): string[] {
+    const warnings: string[] = [];
+    const h3Matches = [...htmlContent.matchAll(/<h3[^>]*>([\s\S]*?)<\/h3>/gi)];
+    const TOPIC_ALLOW_WORDS = new Set([
+        "pros", "cons", "faq", "pricing", "features", "summary", "overview",
+        "setup", "testing", "audits", "rankings", "backlinks", "workflow", "benchmarks",
+        "criteria", "limitations", "results", "tools", "software", "enterprise", "beginners",
+    ]);
+
+    for (const match of h3Matches) {
+        const clean = match[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+        const words = clean.split(/\s+/).filter(Boolean);
+        if (
+            words.length === 2 &&
+            words.every((w) => /^[A-Z][a-z]{2,15}$/.test(w)) &&
+            words.every((w) => !TOPIC_ALLOW_WORDS.has(w.toLowerCase()))
+        ) {
+            warnings.push(
+                `Subheading "${clean}" reads like a bare name — rename it to describe the insight or finding.`,
+            );
+        }
+    }
+    return warnings;
+}
+
+const UNSAFE_WIDGET_RE = /<script|<iframe|<form|<object|<embed|javascript:|on\w+\s*=|<button\b/i;
+const PLACEHOLDER_WIDGET_RE = /\[Section generation failed|\[EDITOR:|\bTODO\b|\bTBD\b|\bFIXME\b|lorem ipsum|Example Company|YourCompany|\{\{[^}]+\}\}|\[INSERT STAT\]|\[IMAGE HERE\]/i;
+
+/**
+ * Validates declarative widget HTML before saving: ensures a single `#blog-interactive-widget`
+ * container, blocks unsafe elements and non-functional buttons, strips unresolved placeholder
+ * copy, and rejects unverified standalone percentage/dollar assertions.
+ */
+export function validateInteractiveWidgetHtml(rawHtml: string | null | undefined): string | null {
+    if (!rawHtml) return null;
+    const match = rawHtml.match(/<div[\s\S]*id=["']blog-interactive-widget["'][\s\S]*<\/div>/i);
+    if (!match) return null;
+    const html = match[0].trim();
+    if (UNSAFE_WIDGET_RE.test(html)) return null;
+    if (PLACEHOLDER_WIDGET_RE.test(html)) return null;
+
+    // Disallow fabricated numeric benchmarks inside standalone widgets
+    const plainText = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (plainText.length < 25) return null;
+    if (/\$\d[\d,.]*|\b\d{1,3}(?:\.\d+)?\s*%/.test(plainText) && !/according to|source:/i.test(plainText)) {
+        return null;
+    }
+
+    return html;
 }
 

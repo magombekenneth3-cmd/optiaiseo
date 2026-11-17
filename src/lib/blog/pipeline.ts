@@ -587,7 +587,8 @@ RULES:
 - At least one section with tone="contrarian" — challenge an industry assumption.
 - Use a case study only when documented evidence is available. Otherwise use a clearly labelled hypothetical example or omit the case-study framing.
 - Vary tones across sections — no two consecutive sections with the same tone.
-- 5-8 sections total.
+- 5-8 sections total, each covering a distinct subtask or comparison dimension — never repeat or re-pitch the same product stack across multiple sections (e.g. avoid "The Best Tools" followed by redundant "Other Tools" / "Tool Checker" sections).
+- Never plan bare proper-noun or person-name headings (e.g. "Karsten Madsen" or a standalone brand name) — headings must state the reader task or topic insight.
 - wordTargets should be driven by searcher task complexity and evidence needs, never by competitor word counts.
 - Every section must say what reader task it completes, what the sampled ranking pages already cover, its additional value, which claims need evidence, and whether its contribution is verified, inferential, or still requires research.
 - Do not force every competitor heading or People Also Ask question into a separate section.
@@ -967,10 +968,13 @@ FORBIDDEN:
 - furthermore / moreover / in conclusion / delve into / leverage / robust / comprehensive
 - "In this section" / "Now let's look at" / "Moving on to"
 - Three consecutive sentences of the same length
+- NEVER use a bare person or reviewer name as a standalone subheading (e.g. "### Karsten Madsen") — frame subheadings around the takeaway or evaluation criterion.
+- Do NOT re-pitch tools already covered in previous sections; stay strictly within this section's assigned angle.
+- NEVER invent typical software pricing ranges (e.g. "$49 to $250/month", "$500+") unless an AUTHORITATIVE RESEARCH SNAPSHOT source explicitly states them.
 - ${isIntro ? '"Welcome to" / "In this article" / opening with a question' : '"When it comes to" / "In the realm of"'}
 
 ${isIntro ? `INTRO RULE: 3 sentences max. (1) Most surprising/useful fact about "${ctx.keyword}". (2) What conventional wisdom gets wrong. (3) What the reader gets. No fluff.` : ""}
-${isFaq ? `FAQ FORMAT: ## for each question. Answer opens immediately with Yes/No/number/tool/timeframe. No preamble. Max 3 sentences per answer.` : ""}
+${isFaq ? `FAQ FORMAT: ## for each question. Answer opens immediately with Yes/No/number/tool/timeframe. No preamble. Max 3 sentences per answer. Do not invent dollar pricing figures when no pricing source is supplied.` : ""}
 ${!isIntro && !isFaq ? `ANSWER-FIRST RULE (mandatory for AEO/AI search citability):
 - Sentence 1–2: Deliver the direct answer to "${section.goal}" immediately. No preamble, no context-setting.
   ❌ BAD:  "Many marketers wonder about ${section.heading.toLowerCase()}..."

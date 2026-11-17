@@ -46,7 +46,11 @@ import type { ResearchEvidenceLedger } from "./evidence-ledger";
 import type { ClaimPlan } from "./claim-plan";
 import { buildResearchPacket } from "./research-packet";
 import { extractEvidencePacket } from "./evidence-extractor";
-import { markdownToHtml, inlineMarkdownToHtml } from "./markdown";
+import {
+    markdownToHtml,
+    inlineMarkdownToHtml,
+    ensureHeadingIdsInHtml,
+} from "./markdown";
 
 export interface BlogPostDraft {
     title: string;
@@ -102,13 +106,72 @@ export interface AuthorProfile {
     localContext?: string | null;
 }
 
-interface UnsplashPhoto {
+export interface UnsplashPhoto {
+    id?: string;
     url: string;
     thumb: string;
     alt: string;
     photographer: string;
     photographerUrl: string;
     unsplashUrl: string;
+}
+
+export interface UnsplashCandidate {
+    id?: string;
+    urls: { regular: string; small: string };
+    alt_description?: string | null;
+    description?: string | null;
+    user: { name: string; links: { html: string } };
+    links: { html: string };
+}
+
+export const UNSPLASH_UTM_SOURCE = "optiaiseo";
+
+function escapeHtmlAttr(value: string): string {
+    return value
+        .replace(/&(?!(?:[a-z]+|#\d+|#x[0-9a-f]+);)/gi, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+
+function buildUnsplashAttributionUrl(rawUrl: string): string {
+    const separator = rawUrl.includes("?") ? "&" : "?";
+    return `${rawUrl}${separator}utm_source=${UNSPLASH_UTM_SOURCE}&utm_medium=referral`;
+}
+
+/**
+ * Selects distinct Unsplash photos across hero and inline slots using photo ID and URL
+ * deduplication so the same image never repeats across sections. Slots with no remaining
+ * unused candidates resolve to null and are omitted.
+ */
+export function selectDistinctUnsplashPhotos(
+    slots: Array<{ candidates: UnsplashCandidate[]; fallbackAlt: string }>,
+): Array<UnsplashPhoto | null> {
+    const usedIds = new Set<string>();
+    const usedUrls = new Set<string>();
+
+    return slots.map(({ candidates, fallbackAlt }) => {
+        for (const photo of candidates) {
+            const url = photo?.urls?.regular?.trim();
+            if (!url || usedUrls.has(url)) continue;
+            const photoKey = photo.id?.trim() || url;
+            if (usedIds.has(photoKey)) continue;
+
+            usedIds.add(photoKey);
+            usedUrls.add(url);
+            return {
+                id: photoKey,
+                url,
+                thumb: photo.urls.small || url,
+                alt: escapeHtmlAttr(photo.alt_description || photo.description || fallbackAlt),
+                photographer: photo.user?.name || "Unsplash Contributor",
+                photographerUrl: buildUnsplashAttributionUrl(photo.user?.links?.html || "https://unsplash.com"),
+                unsplashUrl: buildUnsplashAttributionUrl(photo.links?.html || "https://unsplash.com"),
+            };
+        }
+        return null;
+    });
 }
 
 export interface GeminiBlogResponse {
@@ -130,38 +193,38 @@ export interface GeminiBlogResponse {
     }[];
 }
 
-async function fetchUnsplashPhoto(query: string): Promise<UnsplashPhoto | null> {
+async function fetchUnsplashCandidates(query: string, perPage = 10): Promise<UnsplashCandidate[]> {
     const accessKey = process.env.UNSPLASH_ACCESS_KEY;
-    if (!accessKey) return null;
+    if (!accessKey) return [];
     try {
         const encoded = encodeURIComponent(query.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim());
+        if (!encoded) return [];
         const res = await fetch(
-            `https://api.unsplash.com/search/photos?query=${encoded}&per_page=1&orientation=landscape`,
+            `https://api.unsplash.com/search/photos?query=${encoded}&per_page=${perPage}&orientation=landscape`,
             {
                 headers: { Authorization: `Client-ID ${accessKey}`, "Accept-Version": "v1" },
                 signal: AbortSignal.timeout(8000),
             }
         );
-        if (!res.ok) return null;
+        if (!res.ok) return [];
         const data = await res.json();
-        const photo = data.results?.[0];
-        if (!photo) return null;
-        return {
-            url: photo.urls.regular,
-            thumb: photo.urls.small,
-            alt: photo.alt_description || query,
-            photographer: photo.user.name,
-            photographerUrl: `${photo.user.links.html}?utm_source=seoTool&utm_medium=referral`,
-            unsplashUrl: `${photo.links.html}?utm_source=seoTool&utm_medium=referral`,
-        };
-    } catch { return null; }
+        return Array.isArray(data?.results) ? (data.results as UnsplashCandidate[]) : [];
+    } catch {
+        return [];
+    }
 }
 
 async function fetchBlogPhotos(heroQuery: string, sectionQueries: string[]) {
-    const [hero, ...inline] = await Promise.all([
-        fetchUnsplashPhoto(heroQuery),
-        ...sectionQueries.slice(0, 3).map(q => fetchUnsplashPhoto(q)),
-    ]);
+    const normalizedQueries = [heroQuery, ...sectionQueries.slice(0, 3)];
+    const candidateSets = await Promise.all(
+        normalizedQueries.map(q => fetchUnsplashCandidates(q, 10)),
+    );
+    const [hero = null, ...inline] = selectDistinctUnsplashPhotos(
+        normalizedQueries.map((query, idx) => ({
+            candidates: candidateSets[idx] ?? [],
+            fallbackAlt: query,
+        })),
+    );
     return { hero, inline };
 }
 
@@ -185,21 +248,15 @@ function assembleHtml(params: {
     let html = markdownToHtml(content);
 
     html = html.replace(/<h1(?:\s[^>]*)?>[\s\S]*?<\/h1>/gi, "");
-    const usedIds = new Map<string, number>();
-    html = html.replace(/<h2>([\s\S]+?)<\/h2>/g, (_m, heading: string) => {
-        const base = heading.replace(/<[^>]*>/g, "").replace(/&[a-z#0-9]+;/gi, " ").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "section";
-        const seen = usedIds.get(base) ?? 0;
-        usedIds.set(base, seen + 1);
-        const id = seen === 0 ? base : `${base}-${seen + 1}`;
-        return `<h2 id="${id}">${heading}</h2>`;
-    });
+    const anchored = ensureHeadingIdsInHtml(html);
+    html = anchored.html;
+    const h2Matches = anchored.headings;
 
-    const h2Matches = [...html.matchAll(/<h2 id="([^"]+)">([\s\S]+?)<\/h2>/g)];
     const tocHtml = h2Matches.length >= 3 ? `
-<nav style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:1.25rem 1.5rem;margin:1.5rem 0;" aria-label="Table of contents">
-  <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin:0 0 0.75rem;">In This Article</p>
-  <ol style="margin:0;padding-left:1.25rem;color:#334155;font-size:0.9rem;line-height:1.8;">
-    ${h2Matches.map(([, id, heading]) => `<li><a href="#${id}" style="color:#0ea5e9;text-decoration:none;font-weight:500;">${heading}</a></li>`).join("\n    ")}
+<nav data-optiaiseo-toc="true" style="background-color:rgba(148,163,184,0.08);border:1px solid rgba(148,163,184,0.24);border-radius:12px;padding:1.25rem 1.5rem;margin:1.5rem 0;color:inherit;" aria-label="Table of contents">
+  <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:inherit;opacity:0.72;margin:0 0 0.75rem;">In This Article</p>
+  <ol style="margin:0;padding-left:1.25rem;color:inherit;font-size:0.9rem;line-height:1.8;">
+    ${h2Matches.map(({ id, text }) => `<li><a href="#${id}" style="color:#10b981;text-decoration:none;font-weight:500;">${text}</a></li>`).join("\n    ")}
   </ol>
 </nav>` : "";
 
@@ -210,8 +267,8 @@ function assembleHtml(params: {
 
         if (flaggedIndexes.length === comparisonTable.length) {
             comparisonHtml = `
-<div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:1rem 1.25rem;margin:1.5rem 0;">
-  <p style="margin:0;font-size:0.875rem;color:#92400e;line-height:1.6;">
+<div style="background-color:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.35);border-radius:8px;padding:1rem 1.25rem;margin:1.5rem 0;color:inherit;">
+  <p style="margin:0;font-size:0.875rem;color:inherit;line-height:1.6;">
     <strong>Editor:</strong> This comparison table contains unverified statistics.
     Replace the Result column with real data, or remove before publishing.
   </p>
@@ -221,99 +278,106 @@ function assembleHtml(params: {
             const tableRows = comparisonTable.map((row, i) => {
                 const isFlagged = flaggedIndexes.includes(i);
                 const rowStyle = isFlagged
-                    ? 'background:#fffbeb;border-left:3px solid #f59e0b;'
+                    ? 'background-color:rgba(245,158,11,0.08);border-left:3px solid #f59e0b;'
                     : '';
                 const flagNote = isFlagged
-                    ? `<span style="font-size:0.7rem;color:#92400e;display:block;margin-top:2px;">⚠ Verify stat before publishing</span>`
+                    ? `<span style="font-size:0.7rem;color:#f59e0b;display:block;margin-top:2px;">⚠ Verify stat before publishing</span>`
                     : '';
                 return `
 <tr style="${rowStyle}">
-  <td style="padding:12px 16px;color:#374151;">${row.problem}${flagNote}</td>
-  <td style="padding:12px 16px;color:#6b7280;">${row.industryAvg}</td>
-  <td style="padding:12px 16px;color:#059669;font-weight:600;">${row.fix}</td>
-  <td style="padding:12px 16px;color:#374151;">${row.result}</td>
+  <td style="padding:12px 16px;color:inherit;">${row.problem}${flagNote}</td>
+  <td style="padding:12px 16px;color:inherit;opacity:0.8;">${row.industryAvg}</td>
+  <td style="padding:12px 16px;color:#10b981;font-weight:600;">${row.fix}</td>
+  <td style="padding:12px 16px;color:inherit;">${row.result}</td>
 </tr>`;
             }).join("\n");
 
             comparisonHtml = `
-<div style="margin:2rem 0;overflow-x:auto;border:1px solid #e5e7eb;border-radius:12px;">
-  <table style="width:100%;border-collapse:collapse;font-size:0.9rem;text-align:left;">
-    <thead style="background:#f8fafc;border-bottom:2px solid #e5e7eb;">
+<div style="margin:2rem 0;overflow-x:auto;border:1px solid rgba(148,163,184,0.24);border-radius:12px;color:inherit;">
+  <table style="width:100%;border-collapse:collapse;font-size:0.9rem;text-align:left;color:inherit;">
+    <thead style="background-color:rgba(148,163,184,0.08);border-bottom:2px solid rgba(148,163,184,0.24);">
       <tr>
-        <th style="padding:12px 16px;font-weight:700;color:#1e293b;">Problem</th>
-        <th style="padding:12px 16px;font-weight:700;color:#1e293b;">Industry Average</th>
+        <th style="padding:12px 16px;font-weight:700;color:inherit;">Problem</th>
+        <th style="padding:12px 16px;font-weight:700;color:inherit;">Industry Average</th>
         <th style="padding:12px 16px;font-weight:700;color:#10b981;">${displayName}</th>
-        <th style="padding:12px 16px;font-weight:700;color:#1e293b;">Result</th>
+        <th style="padding:12px 16px;font-weight:700;color:inherit;">Result</th>
       </tr>
     </thead>
     <tbody>
       ${tableRows}
     </tbody>
   </table>
-  ${flaggedIndexes.length > 0 ? `<p style="font-size:0.75rem;color:#92400e;padding:8px 16px;margin:0;border-top:1px solid #fde68a;background:#fffbeb;">⚠ Rows marked in amber contain unverified statistics — replace with sourced data before publishing.</p>` : ''}
+  ${flaggedIndexes.length > 0 ? `<p style="font-size:0.75rem;color:#f59e0b;padding:8px 16px;margin:0;border-top:1px solid rgba(245,158,11,0.3);background-color:rgba(245,158,11,0.08);">⚠ Rows marked in amber contain unverified statistics — replace with sourced data before publishing.</p>` : ''}
 </div>`;
         }
     }
 
     const qaCheck = validateQuickAnswerUniqueness(quickAnswer, html);
     const effectiveQA = qaCheck.warnings.length > 0
-        ? `${quickAnswer} <em style="font-size:0.8rem;color:#94a3b8;">[Editor: review — too similar to intro]</em>`
+        ? `${quickAnswer} <em style="font-size:0.8rem;opacity:0.75;">[Editor: review — too similar to intro]</em>`
         : quickAnswer;
 
     const summaryHtml = `
-<div style="background:#f0f9ff;border:2px solid #bae6fd;border-left:6px solid #0ea5e9;border-radius:12px;padding:1.5rem;margin:1.5rem 0;">
-  <p style="font-size:1.05rem;line-height:1.65;color:#0c4a6e;font-weight:500;margin:0;">${effectiveQA}</p>
+<div style="background-color:rgba(14,165,233,0.08);border:1px solid rgba(14,165,233,0.3);border-left:5px solid #0ea5e9;border-radius:12px;padding:1.5rem;margin:1.5rem 0;color:inherit;">
+  <p style="font-size:1.05rem;line-height:1.65;color:inherit;font-weight:500;margin:0;">${effectiveQA}</p>
 </div>`;
 
+    const renderedUrls = new Set<string>(hero?.url ? [hero.url] : []);
+    const uniqueInlinePhotos = inlinePhotos.map(photo => {
+        if (!photo || renderedUrls.has(photo.url)) return null;
+        renderedUrls.add(photo.url);
+        return photo;
+    });
+
     let photoIdx = 0;
-    html = html.replace(/<h2 id="([^"]+)">([\s\S]+?)<\/h2>/g, (match) => {
-        const photo = inlinePhotos[photoIdx++];
+    html = html.replace(/<h2 id="([^"]+)"(?:\s+[^>]*)?>([\s\S]+?)<\/h2>/g, (match) => {
+        const photo = uniqueInlinePhotos[photoIdx++];
         if (!photo) return match;
         return `${match}
-<figure style="margin:1.5rem 0;border-radius:12px;overflow:hidden;">
+<figure style="margin:1.5rem 0;border-radius:12px;overflow:hidden;border:1px solid rgba(148,163,184,0.2);">
   <img src="${photo.url}" alt="${photo.alt}" loading="lazy" style="width:100%;height:auto;aspect-ratio:16/9;max-height:420px;object-fit:cover;display:block;" />
-  <figcaption style="font-size:0.75rem;color:#6b7280;padding:6px 10px;background:#f9fafb;">
+  <figcaption style="font-size:0.75rem;color:inherit;opacity:0.78;padding:6px 10px;background-color:rgba(148,163,184,0.06);">
     Photo by <a href="${photo.photographerUrl}" target="_blank" rel="noopener">${photo.photographer}</a> on <a href="${photo.unsplashUrl}" target="_blank" rel="noopener">Unsplash</a>
   </figcaption>
 </figure>`;
     });
 
     const faqHtml = faqs.length > 0 ? `
-<section style="margin-top:3rem;border-top:2px solid #e5e7eb;padding-top:2rem;">
-  <h2 id="frequently-asked-questions" style="font-size:1.5rem;font-weight:800;color:#1e293b;margin-bottom:1.5rem;">Frequently Asked Questions</h2>
+<section style="margin-top:3rem;border-top:1px solid rgba(148,163,184,0.24);padding-top:2rem;color:inherit;">
+  <h2 id="frequently-asked-questions" style="font-size:1.5rem;font-weight:800;color:inherit;margin-bottom:1.5rem;">Frequently Asked Questions</h2>
   ${faqs.map(faq => `
-  <div style="margin-bottom:1rem;border:1px solid #f1f5f9;border-radius:12px;">
-    <h3 style="padding:1rem;font-size:1rem;font-weight:700;background:#f8fafc;border-radius:12px;margin:0;">${mdToHtml(faq.question)}</h3>
-    <p style="padding:0.75rem 1rem 1rem;color:#475569;line-height:1.6;margin:0;">${mdToHtml(faq.answer)}</p>
+  <div style="margin-bottom:1rem;border:1px solid rgba(148,163,184,0.22);border-radius:12px;overflow:hidden;">
+    <h3 style="padding:1rem;font-size:1rem;font-weight:700;background-color:rgba(148,163,184,0.08);margin:0;color:inherit;">${mdToHtml(faq.question)}</h3>
+    <p style="padding:0.75rem 1rem 1rem;color:inherit;opacity:0.88;line-height:1.6;margin:0;">${mdToHtml(faq.answer)}</p>
   </div>`).join("")}
 </section>` : "";
 
     const authorHtml = `
-<div style="margin-top:4rem;padding:2rem;background:#1e293b;color:#f8fafc;border-radius:16px;display:flex;gap:1.5rem;align-items:start;">
-  <div style="width:56px;height:56px;border-radius:50%;background:#334155;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.4rem;">✍️</div>
+<div style="margin-top:4rem;padding:2rem;background-color:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.25);color:inherit;border-radius:16px;display:flex;gap:1.5rem;align-items:start;">
+  <div style="width:56px;height:56px;border-radius:50%;background-color:rgba(148,163,184,0.16);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.4rem;">✍️</div>
   <div>
-    <p style="font-weight:800;font-size:1.05rem;margin:0 0 0.2rem;">${author.name}</p>
-    ${author.role ? `<p style="font-size:0.8rem;color:#94a3b8;font-weight:600;text-transform:uppercase;margin:0 0 0.75rem;">${author.role}</p>` : ""}
-    ${author.bio ? `<p style="font-size:0.9rem;line-height:1.6;color:#cbd5e1;margin:0;">${author.bio}</p>` : ""}
+    <p style="font-weight:800;font-size:1.05rem;margin:0 0 0.2rem;color:inherit;">${author.name}</p>
+    ${author.role ? `<p style="font-size:0.8rem;color:inherit;opacity:0.72;font-weight:600;text-transform:uppercase;margin:0 0 0.75rem;">${author.role}</p>` : ""}
+    ${author.bio ? `<p style="font-size:0.9rem;line-height:1.6;color:inherit;opacity:0.88;margin:0;">${author.bio}</p>` : ""}
   </div>
 </div>`;
 
     const nextStepsHtml = funnelHtml ? `
-<section style="margin-top:3rem;padding:2rem;border:2px solid #e2e8f0;border-radius:16px;">
-  <h2 id="next-steps" style="font-size:1.4rem;font-weight:800;color:#1e293b;margin-top:0;">Next Steps</h2>
+<section style="margin-top:3rem;padding:2rem;border:1px solid rgba(148,163,184,0.25);border-radius:16px;color:inherit;">
+  <h2 id="next-steps" style="font-size:1.4rem;font-weight:800;color:inherit;margin-top:0;">Next Steps</h2>
   ${funnelHtml}
 </section>` : "";
 
     const date = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
     return `
-<p style="font-size:0.8rem;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">
+<p style="font-size:0.8rem;color:inherit;opacity:0.75;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">
   By ${author.name}${author.role ? ` · ${author.role}` : ""} · Updated ${date}
 </p>
 ${hero ? `
-<figure style="margin:1.5rem 0;border-radius:16px;overflow:hidden;">
+<figure style="margin:1.5rem 0;border-radius:16px;overflow:hidden;border:1px solid rgba(148,163,184,0.2);">
   <img src="${hero.url}" alt="${hero.alt}" fetchpriority="high" style="width:100%;height:auto;aspect-ratio:16/9;max-height:520px;object-fit:cover;display:block;" />
-  <figcaption style="font-size:0.75rem;color:#6b7280;padding:6px 10px;background:#f9fafb;">
+  <figcaption style="font-size:0.75rem;color:inherit;opacity:0.78;padding:6px 10px;background-color:rgba(148,163,184,0.06);">
     Photo by <a href="${hero.photographerUrl}" target="_blank" rel="noopener">${hero.photographer}</a> on <a href="${hero.unsplashUrl}" target="_blank" rel="noopener">Unsplash</a>
   </figcaption>
 </figure>` : ""}

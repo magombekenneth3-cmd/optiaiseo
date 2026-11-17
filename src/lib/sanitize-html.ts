@@ -7,21 +7,21 @@ const ALLOWED_TAGS = new Set([
     "cite", "code", "col", "colgroup", "data", "dd", "del", "details",
     "dfn", "div", "dl", "dt", "em", "figcaption", "figure", "footer",
     "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "i", "img",
-    "ins", "kbd", "li", "main", "mark", "nav", "ol",
+    "ins", "kbd", "label", "li", "main", "mark", "nav", "ol",
     "p", "picture", "pre", "q", "s", "section", "small",
     "source", "span", "strong", "sub", "summary", "sup", "table",
     "tbody", "td", "tfoot", "th", "thead", "time", "tr",
     "u", "ul", "var", "video", "wbr",
 ]);
 
-const SAFE_CSS_PROPERTIES = /^(color|background-color|font-size|font-weight|font-style|font-family|text-align|text-decoration|margin|margin-top|margin-right|margin-bottom|margin-left|padding|padding-top|padding-right|padding-bottom|padding-left|border|border-radius|width|height|max-width|max-height|aspect-ratio|object-fit|object-position|display|flex|flex-direction|align-items|justify-content|gap|line-height|letter-spacing|list-style|opacity|overflow|white-space|word-break|vertical-align)\s*:/i;
+const SAFE_CSS_PROPERTIES = /^(color|background-color|font-size|font-weight|font-style|font-family|text-align|text-decoration|margin|margin-top|margin-right|margin-bottom|margin-left|padding|padding-top|padding-right|padding-bottom|padding-left|border|border-top|border-right|border-bottom|border-left|border-radius|width|height|max-width|max-height|aspect-ratio|object-fit|object-position|display|flex|flex-direction|flex-shrink|align-items|justify-content|gap|line-height|letter-spacing|list-style|opacity|overflow|white-space|word-break|vertical-align|cursor)\s*:/i;
 
 const ALLOWED_ATTRS = new Set([
     "alt", "aria-checked", "aria-describedby", "aria-disabled", "aria-expanded",
     "aria-hidden", "aria-label", "aria-labelledby", "aria-live", "aria-required",
-    "aria-selected", "border", "cellpadding", "cellspacing",
+    "aria-selected", "border", "cellpadding", "cellspacing", "checked",
     "class", "colspan", "controls", "coords", "datetime",
-    "decoding", "download", "fetchpriority", "headers", "height",
+    "decoding", "download", "fetchpriority", "for", "headers", "height",
     "hidden", "href", "id", "kind", "label", "lang",
     "loading", "loop", "max", "maxlength", "media", "min",
     "muted", "name", "open", "poster", "preload",
